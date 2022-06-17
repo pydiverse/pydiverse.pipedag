@@ -1,0 +1,49 @@
+name: CI
+on: [push]
+
+jobs:
+
+  pre-commit-checks:
+    name: "Linux - pre-commit hooks - Python 3.8"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Install Python 3.8
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.8
+      - name: Run pre-commit checks
+        uses: pre-commit/action@v3.0.0
+
+
+  linux:
+    name: "Linux - unit tests - Python ${{ matrix.PYTHON_VERSION }}"
+    runs-on: ubuntu-latest
+    env:
+      CI: True
+    strategy:
+      fail-fast: true
+      matrix:
+        PYTHON_VERSION: ['3.8', '3.9', '3.10']
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v2.3.5
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          python-version: ${{ matrix.PYTHON_VERSION }}
+          miniforge-variant: Mambaforge
+          miniforge-version: 4.11.0-2
+          use-mamba: true
+          environment-file: environment.yml
+          activate-environment: pydiverse-pipedag
+      - name: Run Unit Tests
+        shell: bash -l {0}
+        run: |
+          pip install --no-build-isolation -e .
+          pytest 
+
