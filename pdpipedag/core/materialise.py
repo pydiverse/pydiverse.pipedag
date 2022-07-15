@@ -47,6 +47,7 @@ class MaterialisingTask(prefect.Task):
         # Set the Prefect name from the function
         if name is None:
             name = getattr(fn, "__name__", type(self).__name__)
+        self.original_name = name
 
         # Run / Signature Handling
         prefect.core.task._validate_run_signature(fn)
@@ -64,9 +65,9 @@ class MaterialisingTask(prefect.Task):
         super().__init__(name=name, **kwargs)
 
         self.input_type = input_type
-
         self.schema = None
         self.upstream_schemas = None
+        self.cache_key = None
 
     def run(self) -> None:
         # This is just a stub.
@@ -119,10 +120,11 @@ class MaterialisationWrapper:
         # Try to retrieve output from cache
         input_json = store.json_serialise(bound.arguments)
         cache_key = store.compute_cache_key(task, input_json)
+        task.cache_key = cache_key
 
         try:
-            cached_output = store.retrieve_cached_output(task, cache_key)
-            store.copy_cached_output_to_working_schema(cached_output)
+            cached_output = store.retrieve_cached_output(task)
+            store.copy_cached_output_to_working_schema(cached_output, task)
             task.logger.info(f"Found task in cache. Using cached result.")
             return cached_output
         except CacheError as e:
@@ -134,5 +136,5 @@ class MaterialisationWrapper:
         result = self.fn(*args, **kwargs)
 
         # Materialise
-        materialised_result = store.materialise_task(task, cache_key, result)
+        materialised_result = store.materialise_task(task, result)
         return materialised_result

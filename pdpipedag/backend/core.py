@@ -32,7 +32,7 @@ class PipeDAGStore:
         self.__lock = Lock()
         self.schemas: dict[str, schema.Schema] = {}
         self.swapped_schemas: set[str] = set()
-        self.run_id = str(uuid.uuid4())
+        self.run_id = uuid.uuid4().hex[:20]
         self.json_encoder = json.JSONEncoder(
             ensure_ascii = False,
             allow_nan = False,
@@ -90,7 +90,6 @@ class PipeDAGStore:
     def materialise_task(
             self,
             task: materialise.MaterialisingTask,
-            cache_key: str,
             value: Materialisable,
     ):
         schema = task.schema
@@ -99,8 +98,8 @@ class PipeDAGStore:
         def materialise_mutator(x, tbl_id = itertools.count()):
             if isinstance(x, table.Table):
                 x.schema = schema
-                x.name = f'{task.name}_{next(tbl_id)}_{cache_key}'
-                x.cache_key = cache_key
+                x.name = f'{task.original_name}_{next(tbl_id):04d}_{task.cache_key}'
+                x.cache_key = task.cache_key
                 self.table_store.store_table(x)
             return x
 
@@ -110,12 +109,12 @@ class PipeDAGStore:
         # Metadata?
         output_json = self.json_serialise(m_value)
         metadata = TaskMetadata(
-            name = task.name,
+            name = task.original_name,
             schema = schema.name,
-            version = NotImplemented,
+            version = task.version,
             timestamp = datetime.datetime.now(),
             run_id = self.run_id,
-            cache_key = cache_key,
+            cache_key = task.cache_key,
             output_json = output_json,
         )
         self.table_store.store_task_metadata(metadata)
@@ -145,8 +144,8 @@ class PipeDAGStore:
 
         v = (
             'PYDIVERSE-PIPEDAG',
-            task.name,
-            # task.version,
+            task.original_name,
+            task.version or 'None',
             input_json
         )
 
@@ -154,19 +153,18 @@ class PipeDAGStore:
         v_bytes = v_str.encode('utf8')
 
         v_hash = hashlib.sha256(v_bytes)
-        return v_hash.hexdigest()
+        return v_hash.hexdigest()[:20]  # Provides 40 bit of collision resistance
 
     def retrieve_cached_output(
             self,
             task: materialise.MaterialisingTask,
-            cache_key: str,
     ) -> Materialisable:
 
         with self.__lock:
             if task.schema.name in self.swapped_schemas:
                 raise SchemaError(f"Schema already swapped.")
 
-        metadata = self.table_store.retrieve_task_metadata(task, cache_key)
+        metadata = self.table_store.retrieve_task_metadata(task, task.cache_key)
         output = self.json_decode(metadata.output_json)
 
         return output
@@ -174,6 +172,7 @@ class PipeDAGStore:
     def copy_cached_output_to_working_schema(
             self,
             output: Materialisable,
+            task: materialise.MaterialisingTask,
     ):
 
         def visiting_mutator(x):
@@ -182,6 +181,7 @@ class PipeDAGStore:
             return x
 
         deepmutate(output, visiting_mutator)
+        self.table_store.copy_task_metadata_to_working_schema(task)
 
     #### Utils ####
 
@@ -191,6 +191,10 @@ class PipeDAGStore:
     def json_decode(self, value: str) -> Materialisable:
         return json.loads(value, object_hook = _json_object_hook)
 
+    def _reset(self):
+        self.schemas.clear()
+        self.swapped_schemas.clear()
+        self.run_id = uuid.uuid4().hex[:20]
 
 PIPEDAG_TYPE = '_pipedag_type_'
 PIPEDAG_TYPE_TABLE = 'table'

@@ -7,19 +7,17 @@ from prefect import Flow
 
 import pdpipedag
 from pdpipedag import materialise, Schema, Table
-from pdpipedag.backend import PipeDAGStore, DictTableStore
+from pdpipedag.backend import PipeDAGStore
+from pdpipedag.backend.table import DictTableStore, SQLTableStore
 
 
 # Configure
 
-# sqlite_path = os.path.abspath(os.path.join(os.path.curdir, 'test.sqlite'))
-# engine = sa.create_engine(f'sqlite:///{sqlite_path}')
-# engine.connect()
-# table_storage = SQLTableStorage(engine)
+engine = sa.create_engine(f'postgresql://127.0.0.1/pipedag', echo = False)
 
 pdpipedag.config = pdpipedag.configuration.Config(
     store = PipeDAGStore(
-        table = DictTableStore(),
+        table = SQLTableStore(engine),
         blob = None,
         lock = None,
     )
@@ -55,18 +53,18 @@ def test_simple_flow():
         assert isinstance(x[0], pd.DataFrame)
         return Table(x[0])
 
-
     with Flow('FLOW') as flow:
         with Schema('SCHEMA1'):
             a, b = inputs()
             a2 = double_values(a)
             b2 = double_values(b)
             b4 = double_values(b2)
+            b4 = double_values(b4)
             x = list_arg([a2, b, b4])
 
         with Schema('SCHEMA2'):
             xj = join_on_a(x, b4)
+            a = double_values(xj)
 
     result = flow.run()
-    print(result.result[xj].result.obj)
     assert result.is_successful()

@@ -13,7 +13,7 @@ class Schema:
 
     def __init__(self, name: str):
         self.name = name
-        self.working_name = f'{name}_tmp_pipedag'
+        self.working_name = f'{name}__pipedag'
         self.task = SchemaSwapTask(self)
         self.materialising_tasks = []
 
