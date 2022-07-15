@@ -6,9 +6,7 @@ import prefect
 
 import pdpipedag
 from pdpipedag._typing import T
-from pdpipedag.core import table as pdtbl
-from pdpipedag.core.util.deepmutate import deepmutate
-from pdpipedag.errors import FlowError
+from pdpipedag.errors import FlowError, CacheError
 
 
 def materialise(
@@ -65,6 +63,8 @@ class MaterialisingTask(prefect.Task):
 
         super().__init__(name=name, **kwargs)
 
+        self.input_type = input_type
+
         self.schema = None
         self.upstream_schemas = None
 
@@ -80,13 +80,18 @@ class MaterialisingTask(prefect.Task):
         new.schema = prefect.context.get('pipedag_schema')
         new.name = f"{new.name}({new.schema.name})"
         if new.schema is None:
-            raise FlowError("Schema missing for materialised task. Materialised tasks must be used inside a schema block.")
+            raise FlowError(
+                "Schema missing for materialised task. Materialised tasks must "
+                "be used inside a schema block.")
 
         # Create run method
         new.run = (lambda *args, **kwargs: new.wrapped_fn(
             *args,
             **kwargs,
-            _pipedag_schema=new.schema,
+            _pipedag_ = {
+                'task': new,
+                'schema': new.schema,
+            }
         ))
         functools.update_wrapper(new.run, new.wrapped_fn)
 
@@ -106,40 +111,28 @@ class MaterialisationWrapper:
         self.fn_signature = inspect.signature(fn)
         self.input_type = input_type
 
-    def __call__(self, *args, _pipedag_schema, **kwargs):
-        # Must pass schema to __call__ because the same wrapper instance
-        # gets used my multiple instances of MaterialisingTask.
-        schema = _pipedag_schema
+    def __call__(self, *args, _pipedag_, **kwargs):
+        task = _pipedag_['task']
+        store = pdpipedag.config.store
+        bound = self.fn_signature.bind(*args, **kwargs)
 
-        # Run the function
-        args, kwargs = self.load_arguments(args, kwargs)
+        # Try to retrieve output from cache
+        input_json = store.json_serialise(bound.arguments)
+        cache_key = store.compute_cache_key(task, input_json)
+
+        try:
+            cached_output = store.retrieve_cached_output(task, cache_key)
+            store.copy_cached_output_to_working_schema(cached_output)
+            task.logger.info(f"Found task in cache. Using cached result.")
+            return cached_output
+        except CacheError as e:
+            task.logger.info(f"Failed to retrieve task from cache. {e}")
+            pass
+
+        # Not found in cache -> Evaluate Function
+        args, kwargs = store.dematerialise_task_inputs(task, bound.args, bound.kwargs)
         result = self.fn(*args, **kwargs)
 
-        # Materialise the results back to our database
-        # + assign schema to return values
-        materialised_result = self.materialise_values(result, schema)
+        # Materialise
+        materialised_result = store.materialise_task(task, cache_key, result)
         return materialised_result
-
-    #### Arguments Loading ####
-
-    def load_arguments(self, args, kwargs) -> tuple[tuple, dict]:
-        bound_signature = self.fn_signature.bind(*args, **kwargs)
-        for name, value in bound_signature.arguments.items():
-            bound_signature.arguments[name] = deepmutate(value, self._load_mutator)
-        return bound_signature.args, bound_signature.kwargs
-
-    def _load_mutator(self, x):
-        if isinstance(x, pdtbl.Table):
-            return pdpipedag.config.table_backend.retrieve_table_obj(x, as_type = self.input_type)
-        return x
-
-    #### Result Materialisation ####
-
-    def materialise_values(self, value, schema):
-        def _materialise_mutator(x):
-            if isinstance(x, pdtbl.Table):
-                x.schema = schema
-                pdpipedag.config.table_backend.store_table(x)
-            return x
-
-        return deepmutate(value, _materialise_mutator)

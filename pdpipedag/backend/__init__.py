@@ -1,11 +1,25 @@
+from .core import PipeDAGStore
+
 from .table import (
-    BaseTableStorage,
-    DictTableStorage,
-    SQLTableStorage,
+    BaseTableStore,
+    DictTableStore,
+    SQLTableStore,
+)
+from .blob import (
+    BaseBlobStore,
+)
+from .lock import (
+    BaseLockManager,
 )
 
 __all__ = [
-    'BaseTableStorage',
-    'DictTableStorage',
-    'SQLTableStorage',
+    'PipeDAGStore',
+
+    'BaseTableStore',
+    'DictTableStore',
+    'SQLTableStore',
+
+    'BaseBlobStore',
+
+    'BaseLockManager',
 ]

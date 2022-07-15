@@ -7,7 +7,7 @@ from prefect import Flow
 
 import pdpipedag
 from pdpipedag import materialise, Schema, Table
-from pdpipedag.backend.table import SQLTableStorage, DictTableStorage
+from pdpipedag.backend import PipeDAGStore, DictTableStore
 
 
 # Configure
@@ -17,10 +17,12 @@ from pdpipedag.backend.table import SQLTableStorage, DictTableStorage
 # engine.connect()
 # table_storage = SQLTableStorage(engine)
 
-table_storage = DictTableStorage()
-
 pdpipedag.config = pdpipedag.configuration.Config(
-    table_backend = table_storage,
+    store = PipeDAGStore(
+        table = DictTableStore(),
+        blob = None,
+        lock = None,
+    )
 )
 
 
@@ -59,13 +61,12 @@ def test_simple_flow():
             a, b = inputs()
             a2 = double_values(a)
             b2 = double_values(b)
-
             b4 = double_values(b2)
-            x = list_arg([a, b, b4])
+            x = list_arg([a2, b, b4])
 
         with Schema('SCHEMA2'):
-            x = join_on_a(a2, b4)
+            xj = join_on_a(x, b4)
 
     result = flow.run()
-    print(result.result[x].result.obj)
+    print(result.result[xj].result.obj)
     assert result.is_successful()

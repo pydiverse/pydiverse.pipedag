@@ -12,8 +12,12 @@ class Table(Generic[T]):
             name: str = None,
             schema: 'schema.Schema' = None,
             primary_key: str = None,
+            cache_key: str = None,
     ):
+
         self.obj = obj
         self.name = name
         self.schema = schema
         self.primary_key = primary_key
+
+        self.cache_key = cache_key

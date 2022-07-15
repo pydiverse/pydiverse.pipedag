@@ -21,6 +21,10 @@ class Schema:
         self.__lock = threading.Lock()
         self.__did_swap = False
 
+        # Make sure that schema exists on database
+        # This also ensures that this schema name is unique
+        pdpipedag.config.store.create_schema(self)
+
     def __repr__(self):
         return f"<Schema: {self.name}>"
 
@@ -33,9 +37,6 @@ class Schema:
 
         # Add schema task to flow
         self.flow.add_task(self.task)
-
-        # Make sure that schema exists on database
-        pdpipedag.config.table_backend.create_schema(self)
 
         return self
 
@@ -122,7 +123,4 @@ class SchemaSwapTask(prefect.Task):
 
     def run(self):
         self.logger.info('Performing schema swap.')
-
-        with self.schema.perform_swap():
-            table_backend = pdpipedag.config.table_backend
-            table_backend.swap_schema(self.schema)
+        pdpipedag.config.store.swap_schema(self.schema)

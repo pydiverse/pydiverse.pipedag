@@ -8,7 +8,7 @@ class SchemaError(Exception):
     Exception raised when something is wrong with the schema.
     """
 
-class AnnotationError(SystemError):
+class CacheError(Exception):
     """
-    Exception raised if a task is annotated incorrectly.
+    Exception raised if something couldn't be retrieved from the cache.
     """

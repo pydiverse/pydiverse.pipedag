@@ -1,6 +1,9 @@
 from . import backend
 from .configuration import config as config
-from .core import materialise, Schema, Table
+
+from .core.schema import Schema
+from .core.table import Table
+from .core.materialise import materialise
 
 __all__ = [
     'materialise',

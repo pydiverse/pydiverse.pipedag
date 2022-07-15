@@ -40,7 +40,7 @@ def _deepmutate_list(x, mutator, memo):
     append = y.append
     for a in x:
         append(deepmutate(a, mutator, memo))
-    return y
+    return mutator(y)
 
 def _deepmutate_tuple(x, mutator, memo):
     y = [deepmutate(a, mutator, memo) for a in x]
@@ -56,14 +56,14 @@ def _deepmutate_tuple(x, mutator, memo):
             break
     else:
         y = x
-    return y
+    return mutator(y)
 
 def _deepmutate_dict(x, mutator, memo):
     y = {}
     memo[id(x)] = y
     for key, value in x.items():
         y[deepmutate(key, mutator, memo)] = deepmutate(value, mutator, memo)
-    return y
+    return mutator(y)
 
 def _keep_alive(x, memo):
     """Keeps a reference to the object x in the memo.
