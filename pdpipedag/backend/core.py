@@ -1,18 +1,17 @@
-import hashlib
-import json
-import itertools
 import datetime
+import hashlib
+import itertools
+import json
 import uuid
-from typing import Any
 from threading import Lock
 
 import pdpipedag
 from pdpipedag import backend
-from pdpipedag.core import schema, table, materialise
+from pdpipedag._typing import Materialisable
+from pdpipedag.core import schema, materialise, Table
 from pdpipedag.core.metadata import TaskMetadata
 from pdpipedag.core.util import deepmutate
-from pdpipedag.errors import SchemaError, CacheError
-from pdpipedag._typing import Materialisable
+from pdpipedag.errors import SchemaError
 
 
 class PipeDAGStore:
@@ -77,7 +76,7 @@ class PipeDAGStore:
     ) -> tuple[tuple, dict]:
 
         def dematerialise_mutator(x):
-            if isinstance(x, table.Table):
+            if isinstance(x, Table):
                 y = self.table_store.retrieve_table_obj(x, as_type = task.input_type)
                 return y
             return x
@@ -96,11 +95,11 @@ class PipeDAGStore:
         assert schema.name in self.schemas
 
         def materialise_mutator(x, tbl_id = itertools.count()):
-            if isinstance(x, table.Table):
+            if isinstance(x, Table):
                 x.schema = schema
                 x.name = f'{task.original_name}_{next(tbl_id):04d}_{task.cache_key}'
                 x.cache_key = task.cache_key
-                self.table_store.store_table(x)
+                self.table_store.store_table(x, lazy = task.lazy)
             return x
 
         # Materialise
@@ -123,7 +122,7 @@ class PipeDAGStore:
 
     #### Cache ####
 
-    def compute_cache_key(
+    def compute_task_cache_key(
             self,
             task: materialise.MaterialisingTask,
             input_json: str,
@@ -143,7 +142,7 @@ class PipeDAGStore:
         # Maybe look into `dask.base.tokenize`
 
         v = (
-            'PYDIVERSE-PIPEDAG',
+            'PYDIVERSE-PIPEDAG-TASK',
             task.original_name,
             task.version or 'None',
             input_json
@@ -176,7 +175,7 @@ class PipeDAGStore:
     ):
 
         def visiting_mutator(x):
-            if isinstance(x, table.Table):
+            if isinstance(x, Table):
                 self.table_store.copy_table_to_working_schema(x)
             return x
 
@@ -201,7 +200,7 @@ PIPEDAG_TYPE_TABLE = 'table'
 PIPEDAG_TYPE_BLOB = 'blob'
 
 def _json_default(o):
-    if isinstance(o, table.Table):
+    if isinstance(o, Table):
         return {
             PIPEDAG_TYPE: PIPEDAG_TYPE_TABLE,
             'schema': o.schema.name,
@@ -221,7 +220,7 @@ def _json_object_hook(d: dict):
 
             schema = pdpipedag.config.store.schemas[schema_name]
 
-            return table.Table(
+            return Table(
                 name = name,
                 schema = schema,
                 cache_key = cache_key,

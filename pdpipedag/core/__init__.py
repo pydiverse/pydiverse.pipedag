@@ -1,6 +1,6 @@
 from .materialise import MaterialisingTask
 from .schema import Schema
-from .table import Table
+from .container import Table
 
 __all__ = [
     'MaterialisingTask',

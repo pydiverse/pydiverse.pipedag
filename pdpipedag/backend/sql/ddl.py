@@ -1,11 +1,13 @@
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.schema import DDLElement
+from sqlalchemy.sql import Select
 
 __all__ = [
     'CreateSchema',
     'DropSchema',
     'RenameSchema',
     'CopyTable',
+    'CreateTableAsSelect',
 ]
 
 
@@ -26,11 +28,18 @@ class RenameSchema(DDLElement):
         self.to = to
 
 class CopyTable(DDLElement):
-    def __init__(self, name, from_schema, to_schema, if_not_exists=False):
-        self.name = name
+    def __init__(self, from_name, from_schema, to_name, to_schema, if_not_exists=False):
+        self.from_name = from_name
         self.from_schema = from_schema
+        self.to_name = to_name
         self.to_schema = to_schema
         self.if_not_exists = if_not_exists
+
+class CreateTableAsSelect(DDLElement):
+    def __init__(self, name: str, schema: str, query: Select):
+        self.name = name
+        self.schema = schema
+        self.query = query
 
 
 @compiles(CreateSchema)
@@ -61,14 +70,25 @@ def visit_rename_schema(rename: RenameSchema, compiler, **kw):
 
 @compiles(CopyTable)
 def visit_copy_table(copy: CopyTable, compiler, *kw):
-    name = compiler.preparer.quote_identifier(copy.name)
+    from_name = compiler.preparer.quote_identifier(copy.from_name)
+    to_name = compiler.preparer.quote_identifier(copy.to_name)
     from_schema = compiler.preparer.format_schema(copy.from_schema)
     to_schema = compiler.preparer.format_schema(copy.to_schema)
 
     text = ["CREATE TABLE"]
     if copy.if_not_exists:
         text.append("IF NOT EXISTS")
-    text.append(f"{to_schema}.{name}")
+    text.append(f"{to_schema}.{to_name}")
     text.append("AS")
 
-    return ' '.join(text) + f"\nSELECT * FROM {from_schema}.{name}"
+    return ' '.join(text) + f"\nSELECT * FROM {from_schema}.{from_name}"
+
+@compiles(CreateTableAsSelect)
+def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
+    name = compiler.preparer.quote_identifier(create.name)
+    schema = compiler.preparer.format_schema(create.schema)
+
+    kw['literal_binds'] = True
+    select = compiler.sql_compiler.process(create.query, **kw)
+
+    return f"CREATE TABLE {schema}.{name} AS\n{select}"
