@@ -7,6 +7,7 @@ from .table import (
 )
 from .blob import (
     BaseBlobStore,
+    FileBlobStore,
 )
 from .lock import (
     BaseLockManager,
@@ -20,6 +21,7 @@ __all__ = [
     'SQLTableStore',
 
     'BaseBlobStore',
+    'FileBlobStore',
 
     'BaseLockManager',
 ]

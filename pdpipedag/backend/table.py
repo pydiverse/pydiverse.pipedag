@@ -278,6 +278,8 @@ class SQLTableStore(BaseTableStore):
                     schema.working_name,
                     obj
                 ))
+        else:
+            raise TypeError(f"Can't store Table with underlying type '{type(obj).__name__}'")
 
         if lazy and lazy_cache_key is not None:
             # Create Metadata
@@ -299,6 +301,11 @@ class SQLTableStore(BaseTableStore):
                     f" to working schema because no such table exists.")
 
     def retrieve_table_obj(self, table: Table, as_type: Type[T], from_cache: bool = False) -> T:
+        if as_type is None:
+            raise TypeError(
+                "Missing 'as_type' argument. You must specify a type to be able "
+                "to dematerialise a Table.")
+
         schema = table.schema
         schema_name = schema.name if from_cache else schema.current_name
 
@@ -315,7 +322,7 @@ class SQLTableStore(BaseTableStore):
                 autoload_with = self.engine,
             )
 
-        raise Exception(f"{type(self).__name__} can't convert to {as_type}.")
+        raise TypeError(f"{type(self).__name__} can't convert to {as_type}.")
 
 
     def store_task_metadata(self, metadata: TaskMetadata):

@@ -8,7 +8,7 @@ from threading import Lock
 import pdpipedag
 from pdpipedag import backend
 from pdpipedag._typing import Materialisable
-from pdpipedag.core import schema, materialise, Table
+from pdpipedag.core import schema, materialise, Table, Blob
 from pdpipedag.core.metadata import TaskMetadata
 from pdpipedag.core.util import deepmutate
 from pdpipedag.errors import SchemaError
@@ -53,7 +53,7 @@ class PipeDAGStore:
             self.schemas[schema.working_name] = schema
 
         self.table_store.create_schema(schema)
-        # self.blob_store.create_schema(schema)
+        self.blob_store.create_schema(schema)
 
     def swap_schema(self, schema: schema.Schema):
         """Swap the working schema with the base schema."""
@@ -64,7 +64,7 @@ class PipeDAGStore:
 
         with schema.perform_swap():
             self.table_store.swap_schema(schema)
-            # self.blob_store.swap_schema(schema)
+            self.blob_store.swap_schema(schema)
 
     #### Task ####
 
@@ -77,8 +77,9 @@ class PipeDAGStore:
 
         def dematerialise_mutator(x):
             if isinstance(x, Table):
-                y = self.table_store.retrieve_table_obj(x, as_type = task.input_type)
-                return y
+                return self.table_store.retrieve_table_obj(x, as_type = task.input_type)
+            elif isinstance(x, Blob):
+                return self.blob_store.retrieve_blob(x)
             return x
 
         d_args = deepmutate(args, dematerialise_mutator)
@@ -95,17 +96,24 @@ class PipeDAGStore:
         assert schema.name in self.schemas
 
         def materialise_mutator(x, tbl_id = itertools.count()):
-            if isinstance(x, Table):
+            if isinstance(x, (Table, Blob)):
                 x.schema = schema
-                x.name = f'{task.original_name}_{next(tbl_id):04d}_{task.cache_key}'
+                x.name = f'{task.original_name}_{task.cache_key}_{next(tbl_id):04d}'
                 x.cache_key = task.cache_key
-                self.table_store.store_table(x, lazy = task.lazy)
+
+                if isinstance(x, Table):
+                    self.table_store.store_table(x, lazy = task.lazy)
+                elif isinstance(x, Blob):
+                    self.blob_store.store_blob(x)
+                else:
+                    raise Exception
+
             return x
 
         # Materialise
         m_value = deepmutate(value, materialise_mutator)
 
-        # Metadata?
+        # Metadata
         output_json = self.json_serialise(m_value)
         metadata = TaskMetadata(
             name = task.original_name,
@@ -177,6 +185,8 @@ class PipeDAGStore:
         def visiting_mutator(x):
             if isinstance(x, Table):
                 self.table_store.copy_table_to_working_schema(x)
+            elif isinstance(x, Blob):
+                self.blob_store.copy_blob_to_working_schema(x)
             return x
 
         deepmutate(output, visiting_mutator)
@@ -207,6 +217,13 @@ def _json_default(o):
             'name': o.name,
             'cache_key': o.cache_key,
         }
+    if isinstance(o, Blob):
+        return {
+            PIPEDAG_TYPE: PIPEDAG_TYPE_BLOB,
+            'schema': o.schema.name,
+            'name': o.name,
+            'cache_key': o.cache_key,
+        }
 
     raise TypeError(f'Object of type {type(o).__name__} is not JSON serializable')
 
@@ -214,21 +231,17 @@ def _json_object_hook(d: dict):
     pipedag_type = d.get(PIPEDAG_TYPE)
     if pipedag_type:
         if pipedag_type == PIPEDAG_TYPE_TABLE:
-            name = d['name']
-            schema_name = d['schema']
-            cache_key = d['cache_key']
-
-            schema = pdpipedag.config.store.schemas[schema_name]
-
             return Table(
-                name = name,
-                schema = schema,
-                cache_key = cache_key,
+                name = d['name'],
+                schema = pdpipedag.config.store.schemas[d['schema']],
+                cache_key = d['cache_key']
             )
-
         elif pipedag_type == PIPEDAG_TYPE_BLOB:
-            raise NotImplementedError
-
+            return Blob(
+                name = d['name'],
+                schema = pdpipedag.config.store.schemas[d['schema']],
+                cache_key = d['cache_key']
+            )
         else:
             raise ValueError(f"Invalid value for '{PIPEDAG_TYPE}' key: {repr(pipedag_type)}")
 

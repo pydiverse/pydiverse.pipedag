@@ -105,7 +105,7 @@ class MaterialisationWrapper:
         store = pdpipedag.config.store
         bound = self.fn_signature.bind(*args, **kwargs)
 
-        print(task.name, id(task), prefect.context.get("task_slug"))
+        # print(task.name, id(task), prefect.context.get("task_slug"))
 
         # Compute the cache key for the task inputs
         input_json = store.json_serialise(bound.arguments)

@@ -9,7 +9,7 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from pdpipedag.core.table import Table
+    from pdpipedag.core.container import Table, Blob
 
 
 def decorator_hint(decorator: Callable) -> Callable:
@@ -27,7 +27,7 @@ MPrimitives = Union[
     bool,
     str
 ]
-MTypes = Union['Table']
+MTypes = Union['Table', 'Blob']
 
 BaseMaterialisable = Union[MPrimitives, MTypes]
 Materialisable = Union[
