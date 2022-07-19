@@ -1,11 +1,12 @@
 import contextlib
 import threading
-from typing import Iterator
+from typing import Iterator, Callable
 
 import prefect
 
 import pdpipedag
 from pdpipedag.core import materialise
+from pdpipedag.core.util.schema_ref_count import schema_ref_counter_handler
 from pdpipedag.errors import SchemaError
 
 
@@ -14,16 +15,20 @@ class Schema:
     def __init__(self, name: str):
         self.name = name
         self.working_name = f'{name}__pipedag'
-        self.task = SchemaSwapTask(self)
-        self.materialising_tasks = []
 
         # Variables that should be accessed via a lock
         self.__lock = threading.Lock()
         self.__did_swap = False
+        self.__ref_count = 0
+        self.__ref_count_free_handler = None
+
+        # Tasks
+        self.task = SchemaSwapTask(self)
+        self.materialising_tasks = []
 
         # Make sure that schema exists on database
         # This also ensures that this schema name is unique
-        pdpipedag.config.store.create_schema(self)
+        pdpipedag.config.store.register_schema(self)
 
     def __repr__(self):
         return f"<Schema: {self.name}>"
@@ -77,6 +82,8 @@ class Schema:
             for dependency in upstream_schemas:
                 task.set_upstream(dependency.task)
 
+            task._incr_schema_ref_count()
+
         # Restore context
         prefect.context.pipedag_schema = self._enter_schema
 
@@ -113,6 +120,23 @@ class Schema:
             finally:
                 self.__did_swap = True
 
+    def _incr_ref_count(self, by: int = 1):
+        with self.__lock:
+            self.__ref_count += by
+
+    def _decr_ref_count(self, by: int = 1):
+        with self.__lock:
+            self.__ref_count -= by
+            assert self.__ref_count >= 0
+
+            if self.__ref_count == 0 and callable(self.__ref_count_free_handler):
+                self.__ref_count_free_handler(self)
+
+    def _set_ref_count_free_handler(self, handler: Callable[['Schema'], None]):
+        assert callable(handler) or handler is None
+        with self.__lock:
+            self.__ref_count_free_handler = handler
+
 
 class SchemaSwapTask(prefect.Task):
 
@@ -121,6 +145,15 @@ class SchemaSwapTask(prefect.Task):
         self.schema = schema
         self.child = None
 
+        self._incr_schema_ref_count()
+        self.state_handlers.append(schema_ref_counter_handler)
+
     def run(self):
         self.logger.info('Performing schema swap.')
         pdpipedag.config.store.swap_schema(self.schema)
+
+    def _incr_schema_ref_count(self, by: int = 1):
+        self.schema._incr_ref_count(by)
+
+    def _decr_schema_ref_count(self, by: int = 1):
+        self.schema._decr_ref_count(by)

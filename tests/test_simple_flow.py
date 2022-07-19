@@ -7,18 +7,18 @@ from prefect import Flow
 
 import pdpipedag
 from pdpipedag import materialise, Schema, Table, Blob
-from pdpipedag.backend import PipeDAGStore, SQLTableStore, FileBlobStore
+from pdpipedag.backend import PipeDAGStore, SQLTableStore, FileBlobStore, FileLockManager
 
 
 # Configure
 
-engine = sa.create_engine(f'postgresql://127.0.0.1/pipedag', echo = True)
+engine = sa.create_engine(f'postgresql://127.0.0.1/pipedag', echo = False)
 
 pdpipedag.config = pdpipedag.configuration.Config(
     store = PipeDAGStore(
         table = SQLTableStore(engine),
-        blob = FileBlobStore('/tmp/pipedag_blobs'),
-        lock = None,
+        blob = FileBlobStore('/tmp/pipedag/blobs'),
+        lock = FileLockManager('/tmp/pipedag/locks'),
     )
 )
 
@@ -37,6 +37,8 @@ def test_simple_flow():
             'x': [1, 1, 2, 2],
         })
 
+        import time
+        time.sleep(20)
         return Table(dfA, 'dfA'), Table(dfB, 'dfB')
 
     @materialise(input_type = pd.DataFrame)

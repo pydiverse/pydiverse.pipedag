@@ -11,6 +11,7 @@ from .blob import (
 )
 from .lock import (
     BaseLockManager,
+    FileLockManager,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     'FileBlobStore',
 
     'BaseLockManager',
+    'FileLockManager',
 ]

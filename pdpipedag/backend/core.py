@@ -3,7 +3,7 @@ import hashlib
 import itertools
 import json
 import uuid
-from threading import Lock
+import threading
 
 import pdpipedag
 from pdpipedag import backend
@@ -28,8 +28,9 @@ class PipeDAGStore:
         self.blob_store = blob
         self.lock_manager = lock
 
-        self.__lock = Lock()
+        self.__lock = threading.Lock()
         self.schemas: dict[str, schema.Schema] = {}
+        self.created_schemas: set[str] = set()
         self.swapped_schemas: set[str] = set()
         self.run_id = uuid.uuid4().hex[:20]
         self.json_encoder = json.JSONEncoder(
@@ -42,7 +43,7 @@ class PipeDAGStore:
 
     #### Schema ####
 
-    def create_schema(self, schema: schema.Schema):
+    def register_schema(self, schema: schema.Schema):
         with self.__lock:
             if schema.name in self.schemas:
                 raise SchemaError(f"Schema with name '{schema.name}' already exists.")
@@ -52,8 +53,22 @@ class PipeDAGStore:
             self.schemas[schema.name] = schema
             self.schemas[schema.working_name] = schema
 
+    def ensure_schema_is_ready(self, schema: schema.Schema):
+        with self.__lock:
+            if schema.name in self.created_schemas:
+                return
+            self.created_schemas.add(schema.name)
+            self.create_schema(schema)
+
+    def create_schema(self, schema: schema.Schema):
+        self.acquire_schema_lock(schema)
         self.table_store.create_schema(schema)
         self.blob_store.create_schema(schema)
+
+        # Once schema reference counter hits 0 (this means all tasks that
+        # have any task contained in the schema as an upstream dependency),
+        # we can release the schema lock.
+        schema._set_ref_count_free_handler(self.release_schema_lock)
 
     def swap_schema(self, schema: schema.Schema):
         """Swap the working schema with the base schema."""
@@ -191,6 +206,14 @@ class PipeDAGStore:
 
         deepmutate(output, visiting_mutator)
         self.table_store.copy_task_metadata_to_working_schema(task)
+
+    #### Locking ####
+
+    def acquire_schema_lock(self, schema: schema.Schema):
+        self.lock_manager.acquire_schema(schema)
+
+    def release_schema_lock(self, schema: schema.Schema):
+        self.lock_manager.release_schema(schema)
 
     #### Utils ####
 

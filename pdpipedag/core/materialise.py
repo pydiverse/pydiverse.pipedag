@@ -5,7 +5,7 @@ from typing import Callable, Any, TypeVar, Type
 import prefect
 
 import pdpipedag
-from pdpipedag._typing import T
+from pdpipedag.core.util.schema_ref_count import schema_ref_counter_handler
 from pdpipedag.errors import FlowError, CacheError
 
 
@@ -58,6 +58,8 @@ class MaterialisingTask(prefect.Task):
         self.upstream_schemas = None
         self.cache_key = None
 
+        self.state_handlers.append(schema_ref_counter_handler)
+
     def run(self) -> None:
         # This is just a stub.
         # As soon as this object called, this run method gets replaced with
@@ -93,6 +95,16 @@ class MaterialisingTask(prefect.Task):
         # Add task to schema
         self.schema.add_task(self)
 
+    def _incr_schema_ref_count(self, by: int = 1):
+        self.schema._incr_ref_count(by)
+        for upstream_schema in self.upstream_schemas:
+            upstream_schema._incr_ref_count(by)
+
+    def _decr_schema_ref_count(self, by: int = 1):
+        self.schema._decr_ref_count(by)
+        for upstream_schema in self.upstream_schemas:
+            upstream_schema._decr_ref_count(by)
+
 
 class MaterialisationWrapper:
 
@@ -105,7 +117,9 @@ class MaterialisationWrapper:
         store = pdpipedag.config.store
         bound = self.fn_signature.bind(*args, **kwargs)
 
-        # print(task.name, id(task), prefect.context.get("task_slug"))
+        # If this is the first task in this schema to be executed, ensure that
+        # the schema has been created and locked.
+        store.ensure_schema_is_ready(task.schema)
 
         # Compute the cache key for the task inputs
         input_json = store.json_serialise(bound.arguments)
