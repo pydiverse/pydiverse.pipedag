@@ -4,14 +4,18 @@ import itertools
 import json
 import uuid
 import threading
+from collections import defaultdict
+
+import prefect.utilities.logging
 
 import pdpipedag
 from pdpipedag import backend
 from pdpipedag._typing import Materialisable
+from pdpipedag.backend.lock import LockState
 from pdpipedag.core import schema, materialise, Table, Blob
 from pdpipedag.core.metadata import TaskMetadata
 from pdpipedag.core.util import deepmutate
-from pdpipedag.errors import SchemaError
+from pdpipedag.errors import SchemaError, LockError
 
 
 class PipeDAGStore:
@@ -33,6 +37,7 @@ class PipeDAGStore:
         self.created_schemas: set[str] = set()
         self.swapped_schemas: set[str] = set()
         self.run_id = uuid.uuid4().hex[:20]
+        self.logger = prefect.utilities.logging.get_logger('pipeDAG')
         self.json_encoder = json.JSONEncoder(
             ensure_ascii = False,
             allow_nan = False,
@@ -40,6 +45,9 @@ class PipeDAGStore:
             sort_keys = True,
             default = _json_default,
         )
+
+        self.lock_conditions = defaultdict(lambda: threading.Condition())
+        self.lock_manager.add_lock_state_listener(self._lock_state_listener)
 
     #### Schema ####
 
@@ -78,6 +86,7 @@ class PipeDAGStore:
             self.swapped_schemas.add(schema.name)
 
         with schema.perform_swap():
+            self.validate_lock_state(schema)
             self.table_store.swap_schema(schema)
             self.blob_store.swap_schema(schema)
 
@@ -92,8 +101,10 @@ class PipeDAGStore:
 
         def dematerialise_mutator(x):
             if isinstance(x, Table):
+                self.validate_lock_state(x.schema)
                 return self.table_store.retrieve_table_obj(x, as_type = task.input_type)
             elif isinstance(x, Blob):
+                self.validate_lock_state(x.schema)
                 return self.blob_store.retrieve_blob(x)
             return x
 
@@ -116,6 +127,7 @@ class PipeDAGStore:
                 x.name = f'{task.original_name}_{task.cache_key}_{next(tbl_id):04d}'
                 x.cache_key = task.cache_key
 
+                self.validate_lock_state(schema)
                 if isinstance(x, Table):
                     self.table_store.store_table(x, lazy = task.lazy)
                 elif isinstance(x, Blob):
@@ -139,6 +151,8 @@ class PipeDAGStore:
             cache_key = task.cache_key,
             output_json = output_json,
         )
+
+        self.validate_lock_state(schema)
         self.table_store.store_task_metadata(metadata)
 
         return m_value
@@ -199,12 +213,16 @@ class PipeDAGStore:
 
         def visiting_mutator(x):
             if isinstance(x, Table):
+                self.validate_lock_state(task.schema)
                 self.table_store.copy_table_to_working_schema(x)
             elif isinstance(x, Blob):
+                self.validate_lock_state(task.schema)
                 self.blob_store.copy_blob_to_working_schema(x)
             return x
 
         deepmutate(output, visiting_mutator)
+
+        self.validate_lock_state(task.schema)
         self.table_store.copy_task_metadata_to_working_schema(task)
 
     #### Locking ####
@@ -214,6 +232,44 @@ class PipeDAGStore:
 
     def release_schema_lock(self, schema: schema.Schema):
         self.lock_manager.release_schema(schema)
+
+    def validate_lock_state(self, schema: schema.Schema):
+        while True:
+            state = self.lock_manager.get_lock_state(schema.name)
+            if state == LockState.LOCKED:
+                return
+            elif state == LockState.UNLOCKED:
+                raise LockError(f"Lock for schema '{schema.name}' is unlocked.")
+            elif state == LockState.INVALID:
+                raise LockError(f"Lock for schema '{schema.name}' is invalid.")
+            elif state == LockState.UNCERTAIN:
+                self.logger.info(f"Waiting for schema '{schema.name}' lock state to become known again...")
+                cond = self.lock_conditions[schema.name]
+                with cond:
+                    cond.wait()
+            else:
+                raise ValueError(f"Invalid state '{state}'.")
+
+    def _lock_state_listener(
+            self,
+            schema_name: str,
+            old_state: LockState,
+            new_state: LockState
+    ):
+
+        # Notify all waiting threads that the lock state has changed
+        cond = self.lock_conditions[schema_name]
+        with cond:
+            cond.notify_all()
+
+        # Logging
+        if new_state == LockState.UNCERTAIN:
+            self.logger.warning(f"Lock for schema '{schema_name}' transitioned to UNCERTAIN state.")
+        if old_state == LockState.UNCERTAIN and new_state == LockState.LOCKED:
+            self.logger.info(f"Lock for schema '{schema_name}' is still LOCKED (after being UNCERTAIN).")
+        if old_state == LockState.UNCERTAIN and new_state == LockState.INVALID:
+            self.logger.error(f"Lock for schema '{schema_name}' has become INVALID.")
+
 
     #### Utils ####
 

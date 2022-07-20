@@ -12,3 +12,9 @@ class CacheError(Exception):
     """
     Exception raised if something couldn't be retrieved from the cache.
     """
+
+class LockError(Exception):
+    """
+    Exception raised if something goes wrong while locking, for example if
+    a lock expires before it has been released.
+    """
