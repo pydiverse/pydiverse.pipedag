@@ -7,6 +7,8 @@ from typing import Callable
 
 import prefect
 import filelock as fl
+from kazoo.client import KazooClient, KazooState
+from kazoo.recipe.lock import Lock as KazooLock
 
 from pdpipedag.core.schema import Schema
 from pdpipedag.errors import LockError
@@ -103,3 +105,44 @@ class FileLockManager(BaseLockManager):
         if schema.name not in self.locks:
             return False
         return self.locks[schema.name].is_locked
+
+
+class ZookeeperLockManager(BaseLockManager):
+
+    def __init__(self, client: KazooClient):
+        super().__init__()
+
+        self.client = client
+        if not self.client.connected:
+            self.client.start()
+        self.client.add_listener(self._lock_listener)
+
+        self.locks: dict[str, KazooLock] = {}
+
+    def acquire_schema(self, schema: Schema):
+        lock = self.client.Lock('/pipedag/locks/' + schema.name, )
+        self.logger.info(f"Locking schema '{schema.name}'")
+        if not lock.acquire():
+            raise LockError(f"Failed to acquire lock for schema '{schema.name}'")
+        self.locks[schema.name] = lock
+        self._set_lock_state(schema.name, LockState.LOCKED)
+
+    def release_schema(self, schema: Schema):
+        if schema.name not in self.locks:
+            raise Exception(f"No lock for schema '{schema.name}' found.")
+
+        self.logger.info(f"Unlocking schema '{schema.name}'")
+        self.locks[schema.name].release()
+        del self.locks[schema.name]
+        self._set_lock_state(schema.name, LockState.UNLOCKED)
+
+    def _lock_listener(self, state):
+        if state == KazooState.SUSPENDED:
+            for lock_name in self.locks.keys():
+                self._set_lock_state(lock_name, LockState.UNCERTAIN)
+        elif state == KazooState.LOST:
+            for lock_name in self.locks.keys():
+                self._set_lock_state(lock_name, LockState.INVALID)
+        elif state == KazooState.CONNECTED:
+            for lock_name in self.locks.keys():
+                self._set_lock_state(lock_name, LockState.LOCKED)

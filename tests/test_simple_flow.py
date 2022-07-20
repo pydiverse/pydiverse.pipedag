@@ -4,11 +4,12 @@ import pytest
 import pandas as pd
 import sqlalchemy as sa
 from prefect import Flow
+from kazoo.client import KazooClient
 
 import pdpipedag
 from pdpipedag import materialise, Schema, Table, Blob
 from pdpipedag.backend import PipeDAGStore, SQLTableStore, FileBlobStore, FileLockManager
-
+from pdpipedag.backend.lock import ZookeeperLockManager
 
 # Configure
 
@@ -18,7 +19,8 @@ pdpipedag.config = pdpipedag.configuration.Config(
     store = PipeDAGStore(
         table = SQLTableStore(engine),
         blob = FileBlobStore('/tmp/pipedag/blobs'),
-        lock = FileLockManager('/tmp/pipedag/locks'),
+        lock = ZookeeperLockManager(KazooClient()),
+        #FileLockManager('/tmp/pipedag/locks'),
     )
 )
 
