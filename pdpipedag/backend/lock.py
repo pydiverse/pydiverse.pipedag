@@ -14,11 +14,11 @@ from pdpipedag.core.schema import Schema
 from pdpipedag.errors import LockError
 
 __all__ = [
-    'BaseLockManager',
-    'LockState',
-    'NoLockManager',
-    'FileLockManager',
-    'ZooKeeperLockManager',
+    "BaseLockManager",
+    "LockState",
+    "NoLockManager",
+    "FileLockManager",
+    "ZooKeeperLockManager",
 ]
 
 
@@ -48,10 +48,10 @@ class LockState(str, Enum):
         is that a lock transitions from `LOCKED -> UNCERTAIN -> INVALID`.
     """
 
-    UNLOCKED = 'UNLOCKED'
-    LOCKED = 'LOCKED'
-    UNCERTAIN = 'UNCERTAIN'
-    INVALID = 'INVALID'
+    UNLOCKED = "UNLOCKED"
+    LOCKED = "LOCKED"
+    UNCERTAIN = "UNCERTAIN"
+    INVALID = "INVALID"
 
 
 LockStateListener: TypeAlias = Callable[[Schema, LockState, LockState], None]
@@ -87,7 +87,7 @@ class BaseLockManager(ABC):
         state and the new lock state as arguments.
         """
         if listener is None or not callable(listener):
-            raise ValueError('Listener must be callable.')
+            raise ValueError("Listener must be callable.")
         self.state_listeners.add(listener)
 
     def remove_lock_state_listener(self, listener: LockStateListener):
@@ -162,10 +162,10 @@ class FileLockManager(BaseLockManager):
         self.base_path = os.path.abspath(base_path)
         self.locks: dict[Schema, fl.BaseFileLock] = {}
 
-        os.makedirs(self.base_path, exist_ok = True)
+        os.makedirs(self.base_path, exist_ok=True)
 
     def acquire_schema(self, schema: Schema):
-        lock_path = os.path.join(self.base_path, schema.name + '.lock')
+        lock_path = os.path.join(self.base_path, schema.name + ".lock")
 
         if schema not in self.locks:
             self.locks[schema] = fl.FileLock(lock_path)
@@ -221,7 +221,9 @@ class ZooKeeperLockManager(BaseLockManager):
         self.locks: dict[Schema, KazooLock] = {}
 
     def acquire_schema(self, schema: Schema):
-        lock = self.client.Lock('/pipedag/locks/' + schema.name, )
+        lock = self.client.Lock(
+            "/pipedag/locks/" + schema.name,
+        )
         self.logger.info(f"Locking schema '{schema.name}'")
         if not lock.acquire():
             raise LockError(f"Failed to acquire lock for schema '{schema.name}'")

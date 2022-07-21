@@ -12,10 +12,11 @@ def requires(requirements: Any | list, exception: BaseException | Type[BaseExcep
     """
 
     if not isinstance(requirements, (list, tuple)):
-        requirements = (requirements, )
+        requirements = (requirements,)
 
     def decorator(cls):
         if not all(requirements):
+
             @functools.wraps(cls.__new__)
             def raiser(*args, **kwargs):
                 raise exception

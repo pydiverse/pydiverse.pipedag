@@ -32,12 +32,11 @@ class PipeDAGStore:
     """
 
     def __init__(
-            self,
-            table: backend.table.BaseTableStore,
-            blob: backend.blob.BaseBlobStore,
-            lock: backend.lock.BaseLockManager,
+        self,
+        table: backend.table.BaseTableStore,
+        blob: backend.blob.BaseBlobStore,
+        lock: backend.lock.BaseLockManager,
     ):
-
         self.table_store = table
         self.blob_store = blob
         self.lock_manager = lock
@@ -46,16 +45,16 @@ class PipeDAGStore:
         self.schemas: dict[str, Schema] = dict()
         self.created_schemas: set[Schema] = set()
         self.run_id = uuid.uuid4().hex[:20]
-        self.logger = prefect.utilities.logging.get_logger('pipeDAG')
+        self.logger = prefect.utilities.logging.get_logger("pipeDAG")
 
         self.json_encoder = json.JSONEncoder(
-            ensure_ascii = False,
-            allow_nan = False,
-            separators = (',', ':'),
-            sort_keys = True,
-            default = json_util.json_default,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+            default=json_util.json_default,
         )
-        self.json_decoder = json.JSONDecoder(object_hook = json_util.json_object_hook)
+        self.json_decoder = json.JSONDecoder(object_hook=json_util.json_object_hook)
 
         self.lock_conditions = defaultdict(lambda: threading.Condition())
         self.lock_manager.add_lock_state_listener(self._lock_state_listener)
@@ -89,7 +88,10 @@ class PipeDAGStore:
             if schema in self.created_schemas:
                 raise SchemaError(f"Schema '{schema.name}' has already been created.")
             if schema.name not in self.schemas:
-                raise SchemaError(f"Can't create schema '{schema.name}' because it hasn't been registered.")
+                raise SchemaError(
+                    f"Can't create schema '{schema.name}' because it hasn't been"
+                    " registered."
+                )
             self.created_schemas.add(schema)
 
         # Lock the schema and then create it
@@ -123,10 +125,10 @@ class PipeDAGStore:
     #### Task ####
 
     def dematerialise_task_inputs(
-            self,
-            task: MaterialisingTask,
-            args: tuple[Materialisable],
-            kwargs: dict[str, Materialisable],
+        self,
+        task: MaterialisingTask,
+        args: tuple[Materialisable],
+        kwargs: dict[str, Materialisable],
     ) -> tuple[tuple, dict]:
         """Loads the inputs for a task from the storage backends
 
@@ -142,7 +144,7 @@ class PipeDAGStore:
         def dematerialise_mutator(x):
             if isinstance(x, Table):
                 self.validate_lock_state(x.schema)
-                return self.table_store.retrieve_table_obj(x, as_type = task.input_type)
+                return self.table_store.retrieve_table_obj(x, as_type=task.input_type)
             elif isinstance(x, Blob):
                 self.validate_lock_state(x.schema)
                 return self.blob_store.retrieve_blob(x)
@@ -154,9 +156,9 @@ class PipeDAGStore:
         return d_args, d_kwargs
 
     def materialise_task(
-            self,
-            task: MaterialisingTask,
-            value: Materialisable,
+        self,
+        task: MaterialisingTask,
+        value: Materialisable,
     ) -> Materialisable:
         """Stores the output of a task in the backend
 
@@ -176,18 +178,21 @@ class PipeDAGStore:
 
         schema = task.schema
         if schema not in self.created_schemas:
-            raise SchemaError(f"Can't materialise because schema '{schema.name}' has not been created.")
+            raise SchemaError(
+                f"Can't materialise because schema '{schema.name}' has not been"
+                " created."
+            )
 
-        def materialise_mutator(x, tbl_id = itertools.count()):
+        def materialise_mutator(x, tbl_id=itertools.count()):
             if isinstance(x, (Table, Blob)):
                 # TODO: Don't overwrite name unless it is None
                 x.schema = schema
-                x.name = f'{task.original_name}_{task.cache_key}_{next(tbl_id):04d}'
+                x.name = f"{task.original_name}_{task.cache_key}_{next(tbl_id):04d}"
                 x.cache_key = task.cache_key
 
                 self.validate_lock_state(schema)
                 if isinstance(x, Table):
-                    self.table_store.store_table(x, lazy = task.lazy)
+                    self.table_store.store_table(x, lazy=task.lazy)
                 elif isinstance(x, Blob):
                     self.blob_store.store_blob(x)
                 else:
@@ -201,13 +206,13 @@ class PipeDAGStore:
         # Metadata
         output_json = self.json_encode(m_value)
         metadata = TaskMetadata(
-            name = task.original_name,
-            schema = schema.name,
-            version = task.version,
-            timestamp = datetime.datetime.now(),
-            run_id = self.run_id,
-            cache_key = task.cache_key,
-            output_json = output_json,
+            name=task.original_name,
+            schema=schema.name,
+            version=task.version,
+            timestamp=datetime.datetime.now(),
+            run_id=self.run_id,
+            cache_key=task.cache_key,
+            output_json=output_json,
         )
 
         self.validate_lock_state(schema)
@@ -218,9 +223,9 @@ class PipeDAGStore:
     #### Cache ####
 
     def compute_task_cache_key(
-            self,
-            task: MaterialisingTask,
-            input_json: str,
+        self,
+        task: MaterialisingTask,
+        input_json: str,
     ) -> str:
         """Compute the cache key for a task
 
@@ -240,14 +245,14 @@ class PipeDAGStore:
         """
 
         v = (
-            'PYDIVERSE-PIPEDAG-TASK',
+            "PYDIVERSE-PIPEDAG-TASK",
             task.original_name,
-            task.version or 'None',
+            task.version or "None",
             input_json,
         )
 
-        v_str = '|'.join(v)
-        v_bytes = v_str.encode('utf8')
+        v_str = "|".join(v)
+        v_bytes = v_str.encode("utf8")
 
         v_hash = hashlib.sha256(v_bytes)
         # Only take first 20 characters of hex digest (80 bits). This
@@ -258,8 +263,8 @@ class PipeDAGStore:
         return v_hash.hexdigest()[:20]
 
     def retrieve_cached_output(
-            self,
-            task: MaterialisingTask,
+        self,
+        task: MaterialisingTask,
     ) -> Materialisable:
         """Try to retrieve the cached outputs for a task
 
@@ -275,9 +280,9 @@ class PipeDAGStore:
         return self.json_decode(metadata.output_json)
 
     def copy_cached_output_to_working_schema(
-            self,
-            output: Materialisable,
-            task: MaterialisingTask,
+        self,
+        output: Materialisable,
+        task: MaterialisingTask,
     ):
         """Copy the outputs from a cached task into the working schema
 
@@ -338,7 +343,10 @@ class PipeDAGStore:
             elif state == LockState.INVALID:
                 raise LockError(f"Lock for schema '{schema.name}' is invalid.")
             elif state == LockState.UNCERTAIN:
-                self.logger.info(f"Waiting for schema '{schema.name}' lock state to become known again...")
+                self.logger.info(
+                    f"Waiting for schema '{schema.name}' lock state to become known"
+                    " again..."
+                )
                 cond = self.lock_conditions[schema]
                 with cond:
                     cond.wait()
@@ -346,10 +354,7 @@ class PipeDAGStore:
                 raise ValueError(f"Invalid state '{state}'.")
 
     def _lock_state_listener(
-            self,
-            schema: Schema,
-            old_state: LockState,
-            new_state: LockState
+        self, schema: Schema, old_state: LockState, new_state: LockState
     ):
         """Internal listener that gets notified when the state of a lock changes"""
 
@@ -360,9 +365,14 @@ class PipeDAGStore:
 
         # Logging
         if new_state == LockState.UNCERTAIN:
-            self.logger.warning(f"Lock for schema '{schema.name}' transitioned to UNCERTAIN state.")
+            self.logger.warning(
+                f"Lock for schema '{schema.name}' transitioned to UNCERTAIN state."
+            )
         if old_state == LockState.UNCERTAIN and new_state == LockState.LOCKED:
-            self.logger.info(f"Lock for schema '{schema.name}' is still LOCKED (after being UNCERTAIN).")
+            self.logger.info(
+                f"Lock for schema '{schema.name}' is still LOCKED (after being"
+                " UNCERTAIN)."
+            )
         if old_state == LockState.UNCERTAIN and new_state == LockState.INVALID:
             self.logger.error(f"Lock for schema '{schema.name}' has become INVALID.")
 

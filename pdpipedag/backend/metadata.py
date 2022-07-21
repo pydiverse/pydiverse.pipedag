@@ -13,6 +13,7 @@ class TaskMetadata:
     same inputs, and all the information that is needed to reconstruct
     the output.
     """
+
     name: str
     schema: str
     version: str | None
@@ -36,6 +37,7 @@ class LazyTableMetadata:
     The `name` and `schema` values are used to retrieve the appropriate
     table from the cache.
     """
+
     name: str
     schema: str
     cache_key: str

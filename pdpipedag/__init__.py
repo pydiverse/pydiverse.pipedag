@@ -6,8 +6,8 @@ from .core.container import Table, Blob
 from .core.materialise import materialise
 
 __all__ = [
-    'materialise',
-    'Schema',
-    'Table',
-    'Blob',
+    "materialise",
+    "Schema",
+    "Table",
+    "Blob",
 ]

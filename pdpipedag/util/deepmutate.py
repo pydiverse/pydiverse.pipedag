@@ -9,6 +9,7 @@ from typing import Callable
 
 _nil = []
 
+
 def deepmutate(x, mutator: Callable, memo=None):
     if memo is None:
         memo = {}
@@ -36,12 +37,14 @@ def deepmutate(x, mutator: Callable, memo=None):
 
     return y
 
+
 def _deepmutate_list(x, mutator, memo):
     y = []
     append = y.append
     for a in x:
         append(deepmutate(a, mutator, memo))
     return mutator(y)
+
 
 def _deepmutate_tuple(x, mutator, memo):
     y = [deepmutate(a, mutator, memo) for a in x]
@@ -59,12 +62,14 @@ def _deepmutate_tuple(x, mutator, memo):
         y = x
     return mutator(y)
 
+
 def _deepmutate_dict(x, mutator, memo):
     y = {}
     memo[id(x)] = y
     for key, value in x.items():
         y[deepmutate(key, mutator, memo)] = deepmutate(value, mutator, memo)
     return mutator(y)
+
 
 def _keep_alive(x, memo):
     """Keeps a reference to the object x in the memo.
@@ -79,4 +84,4 @@ def _keep_alive(x, memo):
         memo[id(memo)].append(x)
     except KeyError:
         # aha, this is the first one :-)
-        memo[id(memo)]=[x]
+        memo[id(memo)] = [x]

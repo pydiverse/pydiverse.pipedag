@@ -22,12 +22,12 @@ class Table(Generic[T]):
     """
 
     def __init__(
-            self,
-            obj: T = None,
-            name: str = None,
-            schema: Schema = None,
-            primary_key: str = None,
-            cache_key: str = None,
+        self,
+        obj: T = None,
+        name: str = None,
+        schema: Schema = None,
+        primary_key: str = None,
+        cache_key: str = None,
     ):
         self.obj = obj
         self.name = name
@@ -37,7 +37,7 @@ class Table(Generic[T]):
         self.cache_key = cache_key
 
     def __str__(self):
-        return f'<Table: {self.name} ({self.schema.name})>'
+        return f"<Table: {self.name} ({self.schema.name})>"
 
 
 class Blob:
@@ -52,11 +52,11 @@ class Blob:
     """
 
     def __init__(
-            self,
-            obj: Any = None,
-            name: str = None,
-            schema: Schema = None,
-            cache_key: str = None,
+        self,
+        obj: Any = None,
+        name: str = None,
+        schema: Schema = None,
+        cache_key: str = None,
     ):
         self.obj = obj
         self.name = name
@@ -65,4 +65,4 @@ class Blob:
         self.cache_key = cache_key
 
     def __str__(self):
-        return f'<Blob: {self.name} ({self.schema.name})>'
+        return f"<Blob: {self.name} ({self.schema.name})>"

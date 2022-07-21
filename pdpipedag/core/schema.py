@@ -74,7 +74,7 @@ class Schema:
 
     def __init__(self, name: str):
         self.name = name
-        self.working_name = f'{name}__pipedag'
+        self.working_name = f"{name}__pipedag"
 
         # Variables that should be accessed via a lock
         self.__lock = threading.Lock()
@@ -113,7 +113,7 @@ class Schema:
         self.flow: prefect.Flow = prefect.context.flow
 
         # Store current schema in context
-        self._enter_schema = prefect.context.get('pipedag_schema')
+        self._enter_schema = prefect.context.get("pipedag_schema")
         prefect.context.pipedag_schema = self
 
         # Add schema task to flow
@@ -129,7 +129,7 @@ class Schema:
 
         upstream_edges = self.flow.all_upstream_edges()
 
-        def get_upstream_schemas(task: prefect.Task) -> Iterator['Schema']:
+        def get_upstream_schemas(task: prefect.Task) -> Iterator["Schema"]:
             """Perform DFS and get all upstream schema dependencies
 
             :param task: The task for which to get the upstream schemas
@@ -229,14 +229,14 @@ class SchemaSwapTask(prefect.Task):
     """Swaps schema once all materialising task have finished successfully"""
 
     def __init__(self, schema):
-        super().__init__(name = f'SchemaSwapTask({schema.name})')
+        super().__init__(name=f"SchemaSwapTask({schema.name})")
         self.schema = schema
 
         self._incr_schema_ref_count()
         self.state_handlers.append(schema_ref_counter_handler)
 
     def run(self):
-        self.logger.info('Performing schema swap.')
+        self.logger.info("Performing schema swap.")
         pdpipedag.config.store.swap_schema(self.schema)
 
     def _incr_schema_ref_count(self, by: int = 1):
@@ -265,7 +265,7 @@ def schema_ref_counter_handler(task, old_state, new_state):
         task._incr_schema_ref_count(new_state.n_map_states)
 
     if isinstance(new_state, prefect.engine.state.Failed):
-        run_count = prefect.context.get('task_run_count', 0)
+        run_count = prefect.context.get("task_run_count", 0)
         if run_count <= task.max_retries:
             # Will retry -> Don't decrement ref counter
             return

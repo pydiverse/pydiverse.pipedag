@@ -24,13 +24,15 @@ def materialise(**kwargs):
             return Table(df * by)
 
     """
+
     def wrapper(fn: CallableT) -> CallableT:
         return MaterialisingTask(fn, **kwargs)
+
     return wrapper
 
 
 class MaterialisingTask(prefect.Task):
-    """ Task whose outputs get materialised
+    """Task whose outputs get materialised
 
     All the values a materialising task returns get written to the appropriate
     storage backend. Additionally, all `Table` and `Blob` objects in the
@@ -67,14 +69,14 @@ class MaterialisingTask(prefect.Task):
     """
 
     def __init__(
-            self,
-            fn: Callable,
-            *,
-            name: str = None,
-            input_type: Type = None,
-            version: str = None,
-            lazy: bool = False,
-            **kwargs: Any
+        self,
+        fn: Callable,
+        *,
+        name: str = None,
+        input_type: Type = None,
+        version: str = None,
+        lazy: bool = False,
+        **kwargs: Any,
     ):
         if not callable(fn):
             raise TypeError("`fn` must be callable")
@@ -128,19 +130,18 @@ class MaterialisingTask(prefect.Task):
         add them to the schema in which they were created.
         """
 
-        self.schema = prefect.context.get('pipedag_schema')
+        self.schema = prefect.context.get("pipedag_schema")
         self.name = f"{self.original_name}({self.schema.name})"
         if self.schema is None:
             raise FlowError(
                 "Schema missing for materialised task. Materialised tasks must "
-                "be used inside a schema block.")
+                "be used inside a schema block."
+            )
 
         # Create run method
-        self.run = (lambda *args, **kwargs: self.wrapped_fn(
-            *args,
-            **kwargs,
-            _pipedag_task_ = self
-        ))
+        self.run = lambda *args, **kwargs: self.wrapped_fn(
+            *args, **kwargs, _pipedag_task_=self
+        )
         functools.update_wrapper(self.run, self.wrapped_fn)
 
         # Add task to schema

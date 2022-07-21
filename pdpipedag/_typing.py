@@ -19,24 +19,18 @@ def decorator_hint(decorator: Callable) -> Callable:
     return decorator
 
 
-T = TypeVar('T')
-CallableT = TypeVar('CallableT', bound = Callable)
+T = TypeVar("T")
+CallableT = TypeVar("CallableT", bound=Callable)
 
 # Materialisable
 
-MPrimitives = Union[
-    int,
-    float,
-    bool,
-    str
-]
-MTypes = Union['Table', 'Blob']
+MPrimitives = Union[int, float, bool, str]
+MTypes = Union["Table", "Blob"]
 
 BaseMaterialisable = Union[MPrimitives, MTypes]
 Materialisable = Union[
     BaseMaterialisable,
-    Dict[MPrimitives, 'Materialisable'],
-    List['Materialisable'],
-    Tuple['Materialisable', ...]
+    Dict[MPrimitives, "Materialisable"],
+    List["Materialisable"],
+    Tuple["Materialisable", ...],
 ]
-
