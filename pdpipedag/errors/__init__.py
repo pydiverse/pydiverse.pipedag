@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 class FlowError(Exception):
     """
     Exception raised when there is an issue with the flow definition.

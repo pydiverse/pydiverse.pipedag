@@ -3,8 +3,9 @@
 Heavily inspired by the builtin copy module of python:
 https://github.com/python/cpython/blob/main/Lib/copy.py
 """
-from typing import Callable
+from __future__ import annotations
 
+from typing import Callable
 
 _nil = []
 

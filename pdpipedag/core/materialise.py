@@ -1,16 +1,18 @@
+from __future__ import annotations
+
 import functools
 import inspect
-from typing import Callable, Any, TypeVar, Type
+from typing import Any, Callable, Type
 
 import prefect
 
 import pdpipedag
-from pdpipedag.core.util.schema_ref_count import schema_ref_counter_handler
+from pdpipedag.core.schema import schema_ref_counter_handler
 from pdpipedag.errors import FlowError, CacheError
+from pdpipedag._typing import CallableT
 
 
 def materialise(**kwargs):
-    CallableT = TypeVar('CallableT', bound = Callable)
     def wrapper(fn: CallableT) -> CallableT:
         return MaterialisingTask(fn, **kwargs)
     return wrapper
@@ -25,6 +27,7 @@ class MaterialisingTask(prefect.Task):
     def __init__(
             self,
             fn: Callable,
+            *,
             name: str = None,
             input_type: Type = None,
             version: str = None,
@@ -122,7 +125,7 @@ class MaterialisationWrapper:
         store.ensure_schema_is_ready(task.schema)
 
         # Compute the cache key for the task inputs
-        input_json = store.json_serialise(bound.arguments)
+        input_json = store.json_encode(bound.arguments)
         cache_key = store.compute_task_cache_key(task, input_json)
         task.cache_key = cache_key
 

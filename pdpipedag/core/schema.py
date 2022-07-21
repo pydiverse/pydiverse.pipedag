@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import contextlib
 import threading
 from typing import Iterator, Callable
@@ -6,7 +8,6 @@ import prefect
 
 import pdpipedag
 from pdpipedag.core import materialise
-from pdpipedag.core.util.schema_ref_count import schema_ref_counter_handler
 from pdpipedag.errors import SchemaError
 
 
@@ -32,6 +33,14 @@ class Schema:
 
     def __repr__(self):
         return f"<Schema: {self.name}>"
+
+    def __hash__(self):
+        return hash(self.name)
+
+    def __eq__(self, other):
+        if not isinstance(other, Schema):
+            return False
+        return self.name == other.name
 
     def __enter__(self):
         self.flow: prefect.Flow = prefect.context.flow
@@ -87,7 +96,8 @@ class Schema:
         # Restore context
         prefect.context.pipedag_schema = self._enter_schema
 
-    def add_task(self, task: prefect.Task):
+    def add_task(self, task: materialise.MaterialisingTask):
+        assert isinstance(task, materialise.MaterialisingTask)
         task.set_downstream(self.task)
         self.materialising_tasks.append(task)
 
@@ -132,7 +142,7 @@ class Schema:
             if self.__ref_count == 0 and callable(self.__ref_count_free_handler):
                 self.__ref_count_free_handler(self)
 
-    def _set_ref_count_free_handler(self, handler: Callable[['Schema'], None]):
+    def _set_ref_count_free_handler(self, handler: Callable[[Schema], None]):
         assert callable(handler) or handler is None
         with self.__lock:
             self.__ref_count_free_handler = handler
@@ -143,7 +153,6 @@ class SchemaSwapTask(prefect.Task):
     def __init__(self, schema):
         super().__init__(name = f'SchemaSwapTask({schema.name})')
         self.schema = schema
-        self.child = None
 
         self._incr_schema_ref_count()
         self.state_handlers.append(schema_ref_counter_handler)
@@ -157,3 +166,28 @@ class SchemaSwapTask(prefect.Task):
 
     def _decr_schema_ref_count(self, by: int = 1):
         self.schema._decr_ref_count(by)
+
+
+def schema_ref_counter_handler(task, old_state, new_state):
+    """Prefect Task state handler to update the schema reference counter
+
+    Requires the task to implement the following methods:
+    ::
+        task._incr_schema_ref_count(by: int = 1)
+        task._decr_schema_ref_count(by: int = 1)
+    """
+
+    if isinstance(new_state, prefect.engine.state.Mapped):
+        # Is mapping task -> Increment reference counter by the number
+        # of child tasks.
+        task._incr_schema_ref_count(new_state.n_map_states)
+
+    if isinstance(new_state, prefect.engine.state.Failed):
+        run_count = prefect.context.get('task_run_count', 0)
+        if run_count <= task.max_retries:
+            # Will retry -> Don't decrement ref counter
+            return
+
+    if isinstance(new_state, prefect.engine.state.Finished):
+        # Did finish task and won't retry -> Decrement ref counter
+        task._decr_schema_ref_count()

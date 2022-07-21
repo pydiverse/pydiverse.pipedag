@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.schema import DDLElement
 from sqlalchemy.sql import Select

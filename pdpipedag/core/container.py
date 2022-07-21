@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any, Generic
 
 from pdpipedag._typing import T
@@ -12,7 +14,7 @@ class Table(Generic[T]):
             self,
             obj: T = None,
             name: str = None,
-            schema: 'Schema' = None,
+            schema: Schema = None,
             primary_key: str = None,
             cache_key: str = None,
     ):
@@ -33,7 +35,7 @@ class Blob:
             self,
             obj: Any = None,
             name: str = None,
-            schema: 'Schema' = None,
+            schema: Schema = None,
             cache_key: str = None,
     ):
         self.obj = obj

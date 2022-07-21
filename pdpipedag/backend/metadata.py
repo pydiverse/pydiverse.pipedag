@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 from dataclasses import dataclass
 
@@ -6,7 +8,7 @@ from dataclasses import dataclass
 class TaskMetadata:
     name: str
     schema: str
-    version: str
+    version: str | None
     timestamp: datetime.datetime
     run_id: str
     cache_key: str

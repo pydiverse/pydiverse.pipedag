@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import (
     TYPE_CHECKING,
     Callable,
@@ -18,6 +20,7 @@ def decorator_hint(decorator: Callable) -> Callable:
 
 
 T = TypeVar('T')
+CallableT = TypeVar('CallableT', bound = Callable)
 
 # Materialisable
 

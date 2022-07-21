@@ -1,21 +1,23 @@
+from __future__ import annotations
+
 import datetime
 import hashlib
 import itertools
 import json
-import uuid
 import threading
+import uuid
 from collections import defaultdict
 
 import prefect.utilities.logging
 
-import pdpipedag
 from pdpipedag import backend
 from pdpipedag._typing import Materialisable
 from pdpipedag.backend.lock import LockState
-from pdpipedag.core import schema, materialise, Table, Blob
-from pdpipedag.core.metadata import TaskMetadata
-from pdpipedag.core.util import deepmutate
+from pdpipedag.backend.metadata import TaskMetadata
+from pdpipedag.backend.util import json as json_util
+from pdpipedag.core import Schema, Table, Blob, MaterialisingTask
 from pdpipedag.errors import SchemaError, LockError
+from pdpipedag.util import deepmutate
 
 
 class PipeDAGStore:
@@ -23,52 +25,50 @@ class PipeDAGStore:
 
     def __init__(
             self,
-            table: 'backend.table.BaseTableStore',
-            blob: 'backend.blob.BaseBlobStore',
-            lock: 'backend.lock.BaseLockManager',
+            table: backend.table.BaseTableStore,
+            blob: backend.blob.BaseBlobStore,
+            lock: backend.lock.BaseLockManager,
     ):
 
         self.table_store = table
         self.blob_store = blob
         self.lock_manager = lock
 
-        self.__lock = threading.Lock()
-        self.schemas: dict[str, schema.Schema] = {}
-        self.created_schemas: set[str] = set()
-        self.swapped_schemas: set[str] = set()
+        self.__lock = threading.RLock()
+        self.schemas: dict[str, Schema] = dict()
+        self.created_schemas: set[Schema] = set()
         self.run_id = uuid.uuid4().hex[:20]
         self.logger = prefect.utilities.logging.get_logger('pipeDAG')
+
         self.json_encoder = json.JSONEncoder(
             ensure_ascii = False,
             allow_nan = False,
             separators = (',', ':'),
             sort_keys = True,
-            default = _json_default,
+            default = json_util.json_default,
         )
+        self.json_decoder = json.JSONDecoder(object_hook = json_util.json_object_hook)
 
         self.lock_conditions = defaultdict(lambda: threading.Condition())
         self.lock_manager.add_lock_state_listener(self._lock_state_listener)
 
     #### Schema ####
 
-    def register_schema(self, schema: schema.Schema):
+    def register_schema(self, schema: Schema):
         with self.__lock:
             if schema.name in self.schemas:
                 raise SchemaError(f"Schema with name '{schema.name}' already exists.")
-            if schema.working_name in self.schemas:
-                raise SchemaError(f"Schema with working name '{schema.working_name}' already exists.")
-
             self.schemas[schema.name] = schema
-            self.schemas[schema.working_name] = schema
 
-    def ensure_schema_is_ready(self, schema: schema.Schema):
+    def create_schema(self, schema: Schema):
         with self.__lock:
-            if schema.name in self.created_schemas:
-                return
-            self.created_schemas.add(schema.name)
-            self.create_schema(schema)
+            if schema in self.created_schemas:
+                raise SchemaError(f"Schema '{schema.name}' has already been created.")
+            if schema.name not in self.schemas:
+                raise SchemaError(f"Can't create schema '{schema.name}' because it hasn't been registered.")
+            self.created_schemas.add(schema)
 
-    def create_schema(self, schema: schema.Schema):
+        # Lock the schema and then create it
         self.acquire_schema_lock(schema)
         self.table_store.create_schema(schema)
         self.blob_store.create_schema(schema)
@@ -78,13 +78,14 @@ class PipeDAGStore:
         # we can release the schema lock.
         schema._set_ref_count_free_handler(self.release_schema_lock)
 
-    def swap_schema(self, schema: schema.Schema):
-        """Swap the working schema with the base schema."""
+    def ensure_schema_is_ready(self, schema: Schema):
         with self.__lock:
-            if schema.name in self.swapped_schemas:
-                raise SchemaError(f"Schema with name '{schema.name}' has already been swapped.")
-            self.swapped_schemas.add(schema.name)
+            if schema in self.created_schemas:
+                return
+            self.create_schema(schema)
 
+    def swap_schema(self, schema: Schema):
+        """Swap the working schema with the base schema."""
         with schema.perform_swap():
             self.validate_lock_state(schema)
             self.table_store.swap_schema(schema)
@@ -94,7 +95,7 @@ class PipeDAGStore:
 
     def dematerialise_task_inputs(
             self,
-            task: materialise.MaterialisingTask,
+            task: MaterialisingTask,
             args: tuple[Materialisable],
             kwargs: dict[str, Materialisable],
     ) -> tuple[tuple, dict]:
@@ -115,14 +116,17 @@ class PipeDAGStore:
 
     def materialise_task(
             self,
-            task: materialise.MaterialisingTask,
+            task: MaterialisingTask,
             value: Materialisable,
-    ):
+    ) -> Materialisable:
+
         schema = task.schema
-        assert schema.name in self.schemas
+        if schema not in self.created_schemas:
+            raise SchemaError(f"Can't materialise because schema '{schema.name}' has not been created.")
 
         def materialise_mutator(x, tbl_id = itertools.count()):
             if isinstance(x, (Table, Blob)):
+                # TODO: Don't overwrite name unless it is None
                 x.schema = schema
                 x.name = f'{task.original_name}_{task.cache_key}_{next(tbl_id):04d}'
                 x.cache_key = task.cache_key
@@ -133,7 +137,7 @@ class PipeDAGStore:
                 elif isinstance(x, Blob):
                     self.blob_store.store_blob(x)
                 else:
-                    raise Exception
+                    raise NotImplementedError
 
             return x
 
@@ -141,7 +145,7 @@ class PipeDAGStore:
         m_value = deepmutate(value, materialise_mutator)
 
         # Metadata
-        output_json = self.json_serialise(m_value)
+        output_json = self.json_encode(m_value)
         metadata = TaskMetadata(
             name = task.original_name,
             schema = schema.name,
@@ -153,7 +157,7 @@ class PipeDAGStore:
         )
 
         self.validate_lock_state(schema)
-        self.table_store.store_task_metadata(metadata)
+        self.table_store.store_task_metadata(metadata, schema)
 
         return m_value
 
@@ -161,7 +165,7 @@ class PipeDAGStore:
 
     def compute_task_cache_key(
             self,
-            task: materialise.MaterialisingTask,
+            task: MaterialisingTask,
             input_json: str,
     ) -> str:
         """Compute the cache key for a task.
@@ -182,7 +186,7 @@ class PipeDAGStore:
             'PYDIVERSE-PIPEDAG-TASK',
             task.original_name,
             task.version or 'None',
-            input_json
+            input_json,
         )
 
         v_str = '|'.join(v)
@@ -193,22 +197,19 @@ class PipeDAGStore:
 
     def retrieve_cached_output(
             self,
-            task: materialise.MaterialisingTask,
+            task: MaterialisingTask,
     ) -> Materialisable:
 
-        with self.__lock:
-            if task.schema.name in self.swapped_schemas:
-                raise SchemaError(f"Schema already swapped.")
+        if task.schema.did_swap:
+            raise SchemaError(f"Schema already swapped.")
 
-        metadata = self.table_store.retrieve_task_metadata(task, task.cache_key)
-        output = self.json_decode(metadata.output_json)
-
-        return output
+        metadata = self.table_store.retrieve_task_metadata(task)
+        return self.json_decode(metadata.output_json)
 
     def copy_cached_output_to_working_schema(
             self,
             output: Materialisable,
-            task: materialise.MaterialisingTask,
+            task: MaterialisingTask,
     ):
 
         def visiting_mutator(x):
@@ -227,15 +228,15 @@ class PipeDAGStore:
 
     #### Locking ####
 
-    def acquire_schema_lock(self, schema: schema.Schema):
+    def acquire_schema_lock(self, schema: Schema):
         self.lock_manager.acquire_schema(schema)
 
-    def release_schema_lock(self, schema: schema.Schema):
+    def release_schema_lock(self, schema: Schema):
         self.lock_manager.release_schema(schema)
 
-    def validate_lock_state(self, schema: schema.Schema):
+    def validate_lock_state(self, schema: Schema):
         while True:
-            state = self.lock_manager.get_lock_state(schema.name)
+            state = self.lock_manager.get_lock_state(schema)
             if state == LockState.LOCKED:
                 return
             elif state == LockState.UNLOCKED:
@@ -244,7 +245,7 @@ class PipeDAGStore:
                 raise LockError(f"Lock for schema '{schema.name}' is invalid.")
             elif state == LockState.UNCERTAIN:
                 self.logger.info(f"Waiting for schema '{schema.name}' lock state to become known again...")
-                cond = self.lock_conditions[schema.name]
+                cond = self.lock_conditions[schema]
                 with cond:
                     cond.wait()
             else:
@@ -252,76 +253,32 @@ class PipeDAGStore:
 
     def _lock_state_listener(
             self,
-            schema_name: str,
+            schema: Schema,
             old_state: LockState,
             new_state: LockState
     ):
-
         # Notify all waiting threads that the lock state has changed
-        cond = self.lock_conditions[schema_name]
+        cond = self.lock_conditions[schema]
         with cond:
             cond.notify_all()
 
         # Logging
         if new_state == LockState.UNCERTAIN:
-            self.logger.warning(f"Lock for schema '{schema_name}' transitioned to UNCERTAIN state.")
+            self.logger.warning(f"Lock for schema '{schema.name}' transitioned to UNCERTAIN state.")
         if old_state == LockState.UNCERTAIN and new_state == LockState.LOCKED:
-            self.logger.info(f"Lock for schema '{schema_name}' is still LOCKED (after being UNCERTAIN).")
+            self.logger.info(f"Lock for schema '{schema.name}' is still LOCKED (after being UNCERTAIN).")
         if old_state == LockState.UNCERTAIN and new_state == LockState.INVALID:
-            self.logger.error(f"Lock for schema '{schema_name}' has become INVALID.")
-
+            self.logger.error(f"Lock for schema '{schema.name}' has become INVALID.")
 
     #### Utils ####
 
-    def json_serialise(self, value: Materialisable) -> str:
+    def json_encode(self, value: Materialisable) -> str:
         return self.json_encoder.encode(value)
 
     def json_decode(self, value: str) -> Materialisable:
-        return json.loads(value, object_hook = _json_object_hook)
+        return self.json_decoder.decode(value)
 
     def _reset(self):
         self.schemas.clear()
-        self.swapped_schemas.clear()
+        self.created_schemas.clear()
         self.run_id = uuid.uuid4().hex[:20]
-
-PIPEDAG_TYPE = '_pipedag_type_'
-PIPEDAG_TYPE_TABLE = 'table'
-PIPEDAG_TYPE_BLOB = 'blob'
-
-def _json_default(o):
-    if isinstance(o, Table):
-        return {
-            PIPEDAG_TYPE: PIPEDAG_TYPE_TABLE,
-            'schema': o.schema.name,
-            'name': o.name,
-            'cache_key': o.cache_key,
-        }
-    if isinstance(o, Blob):
-        return {
-            PIPEDAG_TYPE: PIPEDAG_TYPE_BLOB,
-            'schema': o.schema.name,
-            'name': o.name,
-            'cache_key': o.cache_key,
-        }
-
-    raise TypeError(f'Object of type {type(o).__name__} is not JSON serializable')
-
-def _json_object_hook(d: dict):
-    pipedag_type = d.get(PIPEDAG_TYPE)
-    if pipedag_type:
-        if pipedag_type == PIPEDAG_TYPE_TABLE:
-            return Table(
-                name = d['name'],
-                schema = pdpipedag.config.store.schemas[d['schema']],
-                cache_key = d['cache_key']
-            )
-        elif pipedag_type == PIPEDAG_TYPE_BLOB:
-            return Blob(
-                name = d['name'],
-                schema = pdpipedag.config.store.schemas[d['schema']],
-                cache_key = d['cache_key']
-            )
-        else:
-            raise ValueError(f"Invalid value for '{PIPEDAG_TYPE}' key: {repr(pipedag_type)}")
-
-    return d

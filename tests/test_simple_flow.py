@@ -1,15 +1,11 @@
-import os
-
 import pytest
 import pandas as pd
 import sqlalchemy as sa
 from prefect import Flow
-from kazoo.client import KazooClient
 
 import pdpipedag
 from pdpipedag import materialise, Schema, Table, Blob
-from pdpipedag.backend import PipeDAGStore, SQLTableStore, FileBlobStore, FileLockManager
-from pdpipedag.backend.lock import ZookeeperLockManager
+from pdpipedag.backend import *
 
 # Configure
 
@@ -19,8 +15,9 @@ pdpipedag.config = pdpipedag.configuration.Config(
     store = PipeDAGStore(
         table = SQLTableStore(engine),
         blob = FileBlobStore('/tmp/pipedag/blobs'),
-        lock = ZookeeperLockManager(KazooClient()),
-        #FileLockManager('/tmp/pipedag/locks'),
+        lock = NoLockManager(),
+        # ZooKeeperLockManager(KazooClient()),
+        # FileLockManager('/tmp/pipedag/locks'),
     )
 )
 
@@ -40,7 +37,7 @@ def test_simple_flow():
         })
 
         import time
-        time.sleep(20)
+        time.sleep(1)
         return Table(dfA, 'dfA'), Table(dfB, 'dfB')
 
     @materialise(input_type = pd.DataFrame)

@@ -1,17 +1,35 @@
+from __future__ import annotations
+
 import os
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from enum import Enum
-from typing import Callable
+from typing import Callable, TypeAlias
 
 import prefect
-import filelock as fl
-from kazoo.client import KazooClient, KazooState
-from kazoo.recipe.lock import Lock as KazooLock
 
+from pdpipedag.util import requires
 from pdpipedag.core.schema import Schema
 from pdpipedag.errors import LockError
+
+__all__ = [
+    'BaseLockManager',
+    'LockState',
+    'NoLockManager',
+    'FileLockManager',
+    'ZooKeeperLockManager',
+]
+
+
+class LockState(str, Enum):
+    UNLOCKED = 'UNLOCKED'
+    LOCKED = 'LOCKED'
+    UNCERTAIN = 'UNCERTAIN'
+    INVALID = 'INVALID'
+
+
+LockStateListener: TypeAlias = Callable[[Schema, LockState, LockState], None]
 
 
 class BaseLockManager(ABC):
@@ -31,15 +49,15 @@ class BaseLockManager(ABC):
     def release_schema(self, schema: Schema):
         ...
 
-    def add_lock_state_listener(self, listener: Callable[[str, 'LockState', 'LockState'], None]):
+    def add_lock_state_listener(self, listener: LockStateListener):
         if listener is None or not callable(listener):
             raise ValueError('Listener must be callable.')
         self.state_listeners.add(listener)
 
-    def remove_lock_state_listener(self, listener: Callable[[str, 'LockState'], None]):
+    def remove_lock_state_listener(self, listener: LockStateListener):
         self.state_listeners.remove(listener)
 
-    def _set_lock_state(self, schema: str, new_state: 'LockState'):
+    def set_lock_state(self, schema: Schema, new_state: LockState):
         with self.__lock_state_lock:
             if schema not in self.lock_states:
                 self.lock_states[schema] = new_state
@@ -55,59 +73,72 @@ class BaseLockManager(ABC):
             if new_state == LockState.UNLOCKED:
                 del self.lock_states[schema]
 
-    def get_lock_state(self, schema: str) -> 'LockState':
+    def get_lock_state(self, schema: Schema) -> LockState:
         with self.__lock_state_lock:
             return self.lock_states[schema]
 
 
-class LockState(str, Enum):
-    UNLOCKED = 'UNLOCKED'
-    LOCKED = 'LOCKED'
-    UNCERTAIN = 'UNCERTAIN'
-    INVALID = 'INVALID'
+class NoLockManager(BaseLockManager):
+
+    def acquire_schema(self, schema: Schema):
+        self.set_lock_state(schema, LockState.LOCKED)
+
+    def release_schema(self, schema: Schema):
+        self.set_lock_state(schema, LockState.UNLOCKED)
 
 
+try:
+    import filelock as fl
+except ImportError:
+    fl = None
+
+
+@requires(fl, ImportError("FileLockManager requires 'filelock' to be installed."))
 class FileLockManager(BaseLockManager):
 
     def __init__(self, base_path: str):
         super().__init__()
         self.base_path = os.path.abspath(base_path)
-        self.locks: dict[str, fl.BaseFileLock] = {}
+        self.locks: dict[Schema, fl.BaseFileLock] = {}
 
         os.makedirs(self.base_path, exist_ok = True)
 
     def acquire_schema(self, schema: Schema):
         lock_path = os.path.join(self.base_path, schema.name + '.lock')
 
-        if schema.name not in self.locks:
-            self.locks[schema.name] = fl.FileLock(lock_path)
+        if schema not in self.locks:
+            self.locks[schema] = fl.FileLock(lock_path)
 
-        lock = self.locks[schema.name]
+        lock = self.locks[schema]
         if not lock.is_locked:
             self.logger.info(f"Locking schema '{schema.name}'")
         lock.acquire()
-        self._set_lock_state(schema.name, LockState.LOCKED)
+        self.set_lock_state(schema, LockState.LOCKED)
 
     def release_schema(self, schema: Schema):
-        if schema.name not in self.locks:
-            raise Exception(f"No lock for schema '{schema.name}' found.")
+        if schema not in self.locks:
+            raise LockError(f"No lock for schema '{schema.name}' found.")
 
-        lock = self.locks[schema.name]
+        lock = self.locks[schema]
         lock.release()
 
         if not lock.is_locked:
             self.logger.info(f"Unlocking schema '{schema.name}'")
             os.remove(lock.lock_file)
-            del self.locks[schema.name]
-            self._set_lock_state(schema.name, LockState.UNLOCKED)
-
-    def is_schema_locked(self, schema: Schema) -> bool:
-        if schema.name not in self.locks:
-            return False
-        return self.locks[schema.name].is_locked
+            del self.locks[schema]
+            self.set_lock_state(schema, LockState.UNLOCKED)
 
 
-class ZookeeperLockManager(BaseLockManager):
+try:
+    import kazoo
+    from kazoo.client import KazooClient, KazooState
+    from kazoo.recipe.lock import Lock as KazooLock
+except ImportError:
+    kazoo = None
+
+
+@requires(kazoo, ImportError("ZooKeeperLockManager requires 'kazoo' to be installed."))
+class ZooKeeperLockManager(BaseLockManager):
 
     def __init__(self, client: KazooClient):
         super().__init__()
@@ -117,32 +148,32 @@ class ZookeeperLockManager(BaseLockManager):
             self.client.start()
         self.client.add_listener(self._lock_listener)
 
-        self.locks: dict[str, KazooLock] = {}
+        self.locks: dict[Schema, KazooLock] = {}
 
     def acquire_schema(self, schema: Schema):
         lock = self.client.Lock('/pipedag/locks/' + schema.name, )
         self.logger.info(f"Locking schema '{schema.name}'")
         if not lock.acquire():
             raise LockError(f"Failed to acquire lock for schema '{schema.name}'")
-        self.locks[schema.name] = lock
-        self._set_lock_state(schema.name, LockState.LOCKED)
+        self.locks[schema] = lock
+        self.set_lock_state(schema, LockState.LOCKED)
 
     def release_schema(self, schema: Schema):
-        if schema.name not in self.locks:
-            raise Exception(f"No lock for schema '{schema.name}' found.")
+        if schema not in self.locks:
+            raise LockError(f"No lock for schema '{schema.name}' found.")
 
         self.logger.info(f"Unlocking schema '{schema.name}'")
-        self.locks[schema.name].release()
-        del self.locks[schema.name]
-        self._set_lock_state(schema.name, LockState.UNLOCKED)
+        self.locks[schema].release()
+        del self.locks[schema]
+        self.set_lock_state(schema, LockState.UNLOCKED)
 
     def _lock_listener(self, state):
         if state == KazooState.SUSPENDED:
-            for lock_name in self.locks.keys():
-                self._set_lock_state(lock_name, LockState.UNCERTAIN)
+            for schema in self.locks.keys():
+                self.set_lock_state(schema, LockState.UNCERTAIN)
         elif state == KazooState.LOST:
-            for lock_name in self.locks.keys():
-                self._set_lock_state(lock_name, LockState.INVALID)
+            for schema in self.locks.keys():
+                self.set_lock_state(schema, LockState.INVALID)
         elif state == KazooState.CONNECTED:
-            for lock_name in self.locks.keys():
-                self._set_lock_state(lock_name, LockState.LOCKED)
+            for schema in self.locks.keys():
+                self.set_lock_state(schema, LockState.LOCKED)

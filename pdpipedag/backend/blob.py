@@ -1,10 +1,18 @@
+from __future__ import annotations
+
 import os
 import shutil
 import pickle
 from abc import ABC, abstractmethod
+from typing import Any
 
 from pdpipedag.core import Blob, Schema
 from pdpipedag.errors import CacheError
+
+__all__ = [
+    'BaseBlobStore',
+    'FileBlobStore',
+]
 
 
 class BaseBlobStore(ABC):
@@ -26,16 +34,13 @@ class BaseBlobStore(ABC):
         ...
 
     @abstractmethod
-    def retrieve_blob(self, blob: Blob, from_cache: bool = False):
+    def retrieve_blob(self, blob: Blob, from_cache: bool = False) -> Any:
         ...
 
 
 class FileBlobStore(BaseBlobStore):
 
-    def __init__(
-            self,
-            base_path: str
-    ):
+    def __init__(self, base_path: str):
         self.base_path = os.path.abspath(base_path)
         os.makedirs(self.base_path, exist_ok = True)
 

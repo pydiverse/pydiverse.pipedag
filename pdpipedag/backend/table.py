@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 import threading
 from abc import ABC, abstractmethod
@@ -9,13 +11,16 @@ import sqlalchemy as sa
 import sqlalchemy.exc
 
 from pdpipedag._typing import T
-from pdpipedag.core.container import Table
-from pdpipedag.core.materialise import MaterialisingTask
-from pdpipedag.core.metadata import TaskMetadata, LazyTableMetadata
-from pdpipedag.core.schema import Schema
-from pdpipedag.errors import CacheError
-from pdpipedag.errors import SchemaError
-from .sql import CreateSchema, DropSchema, RenameSchema, CopyTable, CreateTableAsSelect
+from pdpipedag.backend.metadata import TaskMetadata, LazyTableMetadata
+from pdpipedag.core import Schema, Table, MaterialisingTask
+from pdpipedag.errors import CacheError, SchemaError
+from .util.sql_ddl import CreateSchema, DropSchema, RenameSchema, CopyTable, CreateTableAsSelect
+
+__all__ = [
+    'BaseTableStore',
+    'DictTableStore',
+    'SQLTableStore',
+]
 
 
 class BaseTableStore(ABC):
@@ -42,7 +47,7 @@ class BaseTableStore(ABC):
         ...
 
     @abstractmethod
-    def store_task_metadata(self, metadata: TaskMetadata):
+    def store_task_metadata(self, metadata: TaskMetadata, schema: Schema):
         ...
 
     @abstractmethod
@@ -50,7 +55,7 @@ class BaseTableStore(ABC):
         ...
 
     @abstractmethod
-    def retrieve_task_metadata(self, task: MaterialisingTask, cache_key: str) -> TaskMetadata:
+    def retrieve_task_metadata(self, task: MaterialisingTask) -> TaskMetadata:
         ...
 
 
@@ -101,7 +106,8 @@ class DictTableStore(BaseTableStore):
     def copy_table_to_working_schema(self, table: Table):
         schema = table.schema
         if schema.did_swap:
-            raise SchemaError(f"Can't copy table '{table.name}' to working schema. Schema '{schema.name}' has already been swapped.")
+            raise SchemaError(
+                f"Can't copy table '{table.name}' to working schema. Schema '{schema.name}' has already been swapped.")
         if table.cache_key is None:
             raise ValueError(f"Table cache key can't be None.")
 
@@ -118,29 +124,28 @@ class DictTableStore(BaseTableStore):
         if isinstance(obj, as_type):
             return obj.copy()
 
-        raise Exception(f"{type(self).__name__} can't convert from type {type(obj)} to {as_type}.")
+        raise TypeError(f"{type(self).__name__} can't convert from type {type(obj)} to {as_type}.")
 
-    def store_task_metadata(self, metadata: TaskMetadata):
+    def store_task_metadata(self, metadata: TaskMetadata, schema: Schema):
         with self.__lock:
-            self.run_metadata[metadata.schema][metadata.cache_key] = metadata
+            self.run_metadata[schema.name][metadata.cache_key] = metadata
 
     def copy_task_metadata_to_working_schema(self, task: MaterialisingTask):
         schema = task.schema
         with self.__lock:
             self.run_metadata[schema.name][task.cache_key] = self.metadata[schema.name][task.cache_key]
 
-    def retrieve_task_metadata(self, task, cache_key: str) -> TaskMetadata:
+    def retrieve_task_metadata(self, task: MaterialisingTask) -> TaskMetadata:
         with self.__lock:
             try:
-                return self.metadata[task.schema.name][cache_key]
+                return self.metadata[task.schema.name][task.cache_key]
             except KeyError:
                 raise CacheError(
                     f"Failed to retrieve metadata for task "
-                    f"'{task.name}' with cache key '{cache_key}'")
+                    f"'{task.name}' with cache key '{task.cache_key}'")
 
 
 class SQLTableStore(BaseTableStore):
-
     METADATA_SCHEMA = 'pipedag_metadata'
 
     def __init__(self, engine: sa.engine.Engine):
@@ -158,7 +163,7 @@ class SQLTableStore(BaseTableStore):
             Column('schema', String),
             Column('version', String),
             Column('timestamp', DateTime),
-            Column('run_id', String(20)),     # TODO: Replace with appropriate type
+            Column('run_id', String(20)),  # TODO: Replace with appropriate type
             Column('cache_key', String(20)),  # TODO: Replace with appropriate type
             Column('output_json', String),
             Column('in_working_schema', Boolean),
@@ -260,7 +265,8 @@ class SQLTableStore(BaseTableStore):
                     return
                 except CacheError as e:
                     logger.warn(e)
-
+        else:
+            lazy_cache_key = None
 
         if isinstance(obj, pd.DataFrame):
             obj.to_sql(
@@ -271,6 +277,7 @@ class SQLTableStore(BaseTableStore):
                 index = False,
             )
         elif isinstance(obj, sa.sql.Select):
+            # TODO: Handle table.primary_key
             logger.info(f'Performing CREATE TABLE AS SELECT ({table})')
             with self.engine.connect() as conn:
                 conn.execute(CreateTableAsSelect(
@@ -289,11 +296,10 @@ class SQLTableStore(BaseTableStore):
                 cache_key = lazy_cache_key,
             ))
 
-
     def copy_table_to_working_schema(self, table: Table):
         schema = table.schema
         with self.engine.connect() as conn:
-            if sa.inspect(self.engine).has_table(table.name, schema=schema.name):
+            if sa.inspect(self.engine).has_table(table.name, schema = schema.name):
                 conn.execute(CopyTable(table.name, schema.name, table.name, schema.working_name))
             else:
                 raise CacheError(
@@ -324,8 +330,7 @@ class SQLTableStore(BaseTableStore):
 
         raise TypeError(f"{type(self).__name__} can't convert to {as_type}.")
 
-
-    def store_task_metadata(self, metadata: TaskMetadata):
+    def store_task_metadata(self, metadata: TaskMetadata, schema: Schema):
         with self.engine.connect() as conn:
             conn.execute(
                 self.tasks_table.insert().values(
@@ -358,7 +363,7 @@ class SQLTableStore(BaseTableStore):
                 self.tasks_table.insert().values(**metadata_copy)
             )
 
-    def retrieve_task_metadata(self, task: MaterialisingTask, cache_key: str) -> TaskMetadata:
+    def retrieve_task_metadata(self, task: MaterialisingTask) -> TaskMetadata:
         with self.engine.connect() as conn:
             result = conn.execute(
                 self.tasks_table.select()
@@ -369,7 +374,7 @@ class SQLTableStore(BaseTableStore):
             ).mappings().one_or_none()
 
         if result is None:
-            raise CacheError(f"Couldn't retrieve task for cache key {cache_key}")
+            raise CacheError(f"Couldn't retrieve task for cache key {task.cache_key}")
 
         return TaskMetadata(
             name = result.name,
@@ -381,7 +386,6 @@ class SQLTableStore(BaseTableStore):
             output_json = result.output_json,
         )
 
-
     def compute_lazy_table_cache_key(self, table: Table) -> str | None:
         obj = table.obj
         v = [
@@ -390,7 +394,7 @@ class SQLTableStore(BaseTableStore):
         ]
 
         if isinstance(obj, sa.sql.Select):
-            query = str(obj.compile(self.engine, compile_kwargs={'literal_binds': True}))
+            query = str(obj.compile(self.engine, compile_kwargs = {'literal_binds': True}))
             v.append(query)
         else:
             return None
@@ -414,7 +418,7 @@ class SQLTableStore(BaseTableStore):
 
     def copy_lazy_table_to_working_schema(self, metadata: LazyTableMetadata, table: Table):
         with self.engine.connect() as conn:
-            if sa.inspect(self.engine).has_table(metadata.name, schema=metadata.schema):
+            if sa.inspect(self.engine).has_table(metadata.name, schema = metadata.schema):
                 conn.execute(CopyTable(metadata.name, metadata.schema, table.name, table.schema.working_name))
             else:
                 raise CacheError(
