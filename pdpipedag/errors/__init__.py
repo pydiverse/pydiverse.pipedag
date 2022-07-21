@@ -24,3 +24,9 @@ class LockError(Exception):
     Exception raised if something goes wrong while locking, for example if
     a lock expires before it has been released.
     """
+
+
+class DuplicateNameError(ValueError):
+    """
+    Exception raised if an object that is supposed to have a unique name doesn't.
+    """

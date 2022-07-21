@@ -16,7 +16,8 @@ class Table(Generic[T]):
 
     :param obj: The table object to wrap
     :param name: Optional name. If no name is provided, an automatically
-        generated name will be used
+        generated name will be used. To prevent name collisions, you can
+        add '%%' at the end of the name to enable automatic name mangling.
     :param primary_key: Optional name of the primary key that should be
         used when materialising this table
     """
@@ -48,7 +49,8 @@ class Blob:
 
     :param obj: The object to wrap
     :param name: Optional name. If no name is provided, an automatically
-        generated name will be used.
+        generated name will be used. To prevent name collisions, you can
+        add '%%' at the end of the name to enable automatic name mangling.
     """
 
     def __init__(

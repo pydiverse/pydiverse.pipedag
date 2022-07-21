@@ -42,7 +42,7 @@ def test_simple_flow():
         import time
 
         time.sleep(1)
-        return Table(dfA, "dfA"), Table(dfB, "dfB")
+        return Table(dfA, "dfA"), Table(dfB, "dfA_%%")
 
     @materialise(input_type=pd.DataFrame)
     def double_values(df: pd.DataFrame):

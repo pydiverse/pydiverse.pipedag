@@ -16,7 +16,7 @@ from pdpipedag.backend.lock import LockState
 from pdpipedag.backend.metadata import TaskMetadata
 from pdpipedag.backend.util import json as json_util
 from pdpipedag.core import Schema, Table, Blob, MaterialisingTask
-from pdpipedag.errors import SchemaError, LockError
+from pdpipedag.errors import SchemaError, LockError, DuplicateNameError
 from pdpipedag.util import deepmutate
 
 
@@ -44,6 +44,8 @@ class PipeDAGStore:
         self.__lock = threading.RLock()
         self.schemas: dict[str, Schema] = dict()
         self.created_schemas: set[Schema] = set()
+        self.table_names: defaultdict[Schema, set[str]] = defaultdict(lambda: set())
+        self.blob_names: defaultdict[Schema, set[str]] = defaultdict(lambda: set())
         self.run_id = uuid.uuid4().hex[:20]
         self.logger = prefect.utilities.logging.get_logger("pipeDAG")
 
@@ -70,7 +72,9 @@ class PipeDAGStore:
         """
         with self.__lock:
             if schema.name in self.schemas:
-                raise SchemaError(f"Schema with name '{schema.name}' already exists.")
+                raise DuplicateNameError(
+                    f"Schema with name '{schema.name}' already exists."
+                )
             self.schemas[schema.name] = schema
 
     def create_schema(self, schema: Schema):
@@ -187,13 +191,23 @@ class PipeDAGStore:
             if isinstance(x, (Table, Blob)):
                 # TODO: Don't overwrite name unless it is None
                 x.schema = schema
-                x.name = f"{task.original_name}_{task.cache_key}_{next(tbl_id):04d}"
                 x.cache_key = task.cache_key
+
+                # Update name:
+                # - If no name has been provided, generate on automatically
+                # - If the provided name ends with %%, perform name mangling
+                auto_suffix = f"{task.cache_key}_{next(tbl_id):04d}"
+                if x.name is None:
+                    x.name = task.original_name + "_" + auto_suffix
+                elif x.name.endswith("%%"):
+                    x.name = x.name[:-2] + auto_suffix
 
                 self.validate_lock_state(schema)
                 if isinstance(x, Table):
+                    self._check_table_name(x)
                     self.table_store.store_table(x, lazy=task.lazy)
                 elif isinstance(x, Blob):
+                    self._check_blob_name(x)
                     self.blob_store.store_blob(x)
                 else:
                     raise NotImplementedError
@@ -219,6 +233,28 @@ class PipeDAGStore:
         self.table_store.store_task_metadata(metadata, schema)
 
         return m_value
+
+    def _check_table_name(self, table: Table):
+        """Check that table name is unique in schema"""
+        with self.__lock:
+            if table.name in self.table_names[table.schema]:
+                raise DuplicateNameError(
+                    f"Table with name '{table.name}' already exists in schema"
+                    f" '{table.schema.name}'. To enable automatic name mangling,"
+                    " you can add '%%' at the end of the name."
+                )
+            self.table_names[table.schema].add(table.name)
+
+    def _check_blob_name(self, blob: Blob):
+        """Check that blob name is unique in schema"""
+        with self.__lock:
+            if blob.name in self.blob_names[blob.schema]:
+                raise DuplicateNameError(
+                    f"Blob with name '{blob.name}' already exists in schema"
+                    f" '{blob.schema.name}'. To enable automatic name mangling,"
+                    " you can add '%%' at the end of the name."
+                )
+            self.table_names[blob.schema].add(blob.name)
 
     #### Cache ####
 
@@ -296,9 +332,11 @@ class PipeDAGStore:
 
         def visiting_mutator(x):
             if isinstance(x, Table):
+                self._check_table_name(x)
                 self.validate_lock_state(task.schema)
                 self.table_store.copy_table_to_working_schema(x)
             elif isinstance(x, Blob):
+                self._check_blob_name(x)
                 self.validate_lock_state(task.schema)
                 self.blob_store.copy_blob_to_working_schema(x)
             return x
@@ -400,4 +438,6 @@ class PipeDAGStore:
     def _reset(self):
         self.schemas.clear()
         self.created_schemas.clear()
+        self.table_names.clear()
+        self.blob_names.clear()
         self.run_id = uuid.uuid4().hex[:20]
