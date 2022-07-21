@@ -21,7 +21,15 @@ from pdpipedag.util import deepmutate
 
 
 class PipeDAGStore:
-    """Main storage interface for materialising tasks."""
+    """Main storage interface for materialising tasks
+
+    Depending on the use case, the store can be configured using different
+    backends for storing tables, blobs and managing locks.
+
+    Other than initializing the global `PipeDAGStore` object, the user
+    should never have to interact with it. It only serves as a coordinator
+    between the different backends, the schemas and the materialising tasks.
+    """
 
     def __init__(
             self,
@@ -55,12 +63,28 @@ class PipeDAGStore:
     #### Schema ####
 
     def register_schema(self, schema: Schema):
+        """Used by `Schema` objects to inform the backend about its existence
+
+        As of right now, the mains purpose of this function is to prevent
+        creating two schemas with the same name, and to be able to retrieve
+        a schema object based on its name.
+        """
         with self.__lock:
             if schema.name in self.schemas:
                 raise SchemaError(f"Schema with name '{schema.name}' already exists.")
             self.schemas[schema.name] = schema
 
     def create_schema(self, schema: Schema):
+        """Creates the schema in all backends
+
+        This function also acquires a lock on the given schema to prevent
+        other flows from modifying the same schema at the same time. Only
+        once all tasks that depend on this schema have been executed, will
+        this lock be released.
+
+        Don't use this function directly. Instead, use `ensure_schema_is_ready`
+        to prevent unnecessary locking.
+        """
         with self.__lock:
             if schema in self.created_schemas:
                 raise SchemaError(f"Schema '{schema.name}' has already been created.")
@@ -79,13 +103,18 @@ class PipeDAGStore:
         schema._set_ref_count_free_handler(self.release_schema_lock)
 
     def ensure_schema_is_ready(self, schema: Schema):
+        """Creates a schema if it hasn't been created yet
+
+        This allows the creation of schemas in a lazy way. This ensures
+        that a schema only gets locked right before it is needed.
+        """
         with self.__lock:
             if schema in self.created_schemas:
                 return
             self.create_schema(schema)
 
     def swap_schema(self, schema: Schema):
-        """Swap the working schema with the base schema."""
+        """Swap the working schema with the base schema"""
         with schema.perform_swap():
             self.validate_lock_state(schema)
             self.table_store.swap_schema(schema)
@@ -99,6 +128,16 @@ class PipeDAGStore:
             args: tuple[Materialisable],
             kwargs: dict[str, Materialisable],
     ) -> tuple[tuple, dict]:
+        """Loads the inputs for a task from the storage backends
+
+        Traverses the function arguments and replaces all `Table` and
+        `Blob` objects with the associated objects stored in the backend.
+
+        :param task: The task for which the arguments should be dematerialised
+        :param args: The positional arguments
+        :param kwargs: The keyword arguments
+        :return: A tuple with the dematerialised args and kwargs
+        """
 
         def dematerialise_mutator(x):
             if isinstance(x, Table):
@@ -119,6 +158,21 @@ class PipeDAGStore:
             task: MaterialisingTask,
             value: Materialisable,
     ) -> Materialisable:
+        """Stores the output of a task in the backend
+
+        Traverses the output produced by a task, adds missing metadata,
+        materialises all `Table` and `Blob` objects and returns a new
+        output object with the required metadata to allow dematerialisation.
+
+        :param task: The task instance which produced `value`. Must have
+            the correct `cache_key` attribute set.
+        :param value: The output of the task. Must be materialisable; this
+            means it can only contain the following object types:
+            `dict`, `list`, `tuple`,
+            `int`, `float`, `str`, `bool`, `None`,
+            and PipeDAG's `Table` and `Blob` type.
+        :return: A copy of `value` with additional metadata
+        """
 
         schema = task.schema
         if schema not in self.created_schemas:
@@ -168,19 +222,22 @@ class PipeDAGStore:
             task: MaterialisingTask,
             input_json: str,
     ) -> str:
-        """Compute the cache key for a task.
+        """Compute the cache key for a task
 
-        This task hash is based on the following values:
+        Used by materialising task to create a unique fingerprint to determine
+        if the same task has been executed in a previous run with the same
+        inputs.
+
+        This task cache key is based on the following values:
+
         - Task Name
         - Task Version
         - Inputs
 
-        :param task: The task.
-        :param input_json: The inputs provided to the task serialized as a json.
-        :return: A sha256 hex digest.
+        :param task: The task
+        :param input_json: The inputs provided to the task serialized as a json
+        :return: A sha256 hex digest, trimmed to 20 char length
         """
-
-        # Maybe look into `dask.base.tokenize`
 
         v = (
             'PYDIVERSE-PIPEDAG-TASK',
@@ -193,12 +250,23 @@ class PipeDAGStore:
         v_bytes = v_str.encode('utf8')
 
         v_hash = hashlib.sha256(v_bytes)
-        return v_hash.hexdigest()[:20]  # Provides 40 bit of collision resistance
+        # Only take first 20 characters of hex digest (80 bits). This
+        # provides 40 bits of collision resistance, which is more than enough.
+        # To illustrate: If you were to generate one cache key per second,
+        # you still would have to wait about 35000 years until you encounter
+        # a collision.
+        return v_hash.hexdigest()[:20]
 
     def retrieve_cached_output(
             self,
             task: MaterialisingTask,
     ) -> Materialisable:
+        """Try to retrieve the cached outputs for a task
+
+        :param task: The materialising task for which to retrieve
+            the cached output. Must have the `cache_key` attribute set.
+        :raises CacheError: if no matching task exists in the cache
+        """
 
         if task.schema.did_swap:
             raise SchemaError(f"Schema already swapped.")
@@ -211,6 +279,15 @@ class PipeDAGStore:
             output: Materialisable,
             task: MaterialisingTask,
     ):
+        """Copy the outputs from a cached task into the working schema
+
+        If the outputs of a task were successfully retrieved from the cache
+        using `retrieve_cached_output`, they and the associated metadata
+        must be copied from the base schema to the working schema.
+
+        :raises CacheError: if some values in the output can't be found
+            in the cache.
+        """
 
         def visiting_mutator(x):
             if isinstance(x, Table):
@@ -229,12 +306,29 @@ class PipeDAGStore:
     #### Locking ####
 
     def acquire_schema_lock(self, schema: Schema):
+        """Acquires a lock to access the given schema"""
         self.lock_manager.acquire_schema(schema)
 
     def release_schema_lock(self, schema: Schema):
+        """Releases a previously acquired lock on a schema"""
         self.lock_manager.release_schema(schema)
 
     def validate_lock_state(self, schema: Schema):
+        """Validate that a lock is still in the LOCKED state
+
+        Depending on the lock manager, it might be possible that the state
+        of a lock can change unexpectedly.
+
+        If a lock becomes unlocked or invalid, we must abort the task (by
+        throwing an exception), because we can't guarantee that the data
+        it depends on hasn't been changed.
+        On the other hand, if we are uncertain about the state (for example
+        if connection to the internet is temporarily lost), we must pause
+        any task that depends on it and wait until the state of the lock
+        becomes known again.
+
+        :raises LockError: if the lock is unlocked
+        """
         while True:
             state = self.lock_manager.get_lock_state(schema)
             if state == LockState.LOCKED:
@@ -257,6 +351,8 @@ class PipeDAGStore:
             old_state: LockState,
             new_state: LockState
     ):
+        """Internal listener that gets notified when the state of a lock changes"""
+
         # Notify all waiting threads that the lock state has changed
         cond = self.lock_conditions[schema]
         with cond:
@@ -273,9 +369,22 @@ class PipeDAGStore:
     #### Utils ####
 
     def json_encode(self, value: Materialisable) -> str:
+        """Encode a materialisable value as json
+
+        In addition to the default types that python can serialise to json,
+        this function can also serialise `Table` and `Blob` objects.
+        The only caveat is, that python's json module doesn't differentiate
+        between lists and tuples, which means it is impossible to
+        differentiate the two.
+        """
         return self.json_encoder.encode(value)
 
     def json_decode(self, value: str) -> Materialisable:
+        """Decode a materialisable value as json
+
+        Counterpart for the `json_encode` function. Can decode `Table` and
+        `Blob` objects.
+        """
         return self.json_decoder.decode(value)
 
     def _reset(self):

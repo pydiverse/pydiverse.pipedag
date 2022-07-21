@@ -23,6 +23,31 @@ __all__ = [
 
 
 class LockState(str, Enum):
+    """Lock State
+
+    Represent the current state of a lock.
+
+    UNLOCKED:
+        The lock manager hasn't acquired this lock and a different process
+        might be accessing the resource.
+
+    LOCKED:
+        The lock manager has acquired the lock, and it hasn't expired.
+
+    UNCERTAIN:
+        The lock manager isn't certain about the state of the lock. This
+        can, for example, happen if a lock manager requires a connection to
+        the internet and this connection is interrupted.
+        Any process that depends on the locked resource should assume that
+        the resource isn't locked anymore and pause until the lock transitions
+        to a different state.
+
+    INVALID:
+        The lock has been invalidated. This means that a lock that was LOCKED
+        has been unlocked for some unexpected reason. A common transition
+        is that a lock transitions from `LOCKED -> UNCERTAIN -> INVALID`.
+    """
+
     UNLOCKED = 'UNLOCKED'
     LOCKED = 'LOCKED'
     UNCERTAIN = 'UNCERTAIN'
@@ -33,6 +58,12 @@ LockStateListener: TypeAlias = Callable[[Schema, LockState, LockState], None]
 
 
 class BaseLockManager(ABC):
+    """Lock Manager base class
+
+    A lock manager is responsible for acquiring and releasing locks on
+    schemas. This is necessary to prevent two flows from accessing the
+    same schema at the same time (which would lead to corrupted data).
+    """
 
     def __init__(self):
         self.logger = prefect.utilities.logging.get_logger(type(self).__name__)
@@ -43,21 +74,33 @@ class BaseLockManager(ABC):
 
     @abstractmethod
     def acquire_schema(self, schema: Schema):
-        ...
+        """Acquires a lock to access the given schema"""
 
     @abstractmethod
     def release_schema(self, schema: Schema):
-        ...
+        """Releases a previously acquired lock on a schema"""
 
     def add_lock_state_listener(self, listener: LockStateListener):
+        """Add a function to be called when the state of a lock changes
+
+        The listener will be called with the affected schema, the old lock
+        state and the new lock state as arguments.
+        """
         if listener is None or not callable(listener):
             raise ValueError('Listener must be callable.')
         self.state_listeners.add(listener)
 
     def remove_lock_state_listener(self, listener: LockStateListener):
+        """Removes a function from the set of listeners"""
         self.state_listeners.remove(listener)
 
     def set_lock_state(self, schema: Schema, new_state: LockState):
+        """Update the state of a lock
+
+        Function used by lock implementations to update the state of a
+        schema lock. If appropriate, listeners will be informed about
+        this change.
+        """
         with self.__lock_state_lock:
             if schema not in self.lock_states:
                 self.lock_states[schema] = new_state
@@ -74,11 +117,21 @@ class BaseLockManager(ABC):
                 del self.lock_states[schema]
 
     def get_lock_state(self, schema: Schema) -> LockState:
+        """Returns the state of a schema lock"""
         with self.__lock_state_lock:
             return self.lock_states[schema]
 
 
 class NoLockManager(BaseLockManager):
+    """Non locking lock manager (oxymoron)
+
+    This lock manager doesn't do any locking and only serves as a placeholder
+    for an actual lock manager for testing something locally.
+
+    .. WARNING::
+        DON'T USE THIS IN A PRODUCTION ENVIRONMENT. A LOCK MANAGER IS
+        ESSENTIAL TO PREVENT DATA CORRUPTION.
+    """
 
     def acquire_schema(self, schema: Schema):
         self.set_lock_state(schema, LockState.LOCKED)
@@ -95,6 +148,14 @@ except ImportError:
 
 @requires(fl, ImportError("FileLockManager requires 'filelock' to be installed."))
 class FileLockManager(BaseLockManager):
+    """Lock manager that uses lock files
+
+    For details on how exactly the file locking is implemented, check out the
+    `filelock documentation`_.
+
+    .. _`filelock documentation`:
+        https://py-filelock.readthedocs.io/en/latest/index.html
+    """
 
     def __init__(self, base_path: str):
         super().__init__()
@@ -139,6 +200,15 @@ except ImportError:
 
 @requires(kazoo, ImportError("ZooKeeperLockManager requires 'kazoo' to be installed."))
 class ZooKeeperLockManager(BaseLockManager):
+    """Apache ZooKeeper based lock manager
+
+    Uses Apache ZooKeeper to establish `fully distributed locks that are
+    globally synchronous` [1]_. The advantage of this approach is that we
+    it is highly reliable and that in case our flow crashes, the acquired
+    locks automatically get released (the locks are ephemeral).
+
+    .. [1] https://zookeeper.apache.org/doc/r3.1.2/recipes.html#sc_recipes_Locks
+    """
 
     def __init__(self, client: KazooClient):
         super().__init__()

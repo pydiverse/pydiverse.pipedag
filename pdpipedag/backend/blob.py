@@ -16,29 +16,72 @@ __all__ = [
 
 
 class BaseBlobStore(ABC):
+    """Blob store base class
+
+    A blob (binary large object) store is responsible for storing arbitrary
+    python objects. This can, for example, be done by serializing them using
+    the python `pickle` module.
+
+    A store must use a blob's name (`blob.name`) and schema (`blob.schema`)
+    as the primary keys for storing and retrieving blobs. This means that
+    two different `Blob` objects can be used to store and retrieve the same
+    data as long as they have the same name and schema.
+    """
 
     @abstractmethod
     def create_schema(self, schema: Schema):
-        ...
+        """Creates a schema
+
+        Ensures that the base schema exists (but doesn't clear it) and that
+        the working schema exists and is empty.
+        """
 
     @abstractmethod
     def swap_schema(self, schema: Schema):
-        ...
+        """Swap the base schema with the working schema
+
+        After the schema swap the contents of the base schema should be in the
+        working schema, and the contents of the working schema in the base
+        schema.
+        """
 
     @abstractmethod
     def store_blob(self, blob: Blob):
-        ...
+        """Stores a blob in the associated working schema"""
 
     @abstractmethod
     def copy_blob_to_working_schema(self, blob: Blob):
-        ...
+        """Copy a blob from the base schema to the working schema
+
+        This operation MUST not remove the blob from the base schema or modify
+        it in any way.
+        """
 
     @abstractmethod
     def retrieve_blob(self, blob: Blob, from_cache: bool = False) -> Any:
-        ...
+        """Loads a blob from the store
+
+        Retrieves the stored python object from the store and returns it.
+        If `from_cache` is `False` (default), the blob must be retrieved
+        from the current schema (`blob.schema.current_name`). Before a
+        schema swap this corresponds to the working schema and afterwards
+        to the base schema. If `from_cache` is `True`, it must always be
+        retrieved from the base schema.
+        """
 
 
 class FileBlobStore(BaseBlobStore):
+    """File based blob store
+
+    The FileBlobStore stores blobs in a folder structure on a file system.
+    In the base directory there will be two folders for every schema, one
+    for the base and one for the working schema. Inside those folders the
+    blobs will be stored as pickled files:
+    `/base_path/SCHEMA_NAME/BLOB_NAME.pkl`.
+
+    To swap a schema, the only thing that has to be done is to rename the
+    appropriate folders.
+    """
 
     def __init__(self, base_path: str):
         self.base_path = os.path.abspath(base_path)

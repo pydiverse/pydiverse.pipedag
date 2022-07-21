@@ -9,6 +9,17 @@ if TYPE_CHECKING:
 
 
 class Table(Generic[T]):
+    """Table container
+
+    Used to wrap table objects that get returned from materialising
+    tasks.
+
+    :param obj: The table object to wrap
+    :param name: Optional name. If no name is provided, an automatically
+        generated name will be used
+    :param primary_key: Optional name of the primary key that should be
+        used when materialising this table
+    """
 
     def __init__(
             self,
@@ -30,6 +41,15 @@ class Table(Generic[T]):
 
 
 class Blob:
+    """Blob (binary large object) container
+
+    Used to wrap arbitrary python objects that get returned from materialising
+    tasks.
+
+    :param obj: The object to wrap
+    :param name: Optional name. If no name is provided, an automatically
+        generated name will be used.
+    """
 
     def __init__(
             self,

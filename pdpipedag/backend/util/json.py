@@ -1,3 +1,10 @@
+"""Utilities for JSON to support PipeDAG objects
+
+PipeDAG objects get serialised as JSON objects with a special `_pipedag_type_`
+key to identify them when decoding. The associated value encodes the
+type of the object.
+"""
+
 from __future__ import annotations
 
 import pdpipedag
@@ -9,6 +16,7 @@ PIPEDAG_TYPE_BLOB = 'blob'
 
 
 def json_default(o):
+    """Encode `Table` and `Blob` objects"""
     if isinstance(o, Table):
         return {
             PIPEDAG_TYPE: PIPEDAG_TYPE_TABLE,
@@ -28,6 +36,7 @@ def json_default(o):
 
 
 def json_object_hook(d: dict):
+    """Decode json with `Table` and `Blob` objects"""
     pipedag_type = d.get(PIPEDAG_TYPE)
     if pipedag_type:
         if pipedag_type == PIPEDAG_TYPE_TABLE:

@@ -13,15 +13,57 @@ from pdpipedag._typing import CallableT
 
 
 def materialise(**kwargs):
+    """Decorator to create MaterialisingTasks from functions
+
+    For a list of arguments, check out the `MaterialisingTask` documentation.
+
+    Usage example:
+    ::
+        @materialise(input_type = pd.DataFrame, version = "1.0")
+        def multiply_df(df: pd.DataFrame, by: float):
+            return Table(df * by)
+
+    """
     def wrapper(fn: CallableT) -> CallableT:
         return MaterialisingTask(fn, **kwargs)
     return wrapper
 
 
 class MaterialisingTask(prefect.Task):
-    """
-    Task that gets materialised. Automatically adds itself to the active
-    schema for schema swapping.
+    """ Task whose outputs get materialised
+
+    All the values a materialising task returns get written to the appropriate
+    storage backend. Additionally, all `Table` and `Blob` objects in the
+    input will be replaced with their appropriate objects (loaded from the
+    storage backend). This means that tables and blobs never move from one
+    task to another directly, but go through the storage layer instead.
+
+    Because of how caching is implemented, task inputs and outputs must all
+    be 'materialisable'. This means that they can only contain objects of
+    the following types:
+    `dict`, `list`, `tuple`,
+    `int`, `float`, `str`, `bool`, `None`,
+    and PipeDAG's `Table` and `Blob` type.
+
+    Automatically adds itself to the active schema for schema swapping.
+    All materialising tasks MUST be defined inside a schema.
+
+    :param fn: The run method of this task
+    :key name: The name of this task
+    :key input_type: The data type to convert table objects to when passed
+        to this task.
+    :key version: The version of this task. Unless this task is lazy, you
+        always have to bump / change the version number to ensure that
+        the new implementation gets used. Else a cached result might be used
+        instead.
+    :key lazy: Boolean indicating if this task should be lazy. A lazy task is
+        a task that always gets executed, and if it produces a lazy table
+        (e.g. a SQL query), the backend can compare the generated output
+        to see it the same query has been executed before (and only execute
+        it if not). This is an alternative to manually setting the version
+        number.
+    :key kwargs: Any other keyword arguments will directly get passed to the
+        prefect Task initializer.
     """
 
     def __init__(
@@ -80,6 +122,12 @@ class MaterialisingTask(prefect.Task):
         return new
 
     def _update_new_task(self):
+        """
+        Both `__call__` and `map` create new instances of the Task. This
+        method is used to modify those copies, add relevant metadata, and
+        add them to the schema in which they were created.
+        """
+
         self.schema = prefect.context.get('pipedag_schema')
         self.name = f"{self.original_name}({self.schema.name})"
         if self.schema is None:
@@ -99,23 +147,50 @@ class MaterialisingTask(prefect.Task):
         self.schema.add_task(self)
 
     def _incr_schema_ref_count(self, by: int = 1):
+        """
+        Private method required for schema reference counting:
+        `pdpipedag.core.schema.schema_ref_counter_handler`
+
+        Increments the reference count to the schema in which this task was
+        defined, and all schemas that appear in its inputs.
+        """
         self.schema._incr_ref_count(by)
         for upstream_schema in self.upstream_schemas:
             upstream_schema._incr_ref_count(by)
 
     def _decr_schema_ref_count(self, by: int = 1):
+        """
+        Private method required for schema reference counting:
+        `pdpipedag.core.schema.schema_ref_counter_handler`
+
+        Decrements the reference count to the schema in which this task was
+        defined, and all schemas that appear in its inputs.
+        """
         self.schema._decr_ref_count(by)
         for upstream_schema in self.upstream_schemas:
             upstream_schema._decr_ref_count(by)
 
 
 class MaterialisationWrapper:
+    """Function wrapper that contains all high level materialisation logic
+
+    :param fn: The function to wrap
+    """
 
     def __init__(self, fn: Callable):
         self.fn = fn
         self.fn_signature = inspect.signature(fn)
 
     def __call__(self, *args, _pipedag_task_: MaterialisingTask, **kwargs):
+        """Function wrapper / materialisation logic
+
+        :param args: The arguments passed to the function
+        :param _pipedag_task_: The `MaterialisingTask` instance which called
+            this wrapper.
+        :param kwargs: The keyword arguments passed to the function
+        :return: A copy of what the original function returns annotated
+            with some additional metadata.
+        """
         task = _pipedag_task_
         store = pdpipedag.config.store
         bound = self.fn_signature.bind(*args, **kwargs)
