@@ -350,11 +350,11 @@ class PipeDAGStore:
 
     def acquire_schema_lock(self, schema: Schema):
         """Acquires a lock to access the given schema"""
-        self.lock_manager.acquire_schema(schema)
+        self.lock_manager.acquire(schema)
 
     def release_schema_lock(self, schema: Schema):
         """Releases a previously acquired lock on a schema"""
-        self.lock_manager.release_schema(schema)
+        self.lock_manager.release(schema)
 
     def validate_lock_state(self, schema: Schema):
         """Validate that a lock is still in the LOCKED state
@@ -395,6 +395,8 @@ class PipeDAGStore:
         self, schema: Schema, old_state: LockState, new_state: LockState
     ):
         """Internal listener that gets notified when the state of a lock changes"""
+        if not isinstance(schema, Schema):
+            return
 
         # Notify all waiting threads that the lock state has changed
         cond = self.lock_conditions[schema]
