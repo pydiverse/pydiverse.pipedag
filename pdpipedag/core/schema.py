@@ -84,7 +84,7 @@ class Schema:
 
         # Tasks
         self.task = SchemaSwapTask(self)
-        self.materialising_tasks = []
+        self.materialising_tasks: list[materialise.MaterialisingTask] = []
 
         # Make sure that schema exists on database
         # This also ensures that this schema name is unique
@@ -124,33 +124,52 @@ class Schema:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Schema context manager - exit
 
-        Creates missing upstream dependencies for the upstream SchemaSwapTasks.
+        Creates missing up- and downstream dependencies for SchemaSwapTasks.
         """
 
         upstream_edges = self.flow.all_upstream_edges()
+        downstream_edges = self.flow.all_downstream_edges()
 
         def get_upstream_schemas(task: prefect.Task) -> Iterator["Schema"]:
-            """Perform DFS and get all upstream schema dependencies
+            """Get all direct schema dependencies of a task
+
+            The direct schema dependencies is the set of all schemas
+            (excluding the schema of the task itself) that get visited
+            by a DFS on the upstream tasks that stops whenever it
+            encounters a materialising task.
+            In other words: it is the set of all upstream schemas that can
+            be reached without going through another materialising task.
+
+            This recursive implementation seems to be better than a
+            classic DFS that also keeps track of which nodes it has already
+            visited. But because (almost) all inputs of a task are also
+            materialising tasks, this function should never recurse deep.
 
             :param task: The task for which to get the upstream schemas
             :return: Yields all upstream schemas
             """
-            visited = set()
-            stack = [task]
-
-            while stack:
-                top = stack.pop()
-                if top in visited:
+            for up_task in [edge.upstream_task for edge in upstream_edges[task]]:
+                if isinstance(up_task, materialise.MaterialisingTask):
+                    if up_task.schema is not self:
+                        yield up_task.schema
                     continue
-                visited.add(top)
+                yield from get_upstream_schemas(up_task)
 
-                if isinstance(top, materialise.MaterialisingTask):
-                    if top.schema != self:
-                        yield top.schema
-                        continue
+        def needs_downstream(task: prefect.Task) -> bool:
+            """Determine if a task needs the downstream schema swap dependency
 
-                for edge in upstream_edges[top]:
-                    stack.append(edge.upstream_task)
+            Only tasks that don't have other tasks of the same schema as
+            downstream dependencies need to add the schema swap task as
+            a downstream dependency.
+            """
+            for edge in downstream_edges[task]:
+                down_task = edge.downstream_task
+                if isinstance(down_task, materialise.MaterialisingTask):
+                    if down_task.schema is self:
+                        return False
+                    if not needs_downstream(down_task):
+                        return False
+            return True
 
         # For each task, add the appropriate upstream schema swap dependencies
         for task in self.materialising_tasks:
@@ -163,13 +182,17 @@ class Schema:
             # on the list of upstream schemas
             task._incr_schema_ref_count()
 
+        # Add downstream schema swap dependency
+        for task in self.materialising_tasks:
+            if needs_downstream(task):
+                task.set_downstream(self.task)
+
         # Restore context
         prefect.context.pipedag_schema = self._enter_schema
 
     def add_task(self, task: materialise.MaterialisingTask):
         """Add a MaterialisingTask to the Schema"""
         assert isinstance(task, materialise.MaterialisingTask)
-        task.set_downstream(self.task)
         self.materialising_tasks.append(task)
 
     @property
