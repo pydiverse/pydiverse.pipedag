@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import os
 import threading
 from abc import ABC, abstractmethod
@@ -225,6 +226,7 @@ class ZooKeeperLockManager(BaseLockManager):
         self.client = client
         if not self.client.connected:
             self.client.start()
+            atexit.register(lambda: (self.client.stop(), self.client.close()))
         self.client.add_listener(self._lock_listener)
 
         self.locks: dict[Lockable, KazooLock] = {}
