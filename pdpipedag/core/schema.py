@@ -9,6 +9,7 @@ import prefect
 import pdpipedag
 from pdpipedag.core import materialise
 from pdpipedag.errors import SchemaError
+from pdpipedag.util import normalise_name
 
 
 class Schema:
@@ -73,6 +74,8 @@ class Schema:
     """
 
     def __init__(self, name: str):
+        self._name = None
+
         self.name = name
         self.working_name = f"{name}__pipedag"
 
@@ -89,6 +92,14 @@ class Schema:
         # Make sure that schema exists on database
         # This also ensures that this schema name is unique
         pdpipedag.config.store.register_schema(self)
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, value):
+        self._name = normalise_name(value)
 
     def __repr__(self):
         return f"<Schema: {self.name}>"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Generic
 
+from pdpipedag.util import normalise_name
 from pdpipedag._typing import T
 
 if TYPE_CHECKING:
@@ -30,6 +31,8 @@ class Table(Generic[T]):
         primary_key: str = None,
         cache_key: str = None,
     ):
+        self._name = None
+
         self.obj = obj
         self.name = name
         self.schema = schema
@@ -39,6 +42,14 @@ class Table(Generic[T]):
 
     def __str__(self):
         return f"<Table: {self.name} ({self.schema.name})>"
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, value):
+        self._name = normalise_name(value)
 
 
 class Blob:
@@ -60,6 +71,8 @@ class Blob:
         schema: Schema = None,
         cache_key: str = None,
     ):
+        self._name = None
+
         self.obj = obj
         self.name = name
         self.schema = schema
@@ -68,3 +81,11 @@ class Blob:
 
     def __str__(self):
         return f"<Blob: {self.name} ({self.schema.name})>"
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, value):
+        self._name = normalise_name(value)
