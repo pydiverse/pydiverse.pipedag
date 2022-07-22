@@ -46,6 +46,14 @@ class BaseTableStore(ABC):
     stored both in the task object and the metadata object).
     """
 
+    def setup(self):
+        """Setup function
+
+        This function gets called by the PipeDAGStore when it gets
+        initialised. Unlike the __init__ method, a lock is acquired before
+        the setup method gets called to prevent race conditions.
+        """
+
     @abstractmethod
     def create_schema(self, schema: Schema):
         """Creates a schema
@@ -272,6 +280,8 @@ class SQLTableStore(BaseTableStore):
             schema=self.METADATA_SCHEMA,
         )
 
+    def setup(self):
+        super().setup()
         with self.engine.connect() as conn:
             conn.execute(CreateSchema(self.METADATA_SCHEMA, if_not_exists=True))
             self.sql_metadata.create_all(conn)

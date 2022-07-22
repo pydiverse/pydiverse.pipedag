@@ -61,6 +61,13 @@ class PipeDAGStore:
         self.lock_conditions = defaultdict(lambda: threading.Condition())
         self.lock_manager.add_lock_state_listener(self._lock_state_listener)
 
+        # Perform setup operations with lock
+        # This is to prevent race conditions, for example, when creating
+        # the metadata schema with the SQL backend.
+        self.lock_manager.acquire("_pipedag_setup_")
+        self.table_store.setup()
+        self.lock_manager.release("_pipedag_setup_")
+
     #### Schema ####
 
     def register_schema(self, schema: Schema):
