@@ -241,6 +241,12 @@ class Schema:
             finally:
                 self.__did_swap = True
 
+    @property
+    def _ref_count(self):
+        """The current reference counter value. For testing purposes only!"""
+        with self.__lock:
+            return self.__ref_count
+
     def _incr_ref_count(self, by: int = 1):
         with self.__lock:
             self.__ref_count += by

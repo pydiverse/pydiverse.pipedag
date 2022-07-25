@@ -27,6 +27,7 @@ prefect==1.2.4
 psutil==5.9.1
 pyparsing==3.0.9
 pytest==7.1.2
+pytest-timeout==2.1.0
 python-box==6.0.2
 python-dateutil==2.8.2
 python-slugify==6.1.2
