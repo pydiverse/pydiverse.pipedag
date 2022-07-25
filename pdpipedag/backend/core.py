@@ -15,8 +15,8 @@ from pdpipedag._typing import Materialisable
 from pdpipedag.backend.lock import LockState
 from pdpipedag.backend.metadata import TaskMetadata
 from pdpipedag.backend.util import json as json_util
-from pdpipedag.core import Schema, Table, Blob, MaterialisingTask
-from pdpipedag.errors import SchemaError, LockError, DuplicateNameError
+from pdpipedag.core import Blob, MaterialisingTask, Schema, Table
+from pdpipedag.errors import DuplicateNameError, LockError, SchemaError
 from pdpipedag.util import deepmutate
 
 
@@ -44,8 +44,8 @@ class PipeDAGStore:
         self.__lock = threading.RLock()
         self.schemas: dict[str, Schema] = dict()
         self.created_schemas: set[Schema] = set()
-        self.table_names: defaultdict[Schema, set[str]] = defaultdict(lambda: set())
-        self.blob_names: defaultdict[Schema, set[str]] = defaultdict(lambda: set())
+        self.table_names: defaultdict[Schema, set[str]] = defaultdict(set)
+        self.blob_names: defaultdict[Schema, set[str]] = defaultdict(set)
         self.run_id = uuid.uuid4().hex[:20]
         self.logger = prefect.utilities.logging.get_logger("pipeDAG")
 

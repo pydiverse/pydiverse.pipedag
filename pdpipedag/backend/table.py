@@ -384,7 +384,6 @@ class SQLTableStore(BaseTableStore):
                 table.name,
                 self.engine,
                 schema=schema.working_name,
-                if_exists="replace",
                 index=False,
             )
         elif isinstance(obj, sa.sql.Select):
