@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import copy
 import functools
 import inspect
+import threading
+from collections import defaultdict
 from typing import Any, Callable, Type
 
 import prefect
 
 import pdpipedag
-from pdpipedag.core.schema import schema_ref_counter_handler
-from pdpipedag.errors import FlowError, CacheError
 from pdpipedag._typing import CallableT
+from pdpipedag.core.schema import schema_ref_counter_handler
+from pdpipedag.errors import CacheError, FlowError
+from pdpipedag.util import deepmutate
 
 
 def materialise(**kwargs):
@@ -106,6 +110,7 @@ class MaterialisingTask(prefect.Task):
         self.cache_key = None
 
         self.state_handlers.append(schema_ref_counter_handler)
+        self.state_handlers.append(self.wrapped_fn.task_state_handler)
 
     def run(self) -> None:
         # This is just a stub.
@@ -114,12 +119,12 @@ class MaterialisingTask(prefect.Task):
         raise NotImplementedError
 
     def __call__(self, *args, **kwargs):
-        new = super().__call__(*args, **kwargs)  # type: MaterialisingTask
+        new: MaterialisingTask = super().__call__(*args, **kwargs)  # type: ignore
         new._update_new_task()
         return new
 
     def map(self, *args, **kwargs):
-        new = super().map(*args, **kwargs)  # type: MaterialisingTask
+        new: MaterialisingTask = super().map(*args, **kwargs)  # type: ignore
         new._update_new_task()
         return new
 
@@ -182,6 +187,9 @@ class MaterialisationWrapper:
         self.fn = fn
         self.fn_signature = inspect.signature(fn)
 
+        self.__lock = threading.Lock()
+        self.memo = defaultdict(dict)
+
     def __call__(self, *args, _pipedag_task_: MaterialisingTask, **kwargs):
         """Function wrapper / materialisation logic
 
@@ -205,11 +213,45 @@ class MaterialisationWrapper:
         cache_key = store.compute_task_cache_key(task, input_json)
         task.cache_key = cache_key
 
+        # Check if this task has already been run with the same inputs
+        # If yes, return memoized result. This prevents DuplicateNameExceptions
+        with self.__lock:
+            memo_result = self.memo[task.schema].get(cache_key, _nil)
+            if memo_result is _nil:
+                self.memo[task.schema][cache_key] = threading.Condition()
+
+        if memo_result is not _nil:
+            if isinstance(memo_result, threading.Condition):
+                task.logger.info(
+                    "Task is currently being run with the same inputs."
+                    " Waiting for the other task to finish..."
+                )
+            else:
+                task.logger.info(
+                    "Task has already been run with the same inputs."
+                    " Using memoized results."
+                )
+
+            while isinstance(memo_result, threading.Condition):
+                with memo_result:
+                    if memo_result.wait(timeout=60):
+                        task.logger.info("Other task finished. Using memoized result.")
+                    else:
+                        task.logger.info("Waiting...")
+                with self.__lock:
+                    memo_result = self.memo[task.schema][cache_key]
+
+            # Must make a semi-deepcopy of the memoized result:
+            # Deepcopy of python container types, shallow copy of everything else.
+            return deepmutate(memo_result, copy.copy)
+
+        # Lazy task
         if not task.lazy:
             # Try to retrieve output from cache
             try:
                 cached_output = store.retrieve_cached_output(task)
                 store.copy_cached_output_to_working_schema(cached_output, task)
+                self.store_in_memo(cached_output, task, cache_key)
                 task.logger.info(f"Found task in cache. Using cached result.")
                 return cached_output
             except CacheError as e:
@@ -222,4 +264,28 @@ class MaterialisationWrapper:
 
         # Materialise
         materialised_result = store.materialise_task(task, result)
+        self.store_in_memo(materialised_result, task, cache_key)
+
         return materialised_result
+
+    def store_in_memo(self, result, task, cache_key):
+        with self.__lock:
+            condition = self.memo[task.schema][cache_key]
+            self.memo[task.schema][cache_key] = result
+            with condition:
+                condition.notify_all()
+
+    def task_state_handler(self, task: MaterialisingTask, old_state, new_state):
+        if task.cache_key is None or task.schema is None:
+            return
+
+        if new_state.is_failed():
+            with self.__lock:
+                memo_result = self.memo[task.schema].get(task.cache_key, _nil)
+                if isinstance(memo_result, threading.Condition):
+                    with memo_result:
+                        memo_result.notify_all()
+                        self.memo[task.schema][task.cache_key] = _nil
+
+
+_nil = object()
