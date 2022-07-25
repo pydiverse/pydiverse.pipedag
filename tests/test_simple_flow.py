@@ -3,23 +3,9 @@ import pandas as pd
 import sqlalchemy as sa
 from prefect import Flow
 
-import pdpipedag
+# noinspection PyUnresolvedReferences
+from tests import *
 from pdpipedag import materialise, Schema, Table, Blob
-from pdpipedag.backend import *
-
-# Configure
-
-engine = sa.create_engine(f"postgresql://127.0.0.1/pipedag", echo=False)
-
-pdpipedag.config = pdpipedag.configuration.Config(
-    store=PipeDAGStore(
-        table=SQLTableStore(engine),
-        blob=FileBlobStore("/tmp/pipedag/blobs"),
-        lock=NoLockManager(),
-        # ZooKeeperLockManager(KazooClient()),
-        # FileLockManager('/tmp/pipedag/locks'),
-    )
-)
 
 
 def test_simple_flow():
@@ -62,7 +48,7 @@ def test_simple_flow():
         return Blob(x), Blob(y)
 
     with Flow("FLOW") as flow:
-        with Schema("SCHEMA1"):
+        with Schema("schema1"):
             a, b = inputs()
             a2 = double_values(a)
             b2 = double_values(b)
@@ -70,7 +56,7 @@ def test_simple_flow():
             b4 = double_values(b4)
             x = list_arg([a2, b, b4])
 
-        with Schema("SCHEMA2"):
+        with Schema("schema2"):
             xj = join_on_a(a2, b4)
             a = double_values(xj)
 

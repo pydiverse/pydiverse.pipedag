@@ -445,6 +445,12 @@ class PipeDAGStore:
         return self.json_decoder.decode(value)
 
     def _reset(self):
+        for schema in self.schemas.values():
+            try:
+                self.lock_manager.release(schema)
+            except LockError:
+                pass
+
         self.schemas.clear()
         self.created_schemas.clear()
         self.table_names.clear()
