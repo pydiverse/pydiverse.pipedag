@@ -10,16 +10,17 @@ import prefect
 import sqlalchemy as sa
 import sqlalchemy.exc
 
-from pdpipedag._typing import T
-from pdpipedag.backend.metadata import TaskMetadata, LazyTableMetadata
-from pdpipedag.core import Schema, Table, MaterialisingTask
-from pdpipedag.errors import CacheError, SchemaError
+from pydiverse.pipedag._typing import T
+from pydiverse.pipedag.backend.metadata import LazyTableMetadata, TaskMetadata
+from pydiverse.pipedag.core import MaterialisingTask, Schema, Table
+from pydiverse.pipedag.errors import CacheError, SchemaError
+
 from .util.sql_ddl import (
+    CopyTable,
     CreateSchema,
+    CreateTableAsSelect,
     DropSchema,
     RenameSchema,
-    CopyTable,
-    CreateTableAsSelect,
 )
 
 __all__ = [
@@ -102,7 +103,7 @@ class BaseTableStore(ABC):
 
     @abstractmethod
     def retrieve_table_obj(
-        self, table: Table, as_type: Type[T], from_cache: bool = False
+        self, table: Table, as_type: type[T], from_cache: bool = False
     ) -> T:
         """Loads a table from the store
 
@@ -205,7 +206,7 @@ class DictTableStore(BaseTableStore):
             self.store[schema.working_name] = self.store[schema.name]
 
     def retrieve_table_obj(
-        self, table: Table[T], as_type: Type[T], from_cache: bool = False
+        self, table: Table[T], as_type: type[T], from_cache: bool = False
     ) -> T:
         with self.__lock:
             if from_cache:
@@ -251,7 +252,7 @@ class SQLTableStore(BaseTableStore):
         self.engine = engine
 
         # Set up metadata tables and schema
-        from sqlalchemy import Column, BigInteger, String, DateTime, Boolean
+        from sqlalchemy import BigInteger, Boolean, Column, DateTime, String
 
         self.sql_metadata = sa.MetaData()
         self.tasks_table = sa.Table(
@@ -420,7 +421,7 @@ class SQLTableStore(BaseTableStore):
                 )
 
     def retrieve_table_obj(
-        self, table: Table, as_type: Type[T], from_cache: bool = False
+        self, table: Table, as_type: type[T], from_cache: bool = False
     ) -> T:
         if as_type is None:
             raise TypeError(

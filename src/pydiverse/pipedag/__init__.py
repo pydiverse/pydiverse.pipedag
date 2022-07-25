@@ -1,9 +1,8 @@
 from . import backend
 from .configuration import config as config
-
-from .core.schema import Schema
-from .core.container import Table, Blob
+from .core.container import Blob, Table
 from .core.materialise import materialise
+from .core.schema import Schema
 
 __all__ = [
     "materialise",

@@ -1,6 +1,6 @@
+from .container import Blob, Table
 from .materialise import MaterialisingTask
 from .schema import Schema
-from .container import Table, Blob
 
 __all__ = [
     "MaterialisingTask",

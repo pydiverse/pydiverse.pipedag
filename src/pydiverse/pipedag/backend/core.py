@@ -10,14 +10,14 @@ from collections import defaultdict
 
 import prefect.utilities.logging
 
-from pdpipedag import backend
-from pdpipedag._typing import Materialisable
-from pdpipedag.backend.lock import LockState
-from pdpipedag.backend.metadata import TaskMetadata
-from pdpipedag.backend.util import json as json_util
-from pdpipedag.core import Blob, MaterialisingTask, Schema, Table
-from pdpipedag.errors import DuplicateNameError, LockError, SchemaError
-from pdpipedag.util import deepmutate
+from pydiverse.pipedag import backend
+from pydiverse.pipedag._typing import Materialisable
+from pydiverse.pipedag.backend.lock import LockState
+from pydiverse.pipedag.backend.metadata import TaskMetadata
+from pydiverse.pipedag.backend.util import json as json_util
+from pydiverse.pipedag.core import Blob, MaterialisingTask, Schema, Table
+from pydiverse.pipedag.errors import DuplicateNameError, LockError, SchemaError
+from pydiverse.pipedag.util import deepmutate
 
 
 class PipeDAGStore:

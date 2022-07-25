@@ -10,9 +10,9 @@ from typing import Callable, Union
 
 import prefect
 
-from pdpipedag.util import requires
-from pdpipedag.core.schema import Schema
-from pdpipedag.errors import LockError
+from pydiverse.pipedag.core.schema import Schema
+from pydiverse.pipedag.errors import LockError
+from pydiverse.pipedag.util import requires
 
 __all__ = [
     "BaseLockManager",

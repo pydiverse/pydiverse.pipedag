@@ -7,8 +7,8 @@ type of the object.
 
 from __future__ import annotations
 
-import pdpipedag
-from pdpipedag.core import Table, Blob
+import pydiverse.pipedag
+from pydiverse.pipedag.core import Blob, Table
 
 PIPEDAG_TYPE = "_pipedag_type_"
 PIPEDAG_TYPE_TABLE = "table"
@@ -42,13 +42,13 @@ def json_object_hook(d: dict):
         if pipedag_type == PIPEDAG_TYPE_TABLE:
             return Table(
                 name=d["name"],
-                schema=pdpipedag.config.store.schemas[d["schema"]],
+                schema=pydiverse.pipedag.config.store.schemas[d["schema"]],
                 cache_key=d["cache_key"],
             )
         elif pipedag_type == PIPEDAG_TYPE_BLOB:
             return Blob(
                 name=d["name"],
-                schema=pdpipedag.config.store.schemas[d["schema"]],
+                schema=pydiverse.pipedag.config.store.schemas[d["schema"]],
                 cache_key=d["cache_key"],
             )
         else:

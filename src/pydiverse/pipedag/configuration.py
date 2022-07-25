@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pdpipedag import backend
+from pydiverse.pipedag import backend
 
 
 # TODO: Provide a mechanism to configure pipedag using a TOML config file

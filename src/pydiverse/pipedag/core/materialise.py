@@ -9,11 +9,11 @@ from typing import Any, Callable, Type
 
 import prefect
 
-import pdpipedag
-from pdpipedag._typing import CallableT
-from pdpipedag.core.schema import schema_ref_counter_handler
-from pdpipedag.errors import CacheError, FlowError
-from pdpipedag.util import deepmutate
+import pydiverse.pipedag
+from pydiverse.pipedag._typing import CallableT
+from pydiverse.pipedag.core.schema import schema_ref_counter_handler
+from pydiverse.pipedag.errors import CacheError, FlowError
+from pydiverse.pipedag.util import deepmutate
 
 
 def materialise(**kwargs):
@@ -77,7 +77,7 @@ class MaterialisingTask(prefect.Task):
         fn: Callable,
         *,
         name: str = None,
-        input_type: Type = None,
+        input_type: type = None,
         version: str = None,
         lazy: bool = False,
         **kwargs: Any,
@@ -155,7 +155,7 @@ class MaterialisingTask(prefect.Task):
     def _incr_schema_ref_count(self, by: int = 1):
         """
         Private method required for schema reference counting:
-        `pdpipedag.core.schema.schema_ref_counter_handler`
+        `pydiverse.pipedag.core.schema.schema_ref_counter_handler`
 
         Increments the reference count to the schema in which this task was
         defined, and all schemas that appear in its inputs.
@@ -167,7 +167,7 @@ class MaterialisingTask(prefect.Task):
     def _decr_schema_ref_count(self, by: int = 1):
         """
         Private method required for schema reference counting:
-        `pdpipedag.core.schema.schema_ref_counter_handler`
+        `pydiverse.pipedag.core.schema.schema_ref_counter_handler`
 
         Decrements the reference count to the schema in which this task was
         defined, and all schemas that appear in its inputs.
@@ -201,7 +201,7 @@ class MaterialisationWrapper:
             with some additional metadata.
         """
         task = _pipedag_task_
-        store = pdpipedag.config.store
+        store = pydiverse.pipedag.config.store
         bound = self.fn_signature.bind(*args, **kwargs)
 
         # If this is the first task in this schema to be executed, ensure that

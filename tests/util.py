@@ -1,12 +1,14 @@
+from __future__ import annotations
+
 import pytest
 import sqlalchemy as sa
 from kazoo.client import KazooClient
 
-import pdpipedag
-from pdpipedag.backend import (
+import pydiverse.pipedag
+from pydiverse.pipedag.backend import (
+    FileBlobStore,
     PipeDAGStore,
     SQLTableStore,
-    FileBlobStore,
     ZooKeeperLockManager,
 )
 
@@ -16,7 +18,7 @@ def setup_pipedag():
     engine = sa.create_engine("postgresql://postgres:pipedag@127.0.0.1/pipedag")
     kazoo_client = KazooClient()
 
-    pdpipedag.config = pdpipedag.configuration.Config(
+    pydiverse.pipedag.config = pydiverse.pipedag.configuration.Config(
         store=PipeDAGStore(
             table=SQLTableStore(engine),
             blob=FileBlobStore("/tmp/pipedag/blobs"),
@@ -28,4 +30,4 @@ def setup_pipedag():
 
     # Teardown
     # -> Reset everything and release any locks still held
-    pdpipedag.config.store._reset()
+    pydiverse.pipedag.config.store._reset()

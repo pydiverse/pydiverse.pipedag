@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import os
-import shutil
 import pickle
+import shutil
 from abc import ABC, abstractmethod
 from typing import Any
 
-from pdpipedag.core import Blob, Schema
-from pdpipedag.errors import CacheError
+from pydiverse.pipedag.core import Blob, Schema
+from pydiverse.pipedag.errors import CacheError
 
 __all__ = [
     "BaseBlobStore",

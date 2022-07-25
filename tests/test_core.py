@@ -7,7 +7,8 @@ import pytest
 from prefect import Flow
 from pytest_mock import MockerFixture
 
-from pdpipedag import Schema, materialise
+from pydiverse.pipedag import Schema, materialise
+
 # noinspection PyUnresolvedReferences
 from tests import *
 
@@ -44,6 +45,7 @@ def m_raise(x, r: bool):
     if r:
         raise Exception
     return x
+
 
 @materialise(max_retries=3, retry_delay=datetime.timedelta(seconds=0.1))
 def m_raise_retry(x, r: bool):

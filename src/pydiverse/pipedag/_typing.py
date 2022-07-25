@@ -1,17 +1,9 @@
 from __future__ import annotations
 
-from typing import (
-    TYPE_CHECKING,
-    Callable,
-    Dict,
-    List,
-    Tuple,
-    TypeVar,
-    Union,
-)
+from typing import TYPE_CHECKING, Callable, Dict, List, Tuple, TypeVar, Union
 
 if TYPE_CHECKING:
-    from pdpipedag.core.container import Table, Blob
+    from pydiverse.pipedag.core.container import Blob, Table
 
 
 def decorator_hint(decorator: Callable) -> Callable:

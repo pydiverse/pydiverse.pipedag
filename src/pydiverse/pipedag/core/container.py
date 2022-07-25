@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Generic
 
-from pdpipedag.util import normalise_name
-from pdpipedag._typing import T
+from pydiverse.pipedag._typing import T
+from pydiverse.pipedag.util import normalise_name
 
 if TYPE_CHECKING:
-    from pdpipedag.core.schema import Schema
+    from pydiverse.pipedag.core.schema import Schema
 
 
 class Table(Generic[T]):

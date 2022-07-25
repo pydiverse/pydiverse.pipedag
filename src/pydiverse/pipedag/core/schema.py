@@ -6,10 +6,10 @@ from typing import Callable, Iterator
 
 import prefect
 
-import pdpipedag
-from pdpipedag.core import materialise
-from pdpipedag.errors import SchemaError
-from pdpipedag.util import normalise_name
+import pydiverse.pipedag
+from pydiverse.pipedag.core import materialise
+from pydiverse.pipedag.errors import SchemaError
+from pydiverse.pipedag.util import normalise_name
 
 
 class Schema:
@@ -91,7 +91,7 @@ class Schema:
 
         # Make sure that schema exists on database
         # This also ensures that this schema name is unique
-        pdpipedag.config.store.register_schema(self)
+        pydiverse.pipedag.config.store.register_schema(self)
 
     @property
     def name(self):
@@ -141,7 +141,7 @@ class Schema:
         upstream_edges = self.flow.all_upstream_edges()
         downstream_edges = self.flow.all_downstream_edges()
 
-        def get_upstream_schemas(task: prefect.Task) -> Iterator["Schema"]:
+        def get_upstream_schemas(task: prefect.Task) -> Iterator[Schema]:
             """Get all direct schema dependencies of a task
 
             The direct schema dependencies is the set of all schemas
@@ -277,7 +277,7 @@ class SchemaSwapTask(prefect.Task):
 
     def run(self):
         self.logger.info("Performing schema swap.")
-        pdpipedag.config.store.swap_schema(self.schema)
+        pydiverse.pipedag.config.store.swap_schema(self.schema)
 
     def _incr_schema_ref_count(self, by: int = 1):
         self.schema._incr_ref_count(by)

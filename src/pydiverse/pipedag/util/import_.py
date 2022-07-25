@@ -4,7 +4,7 @@ import functools
 from typing import Any, Type
 
 
-def requires(requirements: Any | list, exception: BaseException | Type[BaseException]):
+def requires(requirements: Any | list, exception: BaseException | type[BaseException]):
     """Class decorator for handling optional imports.
 
     If any of the requirements are falsy, this decorator prevents the class
