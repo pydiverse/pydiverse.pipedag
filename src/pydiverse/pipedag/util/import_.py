@@ -1,27 +1,39 @@
 from __future__ import annotations
 
-import functools
-from typing import Any, Type
+from typing import Any
 
 
 def requires(requirements: Any | list, exception: BaseException | type[BaseException]):
     """Class decorator for handling optional imports.
 
     If any of the requirements are falsy, this decorator prevents the class
-    from being instantiated and raises the provided exception instead.
+    from being instantiated and any class attributes from being accessed,
+    and raises the provided exception instead.
     """
 
     if not isinstance(requirements, (list, tuple)):
         requirements = (requirements,)
 
     def decorator(cls):
-        if not all(requirements):
+        if all(requirements):
+            return cls
 
-            @functools.wraps(cls.__new__)
-            def raiser(*args, **kwargs):
+        # Modify class to raise exception
+        class RaiserMeta(type):
+            def __getattr__(self, x):
                 raise exception
 
-            cls.__new__ = raiser
-        return cls
+        def raiser(*args, **kwargs):
+            raise exception
+
+        __name = str(cls.__name__)
+        __bases = ()
+        __dict = {
+            "__metaclass__": RaiserMeta,
+            "__wrapped__": cls,
+            "__new__": raiser,
+        }
+
+        return RaiserMeta(__name, __bases, __dict)
 
     return decorator
