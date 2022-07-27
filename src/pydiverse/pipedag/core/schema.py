@@ -112,7 +112,7 @@ class Schema:
             return False
         return self.name == other.name
 
-    def __enter__(self):
+    def __enter__(self) -> Schema:
         """Schema context manager - enter
 
         Adds the current schema to the prefect context as 'pipedag_schema'

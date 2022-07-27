@@ -10,7 +10,7 @@ from collections import defaultdict
 
 import prefect.utilities.logging
 
-from pydiverse.pipedag import backend
+from pydiverse.pipedag import backend, config
 from pydiverse.pipedag._typing import Materialisable
 from pydiverse.pipedag.backend.lock import LockState
 from pydiverse.pipedag.backend.metadata import TaskMetadata
@@ -195,6 +195,12 @@ class PipeDAGStore:
             )
 
         def materialise_mutator(x, tbl_id=itertools.count()):
+            # TODO: Naming / Primary key with auto tables
+            if isinstance(x, config.auto_table):
+                x = Table(x)
+            if isinstance(x, config.auto_blob):
+                x = Blob(x)
+
             if isinstance(x, (Table, Blob)):
                 # TODO: Don't overwrite name unless it is None
                 x.schema = schema
