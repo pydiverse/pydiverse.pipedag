@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import warnings
 
 import pandas as pd
 import prefect
@@ -8,7 +9,7 @@ import sqlalchemy as sa
 
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.metadata import LazyTableMetadata, TaskMetadata
-from pydiverse.pipedag.backend.table.base import BaseTableStore
+from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
 from pydiverse.pipedag.backend.table.util.sql_ddl import (
     CopyTable,
     CreateSchema,
@@ -128,11 +129,8 @@ class SQLTableStore(BaseTableStore):
                 "Table name must be of instance 'str' not"
                 f" '{type(table.name).__name__}'."
             )
-
-        obj = table.obj
-        assert obj is not None
-
-        logger = prefect.context.get("logger")
+        if table.obj is None:
+            raise TypeError("Table object can't be None.")
 
         if lazy:
             lazy_cache_key = self.compute_lazy_table_cache_key(table)
@@ -153,26 +151,12 @@ class SQLTableStore(BaseTableStore):
                     )
                     return
                 except CacheError as e:
-                    logger.warn(e)
+                    prefect.context.logger.warn(e)
         else:
             lazy_cache_key = None
 
-        if isinstance(obj, pd.DataFrame):
-            obj.to_sql(
-                table.name,
-                self.engine,
-                schema=schema.working_name,
-                index=False,
-            )
-        elif isinstance(obj, sa.sql.Select):
-            # TODO: Handle table.primary_key
-            logger.info(f"Performing CREATE TABLE AS SELECT ({table})")
-            with self.engine.connect() as conn:
-                conn.execute(CreateTableAsSelect(table.name, schema.working_name, obj))
-        else:
-            raise TypeError(
-                f"Can't store Table with underlying type '{type(obj).__name__}'"
-            )
+        hook = self.get_m_table_hook(type(table.obj))
+        hook.materialise(self, table, schema.working_name)
 
         if lazy and lazy_cache_key is not None:
             # Create Metadata
@@ -209,20 +193,8 @@ class SQLTableStore(BaseTableStore):
         schema = table.schema
         schema_name = schema.name if from_cache else schema.current_name
 
-        if as_type == pd.DataFrame:
-            with self.engine.connect() as conn:
-                df = pd.read_sql_table(table.name, conn, schema=schema_name)
-                return df
-
-        if as_type == sa.Table:
-            return sa.Table(
-                table.name,
-                sa.MetaData(bind=self.engine),
-                schema=schema_name,
-                autoload_with=self.engine,
-            )
-
-        raise TypeError(f"{type(self).__name__} can't convert to {as_type}.")
+        hook = self.get_r_table_hook(as_type)
+        return hook.retrieve(self, table, schema_name, as_type)
 
     def store_task_metadata(self, metadata: TaskMetadata, schema: Schema):
         with self.engine.connect() as conn:
@@ -369,3 +341,105 @@ class SQLTableStore(BaseTableStore):
             schema=result.schema,
             cache_key=result.cache_key,
         )
+
+
+@SQLTableStore.register_table()
+class SQLAlchemyTableHook(TableHook[SQLTableStore]):
+    @classmethod
+    def can_materialise(cls, type_) -> bool:
+        return issubclass(type_, sa.sql.Select)
+
+    @classmethod
+    def can_retrieve(cls, type_) -> bool:
+        return type_ == sa.Table
+
+    @classmethod
+    def materialise(cls, store, table: Table[sa.sql.Select], schema_name):
+        prefect.context.logger.info(f"Performing CREATE TABLE AS SELECT ({table})")
+        with store.engine.connect() as conn:
+            conn.execute(CreateTableAsSelect(table.name, schema_name, table.obj))
+
+    @classmethod
+    def retrieve(cls, store, table, schema_name, as_type):
+        return sa.Table(
+            table.name,
+            sa.MetaData(bind=store.engine),
+            schema=schema_name,
+            autoload_with=store.engine,
+        )
+
+
+@SQLTableStore.register_table(pd)
+class PandasTableHook(TableHook[SQLTableStore]):
+    @classmethod
+    def can_materialise(cls, type_) -> bool:
+        return issubclass(type_, pd.DataFrame)
+
+    @classmethod
+    def can_retrieve(cls, type_) -> bool:
+        return type_ == pd.DataFrame
+
+    @classmethod
+    def materialise(cls, store, table: Table[pd.DataFrame], schema_name):
+        table.obj.to_sql(
+            table.name,
+            store.engine,
+            schema=schema_name,
+            index=False,
+        )
+
+    @classmethod
+    def retrieve(cls, store, table, schema_name, as_type):
+        with store.engine.connect() as conn:
+            df = pd.read_sql_table(table.name, conn, schema=schema_name)
+            return df
+
+
+try:
+    import pydiverse.transform as pdt
+except ImportError as e:
+    warnings.warn(str(e), ImportWarning)
+    pdt = None
+
+
+@SQLTableStore.register_table(pdt)
+class PydiverseTransformTableHook(TableHook[SQLTableStore]):
+    @classmethod
+    def can_materialise(cls, type_) -> bool:
+        return issubclass(type_, pdt.Table)
+
+    @classmethod
+    def can_retrieve(cls, type_) -> bool:
+        from pydiverse.transform.eager import PandasTableImpl
+        from pydiverse.transform.lazy import SQLTableImpl
+
+        return issubclass(type_, (PandasTableImpl, SQLTableImpl))
+
+    @classmethod
+    def materialise(cls, store, table: Table[pdt.Table], schema_name):
+        from pydiverse.transform.eager import PandasTableImpl
+        from pydiverse.transform.lazy import SQLTableImpl
+
+        t = table.obj
+        if isinstance(t._impl, PandasTableImpl):
+            from pydiverse.transform.core.verbs import collect
+
+            table.obj = t >> collect()
+            return PandasTableHook.materialise(store, table, schema_name)
+        if isinstance(t._impl, SQLTableImpl):
+            table.obj = t._impl.build_select()
+            return SQLAlchemyTableHook.materialise(store, table, schema_name)
+        raise NotImplementedError
+
+    @classmethod
+    def retrieve(cls, store, table, schema_name, as_type):
+        from pydiverse.transform.eager import PandasTableImpl
+        from pydiverse.transform.lazy import SQLTableImpl
+
+        if issubclass(as_type, PandasTableImpl):
+            df = PandasTableHook.retrieve(store, table, schema_name, pd.DataFrame)
+            return pdt.Table(PandasTableImpl(table.name, df))
+        if issubclass(as_type, SQLTableImpl):
+            sa_tbl = SQLAlchemyTableHook.retrieve(store, table, schema_name, sa.Table)
+            return pdt.Table(SQLTableImpl(store.engine, sa_tbl))
+        raise NotImplementedError
