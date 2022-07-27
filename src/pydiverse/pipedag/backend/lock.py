@@ -3,6 +3,7 @@ from __future__ import annotations
 import atexit
 import os
 import threading
+import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from enum import Enum
@@ -143,7 +144,8 @@ class NoLockManager(BaseLockManager):
 
 try:
     import filelock as fl
-except ImportError:
+except ImportError as e:
+    warnings.warn(str(e), ImportWarning)
     fl = None
 
 
@@ -204,7 +206,8 @@ try:
     import kazoo
     from kazoo.client import KazooClient, KazooState
     from kazoo.recipe.lock import Lock as KazooLock
-except ImportError:
+except ImportError as e:
+    warnings.warn(str(e), ImportWarning)
     kazoo = None
 
 
