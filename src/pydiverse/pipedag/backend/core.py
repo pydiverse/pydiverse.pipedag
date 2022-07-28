@@ -195,12 +195,18 @@ class PipeDAGStore:
             )
 
         def materialise_mutator(x, tbl_id=itertools.count()):
-            # TODO: Naming / Primary key with auto tables
+            # Automatically convert an object to a table / blob if its
+            # type is inside either `config.auto_table` or `.auto_blob`.
             if isinstance(x, config.auto_table):
-                x = Table(x)
+                try:
+                    hook = self.table_store.get_m_table_hook(type(x))
+                    x = hook.auto_table(x)
+                except TypeError:
+                    x = Table(x)
             if isinstance(x, config.auto_blob):
                 x = Blob(x)
 
+            # Do the materialisation
             if isinstance(x, (Table, Blob)):
                 # TODO: Don't overwrite name unless it is None
                 x.schema = schema

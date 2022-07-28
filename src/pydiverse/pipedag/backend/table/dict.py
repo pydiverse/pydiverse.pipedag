@@ -121,11 +121,19 @@ class PandasTableHook(TableHook[DictTableStore]):
 
     @classmethod
     def materialise(cls, store, table: Table[pd.DataFrame], schema_name):
+        if table.name is not None:
+            table.obj.attrs["name"] = table.name
         store.store[schema_name][table.name] = table.obj
 
     @classmethod
     def retrieve(cls, store, table, schema_name, as_type):
         return store.store[schema_name][table.name].copy()
+
+    @classmethod
+    def auto_table(cls, obj: pd.DataFrame):
+        if name := obj.attrs.get("name"):
+            return Table(obj, name)
+        return super().auto_table(obj)
 
 
 try:
@@ -160,3 +168,7 @@ class PydiverseTransformTableHook(TableHook[DictTableStore]):
 
         df = PandasTableHook.retrieve(store, table, schema_name, pd.DataFrame)
         return pdt.Table(PandasTableImpl(table.name, df))
+
+    @classmethod
+    def auto_table(cls, obj: pdt.Table):
+        return Table(obj, obj._impl.name)

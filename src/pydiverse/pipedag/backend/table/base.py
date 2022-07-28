@@ -221,7 +221,6 @@ class TableHook(Generic[StoreT], ABC):
         underlying type. If `True` is returned, the `materialise` method
         MUST be implemented for the type.
         """
-        ...
 
     @classmethod
     @abstractmethod
@@ -231,7 +230,6 @@ class TableHook(Generic[StoreT], ABC):
         and convert it to the specified type. If `True` is returned, the
         `retrieve` method MUST be implemented for the type.
         """
-        ...
 
     @classmethod
     @abstractmethod
@@ -243,7 +241,6 @@ class TableHook(Generic[StoreT], ABC):
         :param schema_name: The name of the schema in which the table should
             be stored
         """
-        ...
 
     @classmethod
     @abstractmethod
@@ -259,4 +256,16 @@ class TableHook(Generic[StoreT], ABC):
         :param as_type: The type as which the table is to be retrieved
         :return: The retrieved table (converted to the correct type)
         """
-        ...
+
+    @classmethod
+    def auto_table(cls, obj: T) -> Table[T]:
+        """Wrap an object inside a `Table`
+
+        Given an object that can be materialised by this hook, produces a
+        Table instance that may contain additional metadata. This is useful
+        to enable automatic name propagation.
+
+        :param obj: The object which should get wrapped inside a `Table`
+        :return: The `Table` object which wraps `obj`
+        """
+        return Table(obj)

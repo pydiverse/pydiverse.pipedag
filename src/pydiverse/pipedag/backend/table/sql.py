@@ -394,6 +394,12 @@ class PandasTableHook(TableHook[SQLTableStore]):
             df = pd.read_sql_table(table.name, conn, schema=schema_name)
             return df
 
+    @classmethod
+    def auto_table(cls, obj: pd.DataFrame):
+        if name := obj.attrs.get("name"):
+            return Table(obj, name)
+        return super().auto_table(obj)
+
 
 try:
     import pydiverse.transform as pdt
@@ -443,3 +449,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             sa_tbl = SQLAlchemyTableHook.retrieve(store, table, schema_name, sa.Table)
             return pdt.Table(SQLTableImpl(store.engine, sa_tbl))
         raise NotImplementedError
+
+    @classmethod
+    def auto_table(cls, obj: pdt.Table):
+        return Table(obj, obj._impl.name)
