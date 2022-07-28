@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import warnings
 
@@ -263,7 +264,8 @@ class SQLTableStore(BaseTableStore):
         v_bytes = v_str.encode("utf8")
 
         v_hash = hashlib.sha256(v_bytes)
-        return v_hash.hexdigest()[:20]
+        hash_str = base64.b32encode(v_hash.digest()).decode("ascii")
+        return hash_str[:20]
 
     def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
         with self.engine.connect() as conn:

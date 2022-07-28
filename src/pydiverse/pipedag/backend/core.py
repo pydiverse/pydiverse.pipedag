@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import datetime
 import hashlib
 import itertools
@@ -316,12 +317,14 @@ class PipeDAGStore:
         v_bytes = v_str.encode("utf8")
 
         v_hash = hashlib.sha256(v_bytes)
-        # Only take first 20 characters of hex digest (80 bits). This
-        # provides 40 bits of collision resistance, which is more than enough.
-        # To illustrate: If you were to generate one cache key per second,
-        # you still would have to wait about 35000 years until you encounter
+        # Only take first 20 characters of base32 digest (100 bits). This
+        # provides 50 bits of collision resistance, which is more than enough.
+        # To illustrate: If you were to generate 1k cache keys per second,
+        # you still would have to wait over 800k years until you encounter
         # a collision.
-        return v_hash.hexdigest()[:20]
+        # NOTE: Can't use base64 because it contains lower and upper case chars
+        hash_str = base64.b32encode(v_hash.digest()).decode("ascii")
+        return hash_str[:20]
 
     def retrieve_cached_output(
         self,
