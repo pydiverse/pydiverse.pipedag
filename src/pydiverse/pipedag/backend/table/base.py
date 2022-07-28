@@ -269,3 +269,15 @@ class TableHook(Generic[StoreT], ABC):
         :return: The `Table` object which wraps `obj`
         """
         return Table(obj)
+
+    @classmethod
+    def lazy_query_str(cls, store: StoreT, obj) -> str:
+        """String that represents the associated object
+
+        Can either be a literal query string (e.g. SQL query), or a string that
+        uniquely represents the query in some other way. Used for computing
+        the cache key for materialising tasks with `lazy=True`.
+
+        :raises TypeError: if the type doesn't support lazy queries.
+        """
+        raise TypeError(f"Lazy query not supported with object of type {type(obj)}")

@@ -267,12 +267,11 @@ class SQLTableStore(BaseTableStore):
             table.cache_key,  # Cache key of task
         ]
 
-        if isinstance(obj, sa.sql.Select):
-            query = str(
-                obj.compile(self.engine, compile_kwargs={"literal_binds": True})
-            )
-            v.append(query)
-        else:
+        try:
+            hook = self.get_m_table_hook(type(table.obj))
+            query_str = hook.lazy_query_str(self, table.obj)
+            v.append(query_str)
+        except TypeError:
             return None
 
         v_str = "|".join(v)
@@ -368,6 +367,10 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
             autoload_with=store.engine,
         )
 
+    @classmethod
+    def lazy_query_str(cls, store, obj) -> str:
+        return str(obj.compile(store.engine, compile_kwargs={"literal_binds": True}))
+
 
 @SQLTableStore.register_table(pd)
 class PandasTableHook(TableHook[SQLTableStore]):
@@ -453,3 +456,13 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
     @classmethod
     def auto_table(cls, obj: pdt.Table):
         return Table(obj, obj._impl.name)
+
+    @classmethod
+    def lazy_query_str(cls, store, obj: pdt.Table) -> str:
+        from pydiverse.transform.core.verbs import build_query
+
+        query = obj >> build_query()
+
+        if query is not None:
+            return str(query)
+        return super().lazy_query_str(store, obj)
