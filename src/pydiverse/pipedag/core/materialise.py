@@ -204,6 +204,11 @@ class MaterialisationWrapper:
         store = pydiverse.pipedag.config.store
         bound = self.fn_signature.bind(*args, **kwargs)
 
+        if task is None:
+            raise TypeError("Task can't be None.")
+        if task.schema is None:
+            raise TypeError("Task schema can't be None")
+
         # If this is the first task in this schema to be executed, ensure that
         # the schema has been created and locked.
         store.ensure_schema_is_ready(task.schema)

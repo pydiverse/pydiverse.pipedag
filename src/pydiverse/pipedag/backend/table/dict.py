@@ -44,19 +44,6 @@ class DictTableStore(BaseTableStore):
 
     def store_table(self, table: Table, lazy: bool):
         schema = table.schema
-        if schema is None:
-            raise ValueError(f"Table schema can't be None.")
-        if schema.did_swap:
-            raise SchemaError(
-                f"Can't add new table to Schema '{schema.name}'. Schema has already"
-                " been swapped."
-            )
-        if not isinstance(table.name, str):
-            raise TypeError(
-                "Table name must be of instance 'str' not"
-                f" '{type(table.name).__name__}'."
-            )
-
         with self.__lock:
             if table.name in self.store[schema.working_name]:
                 raise Exception(f"Table with name '{table.name}' already in store.")
@@ -68,11 +55,11 @@ class DictTableStore(BaseTableStore):
         schema = table.schema
         if schema.did_swap:
             raise SchemaError(
-                f"Can't copy table '{table.name}' to working schema. Schema"
-                f" '{schema.name}' has already been swapped."
+                f"Can't copy table '{table.name}' to working schema."
+                f" Schema '{schema.name}' has already been swapped."
             )
         if table.cache_key is None:
-            raise ValueError(f"Table cache key can't be None.")
+            raise ValueError(f"Table cache key can't be None")
 
         with self.__lock:
             self.store[schema.working_name] = self.store[schema.name]

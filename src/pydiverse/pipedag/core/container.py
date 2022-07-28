@@ -49,6 +49,8 @@ class Table(Generic[T]):
 
     @name.setter
     def name(self, value):
+        if value is not None and not isinstance(value, str):
+            raise TypeError(f"Table name must be of instance 'str' not {type(value)}.")
         self._name = normalise_name(value)
 
 

@@ -193,6 +193,11 @@ class PipeDAGStore:
                 f"Can't materialise because schema '{schema.name}' has not been"
                 " created."
             )
+        if schema.did_swap:
+            raise SchemaError(
+                f"Can't add new table to Schema '{schema.name}'."
+                " Schema has already been swapped."
+            )
 
         def materialise_mutator(x, tbl_id=itertools.count()):
             # Automatically convert an object to a table / blob if its
@@ -208,7 +213,6 @@ class PipeDAGStore:
 
             # Do the materialisation
             if isinstance(x, (Table, Blob)):
-                # TODO: Don't overwrite name unless it is None
                 x.schema = schema
                 x.cache_key = task.cache_key
 
@@ -223,6 +227,8 @@ class PipeDAGStore:
 
                 self.validate_lock_state(schema)
                 if isinstance(x, Table):
+                    if x.obj is None:
+                        raise TypeError("Underlying table object can't be None")
                     self._check_table_name(x)
                     self.table_store.store_table(x, lazy=task.lazy)
                 elif isinstance(x, Blob):

@@ -117,21 +117,6 @@ class SQLTableStore(BaseTableStore):
 
     def store_table(self, table: Table, lazy: bool):
         schema = table.schema
-        if schema is None:
-            raise ValueError(f"Table schema can't be None.")
-        if schema.did_swap:
-            raise SchemaError(
-                f"Can't add new table to Schema '{schema.name}'. Schema has already"
-                " been swapped."
-            )
-        if not isinstance(table.name, str):
-            raise TypeError(
-                "Table name must be of instance 'str' not"
-                f" '{type(table.name).__name__}'."
-            )
-        if table.obj is None:
-            raise TypeError("Table object can't be None.")
-
         if lazy:
             lazy_cache_key = self.compute_lazy_table_cache_key(table)
             lazy_table_md = self.retrieve_lazy_table_metadata(
