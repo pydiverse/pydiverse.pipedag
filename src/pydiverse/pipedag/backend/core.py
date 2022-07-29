@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import contextlib
 import datetime
 import itertools
 import json
 import threading
 import uuid
 from collections import defaultdict
+from typing import Callable, ContextManager
 
 import prefect.utilities.logging
 
@@ -229,7 +231,8 @@ class PipeDAGStore:
                 if isinstance(x, Table):
                     if x.obj is None:
                         raise TypeError("Underlying table object can't be None")
-                    self._check_table_name(x)
+
+                    name_checker(x)
                     if task.lazy:
                         self.table_store.store_table_lazy(x)
                     else:
@@ -241,7 +244,7 @@ class PipeDAGStore:
                             " downstream dependencies is not implemented."
                         )
 
-                    self._check_blob_name(x)
+                    name_checker(x)
                     self.blob_store.store_blob(x)
                 else:
                     raise NotImplementedError
@@ -249,7 +252,8 @@ class PipeDAGStore:
             return x
 
         # Materialise
-        m_value = deepmutate(value, materialise_mutator)
+        with self.materialisation_context() as name_checker:
+            m_value = deepmutate(value, materialise_mutator)
 
         # Metadata
         output_json = self.json_encode(m_value)
@@ -268,27 +272,61 @@ class PipeDAGStore:
 
         return m_value
 
-    def _check_table_name(self, table: Table):
-        """Check that table name is unique in schema"""
-        with self.__lock:
-            if table.name in self.table_names[table.schema]:
-                raise DuplicateNameError(
-                    f"Table with name '{table.name}' already exists in schema"
-                    f" '{table.schema.name}'. To enable automatic name mangling,"
-                    " you can add '%%' at the end of the name."
-                )
-            self.table_names[table.schema].add(table.name)
+    @contextlib.contextmanager
+    def materialisation_context(self) -> ContextManager[Callable[[Table | Blob], None]]:
+        """Context manager for materialisation
 
-    def _check_blob_name(self, blob: Blob):
-        """Check that blob name is unique in schema"""
-        with self.__lock:
-            if blob.name in self.blob_names[blob.schema]:
-                raise DuplicateNameError(
-                    f"Blob with name '{blob.name}' already exists in schema"
-                    f" '{blob.schema.name}'. To enable automatic name mangling,"
-                    " you can add '%%' at the end of the name."
-                )
-            self.table_names[blob.schema].add(blob.name)
+        All materialisation operations should be wrapped using this context
+        manager. It does the following things:
+
+        - It returns a name checker function which, when called with either
+          a Table or Blob, checks if an object with the same name already
+          exists in the schema. If it does, it raises a `DuplicateNameError`.
+
+        - If an exception is raised inside the context, all objects that have
+          been materialised (given that the name checker function was called
+          with them), get deleted again.
+
+        The deletion behaviour is important, because when copying tables from
+        the cache to the working schema, we want to be able to delete
+        """
+        stored_objects: list[Table | Blob] = []
+
+        def name_checker(obj: Table | Blob):
+            if isinstance(obj, Table):
+                name_store = self.table_names
+            elif isinstance(obj, Blob):
+                name_store = self.blob_names
+            else:
+                raise TypeError
+
+            with self.__lock:
+                if obj.name in name_store[obj.schema]:
+                    raise DuplicateNameError(
+                        f"{type(obj).__name__} with name '{obj.name}' already"
+                        " exists in schema '{obj.schema.name}'."
+                        " To enable automatic name mangling,"
+                        " you can add '%%' at the end of the name."
+                    )
+
+                stored_objects.append(obj)
+                name_store[obj.schema].add(obj.name)
+
+        try:
+            yield name_checker
+        except Exception as e:
+            # Clean up
+            with self.__lock:
+                for obj in stored_objects:
+                    if isinstance(obj, Table):
+                        self.table_names[obj.schema].remove(obj.name)
+                        self.table_store.delete_table_from_working_schema(obj)
+                    elif isinstance(obj, Blob):
+                        self.blob_names[obj.schema].remove(obj.name)
+                        self.blob_store.delete_blob_from_working_schema(obj)
+                    else:
+                        raise TypeError
+            raise e
 
     #### Cache ####
 
@@ -353,16 +391,17 @@ class PipeDAGStore:
 
         def visiting_mutator(x):
             if isinstance(x, Table):
-                self._check_table_name(x)
+                name_checker(x)
                 self.validate_lock_state(task.schema)
                 self.table_store.copy_table_to_working_schema(x)
             elif isinstance(x, Blob):
-                self._check_blob_name(x)
+                name_checker(x)
                 self.validate_lock_state(task.schema)
                 self.blob_store.copy_blob_to_working_schema(x)
             return x
 
-        deepmutate(output, visiting_mutator)
+        with self.materialisation_context() as name_checker:
+            deepmutate(output, visiting_mutator)
 
         self.validate_lock_state(task.schema)
         self.table_store.copy_task_metadata_to_working_schema(task)

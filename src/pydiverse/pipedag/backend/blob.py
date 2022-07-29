@@ -58,6 +58,13 @@ class BaseBlobStore(ABC):
         """
 
     @abstractmethod
+    def delete_blob_from_working_schema(self, blob: Blob):
+        """Delete a blob from the working schema
+
+        If the blob doesn't exist in the working schema, fail silently.
+        """
+
+    @abstractmethod
     def retrieve_blob(self, blob: Blob, from_cache: bool = False) -> Any:
         """Loads a blob from the store
 
@@ -127,6 +134,12 @@ class FileBlobStore(BaseBlobStore):
                 f"Can't copy blob '{blob.name}' (schema: '{blob.schema.name}')"
                 " to working schema because no such blob exists."
             )
+
+    def delete_blob_from_working_schema(self, blob: Blob):
+        try:
+            os.remove(self.get_blob_path(blob.schema.working_name, blob.name))
+        except FileNotFoundError:
+            return
 
     def retrieve_blob(self, blob: Blob, from_cache: bool = False):
         schema = blob.schema

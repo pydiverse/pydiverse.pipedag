@@ -186,7 +186,7 @@ class BaseTableStore(metaclass=_TableStoreMeta):
             # to the working schema
             metadata = self.retrieve_lazy_table_metadata(lazy_cache_key, table.schema)
             self.copy_lazy_table_to_working_schema(metadata, table)
-            prefect.context.logger.info("Lazy cache of table '{table.name}' found")
+            prefect.context.logger.info(f"Lazy cache of table '{table.name}' found")
         except CacheError as e:
             prefect.context.logger.warn(e)
 
@@ -223,6 +223,13 @@ class BaseTableStore(metaclass=_TableStoreMeta):
         it in any way.
 
         :raises CacheError: if the lazy table can't be found
+        """
+
+    @abstractmethod
+    def delete_table_from_working_schema(self, table: Table):
+        """Delete a table from the working schema
+
+        If the table doesn't exist in the working schema, fail silently.
         """
 
     # Dematerialise

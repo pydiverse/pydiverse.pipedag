@@ -8,8 +8,9 @@ __all__ = [
     "CreateSchema",
     "DropSchema",
     "RenameSchema",
-    "CopyTable",
     "CreateTableAsSelect",
+    "CopyTable",
+    "DropTable",
 ]
 
 
@@ -32,6 +33,13 @@ class RenameSchema(DDLElement):
         self.to = to
 
 
+class CreateTableAsSelect(DDLElement):
+    def __init__(self, name: str, schema: str, query: Select):
+        self.name = name
+        self.schema = schema
+        self.query = query
+
+
 class CopyTable(DDLElement):
     def __init__(self, from_name, from_schema, to_name, to_schema, if_not_exists=False):
         self.from_name = from_name
@@ -41,11 +49,11 @@ class CopyTable(DDLElement):
         self.if_not_exists = if_not_exists
 
 
-class CreateTableAsSelect(DDLElement):
-    def __init__(self, name: str, schema: str, query: Select):
+class DropTable(DDLElement):
+    def __init__(self, name, schema, if_exists=False):
         self.name = name
         self.schema = schema
-        self.query = query
+        self.if_exists = if_exists
 
 
 @compiles(CreateSchema)
@@ -77,6 +85,17 @@ def visit_rename_schema(rename: RenameSchema, compiler, **kw):
     return "ALTER SCHEMA " + _from + " RENAME TO " + to
 
 
+@compiles(CreateTableAsSelect)
+def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
+    name = compiler.preparer.quote_identifier(create.name)
+    schema = compiler.preparer.format_schema(create.schema)
+
+    kw["literal_binds"] = True
+    select = compiler.sql_compiler.process(create.query, **kw)
+
+    return f"CREATE TABLE {schema}.{name} AS\n{select}"
+
+
 @compiles(CopyTable)
 def visit_copy_table(copy: CopyTable, compiler, *kw):
     from_name = compiler.preparer.quote_identifier(copy.from_name)
@@ -93,12 +112,12 @@ def visit_copy_table(copy: CopyTable, compiler, *kw):
     return " ".join(text) + f"\nSELECT * FROM {from_schema}.{from_name}"
 
 
-@compiles(CreateTableAsSelect)
-def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
-    name = compiler.preparer.quote_identifier(create.name)
-    schema = compiler.preparer.format_schema(create.schema)
-
-    kw["literal_binds"] = True
-    select = compiler.sql_compiler.process(create.query, **kw)
-
-    return f"CREATE TABLE {schema}.{name} AS\n{select}"
+@compiles(DropTable)
+def visit_drop_table(drop: DropTable, compiler, **kw):
+    table = compiler.preparer.quote_identifier(drop.name)
+    schema = compiler.preparer.format_schema(drop.schema)
+    text = ["DROP TABLE"]
+    if drop.if_exists:
+        text.append("IF EXISTS")
+    text.append(f"{schema}.{table}")
+    return " ".join(text)

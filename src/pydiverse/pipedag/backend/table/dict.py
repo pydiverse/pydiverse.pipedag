@@ -72,6 +72,12 @@ class DictTableStore(BaseTableStore):
             metadata.name
         ]
 
+    def delete_table_from_working_schema(self, table: Table):
+        try:
+            self.store[table.schema.working_name].pop(table.name)
+        except KeyError:
+            return
+
     def store_task_metadata(self, metadata: TaskMetadata, schema: Schema):
         self.w_metadata[schema][metadata.cache_key] = metadata
 

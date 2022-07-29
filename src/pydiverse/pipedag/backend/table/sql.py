@@ -13,6 +13,7 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     CreateSchema,
     CreateTableAsSelect,
     DropSchema,
+    DropTable,
     RenameSchema,
 )
 from pydiverse.pipedag.core import MaterialisingTask, Schema, Table
@@ -144,6 +145,12 @@ class SQLTableStore(BaseTableStore):
                     table.name,
                     table.schema.working_name,
                 )
+            )
+
+    def delete_table_from_working_schema(self, table: Table):
+        with self.engine.connect() as conn:
+            conn.execute(
+                DropTable(table.name, table.schema.working_name, if_exists=True)
             )
 
     def store_task_metadata(self, metadata: TaskMetadata, schema: Schema):
