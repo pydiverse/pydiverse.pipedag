@@ -10,7 +10,7 @@ from pytest_mock import MockerFixture
 from pydiverse.pipedag import Schema, materialise
 
 # noinspection PyUnresolvedReferences
-from tests import *
+from tests.util import setup_pipedag
 
 
 @materialise()

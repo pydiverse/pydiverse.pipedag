@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 import sqlalchemy as sa
 from prefect import Flow
 
 from pydiverse.pipedag import Blob, Schema, Table, materialise
 
 # noinspection PyUnresolvedReferences
-from tests import *
+from .util import setup_pipedag
 
 
 def test_simple_flow():
