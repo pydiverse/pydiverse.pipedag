@@ -176,6 +176,10 @@ class BaseTableStore(metaclass=_TableStoreMeta):
             # Fallback to default implementation
             return self.store_table(table)
 
+        # Must update table cache key here to ensure that any downstream
+        # task get invalidated in case the query changed.
+        table.cache_key = lazy_cache_key
+
         # Store table
         try:
             # Try retrieving the table from the cache and then copying it

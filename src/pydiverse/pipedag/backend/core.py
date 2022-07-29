@@ -235,6 +235,12 @@ class PipeDAGStore:
                     else:
                         self.table_store.store_table(x)
                 elif isinstance(x, Blob):
+                    if task.lazy:
+                        raise NotImplementedError(
+                            "Can't use Blobs with lazy tasks. Invalidation of the"
+                            " downstream dependencies is not implemented."
+                        )
+
                     self._check_blob_name(x)
                     self.blob_store.store_blob(x)
                 else:
