@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from abc import ABC, ABCMeta, abstractmethod
-from typing import Any, Generic, Type
+from typing import Any, Generic
 
+import prefect
 from typing_extensions import Self
 
 from pydiverse.pipedag._typing import StoreT, T
-from pydiverse.pipedag.backend.metadata import TaskMetadata
+from pydiverse.pipedag.backend.metadata import LazyTableMetadata, TaskMetadata
+from pydiverse.pipedag.backend.util import compute_cache_key
 from pydiverse.pipedag.core import MaterialisingTask, Schema, Table
+from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.util import requires
 
 
@@ -117,6 +120,8 @@ class BaseTableStore(metaclass=_TableStoreMeta):
                 return hook
         raise TypeError(f"Can't retrieve Table as type {type_}")
 
+    # Schema
+
     @abstractmethod
     def create_schema(self, schema: Schema):
         """Creates a schema
@@ -137,21 +142,61 @@ class BaseTableStore(metaclass=_TableStoreMeta):
         replace the metadata of the base schema. The latter can be discarded.
         """
 
-    @abstractmethod
-    def store_table(self, table: Table, lazy: bool):
-        """Stores a table in the associated working schema.
+    # Materialise
+
+    def store_table(self, table: Table):
+        """Stores a table in the associated working schema
 
         The store must convert the table object (`table.obj`) to the correct
         internal type. This means, that in some cases it first has to
         evaluate a lazy object. For example: if a sql based table store
         receives a sql query to store, it has to execute it first.
 
-        If `lazy` is set to `True` and the table object represents a lazy
-        table / query, the store may choose to check if the same query
-        with the same inputs (based on `table.cache_key`) has already been
-        executed before. If yes, instead of evaluating the query, it can
-        just copy the previous result to the working schema.
+        The implementation details of this get handled by the registered
+        TableHooks.
         """
+
+        hook = self.get_m_table_hook(type(table.obj))
+        hook.materialise(self, table, table.schema.working_name)
+
+    def store_table_lazy(self, table: Table):
+        """Lazily sores a table in the associated working schema
+
+        The same as `store_table()`, with the difference being that if the
+        table object represents a lazy table / query, the store first checks
+        if the same query with the same input (based on `table.cache_key`)
+        has already been executed before. If yes, instead of evaluating
+        the query, it just copies the previous result to the working schema.
+
+        Used when `lazy = True` is set for a materialising task.
+        """
+
+        lazy_cache_key = self.compute_lazy_table_cache_key(table)
+        if lazy_cache_key is None:
+            # Fallback to default implementation
+            return self.store_table(table)
+
+        # Store table
+        try:
+            # Try retrieving the table from the cache and then copying it
+            # to the working schema
+            metadata = self.retrieve_lazy_table_metadata(lazy_cache_key, table.schema)
+            self.copy_lazy_table_to_working_schema(metadata, table)
+            prefect.context.logger.info("Lazy cache of table '{table.name}' found")
+        except CacheError as e:
+            prefect.context.logger.warn(e)
+
+            # Either not found in cache, or copying failed -> fallback
+            self.store_table(table)
+
+        # Store metadata
+        self.store_lazy_table_metadata(
+            LazyTableMetadata(
+                name=table.name,
+                schema=table.schema.name,
+                cache_key=lazy_cache_key,
+            )
+        )
 
     @abstractmethod
     def copy_table_to_working_schema(self, table: Table):
@@ -164,6 +209,20 @@ class BaseTableStore(metaclass=_TableStoreMeta):
         """
 
     @abstractmethod
+    def copy_lazy_table_to_working_schema(
+        self, metadata: LazyTableMetadata, table: Table
+    ):
+        """Copy the lazy table identified by the metadata to the working schema
+        of table argument and rename it to `table.name`.
+
+        This operation MUST not remove the table from the base schema or modify
+        it in any way.
+
+        :raises CacheError: if the lazy table can't be found
+        """
+
+    # Dematerialise
+
     def retrieve_table_obj(
         self, table: Table, as_type: type[T], from_cache: bool = False
     ) -> T:
@@ -181,12 +240,27 @@ class BaseTableStore(metaclass=_TableStoreMeta):
             the requested type.
         """
 
+        if as_type is None:
+            raise TypeError(
+                "Missing 'as_type' argument. You must specify a type to be able "
+                "to dematerialise a Table."
+            )
+
+        schema = table.schema
+        schema_name = schema.name if from_cache else schema.current_name
+
+        hook = self.get_r_table_hook(as_type)
+        return hook.retrieve(self, table, schema_name, as_type)
+
+    # Metadata
+
     @abstractmethod
     def store_task_metadata(self, metadata: TaskMetadata, schema: Schema):
         """Stores the metadata of a task
 
-        The metadata should always be stored associated in such a way that
-        it is associated with the working schema.
+        The metadata must always be stored in such a way that it is
+        associated with the working schema. Only after a schema swap
+        should it be associated with the base schema.
         """
 
     @abstractmethod
@@ -201,6 +275,45 @@ class BaseTableStore(metaclass=_TableStoreMeta):
         """Retrieve a task's metadata from the store
 
         :raises CacheError: if no metadata for this task can be found.
+        """
+
+    # Lazy Table Metadata
+
+    def compute_lazy_table_cache_key(self, table: Table) -> str | None:
+        """Get a cache key that identifies a lazy table
+
+        This cache key is based on the inputs of a task and the query
+        that the table object represents.
+
+        :param table: The table for which to compute the cache key
+        :return: Either a cache key (str) or None if the table doesn't
+            represent a lazy query
+        """
+        try:
+            hook = self.get_m_table_hook(type(table.obj))
+            query_str = hook.lazy_query_str(self, table.obj)
+        except TypeError:
+            return None
+
+        return compute_cache_key("LAZY-TABLE", table.cache_key, query_str)
+
+    @abstractmethod
+    def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
+        """Stores the metadata of a lazy table
+
+        The metadata must always be stored in such a way that it is
+        associated with the working schema. Only after a schema swap
+        should it be associated with the base schema.
+        """
+
+    @abstractmethod
+    def retrieve_lazy_table_metadata(
+        self, cache_key: str, schema: Schema
+    ) -> LazyTableMetadata:
+        """Retrieve a lazy table's metadata from the store
+
+        :raises CacheError: if not metadata that matches the provided cache_key
+            and schema was found
         """
 
 

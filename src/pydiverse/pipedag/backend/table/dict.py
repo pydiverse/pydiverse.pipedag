@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import threading
 import warnings
 
 import pandas as pd
 
-from pydiverse.pipedag._typing import T
-from pydiverse.pipedag.backend.metadata import TaskMetadata
+from pydiverse.pipedag.backend.metadata import LazyTableMetadata, TaskMetadata
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
 from pydiverse.pipedag.core import MaterialisingTask, Schema, Table
 from pydiverse.pipedag.errors import CacheError, SchemaError
@@ -21,35 +19,30 @@ class DictTableStore(BaseTableStore):
     def __init__(self):
         self.store = dict()
         self.metadata = dict()
-        self.run_metadata = dict()
-        self.__lock = threading.RLock()
+        self.w_metadata = dict()
+
+        self.lazy_table_metadata = dict()
+        self.w_lazy_table_metadata = dict()
 
     def create_schema(self, schema: Schema):
-        with self.__lock:
-            self.store.setdefault(schema.name, {})
-            self.store[schema.working_name] = {}
+        self.store.setdefault(schema.name, {})
+        self.store[schema.working_name] = {}
 
-            self.metadata.setdefault(schema.name, {})
-            self.run_metadata[schema.name] = {}
+        self.metadata.setdefault(schema, {})
+        self.w_metadata[schema] = {}
+
+        self.lazy_table_metadata.setdefault(schema, {})
+        self.w_lazy_table_metadata[schema] = {}
 
     def swap_schema(self, schema: Schema):
-        with self.__lock:
-            main_schema = self.store[schema.name]
-            working_schema = self.store[schema.working_name]
-            self.store[schema.name] = working_schema
-            self.store[schema.working_name] = main_schema
+        main_schema = self.store[schema.name]
+        working_schema = self.store[schema.working_name]
+        self.store[schema.name] = working_schema
+        self.store[schema.working_name] = main_schema
 
-            # Move metadata from current run into actual metadata store
-            self.metadata[schema.name] = self.run_metadata[schema.name]
-
-    def store_table(self, table: Table, lazy: bool):
-        schema = table.schema
-        with self.__lock:
-            if table.name in self.store[schema.working_name]:
-                raise Exception(f"Table with name '{table.name}' already in store.")
-
-            hook = self.get_m_table_hook(type(table.obj))
-            hook.materialise(self, table, schema.working_name)
+        # Move metadata from working schema into actual metadata store
+        self.metadata[schema] = self.w_metadata[schema]
+        self.lazy_table_metadata[schema] = self.w_lazy_table_metadata[schema]
 
     def copy_table_to_working_schema(self, table: Table):
         schema = table.schema
@@ -61,39 +54,50 @@ class DictTableStore(BaseTableStore):
         if table.cache_key is None:
             raise ValueError(f"Table cache key can't be None")
 
-        with self.__lock:
-            self.store[schema.working_name] = self.store[schema.name]
+        self.store[schema.working_name] = self.store[schema.name]
 
-    def retrieve_table_obj(
-        self, table: Table[T], as_type: type[T], from_cache: bool = False
-    ) -> T:
-        with self.__lock:
-            schema = table.schema
-            schema_name = schema.name if from_cache else schema.current_name
+    def copy_lazy_table_to_working_schema(
+        self, metadata: LazyTableMetadata, table: Table
+    ):
+        if (metadata.schema not in self.store) or (
+            metadata.name not in self.store[metadata.schema]
+        ):
+            raise CacheError(
+                f"Can't copy lazy table '{metadata.name}' (schema:"
+                f" '{metadata.schema}') to working schema because no such table"
+                " exists."
+            )
 
-            hook = self.get_r_table_hook(as_type)
-            return hook.retrieve(self, table, schema_name, as_type)
+        self.store[table.schema.working_name][table.name] = self.store[metadata.schema][
+            metadata.name
+        ]
 
     def store_task_metadata(self, metadata: TaskMetadata, schema: Schema):
-        with self.__lock:
-            self.run_metadata[schema.name][metadata.cache_key] = metadata
+        self.w_metadata[schema][metadata.cache_key] = metadata
 
     def copy_task_metadata_to_working_schema(self, task: MaterialisingTask):
         schema = task.schema
-        with self.__lock:
-            self.run_metadata[schema.name][task.cache_key] = self.metadata[schema.name][
-                task.cache_key
-            ]
+        self.w_metadata[schema][task.cache_key] = self.metadata[schema][task.cache_key]
 
     def retrieve_task_metadata(self, task: MaterialisingTask) -> TaskMetadata:
-        with self.__lock:
-            try:
-                return self.metadata[task.schema.name][task.cache_key]
-            except KeyError:
-                raise CacheError(
-                    "Failed to retrieve metadata for task "
-                    f"'{task.name}' with cache key '{task.cache_key}'"
-                )
+        try:
+            return self.metadata[task.schema][task.cache_key]
+        except KeyError:
+            raise CacheError(
+                "Failed to retrieve metadata for task "
+                f"'{task.name}' with cache key '{task.cache_key}'"
+            )
+
+    def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
+        self.w_lazy_table_metadata[metadata.schema][metadata.cache_key] = metadata
+
+    def retrieve_lazy_table_metadata(
+        self, cache_key: str, schema: Schema
+    ) -> LazyTableMetadata:
+        try:
+            return self.lazy_table_metadata[schema.name][cache_key]
+        except (TypeError, KeyError):
+            raise CacheError
 
 
 @DictTableStore.register_table(pd)

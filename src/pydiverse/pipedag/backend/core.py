@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import base64
 import datetime
-import hashlib
 import itertools
 import json
 import threading
@@ -15,6 +13,7 @@ from pydiverse.pipedag import backend, config
 from pydiverse.pipedag._typing import Materialisable
 from pydiverse.pipedag.backend.lock import LockState
 from pydiverse.pipedag.backend.metadata import TaskMetadata
+from pydiverse.pipedag.backend.util import compute_cache_key
 from pydiverse.pipedag.backend.util import json as json_util
 from pydiverse.pipedag.core import Blob, MaterialisingTask, Schema, Table
 from pydiverse.pipedag.errors import DuplicateNameError, LockError, SchemaError
@@ -231,7 +230,10 @@ class PipeDAGStore:
                     if x.obj is None:
                         raise TypeError("Underlying table object can't be None")
                     self._check_table_name(x)
-                    self.table_store.store_table(x, lazy=task.lazy)
+                    if task.lazy:
+                        self.table_store.store_table_lazy(x)
+                    else:
+                        self.table_store.store_table(x)
                 elif isinstance(x, Blob):
                     self._check_blob_name(x)
                     self.blob_store.store_blob(x)
@@ -303,28 +305,13 @@ class PipeDAGStore:
 
         :param task: The task
         :param input_json: The inputs provided to the task serialized as a json
-        :return: A sha256 hex digest, trimmed to 20 char length
         """
-
-        v = (
-            "PYDIVERSE-PIPEDAG-TASK",
+        return compute_cache_key(
+            "TASK",
             task.original_name,
             task.version or "None",
             input_json,
         )
-
-        v_str = "|".join(v)
-        v_bytes = v_str.encode("utf8")
-
-        v_hash = hashlib.sha256(v_bytes)
-        # Only take first 20 characters of base32 digest (100 bits). This
-        # provides 50 bits of collision resistance, which is more than enough.
-        # To illustrate: If you were to generate 1k cache keys per second,
-        # you still would have to wait over 800k years until you encounter
-        # a collision.
-        # NOTE: Can't use base64 because it contains lower and upper case chars
-        hash_str = base64.b32encode(v_hash.digest()).decode("ascii")
-        return hash_str[:20]
 
     def retrieve_cached_output(
         self,

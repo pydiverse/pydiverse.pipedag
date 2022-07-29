@@ -250,9 +250,8 @@ class MaterialisationWrapper:
             # Deepcopy of python container types, shallow copy of everything else.
             return deepmutate(memo_result, copy.copy)
 
-        # Lazy task
+        # If task is not lazy, check the cache
         if not task.lazy:
-            # Try to retrieve output from cache
             try:
                 cached_output = store.retrieve_cached_output(task)
                 store.copy_cached_output_to_working_schema(cached_output, task)

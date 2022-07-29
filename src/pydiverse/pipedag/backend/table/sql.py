@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import base64
-import hashlib
 import warnings
 
 import pandas as pd
 import prefect
 import sqlalchemy as sa
 
-from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.metadata import LazyTableMetadata, TaskMetadata
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
 from pydiverse.pipedag.backend.table.util.sql_ddl import (
@@ -19,7 +16,7 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     RenameSchema,
 )
 from pydiverse.pipedag.core import MaterialisingTask, Schema, Table
-from pydiverse.pipedag.errors import CacheError, SchemaError
+from pydiverse.pipedag.errors import CacheError
 
 
 class SQLTableStore(BaseTableStore):
@@ -116,71 +113,38 @@ class SQLTableStore(BaseTableStore):
                     .values(in_working_schema=False)
                 )
 
-    def store_table(self, table: Table, lazy: bool):
-        schema = table.schema
-        if lazy:
-            lazy_cache_key = self.compute_lazy_table_cache_key(table)
-            lazy_table_md = self.retrieve_lazy_table_metadata(
-                lazy_cache_key, schema.name
-            )
-
-            if lazy_table_md is not None:
-                # Found in cache
-                try:
-                    self.copy_lazy_table_to_working_schema(lazy_table_md, table)
-                    self.store_lazy_table_metadata(
-                        LazyTableMetadata(
-                            name=table.name,
-                            schema=schema.name,
-                            cache_key=lazy_cache_key,
-                        )
-                    )
-                    return
-                except CacheError as e:
-                    prefect.context.logger.warn(e)
-        else:
-            lazy_cache_key = None
-
-        hook = self.get_m_table_hook(type(table.obj))
-        hook.materialise(self, table, schema.working_name)
-
-        if lazy and lazy_cache_key is not None:
-            # Create Metadata
-            self.store_lazy_table_metadata(
-                LazyTableMetadata(
-                    name=table.name,
-                    schema=schema.name,
-                    cache_key=lazy_cache_key,
-                )
-            )
-
     def copy_table_to_working_schema(self, table: Table):
         schema = table.schema
-        with self.engine.connect() as conn:
-            if sa.inspect(self.engine).has_table(table.name, schema=schema.name):
-                conn.execute(
-                    CopyTable(table.name, schema.name, table.name, schema.working_name)
-                )
-            else:
-                raise CacheError(
-                    f"Can't copy table '{table.name}' (schema: '{schema.name}')"
-                    " to working schema because no such table exists."
-                )
-
-    def retrieve_table_obj(
-        self, table: Table, as_type: type[T], from_cache: bool = False
-    ) -> T:
-        if as_type is None:
-            raise TypeError(
-                "Missing 'as_type' argument. You must specify a type to be able "
-                "to dematerialise a Table."
+        if not sa.inspect(self.engine).has_table(table.name, schema=schema.name):
+            raise CacheError(
+                f"Can't copy table '{table.name}' (schema: '{schema.name}')"
+                " to working schema because no such table exists."
             )
 
-        schema = table.schema
-        schema_name = schema.name if from_cache else schema.current_name
+        with self.engine.connect() as conn:
+            conn.execute(
+                CopyTable(table.name, schema.name, table.name, schema.working_name)
+            )
 
-        hook = self.get_r_table_hook(as_type)
-        return hook.retrieve(self, table, schema_name, as_type)
+    def copy_lazy_table_to_working_schema(
+        self, metadata: LazyTableMetadata, table: Table
+    ):
+        if not sa.inspect(self.engine).has_table(metadata.name, schema=metadata.schema):
+            raise CacheError(
+                f"Can't copy lazy table '{metadata.name}' (schema:"
+                f" '{metadata.schema}') to working schema because no such table"
+                " exists."
+            )
+
+        with self.engine.connect() as conn:
+            conn.execute(
+                CopyTable(
+                    metadata.name,
+                    metadata.schema,
+                    table.name,
+                    table.schema.working_name,
+                )
+            )
 
     def store_task_metadata(self, metadata: TaskMetadata, schema: Schema):
         with self.engine.connect() as conn:
@@ -244,29 +208,6 @@ class SQLTableStore(BaseTableStore):
             output_json=result.output_json,
         )
 
-    #### Lazy Table Implementation ####
-
-    def compute_lazy_table_cache_key(self, table: Table) -> str | None:
-        obj = table.obj
-        v = [
-            "PYDIVERSE-PIPEDAG-LAZY-TABLE",
-            table.cache_key,  # Cache key of task
-        ]
-
-        try:
-            hook = self.get_m_table_hook(type(table.obj))
-            query_str = hook.lazy_query_str(self, table.obj)
-            v.append(query_str)
-        except TypeError:
-            return None
-
-        v_str = "|".join(v)
-        v_bytes = v_str.encode("utf8")
-
-        v_hash = hashlib.sha256(v_bytes)
-        hash_str = base64.b32encode(v_hash.digest()).decode("ascii")
-        return hash_str[:20]
-
     def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
         with self.engine.connect() as conn:
             conn.execute(
@@ -278,38 +219,15 @@ class SQLTableStore(BaseTableStore):
                 )
             )
 
-    def copy_lazy_table_to_working_schema(
-        self, metadata: LazyTableMetadata, table: Table
-    ):
-        with self.engine.connect() as conn:
-            if sa.inspect(self.engine).has_table(metadata.name, schema=metadata.schema):
-                conn.execute(
-                    CopyTable(
-                        metadata.name,
-                        metadata.schema,
-                        table.name,
-                        table.schema.working_name,
-                    )
-                )
-            else:
-                raise CacheError(
-                    f"Can't copy lazy table '{metadata.name}' (schema:"
-                    f" '{metadata.schema}') to working schema because no such table"
-                    " exists."
-                )
-
     def retrieve_lazy_table_metadata(
-        self, cache_key: str, schema: str
-    ) -> LazyTableMetadata | None:
-        if cache_key is None:
-            return None
-
+        self, cache_key: str, schema: Schema
+    ) -> LazyTableMetadata:
         try:
             with self.engine.connect() as conn:
                 result = (
                     conn.execute(
                         self.lazy_cache_table.select()
-                        .where(self.lazy_cache_table.c.schema == schema)
+                        .where(self.lazy_cache_table.c.schema == schema.name)
                         .where(self.lazy_cache_table.c.cache_key == cache_key)
                         .where(self.lazy_cache_table.c.in_working_schema == False)
                     )
@@ -317,10 +235,10 @@ class SQLTableStore(BaseTableStore):
                     .one_or_none()
                 )
         except sa.exc.MultipleResultsFound:
-            return None
+            raise CacheError("Multiple results found for lazy table cache key")
 
         if result is None:
-            return None
+            raise CacheError("")
 
         return LazyTableMetadata(
             name=result.name,
