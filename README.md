@@ -6,19 +6,18 @@ A pipeline orchestration layer built on top of prefect for caching and cache inv
 
 ## Installation
 
-You can install the package in development mode using:
+To install the package locally in development mode, you first have to install
+[Poetry](https://python-poetry.org/docs/#installation).
+After that, install pydiverse pipedag like this:
 
 ```bash
-git clone https://github.com/pydiverse/pydiverse.pipedag.git
-cd pydiverse.pipedag
+git clone https://github.com/Quantco/pdpipedag.git
+cd pdpipedag
 
-# create and activate a fresh environment named pydiverse.pipedag
-# see environment.yml for details
-mamba env create
-conda activate pydiverse.pipedag
-
+# Create the environment, activate it and install the pre-commit hooks
+poetry install
+poetry shell
 pre-commit install
-pip install --no-build-isolation -e .
 ```
 
 ## Testing
