@@ -11,9 +11,10 @@ from typing import Callable, Union
 
 import prefect
 
+from pydiverse.pipedag import config
 from pydiverse.pipedag.core.schema import Schema
 from pydiverse.pipedag.errors import LockError
-from pydiverse.pipedag.util import requires
+from pydiverse.pipedag.util import normalise_name, requires
 
 __all__ = [
     "BaseLockManager",
@@ -163,6 +164,9 @@ class FileLockManager(BaseLockManager):
     def __init__(self, base_path: str):
         super().__init__()
         self.base_path = os.path.abspath(base_path)
+        if config.name is not None:
+            project_name = normalise_name(config.name)
+            self.base_path = os.path.join(self.base_path, project_name)
         self.locks: dict[Lockable, fl.BaseFileLock] = {}
 
         os.makedirs(self.base_path, exist_ok=True)
@@ -234,6 +238,9 @@ class ZooKeeperLockManager(BaseLockManager):
 
         self.locks: dict[Lockable, KazooLock] = {}
         self.base_path = "/pipedag/locks/"
+        if config.name is not None:
+            project_name = normalise_name(config.name)
+            self.base_path += project_name + "/"
 
     def acquire(self, lock: Lockable):
         zk_lock = self.client.Lock(self.lock_path(lock))

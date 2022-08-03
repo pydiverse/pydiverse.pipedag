@@ -25,6 +25,7 @@ def setup_pipedag():
     engine = sa.create_engine("postgresql://postgres:pipedag@127.0.0.1/pipedag")
     kazoo_client = KazooClient()
 
+    pdd.config.name = "pipedag_tests"
     pdd.config.store = PipeDAGStore(
         table=SQLTableStore(engine),
         blob=FileBlobStore("/tmp/pipedag/blobs"),

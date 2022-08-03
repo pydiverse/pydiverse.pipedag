@@ -6,8 +6,10 @@ import shutil
 from abc import ABC, abstractmethod
 from typing import Any
 
+from pydiverse.pipedag import config
 from pydiverse.pipedag.core import Blob, Schema
 from pydiverse.pipedag.errors import CacheError
+from pydiverse.pipedag.util import normalise_name
 
 __all__ = [
     "BaseBlobStore",
@@ -84,7 +86,7 @@ class FileBlobStore(BaseBlobStore):
     In the base directory there will be two folders for every schema, one
     for the base and one for the working schema. Inside those folders the
     blobs will be stored as pickled files:
-    `/base_path/SCHEMA_NAME/BLOB_NAME.pkl`.
+    `/base_path/PROJECT_NAME/SCHEMA_NAME/BLOB_NAME.pkl`.
 
     To swap a schema, the only thing that has to be done is to rename the
     appropriate folders.
@@ -92,6 +94,10 @@ class FileBlobStore(BaseBlobStore):
 
     def __init__(self, base_path: str):
         self.base_path = os.path.abspath(base_path)
+        if config.name is not None:
+            project_name = normalise_name(config.name)
+            self.base_path = os.path.join(self.base_path, project_name)
+
         os.makedirs(self.base_path, exist_ok=True)
 
     def create_schema(self, schema: Schema):
