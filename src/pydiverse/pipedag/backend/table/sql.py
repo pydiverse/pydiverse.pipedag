@@ -16,12 +16,18 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     DropTable,
     RenameSchema,
 )
-from pydiverse.pipedag.core import MaterialisingTask, Schema, Table
+from pydiverse.pipedag.core import MaterialisingTask, Stage, Table
 from pydiverse.pipedag.errors import CacheError
 
 
 class SQLTableStore(BaseTableStore):
-    """Table store that materialises tables to a SQL database"""
+    """Table store that materialises tables to a SQL database
+
+    Uses schema swapping for transactions:
+    Creates a schema for each stage and a temporary schema for each
+    transaction. If all tasks inside a stage succeed, swaps the schemas by
+    renaming them.
+    """
 
     METADATA_SCHEMA = "pipedag_metadata"
 
@@ -37,13 +43,13 @@ class SQLTableStore(BaseTableStore):
             self.sql_metadata,
             Column("id", BigInteger, primary_key=True, autoincrement=True),
             Column("name", String),
-            Column("schema", String),
+            Column("stage", String),
             Column("version", String),
             Column("timestamp", DateTime),
             Column("run_id", String(20)),  # TODO: Replace with appropriate type
             Column("cache_key", String(20)),  # TODO: Replace with appropriate type
             Column("output_json", String),
-            Column("in_working_schema", Boolean),
+            Column("in_transaction_schema", Boolean),
             schema=self.METADATA_SCHEMA,
         )
 
@@ -52,9 +58,9 @@ class SQLTableStore(BaseTableStore):
             self.sql_metadata,
             Column("id", BigInteger, primary_key=True, autoincrement=True),
             Column("name", String),
-            Column("schema", String),
+            Column("stage", String),
             Column("cache_key", String(20)),
-            Column("in_working_schema", Boolean),
+            Column("in_transaction_schema", Boolean),
             schema=self.METADATA_SCHEMA,
         )
 
@@ -64,76 +70,74 @@ class SQLTableStore(BaseTableStore):
             conn.execute(CreateSchema(self.METADATA_SCHEMA, if_not_exists=True))
             self.sql_metadata.create_all(conn)
 
-    def create_schema(self, schema: Schema):
-        cs_main = CreateSchema(schema.name, if_not_exists=True)
-        ds_working = DropSchema(schema.working_name, if_exists=True, cascade=True)
-        cs_working = CreateSchema(schema.working_name, if_not_exists=True)
+    def init_stage(self, stage: Stage):
+        cs_base = CreateSchema(stage.name, if_not_exists=True)
+        ds_trans = DropSchema(stage.transaction_name, if_exists=True, cascade=True)
+        cs_trans = CreateSchema(stage.transaction_name, if_not_exists=True)
 
         with self.engine.connect() as conn:
-            conn.execute(cs_main)
-            conn.execute(ds_working)
-            conn.execute(cs_working)
+            conn.execute(cs_base)
+            conn.execute(ds_trans)
+            conn.execute(cs_trans)
 
             conn.execute(
                 self.tasks_table.delete()
-                .where(self.tasks_table.c.schema == schema.name)
-                .where(self.tasks_table.c.in_working_schema == True)
+                .where(self.tasks_table.c.stage == stage.name)
+                .where(self.tasks_table.c.in_transaction_schema == True)
             )
 
-    def swap_schema(self, schema: Schema):
-        tmp = schema.name + "__tmp_swap"
+    def commit_stage(self, stage: Stage):
+        tmp = stage.name + "__swap"
         with self.engine.connect() as conn:
             with conn.begin():
-                conn.execute(RenameSchema(schema.working_name, tmp))
-                conn.execute(RenameSchema(schema.name, schema.working_name))
-                conn.execute(RenameSchema(tmp, schema.name))
+                conn.execute(RenameSchema(stage.transaction_name, tmp))
+                conn.execute(RenameSchema(stage.name, stage.transaction_name))
+                conn.execute(RenameSchema(tmp, stage.name))
                 conn.execute(DropSchema(tmp, if_exists=True, cascade=True))
                 conn.execute(
-                    DropSchema(schema.working_name, if_exists=True, cascade=True)
+                    DropSchema(stage.transaction_name, if_exists=True, cascade=True)
                 )
 
                 conn.execute(
                     self.tasks_table.delete()
-                    .where(self.tasks_table.c.schema == schema.name)
-                    .where(self.tasks_table.c.in_working_schema == False)
+                    .where(self.tasks_table.c.stage == stage.name)
+                    .where(self.tasks_table.c.in_transaction_schema == False)
                 )
                 conn.execute(
                     self.tasks_table.update()
-                    .where(self.tasks_table.c.schema == schema.name)
-                    .values(in_working_schema=False)
+                    .where(self.tasks_table.c.stage == stage.name)
+                    .values(in_transaction_schema=False)
                 )
 
                 conn.execute(
                     self.lazy_cache_table.delete()
-                    .where(self.lazy_cache_table.c.schema == schema.name)
-                    .where(self.lazy_cache_table.c.in_working_schema == False)
+                    .where(self.lazy_cache_table.c.stage == stage.name)
+                    .where(self.lazy_cache_table.c.in_transaction_schema == False)
                 )
                 conn.execute(
                     self.lazy_cache_table.update()
-                    .where(self.lazy_cache_table.c.schema == schema.name)
-                    .values(in_working_schema=False)
+                    .where(self.lazy_cache_table.c.stage == stage.name)
+                    .values(in_transaction_schema=False)
                 )
 
-    def copy_table_to_working_schema(self, table: Table):
-        schema = table.schema
-        if not sa.inspect(self.engine).has_table(table.name, schema=schema.name):
+    def copy_table_to_transaction(self, table: Table):
+        stage = table.stage
+        if not sa.inspect(self.engine).has_table(table.name, schema=stage.name):
             raise CacheError(
-                f"Can't copy table '{table.name}' (schema: '{schema.name}')"
-                " to working schema because no such table exists."
+                f"Can't copy table '{table.name}' (schema: '{stage.name}')"
+                " to transaction because no such table exists."
             )
 
         with self.engine.connect() as conn:
             conn.execute(
-                CopyTable(table.name, schema.name, table.name, schema.working_name)
+                CopyTable(table.name, stage.name, table.name, stage.transaction_name)
             )
 
-    def copy_lazy_table_to_working_schema(
-        self, metadata: LazyTableMetadata, table: Table
-    ):
-        if not sa.inspect(self.engine).has_table(metadata.name, schema=metadata.schema):
+    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
+        if not sa.inspect(self.engine).has_table(metadata.name, schema=metadata.stage):
             raise CacheError(
                 f"Can't copy lazy table '{metadata.name}' (schema:"
-                f" '{metadata.schema}') to working schema because no such table"
+                f" '{metadata.stage}') to transaction because no such table"
                 " exists."
             )
 
@@ -141,49 +145,49 @@ class SQLTableStore(BaseTableStore):
             conn.execute(
                 CopyTable(
                     metadata.name,
-                    metadata.schema,
+                    metadata.stage,
                     table.name,
-                    table.schema.working_name,
+                    table.stage.transaction_name,
                 )
             )
 
-    def delete_table_from_working_schema(self, table: Table):
+    def delete_table_from_transaction(self, table: Table):
         with self.engine.connect() as conn:
             conn.execute(
-                DropTable(table.name, table.schema.working_name, if_exists=True)
+                DropTable(table.name, table.stage.transaction_name, if_exists=True)
             )
 
-    def store_task_metadata(self, metadata: TaskMetadata, schema: Schema):
+    def store_task_metadata(self, metadata: TaskMetadata, stage: Stage):
         with self.engine.connect() as conn:
             conn.execute(
                 self.tasks_table.insert().values(
                     name=metadata.name,
-                    schema=metadata.schema,
+                    stage=metadata.stage,
                     version=metadata.version,
                     timestamp=metadata.timestamp,
                     run_id=metadata.run_id,
                     cache_key=metadata.cache_key,
                     output_json=metadata.output_json,
-                    in_working_schema=True,
+                    in_transaction_schema=True,
                 )
             )
 
-    def copy_task_metadata_to_working_schema(self, task: MaterialisingTask):
+    def copy_task_metadata_to_transaction(self, task: MaterialisingTask):
         with self.engine.connect() as conn:
             metadata = (
                 conn.execute(
                     self.tasks_table.select()
-                    .where(self.tasks_table.c.schema == task.schema.name)
+                    .where(self.tasks_table.c.stage == task.stage.name)
                     .where(self.tasks_table.c.version == task.version)
                     .where(self.tasks_table.c.cache_key == task.cache_key)
-                    .where(self.tasks_table.c.in_working_schema == False)
+                    .where(self.tasks_table.c.in_transaction_schema == False)
                 )
                 .mappings()
                 .one()
             )
 
             metadata_copy = dict(metadata)
-            metadata_copy["in_working_schema"] = True
+            metadata_copy["in_transaction_schema"] = True
             del metadata_copy["id"]
 
             conn.execute(self.tasks_table.insert().values(**metadata_copy))
@@ -193,10 +197,10 @@ class SQLTableStore(BaseTableStore):
             result = (
                 conn.execute(
                     self.tasks_table.select()
-                    .where(self.tasks_table.c.schema == task.schema.name)
+                    .where(self.tasks_table.c.stage == task.stage.name)
                     .where(self.tasks_table.c.version == task.version)
                     .where(self.tasks_table.c.cache_key == task.cache_key)
-                    .where(self.tasks_table.c.in_working_schema == False)
+                    .where(self.tasks_table.c.in_transaction_schema == False)
                 )
                 .mappings()
                 .one_or_none()
@@ -207,7 +211,7 @@ class SQLTableStore(BaseTableStore):
 
         return TaskMetadata(
             name=result.name,
-            schema=result.schema,
+            stage=result.stage,
             version=result.version,
             timestamp=result.timestamp,
             run_id=result.run_id,
@@ -220,23 +224,23 @@ class SQLTableStore(BaseTableStore):
             conn.execute(
                 self.lazy_cache_table.insert().values(
                     name=metadata.name,
-                    schema=metadata.schema,
+                    stage=metadata.stage,
                     cache_key=metadata.cache_key,
-                    in_working_schema=True,
+                    in_transaction_schema=True,
                 )
             )
 
     def retrieve_lazy_table_metadata(
-        self, cache_key: str, schema: Schema
+        self, cache_key: str, stage: Stage
     ) -> LazyTableMetadata:
         try:
             with self.engine.connect() as conn:
                 result = (
                     conn.execute(
                         self.lazy_cache_table.select()
-                        .where(self.lazy_cache_table.c.schema == schema.name)
+                        .where(self.lazy_cache_table.c.stage == stage.name)
                         .where(self.lazy_cache_table.c.cache_key == cache_key)
-                        .where(self.lazy_cache_table.c.in_working_schema == False)
+                        .where(self.lazy_cache_table.c.in_transaction_schema == False)
                     )
                     .mappings()
                     .one_or_none()
@@ -249,7 +253,7 @@ class SQLTableStore(BaseTableStore):
 
         return LazyTableMetadata(
             name=result.name,
-            schema=result.schema,
+            stage=result.stage,
             cache_key=result.cache_key,
         )
 
@@ -265,17 +269,17 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         return type_ == sa.Table
 
     @classmethod
-    def materialise(cls, store, table: Table[sa.sql.Select], schema_name):
+    def materialise(cls, store, table: Table[sa.sql.Select], stage_name):
         prefect.context.logger.info(f"Performing CREATE TABLE AS SELECT ({table})")
         with store.engine.connect() as conn:
-            conn.execute(CreateTableAsSelect(table.name, schema_name, table.obj))
+            conn.execute(CreateTableAsSelect(table.name, stage_name, table.obj))
 
     @classmethod
-    def retrieve(cls, store, table, schema_name, as_type):
+    def retrieve(cls, store, table, stage_name, as_type):
         return sa.Table(
             table.name,
             sa.MetaData(bind=store.engine),
-            schema=schema_name,
+            schema=stage_name,
             autoload_with=store.engine,
         )
 
@@ -295,18 +299,18 @@ class PandasTableHook(TableHook[SQLTableStore]):
         return type_ == pd.DataFrame
 
     @classmethod
-    def materialise(cls, store, table: Table[pd.DataFrame], schema_name):
+    def materialise(cls, store, table: Table[pd.DataFrame], stage_name):
         table.obj.to_sql(
             table.name,
             store.engine,
-            schema=schema_name,
+            schema=stage_name,
             index=False,
         )
 
     @classmethod
-    def retrieve(cls, store, table, schema_name, as_type):
+    def retrieve(cls, store, table, stage_name, as_type):
         with store.engine.connect() as conn:
-            df = pd.read_sql_table(table.name, conn, schema=schema_name)
+            df = pd.read_sql_table(table.name, conn, schema=stage_name)
             return df
 
     @classmethod
@@ -337,7 +341,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         return issubclass(type_, (PandasTableImpl, SQLTableImpl))
 
     @classmethod
-    def materialise(cls, store, table: Table[pdt.Table], schema_name):
+    def materialise(cls, store, table: Table[pdt.Table], stage_name):
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
 
@@ -346,22 +350,22 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             from pydiverse.transform.core.verbs import collect
 
             table.obj = t >> collect()
-            return PandasTableHook.materialise(store, table, schema_name)
+            return PandasTableHook.materialise(store, table, stage_name)
         if isinstance(t._impl, SQLTableImpl):
             table.obj = t._impl.build_select()
-            return SQLAlchemyTableHook.materialise(store, table, schema_name)
+            return SQLAlchemyTableHook.materialise(store, table, stage_name)
         raise NotImplementedError
 
     @classmethod
-    def retrieve(cls, store, table, schema_name, as_type):
+    def retrieve(cls, store, table, stage_name, as_type):
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
 
         if issubclass(as_type, PandasTableImpl):
-            df = PandasTableHook.retrieve(store, table, schema_name, pd.DataFrame)
+            df = PandasTableHook.retrieve(store, table, stage_name, pd.DataFrame)
             return pdt.Table(PandasTableImpl(table.name, df))
         if issubclass(as_type, SQLTableImpl):
-            sa_tbl = SQLAlchemyTableHook.retrieve(store, table, schema_name, sa.Table)
+            sa_tbl = SQLAlchemyTableHook.retrieve(store, table, stage_name, sa.Table)
             return pdt.Table(SQLTableImpl(store.engine, sa_tbl))
         raise NotImplementedError
 

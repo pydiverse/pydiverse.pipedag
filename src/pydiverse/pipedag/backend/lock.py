@@ -12,7 +12,7 @@ from typing import Callable, Union
 import prefect
 
 from pydiverse.pipedag import config
-from pydiverse.pipedag.core.schema import Schema
+from pydiverse.pipedag.core.stage import Stage
 from pydiverse.pipedag.errors import LockError
 from pydiverse.pipedag.util import normalise_name, requires
 
@@ -57,7 +57,7 @@ class LockState(str, Enum):
     INVALID = "INVALID"
 
 
-Lockable = Union[Schema, str]
+Lockable = Union[Stage, str]
 LockStateListener = Callable[[Lockable, LockState, LockState], None]
 
 
@@ -65,8 +65,8 @@ class BaseLockManager(ABC):
     """Lock Manager base class
 
     A lock manager is responsible for acquiring and releasing locks on
-    schemas. This is necessary to prevent two flows from accessing the
-    same schema at the same time (which would lead to corrupted data).
+    stage. This is necessary to prevent two flows from accessing the
+    same stage at the same time (which would lead to corrupted data).
     """
 
     def __init__(self):
@@ -87,7 +87,7 @@ class BaseLockManager(ABC):
     def add_lock_state_listener(self, listener: LockStateListener):
         """Add a function to be called when the state of a lock changes
 
-        The listener will be called with the affected schema, the old lock
+        The listener will be called with the affected stage, the old lock
         state and the new lock state as arguments.
         """
         if listener is None or not callable(listener):
@@ -196,7 +196,7 @@ class FileLockManager(BaseLockManager):
             self.set_lock_state(lock, LockState.UNLOCKED)
 
     def lock_path(self, lock: Lockable):
-        if isinstance(lock, Schema):
+        if isinstance(lock, Stage):
             return os.path.join(self.base_path, lock.name + ".lock")
         elif isinstance(lock, str):
             return os.path.join(self.base_path, lock + ".lock")
@@ -260,7 +260,7 @@ class ZooKeeperLockManager(BaseLockManager):
         self.set_lock_state(lock, LockState.UNLOCKED)
 
     def lock_path(self, lock: Lockable):
-        if isinstance(lock, Schema):
+        if isinstance(lock, Stage):
             return self.base_path + lock.name
         elif isinstance(lock, str):
             return self.base_path + lock

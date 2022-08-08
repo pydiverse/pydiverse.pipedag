@@ -7,9 +7,9 @@ class FlowError(Exception):
     """
 
 
-class SchemaError(Exception):
+class StageError(Exception):
     """
-    Exception raised when something is wrong with the schema.
+    Exception raised when something is wrong with the stage.
     """
 
 

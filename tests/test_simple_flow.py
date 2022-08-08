@@ -4,7 +4,7 @@ import pandas as pd
 import sqlalchemy as sa
 from prefect import Flow
 
-from pydiverse.pipedag import Blob, Schema, Table, materialise
+from pydiverse.pipedag import Blob, Stage, Table, materialise
 
 # noinspection PyUnresolvedReferences
 from .util import setup_pipedag
@@ -50,7 +50,7 @@ def test_simple_flow():
         return Blob(x), Blob(y)
 
     with Flow("FLOW") as flow:
-        with Schema("schema1"):
+        with Stage("stage1"):
             a, b = inputs()
             a2 = double_values(a)
             b2 = double_values(b)
@@ -58,7 +58,7 @@ def test_simple_flow():
             b4 = double_values(b4)
             x = list_arg([a2, b, b4])
 
-        with Schema("schema2"):
+        with Stage("stage2"):
             xj = join_on_a(a2, b4)
             a = double_values(xj)
 

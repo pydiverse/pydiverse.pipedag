@@ -6,7 +6,7 @@ from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.util import normalise_name
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag.core.schema import Schema
+    from pydiverse.pipedag.core.stage import Stage
 
 
 class Table(Generic[T]):
@@ -27,7 +27,7 @@ class Table(Generic[T]):
         self,
         obj: T = None,
         name: str = None,
-        schema: Schema = None,
+        stage: Stage = None,
         primary_key: str = None,
         cache_key: str = None,
     ):
@@ -35,13 +35,13 @@ class Table(Generic[T]):
 
         self.obj = obj
         self.name = name
-        self.schema = schema
+        self.stage = stage
         self.primary_key = primary_key
 
         self.cache_key = cache_key
 
     def __str__(self):
-        return f"<Table: {self.name} ({self.schema.name})>"
+        return f"<Table: {self.name} ({self.stage.name})>"
 
     @property
     def name(self):
@@ -70,19 +70,19 @@ class Blob:
         self,
         obj: Any = None,
         name: str = None,
-        schema: Schema = None,
+        stage: Stage = None,
         cache_key: str = None,
     ):
         self._name = None
 
         self.obj = obj
         self.name = name
-        self.schema = schema
+        self.stage = stage
 
         self.cache_key = cache_key
 
     def __str__(self):
-        return f"<Blob: {self.name} ({self.schema.name})>"
+        return f"<Blob: {self.name} ({self.stage.name})>"
 
     @property
     def name(self):

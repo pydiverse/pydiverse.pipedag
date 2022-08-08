@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from pydiverse.pipedag import config
-from pydiverse.pipedag.core import Blob, Schema
+from pydiverse.pipedag.core import Blob, Stage
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.util import normalise_name
 
@@ -24,58 +24,50 @@ class BaseBlobStore(ABC):
     python objects. This can, for example, be done by serializing them using
     the python `pickle` module.
 
-    A store must use a blob's name (`blob.name`) and schema (`blob.schema`)
+    A store must use a blob's name (`blob.name`) and stage (`blob.stage`)
     as the primary keys for storing and retrieving blobs. This means that
     two different `Blob` objects can be used to store and retrieve the same
-    data as long as they have the same name and schema.
+    data as long as they have the same name and stage.
     """
 
     @abstractmethod
-    def create_schema(self, schema: Schema):
-        """Creates a schema
-
-        Ensures that the base schema exists (but doesn't clear it) and that
-        the working schema exists and is empty.
-        """
+    def init_stage(self, stage: Stage):
+        """Initialize a stage and start a transaction"""
 
     @abstractmethod
-    def swap_schema(self, schema: Schema):
-        """Swap the base schema with the working schema
+    def commit_stage(self, stage: Stage):
+        """Commit the stage transaction
 
-        After the schema swap the contents of the base schema should be in the
-        working schema, and the contents of the working schema in the base
-        schema.
+        Replace the blobs of the base stage with the blobs in the transaction.
         """
 
     @abstractmethod
     def store_blob(self, blob: Blob):
-        """Stores a blob in the associated working schema"""
+        """Stores a blob in the associated stage transaction"""
 
     @abstractmethod
-    def copy_blob_to_working_schema(self, blob: Blob):
-        """Copy a blob from the base schema to the working schema
+    def copy_blob_to_transaction(self, blob: Blob):
+        """Copy a blob from the base stage to the transaction
 
-        This operation MUST not remove the blob from the base schema or modify
+        This operation MUST not remove the blob from the base stage or modify
         it in any way.
         """
 
     @abstractmethod
-    def delete_blob_from_working_schema(self, blob: Blob):
-        """Delete a blob from the working schema
+    def delete_blob_from_transaction(self, blob: Blob):
+        """Delete a blob from the transaction
 
-        If the blob doesn't exist in the working schema, fail silently.
+        If the blob doesn't exist in the transaction, fail silently.
         """
 
     @abstractmethod
-    def retrieve_blob(self, blob: Blob, from_cache: bool = False) -> Any:
+    def retrieve_blob(self, blob: Blob) -> Any:
         """Loads a blob from the store
 
         Retrieves the stored python object from the store and returns it.
-        If `from_cache` is `False` (default), the blob must be retrieved
-        from the current schema (`blob.schema.current_name`). Before a
-        schema swap this corresponds to the working schema and afterwards
-        to the base schema. If `from_cache` is `True`, it must always be
-        retrieved from the base schema.
+        If the stage hasn't yet been committed, the blob must be retrieved
+        from the transaction, else it must be retrieved from the committed
+        stage.
         """
 
 
@@ -83,13 +75,13 @@ class FileBlobStore(BaseBlobStore):
     """File based blob store
 
     The FileBlobStore stores blobs in a folder structure on a file system.
-    In the base directory there will be two folders for every schema, one
-    for the base and one for the working schema. Inside those folders the
+    In the base directory there will be two folders for every stage, one
+    for the base and one for the transaction stage. Inside those folders the
     blobs will be stored as pickled files:
-    `/base_path/PROJECT_NAME/SCHEMA_NAME/BLOB_NAME.pkl`.
+    `/base_path/PROJECT_NAME/STAGE_NAME/BLOB_NAME.pkl`.
 
-    To swap a schema, the only thing that has to be done is to rename the
-    appropriate folders.
+    To commit a stage, the only thing that has to be done is to rename
+    the appropriate folders.
     """
 
     def __init__(self, base_path: str):
@@ -100,62 +92,63 @@ class FileBlobStore(BaseBlobStore):
 
         os.makedirs(self.base_path, exist_ok=True)
 
-    def create_schema(self, schema: Schema):
-        schema_path = self.get_schema_path(schema.name)
-        working_schema_path = self.get_schema_path(schema.working_name)
+    def init_stage(self, stage: Stage):
+        stage_path = self.get_stage_path(stage.name)
+        transaction_path = self.get_stage_path(stage.transaction_name)
 
         try:
-            os.mkdir(schema_path)
+            os.mkdir(stage_path)
         except FileExistsError:
             pass
 
         try:
-            os.mkdir(working_schema_path)
+            os.mkdir(transaction_path)
         except FileExistsError:
-            shutil.rmtree(working_schema_path)
-            os.mkdir(working_schema_path)
+            shutil.rmtree(transaction_path)
+            os.mkdir(transaction_path)
 
-    def swap_schema(self, schema: Schema):
-        schema_path = self.get_schema_path(schema.name)
-        working_schema_path = self.get_schema_path(schema.working_name)
-        tmp_schema_path = self.get_schema_path(schema.name + "__tmp_swap")
+    def commit_stage(self, stage: Stage):
+        stage_path = self.get_stage_path(stage.name)
+        transaction_path = self.get_stage_path(stage.transaction_name)
+        tmp_path = self.get_stage_path(stage.name + "__swap")
 
-        os.rename(working_schema_path, tmp_schema_path)
-        os.rename(schema_path, working_schema_path)
-        os.rename(tmp_schema_path, schema_path)
-        shutil.rmtree(working_schema_path)
+        os.rename(transaction_path, tmp_path)
+        os.rename(stage_path, transaction_path)
+        os.rename(tmp_path, stage_path)
+        shutil.rmtree(transaction_path)
 
     def store_blob(self, blob: Blob):
-        with open(self.get_blob_path(blob.schema.working_name, blob.name), "wb") as f:
+        with open(
+            self.get_blob_path(blob.stage.transaction_name, blob.name), "wb"
+        ) as f:
             pickle.dump(blob.obj, f, pickle.HIGHEST_PROTOCOL)
 
-    def copy_blob_to_working_schema(self, blob: Blob):
+    def copy_blob_to_transaction(self, blob: Blob):
         try:
             shutil.copy2(
-                self.get_blob_path(blob.schema.name, blob.name),
-                self.get_blob_path(blob.schema.working_name, blob.name),
+                self.get_blob_path(blob.stage.name, blob.name),
+                self.get_blob_path(blob.stage.transaction_name, blob.name),
             )
         except FileNotFoundError:
             raise CacheError(
-                f"Can't copy blob '{blob.name}' (schema: '{blob.schema.name}')"
-                " to working schema because no such blob exists."
+                f"Can't copy blob '{blob.name}' (stage: '{blob.stage.name}')"
+                " to working transaction because no such blob exists."
             )
 
-    def delete_blob_from_working_schema(self, blob: Blob):
+    def delete_blob_from_transaction(self, blob: Blob):
         try:
-            os.remove(self.get_blob_path(blob.schema.working_name, blob.name))
+            os.remove(self.get_blob_path(blob.stage.transaction_name, blob.name))
         except FileNotFoundError:
             return
 
-    def retrieve_blob(self, blob: Blob, from_cache: bool = False):
-        schema = blob.schema
-        schema_name = schema.name if from_cache else schema.current_name
+    def retrieve_blob(self, blob: Blob):
+        stage = blob.stage
 
-        with open(self.get_blob_path(schema_name, blob.name), "rb") as f:
+        with open(self.get_blob_path(stage.current_name, blob.name), "rb") as f:
             return pickle.load(f)
 
-    def get_schema_path(self, schema_name: str):
-        return os.path.join(self.base_path, schema_name)
+    def get_stage_path(self, stage_name: str):
+        return os.path.join(self.base_path, stage_name)
 
-    def get_blob_path(self, schema_name: str, blob_name: str):
-        return os.path.join(self.base_path, schema_name, blob_name + ".pkl")
+    def get_blob_path(self, stage_name: str, blob_name: str):
+        return os.path.join(self.base_path, stage_name, blob_name + ".pkl")

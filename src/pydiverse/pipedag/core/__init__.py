@@ -1,10 +1,10 @@
 from .container import Blob, Table
 from .materialise import MaterialisingTask
-from .schema import Schema
+from .stage import Stage
 
 __all__ = [
     "MaterialisingTask",
-    "Schema",
+    "Stage",
     "Table",
     "Blob",
 ]

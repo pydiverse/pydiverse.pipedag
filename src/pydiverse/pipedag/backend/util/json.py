@@ -20,14 +20,14 @@ def json_default(o):
     if isinstance(o, Table):
         return {
             PIPEDAG_TYPE: PIPEDAG_TYPE_TABLE,
-            "schema": o.schema.name,
+            "stage": o.stage.name,
             "name": o.name,
             "cache_key": o.cache_key,
         }
     if isinstance(o, Blob):
         return {
             PIPEDAG_TYPE: PIPEDAG_TYPE_BLOB,
-            "schema": o.schema.name,
+            "stage": o.stage.name,
             "name": o.name,
             "cache_key": o.cache_key,
         }
@@ -42,13 +42,13 @@ def json_object_hook(d: dict):
         if pipedag_type == PIPEDAG_TYPE_TABLE:
             return Table(
                 name=d["name"],
-                schema=pydiverse.pipedag.config.store.schemas[d["schema"]],
+                stage=pydiverse.pipedag.config.store.stages[d["stage"]],
                 cache_key=d["cache_key"],
             )
         elif pipedag_type == PIPEDAG_TYPE_BLOB:
             return Blob(
                 name=d["name"],
-                schema=pydiverse.pipedag.config.store.schemas[d["schema"]],
+                stage=pydiverse.pipedag.config.store.stages[d["stage"]],
                 cache_key=d["cache_key"],
             )
         else:

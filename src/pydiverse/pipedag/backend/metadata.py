@@ -15,7 +15,7 @@ class TaskMetadata:
     """
 
     name: str
-    schema: str
+    stage: str
     version: str | None
     timestamp: datetime.datetime
     run_id: str
@@ -34,10 +34,10 @@ class LazyTableMetadata:
     producing task (this ensures that there will be no match if the inputs
     to the task change) and the query that produces the table.
 
-    The `name` and `schema` values are used to retrieve the appropriate
+    The `name` and `stage` values are used to retrieve the appropriate
     table from the cache.
     """
 
     name: str
-    schema: str
+    stage: str
     cache_key: str

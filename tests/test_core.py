@@ -7,7 +7,7 @@ import pytest
 from prefect import Flow
 from pytest_mock import MockerFixture
 
-from pydiverse.pipedag import Schema, materialise
+from pydiverse.pipedag import Stage, materialise
 
 # noinspection PyUnresolvedReferences
 from tests.util import setup_pipedag
@@ -64,89 +64,89 @@ def m_assert(condition):
     return _m_assert
 
 
-def test_schema_attach_tasks():
+def test_stage_attach_tasks():
     with Flow("flow"):
-        with Schema("schema") as s:
+        with Stage("stage") as s:
             task_1 = m_1()
             task_2 = m_2()
 
     assert s.materialising_tasks == [task_1, task_2]
-    assert task_1.schema is s
-    assert task_2.schema is s
-    assert task_1.upstream_schemas == []
-    assert task_2.upstream_schemas == []
+    assert task_1.stage is s
+    assert task_2.stage is s
+    assert task_1.upstream_stages == []
+    assert task_2.upstream_stages == []
 
 
-def test_nested_schema_attach_tasks():
+def test_nested_stage_attach_tasks():
     with Flow("flow"):
-        with Schema("outer") as outer:
+        with Stage("outer") as outer:
             task_1_outer = m_1()
-            with Schema("inner") as inner:
+            with Stage("inner") as inner:
                 task_1_inner = m_1()
                 task_2_inner = m_2()
             task_2_outer = m_2()
 
     assert outer.materialising_tasks == [task_1_outer, task_2_outer]
-    assert task_1_outer.schema is outer
-    assert task_2_outer.schema is outer
-    assert task_1_inner.upstream_schemas == []
-    assert task_2_inner.upstream_schemas == []
+    assert task_1_outer.stage is outer
+    assert task_2_outer.stage is outer
+    assert task_1_inner.upstream_stages == []
+    assert task_2_inner.upstream_stages == []
 
     assert inner.materialising_tasks == [task_1_inner, task_2_inner]
-    assert task_1_inner.schema is inner
-    assert task_2_inner.schema is inner
-    assert task_1_inner.upstream_schemas == []
-    assert task_2_inner.upstream_schemas == []
+    assert task_1_inner.stage is inner
+    assert task_2_inner.stage is inner
+    assert task_1_inner.upstream_stages == []
+    assert task_2_inner.upstream_stages == []
 
 
-def test_task_upstream_schemas():
+def test_task_upstream_stages():
     with Flow("flow"):
-        with Schema("schema1") as s1:
+        with Stage("stage1") as s1:
             task_1 = m_1()
             task_1_list = m_noop.map([task_1])
 
-        with Schema("schema2") as s2:
+        with Stage("stage2") as s2:
             task_2 = m_2()
             task_2_list = m_noop.map([task_2])
 
-        with Schema("schema3") as s3:
+        with Stage("stage3") as s3:
             task_tuple = m_tuple(task_1_list, task_2_list)
             task_tuple_map = m_noop.map(task_tuple)
             task_list_map = m_noop.map([task_1, task_tuple_map])
 
-    assert task_1.upstream_schemas == []
-    assert task_1_list.upstream_schemas == []
-    assert task_2.upstream_schemas == []
-    assert task_2_list.upstream_schemas == []
-    assert set(task_tuple.upstream_schemas) == {s1, s2}
-    assert task_tuple_map.upstream_schemas == []
-    assert task_list_map.upstream_schemas == [s1]
+    assert task_1.upstream_stages == []
+    assert task_1_list.upstream_stages == []
+    assert task_2.upstream_stages == []
+    assert task_2_list.upstream_stages == []
+    assert set(task_tuple.upstream_stages) == {s1, s2}
+    assert task_tuple_map.upstream_stages == []
+    assert task_list_map.upstream_stages == [s1]
 
 
-def test_schema_ref_counter(mocker: MockerFixture):
+def test_stage_ref_counter(mocker: MockerFixture):
     with Flow("flow"):
-        with Schema("schema") as s:
+        with Stage("stage") as s:
             task_1 = m_1()
             task_2 = m_2()
 
-    stub = mocker.stub("schema ref counter free")
+    stub = mocker.stub("stage ref counter free")
     s._set_ref_count_free_handler(stub)
 
     assert s._ref_count == 3
-    task_1._decr_schema_ref_count()
-    task_2._decr_schema_ref_count()
+    task_1._decr_stage_ref_count()
+    task_2._decr_stage_ref_count()
     assert s._ref_count == 1
 
     stub.assert_not_called()
-    s.task._decr_schema_ref_count()
+    s.task._decr_stage_ref_count()
     assert s._ref_count == 0
     stub.assert_called_once_with(s)
 
 
-def test_schema_ref_counter_auto():
-    # Super simple case with just two task inside one schema
+def test_stage_ref_counter_auto():
+    # Super simple case with just two task inside one stage
     with Flow("flow") as f:
-        with Schema("schema") as s:
+        with Stage("stage") as s:
             task_1 = m_1()
             task_2 = m_2()
             m_assert(lambda _: s._ref_count == 2)([task_1, task_2])
@@ -154,9 +154,9 @@ def test_schema_ref_counter_auto():
     assert f.run().is_successful()
     assert s._ref_count == 0
 
-    # Multiple tasks with interdependency and a map inside one schema
+    # Multiple tasks with interdependency and a map inside one stage
     with Flow("flow") as f:
-        with Schema("schema2") as s:
+        with Stage("stage2") as s:
             task_1 = m_1()
             task_2 = m_2()
             task_tuple = m_tuple(task_1, task_2)
@@ -167,19 +167,19 @@ def test_schema_ref_counter_auto():
     assert f.run().is_successful()
     assert s._ref_count == 0
 
-    # Multiple tasks spread over multiple schemas
+    # Multiple tasks spread over multiple stages
     with Flow("flow") as f:
-        with Schema("schema3") as s1:
+        with Stage("stage3") as s1:
             task_1 = m_1()
             task_1_list = m_noop.map([task_1])
             m_assert(lambda _: s1._ref_count == 3)(task_1_list)
 
-        with Schema("schema4") as s2:
+        with Stage("stage4") as s2:
             task_2 = m_2()
             task_2_list = m_noop.map([task_2])
             m_assert(lambda _: s2._ref_count == 3)(task_2_list)
 
-        with Schema("schema5") as s3:
+        with Stage("stage5") as s3:
             task_tuple = m_tuple(task_1_list, task_2_list)
             x = m_assert(lambda _: s1._ref_count == 0)(task_tuple)
             x = m_assert(lambda _: s2._ref_count == 0)(x)
@@ -192,19 +192,19 @@ def test_materialise_memo():
     # A flow should be able to contain the same task with the same inputs
     # more than once and still run successfully.
     with Flow("flow") as f:
-        with Schema("schema1"):
+        with Stage("stage1"):
             t_1 = m_sleep_noop(1)
             t_2 = m_sleep_noop(1)
             t_3 = m_sleep_noop(1)
             t_4 = m_sleep_noop(1)
 
-        with Schema("schema2"):
+        with Stage("stage2"):
             t_5 = m_sleep_noop(1)
             t_6 = m_sleep_noop(t_5)
             t_7 = m_sleep_noop(t_6)
             t_8 = m_sleep_noop(t_7)
 
-        with Schema("schema3"):
+        with Stage("stage3"):
             t_map = m_noop([t_1, t_2, t_3, t_4, t_5, t_6, t_7, t_8])
 
     assert f.run().is_successful()
@@ -213,19 +213,19 @@ def test_materialise_memo():
 @pytest.mark.timeout(5)
 def test_materialise_memo_with_failures():
     with Flow("flow") as f:
-        with Schema("schema1"):
+        with Stage("stage1"):
             t_1 = m_raise(1, False)
             t_2 = m_raise(1, True)
             t_3 = m_raise(1, True)
             t_4 = m_raise(t_2, True)
 
-        with Schema("schema2"):
+        with Stage("stage2"):
             t_5 = m_raise_retry(1, False)
             t_6 = m_raise_retry(t_5, False)
             t_7 = m_raise_retry(t_6, True)
             t_8 = m_raise_retry(1, True)
 
-        with Schema("schema3"):
+        with Stage("stage3"):
             t_map = m_noop([t_1, t_2, t_3, t_4, t_5, t_6, t_7, t_8])
 
     assert f.run().is_failed()

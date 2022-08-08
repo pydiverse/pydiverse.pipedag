@@ -9,7 +9,7 @@ from typing_extensions import Self
 from pydiverse.pipedag._typing import StoreT, T
 from pydiverse.pipedag.backend.metadata import LazyTableMetadata, TaskMetadata
 from pydiverse.pipedag.backend.util import compute_cache_key
-from pydiverse.pipedag.core import MaterialisingTask, Schema, Table
+from pydiverse.pipedag.core import MaterialisingTask, Stage, Table
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.util import requires
 
@@ -38,14 +38,25 @@ class BaseTableStore(metaclass=_TableStoreMeta):
     of tabular data. Additionally, it also has to manage all task metadata,
     This includes storing it, but also cleaning up stale metadata.
 
-    A store must use a table's name (`table.name`) and schema (`table.schema`)
+    A store must use a table's name (`table.name`) and stage (`table.stage`)
     as the primary keys for storing and retrieving it. This means that
     two different `Table` objects can be used to store and retrieve the same
-    data as long as they have the same name and schema.
+    data as long as they have the same name and stage.
 
-    The same is also true for the task metadata where the task `schema`,
+    The same is also true for the task metadata where the task `stage`,
     `version` and `cache_key` act as the primary keys (those values are
     stored both in the task object and the metadata object).
+
+
+    To implement the stage transaction and commit mechanism, a technique
+    called schema swapping is used:
+
+    All outputs from materializing tasks get materialized into a temporary
+    empty schema (`stage.transaction_name`) and only if all tasks have
+    finished running *successfully* you swap the 'base schema' (original stage,
+    or cache) with the 'transaction schema'. This is usually done by renaming
+    them.
+
     """
 
     _REGISTERED_TABLES: list[TableHook]
@@ -120,32 +131,36 @@ class BaseTableStore(metaclass=_TableStoreMeta):
                 return hook
         raise TypeError(f"Can't retrieve Table as type {type_}")
 
-    # Schema
+    # Stage
 
     @abstractmethod
-    def create_schema(self, schema: Schema):
-        """Creates a schema
+    def init_stage(self, stage: Stage):
+        """Initialize a stage transaction
+
+        When working with schema swapping:
 
         Ensures that the base schema exists (but doesn't clear it) and that
-        the working schema exists and is empty.
+        the transaction schema exists and is empty.
         """
 
     @abstractmethod
-    def swap_schema(self, schema: Schema):
-        """Swap the base schema with the working schema
+    def commit_stage(self, stage: Stage):
+        """Commit the stage
+
+        When using schema swapping:
 
         After the schema swap the contents of the base schema should be in the
-        working schema, and the contents of the working schema in the base
-        schema.
+        transaction schema, and the contents of the transaction schema in
+        the base schema.
 
-        Additionally, the metadata associated with the working schema should
+        Additionally, the metadata associated with the transaction schema should
         replace the metadata of the base schema. The latter can be discarded.
         """
 
     # Materialise
 
     def store_table(self, table: Table):
-        """Stores a table in the associated working schema
+        """Stores a table in the associated transaction stage
 
         The store must convert the table object (`table.obj`) to the correct
         internal type. This means, that in some cases it first has to
@@ -157,16 +172,16 @@ class BaseTableStore(metaclass=_TableStoreMeta):
         """
 
         hook = self.get_m_table_hook(type(table.obj))
-        hook.materialise(self, table, table.schema.working_name)
+        hook.materialise(self, table, table.stage.transaction_name)
 
     def store_table_lazy(self, table: Table):
-        """Lazily sores a table in the associated working schema
+        """Lazily sores a table in the associated commit stage
 
         The same as `store_table()`, with the difference being that if the
         table object represents a lazy table / query, the store first checks
         if the same query with the same input (based on `table.cache_key`)
         has already been executed before. If yes, instead of evaluating
-        the query, it just copies the previous result to the working schema.
+        the query, it just copies the previous result to the commit stage.
 
         Used when `lazy = True` is set for a materialising task.
         """
@@ -183,9 +198,9 @@ class BaseTableStore(metaclass=_TableStoreMeta):
         # Store table
         try:
             # Try retrieving the table from the cache and then copying it
-            # to the working schema
-            metadata = self.retrieve_lazy_table_metadata(lazy_cache_key, table.schema)
-            self.copy_lazy_table_to_working_schema(metadata, table)
+            # to the transaction stage
+            metadata = self.retrieve_lazy_table_metadata(lazy_cache_key, table.stage)
+            self.copy_lazy_table_to_transaction(metadata, table)
             prefect.context.logger.info(f"Lazy cache of table '{table.name}' found")
         except CacheError as e:
             prefect.context.logger.warn(e)
@@ -197,55 +212,48 @@ class BaseTableStore(metaclass=_TableStoreMeta):
         self.store_lazy_table_metadata(
             LazyTableMetadata(
                 name=table.name,
-                schema=table.schema.name,
+                stage=table.stage.name,
                 cache_key=lazy_cache_key,
             )
         )
 
     @abstractmethod
-    def copy_table_to_working_schema(self, table: Table):
-        """Copy a table from the base schema to the working schema
+    def copy_table_to_transaction(self, table: Table):
+        """Copy a table from the base stage to the transaction stage
 
-        This operation MUST not remove the table from the base schema or modify
-        it in any way.
+        This operation MUST not remove the table from the base stage store
+        or modify it in any way.
 
-        :raises CacheError: if the table can't be found in the base schema
+        :raises CacheError: if the table can't be found in the cache
         """
 
     @abstractmethod
-    def copy_lazy_table_to_working_schema(
-        self, metadata: LazyTableMetadata, table: Table
-    ):
-        """Copy the lazy table identified by the metadata to the working schema
-        of table argument and rename it to `table.name`.
+    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
+        """Copy the lazy table identified by the metadata to the transaction
+        stage of table argument and rename it to `table.name`.
 
-        This operation MUST not remove the table from the base schema or modify
+        This operation MUST not remove the table from the base stage or modify
         it in any way.
 
         :raises CacheError: if the lazy table can't be found
         """
 
     @abstractmethod
-    def delete_table_from_working_schema(self, table: Table):
-        """Delete a table from the working schema
+    def delete_table_from_transaction(self, table: Table):
+        """Delete a table from the transaction
 
-        If the table doesn't exist in the working schema, fail silently.
+        If the table doesn't exist in the transaction stage, fail silently.
         """
 
     # Dematerialise
 
-    def retrieve_table_obj(
-        self, table: Table, as_type: type[T], from_cache: bool = False
-    ) -> T:
+    def retrieve_table_obj(self, table: Table, as_type: type[T]) -> T:
         """Loads a table from the store
 
         Retrieves the table from the store, converts it to the correct
-        type (given by the `as_type` argument) and returns it.
-        If `from_cache` is `False` (default), the table must be retrieved
-        from the current schema (`table.schema.current_name`). Before a
-        schema swap this corresponds to the working schema and afterwards
-        to the base schema. If `from_cache` is `True`, it must always be
-        retrieved from the base schema.
+        If the stage hasn't yet been committed, the table must be retrieved
+        from the transaction, else it must be retrieved from the committed
+        stage.
 
         :raises TypeError: if the retrieved table can't be converted to
             the requested type.
@@ -257,28 +265,25 @@ class BaseTableStore(metaclass=_TableStoreMeta):
                 "to dematerialise a Table."
             )
 
-        schema = table.schema
-        schema_name = schema.name if from_cache else schema.current_name
-
         hook = self.get_r_table_hook(as_type)
-        return hook.retrieve(self, table, schema_name, as_type)
+        return hook.retrieve(self, table, table.stage.current_name, as_type)
 
     # Metadata
 
     @abstractmethod
-    def store_task_metadata(self, metadata: TaskMetadata, schema: Schema):
+    def store_task_metadata(self, metadata: TaskMetadata, stage: Stage):
         """Stores the metadata of a task
 
         The metadata must always be stored in such a way that it is
-        associated with the working schema. Only after a schema swap
-        should it be associated with the base schema.
+        associated with the transaction. Only after a stage has been
+        committed, should it be associated with the base stage / cache.
         """
 
     @abstractmethod
-    def copy_task_metadata_to_working_schema(self, task: MaterialisingTask):
-        """Copy a task's metadata from the base to the working schema
+    def copy_task_metadata_to_transaction(self, task: MaterialisingTask):
+        """Copy a task's metadata from the cache to the transaction
 
-        The schema of a task can be accessed using `task.schema`.
+        The stage of a task can be accessed using `task.stage`.
         """
 
     @abstractmethod
@@ -313,18 +318,18 @@ class BaseTableStore(metaclass=_TableStoreMeta):
         """Stores the metadata of a lazy table
 
         The metadata must always be stored in such a way that it is
-        associated with the working schema. Only after a schema swap
-        should it be associated with the base schema.
+        associated with the transaction. Only after a stage has been
+        committed, should it be associated with the base stage / cache.
         """
 
     @abstractmethod
     def retrieve_lazy_table_metadata(
-        self, cache_key: str, schema: Schema
+        self, cache_key: str, stage: Stage
     ) -> LazyTableMetadata:
         """Retrieve a lazy table's metadata from the store
 
         :raises CacheError: if not metadata that matches the provided cache_key
-            and schema was found
+            and stage was found
         """
 
 
@@ -357,25 +362,25 @@ class TableHook(Generic[StoreT], ABC):
 
     @classmethod
     @abstractmethod
-    def materialise(cls, store: StoreT, table: Table, schema_name: str) -> None:
+    def materialise(cls, store: StoreT, table: Table, stage_name: str) -> None:
         """Materialise a table object
 
         :param store: The store which called this method
         :param table: The table that should be materialised
-        :param schema_name: The name of the schema in which the table should
-            be stored
+        :param stage_name: The name of the stage in which the table should
+            be stored - can either be `stage.name` or `stage.transaction_name`.
         """
 
     @classmethod
     @abstractmethod
     def retrieve(
-        cls, store: StoreT, table: Table, schema_name: str, as_type: type[T]
+        cls, store: StoreT, table: Table, stage_name: str, as_type: type[T]
     ) -> T:
         """Retrieve a table from the store
 
         :param store: The store in which the table is stored
         :param table: The table which should get retrieved
-        :param schema_name: The name of the schema from which te table should
+        :param stage_name: The name of the stage from which te table should
             be retrieved
         :param as_type: The type as which the table is to be retrieved
         :return: The retrieved table (converted to the correct type)

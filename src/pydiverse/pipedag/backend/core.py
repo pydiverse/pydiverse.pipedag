@@ -17,8 +17,8 @@ from pydiverse.pipedag.backend.lock import LockState
 from pydiverse.pipedag.backend.metadata import TaskMetadata
 from pydiverse.pipedag.backend.util import compute_cache_key
 from pydiverse.pipedag.backend.util import json as json_util
-from pydiverse.pipedag.core import Blob, MaterialisingTask, Schema, Table
-from pydiverse.pipedag.errors import DuplicateNameError, LockError, SchemaError
+from pydiverse.pipedag.core import Blob, MaterialisingTask, Stage, Table
+from pydiverse.pipedag.errors import DuplicateNameError, LockError, StageError
 from pydiverse.pipedag.util import deepmutate
 
 
@@ -30,7 +30,7 @@ class PipeDAGStore:
 
     Other than initializing the global `PipeDAGStore` object, the user
     should never have to interact with it. It only serves as a coordinator
-    between the different backends, the schemas and the materialising tasks.
+    between the different backends, the stages and the materialising tasks.
     """
 
     def __init__(
@@ -44,10 +44,10 @@ class PipeDAGStore:
         self.lock_manager = lock
 
         self.__lock = threading.RLock()
-        self.schemas: dict[str, Schema] = dict()
-        self.created_schemas: set[Schema] = set()
-        self.table_names: defaultdict[Schema, set[str]] = defaultdict(set)
-        self.blob_names: defaultdict[Schema, set[str]] = defaultdict(set)
+        self.stages: dict[str, Stage] = dict()
+        self.created_stages: set[Stage] = set()
+        self.table_names: defaultdict[Stage, set[str]] = defaultdict(set)
+        self.blob_names: defaultdict[Stage, set[str]] = defaultdict(set)
         self.run_id = uuid.uuid4().hex[:20]
         self.logger = prefect.utilities.logging.get_logger("pipeDAG")
 
@@ -70,70 +70,70 @@ class PipeDAGStore:
         self.table_store.setup()
         self.lock_manager.release("_pipedag_setup_")
 
-    #### Schema ####
+    #### STAGE ####
 
-    def register_schema(self, schema: Schema):
-        """Used by `Schema` objects to inform the backend about its existence
+    def register_stage(self, stage: Stage):
+        """Used by `Stage` objects to inform the backend about its existence
 
         As of right now, the mains purpose of this function is to prevent
-        creating two schemas with the same name, and to be able to retrieve
-        a schema object based on its name.
+        creating two stages with the same name, and to be able to retrieve
+        a stage object based on its name.
         """
         with self.__lock:
-            if schema.name in self.schemas:
+            if stage.name in self.stages:
                 raise DuplicateNameError(
-                    f"Schema with name '{schema.name}' already exists."
+                    f"Stage with name '{stage.name}' already exists."
                 )
-            self.schemas[schema.name] = schema
+            self.stages[stage.name] = stage
 
-    def create_schema(self, schema: Schema):
-        """Creates the schema in all backends
+    def init_stage(self, stage: Stage):
+        """Initializes the stage in all backends
 
-        This function also acquires a lock on the given schema to prevent
-        other flows from modifying the same schema at the same time. Only
-        once all tasks that depend on this schema have been executed, will
+        This function also acquires a lock on the given stage to prevent
+        other flows from modifying the same stage at the same time. Only
+        once all tasks that depend on this stage have been executed, will
         this lock be released.
 
-        Don't use this function directly. Instead, use `ensure_schema_is_ready`
+        Don't use this function directly. Instead, use `ensure_stage_is_ready`
         to prevent unnecessary locking.
         """
         with self.__lock:
-            if schema in self.created_schemas:
-                raise SchemaError(f"Schema '{schema.name}' has already been created.")
-            if schema.name not in self.schemas:
-                raise SchemaError(
-                    f"Can't create schema '{schema.name}' because it hasn't been"
+            if stage in self.created_stages:
+                raise StageError(f"Stage '{stage.name}' has already been created.")
+            if stage.name not in self.stages:
+                raise StageError(
+                    f"Can't create stage '{stage.name}' because it hasn't been"
                     " registered."
                 )
-            self.created_schemas.add(schema)
+            self.created_stages.add(stage)
 
-        # Lock the schema and then create it
-        self.acquire_schema_lock(schema)
-        self.table_store.create_schema(schema)
-        self.blob_store.create_schema(schema)
+        # Lock the stage and then create it
+        self.acquire_stage_lock(stage)
+        self.table_store.init_stage(stage)
+        self.blob_store.init_stage(stage)
 
-        # Once schema reference counter hits 0 (this means all tasks that
-        # have any task contained in the schema as an upstream dependency),
-        # we can release the schema lock.
-        schema._set_ref_count_free_handler(self.release_schema_lock)
+        # Once stage reference counter hits 0 (this means all tasks that
+        # have any task contained in the stage as an upstream dependency),
+        # we can release the stage lock.
+        stage._set_ref_count_free_handler(self.release_stage_lock)
 
-    def ensure_schema_is_ready(self, schema: Schema):
-        """Creates a schema if it hasn't been created yet
+    def ensure_stage_is_ready(self, stage: Stage):
+        """Initializes a stage if it hasn't been created yet
 
-        This allows the creation of schemas in a lazy way. This ensures
-        that a schema only gets locked right before it is needed.
+        This allows the creation of stages in a lazy way. This ensures
+        that a stage only gets locked right before it is needed.
         """
         with self.__lock:
-            if schema in self.created_schemas:
+            if stage in self.created_stages:
                 return
-            self.create_schema(schema)
+            self.init_stage(stage)
 
-    def swap_schema(self, schema: Schema):
-        """Swap the working schema with the base schema"""
-        with schema.perform_swap():
-            self.validate_lock_state(schema)
-            self.table_store.swap_schema(schema)
-            self.blob_store.swap_schema(schema)
+    def commit_stage(self, stage: Stage):
+        """Commit the stage"""
+        with stage.commit_context():
+            self.validate_lock_state(stage)
+            self.table_store.commit_stage(stage)
+            self.blob_store.commit_stage(stage)
 
     #### Task ####
 
@@ -156,10 +156,10 @@ class PipeDAGStore:
 
         def dematerialise_mutator(x):
             if isinstance(x, Table):
-                self.validate_lock_state(x.schema)
+                self.validate_lock_state(x.stage)
                 return self.table_store.retrieve_table_obj(x, as_type=task.input_type)
             elif isinstance(x, Blob):
-                self.validate_lock_state(x.schema)
+                self.validate_lock_state(x.stage)
                 return self.blob_store.retrieve_blob(x)
             return x
 
@@ -189,16 +189,15 @@ class PipeDAGStore:
         :return: A copy of `value` with additional metadata
         """
 
-        schema = task.schema
-        if schema not in self.created_schemas:
-            raise SchemaError(
-                f"Can't materialise because schema '{schema.name}' has not been"
-                " created."
+        stage = task.stage
+        if stage not in self.created_stages:
+            raise StageError(
+                f"Can't materialise because stage '{stage.name}' has not been created."
             )
-        if schema.did_swap:
-            raise SchemaError(
-                f"Can't add new table to Schema '{schema.name}'."
-                " Schema has already been swapped."
+        if stage.did_commit:
+            raise StageError(
+                f"Can't add new table to Stage '{stage.name}'."
+                " Stage has already been committed."
             )
 
         def materialise_mutator(x, tbl_id=itertools.count()):
@@ -215,7 +214,7 @@ class PipeDAGStore:
 
             # Do the materialisation
             if isinstance(x, (Table, Blob)):
-                x.schema = schema
+                x.stage = stage
                 x.cache_key = task.cache_key
 
                 # Update name:
@@ -227,7 +226,7 @@ class PipeDAGStore:
                 elif x.name.endswith("%%"):
                     x.name = x.name[:-2] + auto_suffix
 
-                self.validate_lock_state(schema)
+                self.validate_lock_state(stage)
                 if isinstance(x, Table):
                     if x.obj is None:
                         raise TypeError("Underlying table object can't be None")
@@ -259,7 +258,7 @@ class PipeDAGStore:
         output_json = self.json_encode(m_value)
         metadata = TaskMetadata(
             name=task.original_name,
-            schema=schema.name,
+            stage=stage.name,
             version=task.version,
             timestamp=datetime.datetime.now(),
             run_id=self.run_id,
@@ -267,8 +266,8 @@ class PipeDAGStore:
             output_json=output_json,
         )
 
-        self.validate_lock_state(schema)
-        self.table_store.store_task_metadata(metadata, schema)
+        self.validate_lock_state(stage)
+        self.table_store.store_task_metadata(metadata, stage)
 
         return m_value
 
@@ -281,14 +280,11 @@ class PipeDAGStore:
 
         - It returns a name checker function which, when called with either
           a Table or Blob, checks if an object with the same name already
-          exists in the schema. If it does, it raises a `DuplicateNameError`.
+          exists in the stage. If it does, it raises a `DuplicateNameError`.
 
         - If an exception is raised inside the context, all objects that have
           been materialised (given that the name checker function was called
           with them), get deleted again.
-
-        The deletion behaviour is important, because when copying tables from
-        the cache to the working schema, we want to be able to delete
         """
         stored_objects: list[Table | Blob] = []
 
@@ -301,16 +297,16 @@ class PipeDAGStore:
                 raise TypeError
 
             with self.__lock:
-                if obj.name in name_store[obj.schema]:
+                if obj.name in name_store[obj.stage]:
                     raise DuplicateNameError(
                         f"{type(obj).__name__} with name '{obj.name}' already"
-                        " exists in schema '{obj.schema.name}'."
+                        f" exists in stage '{obj.stage.name}'."
                         " To enable automatic name mangling,"
                         " you can add '%%' at the end of the name."
                     )
 
                 stored_objects.append(obj)
-                name_store[obj.schema].add(obj.name)
+                name_store[obj.stage].add(obj.name)
 
         try:
             yield name_checker
@@ -319,11 +315,11 @@ class PipeDAGStore:
             with self.__lock:
                 for obj in stored_objects:
                     if isinstance(obj, Table):
-                        self.table_names[obj.schema].remove(obj.name)
-                        self.table_store.delete_table_from_working_schema(obj)
+                        self.table_names[obj.stage].remove(obj.name)
+                        self.table_store.delete_table_from_transaction(obj)
                     elif isinstance(obj, Blob):
-                        self.blob_names[obj.schema].remove(obj.name)
-                        self.blob_store.delete_blob_from_working_schema(obj)
+                        self.blob_names[obj.stage].remove(obj.name)
+                        self.blob_store.delete_blob_from_transaction(obj)
                     else:
                         raise TypeError
             raise e
@@ -368,22 +364,22 @@ class PipeDAGStore:
         :raises CacheError: if no matching task exists in the cache
         """
 
-        if task.schema.did_swap:
-            raise SchemaError(f"Schema already swapped.")
+        if task.stage.did_commit:
+            raise StageError(f"Stage already committed.")
 
         metadata = self.table_store.retrieve_task_metadata(task)
         return self.json_decode(metadata.output_json)
 
-    def copy_cached_output_to_working_schema(
+    def copy_cached_output_to_transaction_stage(
         self,
         output: Materialisable,
         task: MaterialisingTask,
     ):
-        """Copy the outputs from a cached task into the working schema
+        """Copy the outputs from a cached task into the transaction stage
 
         If the outputs of a task were successfully retrieved from the cache
         using `retrieve_cached_output`, they and the associated metadata
-        must be copied from the base schema to the working schema.
+        must be copied from the base stage to the transaction.
 
         :raises CacheError: if some values in the output can't be found
             in the cache.
@@ -392,31 +388,31 @@ class PipeDAGStore:
         def visiting_mutator(x):
             if isinstance(x, Table):
                 name_checker(x)
-                self.validate_lock_state(task.schema)
-                self.table_store.copy_table_to_working_schema(x)
+                self.validate_lock_state(task.stage)
+                self.table_store.copy_table_to_transaction(x)
             elif isinstance(x, Blob):
                 name_checker(x)
-                self.validate_lock_state(task.schema)
-                self.blob_store.copy_blob_to_working_schema(x)
+                self.validate_lock_state(task.stage)
+                self.blob_store.copy_blob_to_transaction(x)
             return x
 
         with self.materialisation_context() as name_checker:
             deepmutate(output, visiting_mutator)
 
-        self.validate_lock_state(task.schema)
-        self.table_store.copy_task_metadata_to_working_schema(task)
+        self.validate_lock_state(task.stage)
+        self.table_store.copy_task_metadata_to_transaction(task)
 
     #### Locking ####
 
-    def acquire_schema_lock(self, schema: Schema):
-        """Acquires a lock to access the given schema"""
-        self.lock_manager.acquire(schema)
+    def acquire_stage_lock(self, stage: Stage):
+        """Acquires a lock to access the given stage"""
+        self.lock_manager.acquire(stage)
 
-    def release_schema_lock(self, schema: Schema):
-        """Releases a previously acquired lock on a schema"""
-        self.lock_manager.release(schema)
+    def release_stage_lock(self, stage: Stage):
+        """Releases a previously acquired lock on a stage"""
+        self.lock_manager.release(stage)
 
-    def validate_lock_state(self, schema: Schema):
+    def validate_lock_state(self, stage: Stage):
         """Validate that a lock is still in the LOCKED state
 
         Depending on the lock manager, it might be possible that the state
@@ -433,48 +429,48 @@ class PipeDAGStore:
         :raises LockError: if the lock is unlocked
         """
         while True:
-            state = self.lock_manager.get_lock_state(schema)
+            state = self.lock_manager.get_lock_state(stage)
             if state == LockState.LOCKED:
                 return
             elif state == LockState.UNLOCKED:
-                raise LockError(f"Lock for schema '{schema.name}' is unlocked.")
+                raise LockError(f"Lock for stage '{stage.name}' is unlocked.")
             elif state == LockState.INVALID:
-                raise LockError(f"Lock for schema '{schema.name}' is invalid.")
+                raise LockError(f"Lock for stage '{stage.name}' is invalid.")
             elif state == LockState.UNCERTAIN:
                 self.logger.info(
-                    f"Waiting for schema '{schema.name}' lock state to become known"
+                    f"Waiting for stage '{stage.name}' lock state to become known"
                     " again..."
                 )
-                cond = self.lock_conditions[schema]
+                cond = self.lock_conditions[stage]
                 with cond:
                     cond.wait()
             else:
                 raise ValueError(f"Invalid state '{state}'.")
 
     def _lock_state_listener(
-        self, schema: Schema, old_state: LockState, new_state: LockState
+        self, stage: Stage, old_state: LockState, new_state: LockState
     ):
         """Internal listener that gets notified when the state of a lock changes"""
-        if not isinstance(schema, Schema):
+        if not isinstance(stage, Stage):
             return
 
         # Notify all waiting threads that the lock state has changed
-        cond = self.lock_conditions[schema]
+        cond = self.lock_conditions[stage]
         with cond:
             cond.notify_all()
 
         # Logging
         if new_state == LockState.UNCERTAIN:
             self.logger.warning(
-                f"Lock for schema '{schema.name}' transitioned to UNCERTAIN state."
+                f"Lock for stage '{stage.name}' transitioned to UNCERTAIN state."
             )
         if old_state == LockState.UNCERTAIN and new_state == LockState.LOCKED:
             self.logger.info(
-                f"Lock for schema '{schema.name}' is still LOCKED (after being"
+                f"Lock for stage '{stage.name}' is still LOCKED (after being"
                 " UNCERTAIN)."
             )
         if old_state == LockState.UNCERTAIN and new_state == LockState.INVALID:
-            self.logger.error(f"Lock for schema '{schema.name}' has become INVALID.")
+            self.logger.error(f"Lock for stage '{stage.name}' has become INVALID.")
 
     #### Utils ####
 
@@ -498,14 +494,14 @@ class PipeDAGStore:
         return self.json_decoder.decode(value)
 
     def _reset(self):
-        for schema in self.schemas.values():
+        for stage in self.stages.values():
             try:
-                self.lock_manager.release(schema)
+                self.lock_manager.release(stage)
             except LockError:
                 pass
 
-        self.schemas.clear()
-        self.created_schemas.clear()
+        self.stages.clear()
+        self.created_stages.clear()
         self.table_names.clear()
         self.blob_names.clear()
         self.run_id = uuid.uuid4().hex[:20]

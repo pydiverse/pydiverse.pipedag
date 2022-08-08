@@ -11,7 +11,7 @@ import prefect
 
 import pydiverse.pipedag
 from pydiverse.pipedag._typing import CallableT
-from pydiverse.pipedag.core.schema import schema_ref_counter_handler
+from pydiverse.pipedag.core.stage import stage_ref_counter_handler
 from pydiverse.pipedag.errors import CacheError, FlowError
 from pydiverse.pipedag.util import deepmutate
 
@@ -51,8 +51,8 @@ class MaterialisingTask(prefect.Task):
     `int`, `float`, `str`, `bool`, `None`,
     and PipeDAG's `Table` and `Blob` type.
 
-    Automatically adds itself to the active schema for schema swapping.
-    All materialising tasks MUST be defined inside a schema.
+    Automatically adds itself to the active stage.
+    All materialising tasks MUST be defined inside a stage.
 
     :param fn: The run method of this task
     :key name: The name of this task
@@ -105,11 +105,11 @@ class MaterialisingTask(prefect.Task):
         self.version = version
         self.lazy = lazy
 
-        self.schema = None
-        self.upstream_schemas = None
+        self.stage = None
+        self.upstream_stages = None
         self.cache_key = None
 
-        self.state_handlers.append(schema_ref_counter_handler)
+        self.state_handlers.append(stage_ref_counter_handler)
         self.state_handlers.append(self.wrapped_fn.task_state_handler)
 
     def run(self) -> None:
@@ -132,15 +132,15 @@ class MaterialisingTask(prefect.Task):
         """
         Both `__call__` and `map` create new instances of the Task. This
         method is used to modify those copies, add relevant metadata, and
-        add them to the schema in which they were created.
+        add them to the stage in which they were created.
         """
 
-        self.schema = prefect.context.get("pipedag_schema")
-        self.name = f"{self.original_name}({self.schema.name})"
-        if self.schema is None:
+        self.stage = prefect.context.get("pipedag_stage")
+        self.name = f"{self.original_name}({self.stage.name})"
+        if self.stage is None:
             raise FlowError(
-                "Schema missing for materialised task. Materialised tasks must "
-                "be used inside a schema block."
+                "Stage missing for materialised task. Materialised tasks must "
+                "be used inside a stage block."
             )
 
         # Create run method
@@ -149,32 +149,32 @@ class MaterialisingTask(prefect.Task):
         )
         functools.update_wrapper(self.run, self.wrapped_fn)
 
-        # Add task to schema
-        self.schema.add_task(self)
+        # Add task to stage
+        self.stage.add_task(self)
 
-    def _incr_schema_ref_count(self, by: int = 1):
+    def _incr_stage_ref_count(self, by: int = 1):
         """
-        Private method required for schema reference counting:
-        `pydiverse.pipedag.core.schema.schema_ref_counter_handler`
+        Private method required for stage reference counting:
+        `pydiverse.pipedag.core.stage.stage_ref_counter_handler`
 
-        Increments the reference count to the schema in which this task was
-        defined, and all schemas that appear in its inputs.
+        Increments the reference count to the stage in which this task was
+        defined, and all stage that appear in its inputs.
         """
-        self.schema._incr_ref_count(by)
-        for upstream_schema in self.upstream_schemas:
-            upstream_schema._incr_ref_count(by)
+        self.stage._incr_ref_count(by)
+        for upstream_stage in self.upstream_stages:
+            upstream_stage._incr_ref_count(by)
 
-    def _decr_schema_ref_count(self, by: int = 1):
+    def _decr_stage_ref_count(self, by: int = 1):
         """
-        Private method required for schema reference counting:
-        `pydiverse.pipedag.core.schema.schema_ref_counter_handler`
+        Private method required for stage reference counting:
+        `pydiverse.pipedag.core.stage.stage_ref_counter_handler`
 
-        Decrements the reference count to the schema in which this task was
-        defined, and all schemas that appear in its inputs.
+        Decrements the reference count to the stage in which this task was
+        defined, and all stage that appear in its inputs.
         """
-        self.schema._decr_ref_count(by)
-        for upstream_schema in self.upstream_schemas:
-            upstream_schema._decr_ref_count(by)
+        self.stage._decr_ref_count(by)
+        for upstream_stage in self.upstream_stages:
+            upstream_stage._decr_ref_count(by)
 
 
 class MaterialisationWrapper:
@@ -206,12 +206,12 @@ class MaterialisationWrapper:
 
         if task is None:
             raise TypeError("Task can't be None.")
-        if task.schema is None:
-            raise TypeError("Task schema can't be None")
+        if task.stage is None:
+            raise TypeError("Task stage can't be None")
 
-        # If this is the first task in this schema to be executed, ensure that
-        # the schema has been created and locked.
-        store.ensure_schema_is_ready(task.schema)
+        # If this is the first task in this stage to be executed, ensure that
+        # the stage has been initialized and locked.
+        store.ensure_stage_is_ready(task.stage)
 
         # Compute the cache key for the task inputs
         input_json = store.json_encode(bound.arguments)
@@ -221,9 +221,9 @@ class MaterialisationWrapper:
         # Check if this task has already been run with the same inputs
         # If yes, return memoized result. This prevents DuplicateNameExceptions
         with self.__lock:
-            memo_result = self.memo[task.schema].get(cache_key, _nil)
+            memo_result = self.memo[task.stage].get(cache_key, _nil)
             if memo_result is _nil:
-                self.memo[task.schema][cache_key] = threading.Condition()
+                self.memo[task.stage][cache_key] = threading.Condition()
 
         if memo_result is not _nil:
             if isinstance(memo_result, threading.Condition):
@@ -244,7 +244,7 @@ class MaterialisationWrapper:
                     else:
                         task.logger.info("Waiting...")
                 with self.__lock:
-                    memo_result = self.memo[task.schema][cache_key]
+                    memo_result = self.memo[task.stage][cache_key]
 
             # Must make a semi-deepcopy of the memoized result:
             # Deepcopy of python container types, shallow copy of everything else.
@@ -254,7 +254,7 @@ class MaterialisationWrapper:
         if not task.lazy:
             try:
                 cached_output = store.retrieve_cached_output(task)
-                store.copy_cached_output_to_working_schema(cached_output, task)
+                store.copy_cached_output_to_transaction_stage(cached_output, task)
                 self.store_in_memo(cached_output, task, cache_key)
                 task.logger.info(f"Found task in cache. Using cached result.")
                 return cached_output
@@ -274,22 +274,22 @@ class MaterialisationWrapper:
 
     def store_in_memo(self, result, task, cache_key):
         with self.__lock:
-            condition = self.memo[task.schema][cache_key]
-            self.memo[task.schema][cache_key] = result
+            condition = self.memo[task.stage][cache_key]
+            self.memo[task.stage][cache_key] = result
             with condition:
                 condition.notify_all()
 
     def task_state_handler(self, task: MaterialisingTask, old_state, new_state):
-        if task.cache_key is None or task.schema is None:
+        if task.cache_key is None or task.stage is None:
             return
 
         if new_state.is_failed():
             with self.__lock:
-                memo_result = self.memo[task.schema].get(task.cache_key, _nil)
+                memo_result = self.memo[task.stage].get(task.cache_key, _nil)
                 if isinstance(memo_result, threading.Condition):
                     with memo_result:
                         memo_result.notify_all()
-                        self.memo[task.schema][task.cache_key] = _nil
+                        self.memo[task.stage][task.cache_key] = _nil
 
 
 _nil = object()
