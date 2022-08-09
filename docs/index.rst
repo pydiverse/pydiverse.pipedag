@@ -2,10 +2,11 @@ Welcome to pydiverse.pipedag's documentation!
 =============================================
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :glob:
+   :maxdepth: 1
+   :caption: Reference:
 
-   API Reference <api/modules>
+   reference/*
 
 
 

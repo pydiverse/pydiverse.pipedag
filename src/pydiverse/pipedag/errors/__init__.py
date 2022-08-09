@@ -30,3 +30,15 @@ class DuplicateNameError(ValueError):
     """
     Exception raised if an object that is supposed to have a unique name doesn't.
     """
+
+
+class IPCError(Exception):
+    """
+    Exception raised when inter process communication fails.
+    """
+
+
+class RemoteProcessError(IPCError):
+    """
+    Exception raised if an exception occurred in the remote IPC process.
+    """

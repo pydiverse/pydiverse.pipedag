@@ -3,8 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Callable, Dict, List, Tuple, TypeVar, Union
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag.backend.table.base import BaseTableStore
-    from pydiverse.pipedag.core.container import Blob, Table
+    pass
 
 
 def decorator_hint(decorator: Callable) -> Callable:
@@ -16,15 +15,15 @@ T = TypeVar("T")
 CallableT = TypeVar("CallableT", bound=Callable)
 StoreT = TypeVar("StoreT", bound="BaseTableStore")
 
-# Materialisable
+# Materializable
 
 MPrimitives = Union[int, float, bool, str]
 MTypes = Union["Table", "Blob"]
 
-BaseMaterialisable = Union[MPrimitives, MTypes]
-Materialisable = Union[
-    BaseMaterialisable,
-    Dict[MPrimitives, "Materialisable"],
-    List["Materialisable"],
-    Tuple["Materialisable", ...],
+BaseMaterializable = Union[MPrimitives, MTypes]
+Materializable = Union[
+    BaseMaterializable,
+    Dict[MPrimitives, "Materializable"],
+    List["Materializable"],
+    Tuple["Materializable", ...],
 ]

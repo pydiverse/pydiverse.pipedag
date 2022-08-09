@@ -7,14 +7,14 @@ import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from enum import Enum
-from typing import Callable, Union
+from typing import Any, Callable, Union
 
-import prefect
+import structlog
 
-from pydiverse.pipedag import config
+from pydiverse.pipedag.context.context import ConfigContext
 from pydiverse.pipedag.core.stage import Stage
 from pydiverse.pipedag.errors import LockError
-from pydiverse.pipedag.util import normalise_name, requires
+from pydiverse.pipedag.util import normalize_name, requires
 
 __all__ = [
     "BaseLockManager",
@@ -25,7 +25,7 @@ __all__ = [
 ]
 
 
-class LockState(str, Enum):
+class LockState(Enum):
     """Lock State
 
     Represent the current state of a lock.
@@ -51,10 +51,10 @@ class LockState(str, Enum):
         is that a lock transitions from `LOCKED -> UNCERTAIN -> INVALID`.
     """
 
-    UNLOCKED = "UNLOCKED"
-    LOCKED = "LOCKED"
-    UNCERTAIN = "UNCERTAIN"
-    INVALID = "INVALID"
+    UNLOCKED = 0
+    LOCKED = 1
+    UNCERTAIN = 2
+    INVALID = 3
 
 
 Lockable = Union[Stage, str]
@@ -70,7 +70,7 @@ class BaseLockManager(ABC):
     """
 
     def __init__(self):
-        self.logger = prefect.utilities.logging.get_logger(type(self).__name__)
+        self.logger = structlog.get_logger(lock=type(self).__name__)
 
         self.state_listeners = set()
         self.lock_states = defaultdict(lambda: LockState.UNLOCKED)
@@ -164,8 +164,9 @@ class FileLockManager(BaseLockManager):
     def __init__(self, base_path: str):
         super().__init__()
         self.base_path = os.path.abspath(base_path)
-        if config.name is not None:
-            project_name = normalise_name(config.name)
+        name = ConfigContext.get().name
+        if name is not None:
+            project_name = normalize_name(name)
             self.base_path = os.path.join(self.base_path, project_name)
         self.locks: dict[Lockable, fl.BaseFileLock] = {}
 
@@ -238,9 +239,15 @@ class ZooKeeperLockManager(BaseLockManager):
 
         self.locks: dict[Lockable, KazooLock] = {}
         self.base_path = "/pipedag/locks/"
+        config = ConfigContext.get()
         if config.name is not None:
-            project_name = normalise_name(config.name)
+            project_name = normalize_name(config.name)
             self.base_path += project_name + "/"
+
+    @classmethod
+    def _init_conf_(cls, config: dict[str, Any]):
+        client = KazooClient(**config)
+        return cls(client)
 
     def acquire(self, lock: Lockable):
         zk_lock = self.client.Lock(self.lock_path(lock))

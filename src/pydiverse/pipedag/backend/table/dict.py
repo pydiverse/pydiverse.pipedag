@@ -4,10 +4,11 @@ import warnings
 
 import pandas as pd
 
-from pydiverse.pipedag.backend.metadata import LazyTableMetadata, TaskMetadata
+from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
-from pydiverse.pipedag.core import MaterialisingTask, Stage, Table
 from pydiverse.pipedag.errors import CacheError, StageError
+from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.metadata import LazyTableMetadata, TaskMetadata
 
 
 class DictTableStore(BaseTableStore):
@@ -17,6 +18,7 @@ class DictTableStore(BaseTableStore):
     """
 
     def __init__(self):
+        super().__init__()
         self.store = dict()
 
         self.metadata = dict()
@@ -81,11 +83,11 @@ class DictTableStore(BaseTableStore):
     def store_task_metadata(self, metadata: TaskMetadata, stage: Stage):
         self.t_metadata[stage][metadata.cache_key] = metadata
 
-    def copy_task_metadata_to_transaction(self, task: MaterialisingTask):
+    def copy_task_metadata_to_transaction(self, task: MaterializingTask):
         stage = task.stage
         self.t_metadata[stage][task.cache_key] = self.metadata[stage][task.cache_key]
 
-    def retrieve_task_metadata(self, task: MaterialisingTask) -> TaskMetadata:
+    def retrieve_task_metadata(self, task: MaterializingTask) -> TaskMetadata:
         try:
             return self.metadata[task.stage][task.cache_key]
         except KeyError:
@@ -109,7 +111,7 @@ class DictTableStore(BaseTableStore):
 @DictTableStore.register_table(pd)
 class PandasTableHook(TableHook[DictTableStore]):
     @classmethod
-    def can_materialise(cls, type_) -> bool:
+    def can_materialize(cls, type_) -> bool:
         return issubclass(type_, pd.DataFrame)
 
     @classmethod
@@ -117,7 +119,7 @@ class PandasTableHook(TableHook[DictTableStore]):
         return type_ == pd.DataFrame
 
     @classmethod
-    def materialise(cls, store, table: Table[pd.DataFrame], stage_name):
+    def materialize(cls, store, table: Table[pd.DataFrame], stage_name):
         if table.name is not None:
             table.obj.attrs["name"] = table.name
         store.store[stage_name][table.name] = table.obj
@@ -143,7 +145,7 @@ except ImportError as e:
 @DictTableStore.register_table(pdt)
 class PydiverseTransformTableHook(TableHook[DictTableStore]):
     @classmethod
-    def can_materialise(cls, type_) -> bool:
+    def can_materialize(cls, type_) -> bool:
         return issubclass(type_, pdt.Table)
 
     @classmethod
@@ -153,11 +155,11 @@ class PydiverseTransformTableHook(TableHook[DictTableStore]):
         return issubclass(type_, PandasTableImpl)
 
     @classmethod
-    def materialise(cls, store, table: Table[pdt.Table], stage_name):
+    def materialize(cls, store, table: Table[pdt.Table], stage_name):
         from pydiverse.transform.core.verbs import collect
 
         table.obj = table.obj >> collect()
-        return PandasTableHook.materialise(store, table, stage_name)
+        return PandasTableHook.materialize(store, table, stage_name)
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Generic
+from typing import TYPE_CHECKING, Generic
 
 from pydiverse.pipedag._typing import T
-from pydiverse.pipedag.util import normalise_name
+from pydiverse.pipedag.util import normalize_name
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core.stage import Stage
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 class Table(Generic[T]):
     """Table container
 
-    Used to wrap table objects that get returned from materialising
+    Used to wrap table objects that get returned from materializing
     tasks.
 
     :param obj: The table object to wrap
@@ -20,7 +20,7 @@ class Table(Generic[T]):
         generated name will be used. To prevent name collisions, you can
         add '%%' at the end of the name to enable automatic name mangling.
     :param primary_key: Optional name of the primary key that should be
-        used when materialising this table
+        used when materializing this table
     """
 
     def __init__(
@@ -51,13 +51,13 @@ class Table(Generic[T]):
     def name(self, value):
         if value is not None and not isinstance(value, str):
             raise TypeError(f"Table name must be of instance 'str' not {type(value)}.")
-        self._name = normalise_name(value)
+        self._name = normalize_name(value)
 
 
-class Blob:
+class Blob(Generic[T]):
     """Blob (binary large object) container
 
-    Used to wrap arbitrary python objects that get returned from materialising
+    Used to wrap arbitrary python objects that get returned from materializing
     tasks.
 
     :param obj: The object to wrap
@@ -68,7 +68,7 @@ class Blob:
 
     def __init__(
         self,
-        obj: Any = None,
+        obj: T = None,
         name: str = None,
         stage: Stage = None,
         cache_key: str = None,
@@ -90,4 +90,4 @@ class Blob:
 
     @name.setter
     def name(self, value):
-        self._name = normalise_name(value)
+        self._name = normalize_name(value)

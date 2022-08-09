@@ -4,12 +4,15 @@ import os
 import pickle
 import shutil
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from pydiverse.pipedag import config
-from pydiverse.pipedag.core import Blob, Stage
+from pydiverse.pipedag.context import ConfigContext
 from pydiverse.pipedag.errors import CacheError
-from pydiverse.pipedag.util import normalise_name
+from pydiverse.pipedag.util import normalize_name
+
+if TYPE_CHECKING:
+    from pydiverse.pipedag.core import Stage
+    from pydiverse.pipedag.materialize import Blob
 
 __all__ = [
     "BaseBlobStore",
@@ -86,8 +89,9 @@ class FileBlobStore(BaseBlobStore):
 
     def __init__(self, base_path: str):
         self.base_path = os.path.abspath(base_path)
+        config = ConfigContext.get()
         if config.name is not None:
-            project_name = normalise_name(config.name)
+            project_name = normalize_name(config.name)
             self.base_path = os.path.join(self.base_path, project_name)
 
         os.makedirs(self.base_path, exist_ok=True)
