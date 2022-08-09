@@ -3,10 +3,9 @@ from __future__ import annotations
 import warnings
 
 import pandas as pd
-import prefect
 import sqlalchemy as sa
 
-from pydiverse.pipedag.backend.metadata import LazyTableMetadata, TaskMetadata
+from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
 from pydiverse.pipedag.backend.table.util.sql_ddl import (
     CopyTable,
@@ -16,12 +15,13 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     DropTable,
     RenameSchema,
 )
-from pydiverse.pipedag.core import MaterialisingTask, Stage, Table
 from pydiverse.pipedag.errors import CacheError
+from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.metadata import LazyTableMetadata, TaskMetadata
 
 
 class SQLTableStore(BaseTableStore):
-    """Table store that materialises tables to a SQL database
+    """Table store that materializes tables to a SQL database
 
     Uses schema swapping for transactions:
     Creates a schema for each stage and a temporary schema for each
@@ -32,6 +32,8 @@ class SQLTableStore(BaseTableStore):
     METADATA_SCHEMA = "pipedag_metadata"
 
     def __init__(self, engine: sa.engine.Engine):
+        super().__init__()
+
         self.engine = engine
 
         # Set up metadata tables and schema
@@ -63,6 +65,18 @@ class SQLTableStore(BaseTableStore):
             Column("in_transaction_schema", Boolean),
             schema=self.METADATA_SCHEMA,
         )
+
+    @classmethod
+    def _init_conf_(cls, config: dict):
+        engine_config = config.pop("engine")
+        if isinstance(engine_config, str):
+            engine_config = {"url": engine_config}
+
+        engine_url = engine_config.pop("url")
+        engine_config["_coerce_config"] = True
+        engine = sa.create_engine(engine_url)
+
+        return cls(engine=engine, **config)
 
     def setup(self):
         super().setup()
@@ -172,7 +186,7 @@ class SQLTableStore(BaseTableStore):
                 )
             )
 
-    def copy_task_metadata_to_transaction(self, task: MaterialisingTask):
+    def copy_task_metadata_to_transaction(self, task: MaterializingTask):
         with self.engine.connect() as conn:
             metadata = (
                 conn.execute(
@@ -192,19 +206,22 @@ class SQLTableStore(BaseTableStore):
 
             conn.execute(self.tasks_table.insert().values(**metadata_copy))
 
-    def retrieve_task_metadata(self, task: MaterialisingTask) -> TaskMetadata:
-        with self.engine.connect() as conn:
-            result = (
-                conn.execute(
-                    self.tasks_table.select()
-                    .where(self.tasks_table.c.stage == task.stage.name)
-                    .where(self.tasks_table.c.version == task.version)
-                    .where(self.tasks_table.c.cache_key == task.cache_key)
-                    .where(self.tasks_table.c.in_transaction_schema == False)
+    def retrieve_task_metadata(self, task: MaterializingTask) -> TaskMetadata:
+        try:
+            with self.engine.connect() as conn:
+                result = (
+                    conn.execute(
+                        self.tasks_table.select()
+                        .where(self.tasks_table.c.stage == task.stage.name)
+                        .where(self.tasks_table.c.version == task.version)
+                        .where(self.tasks_table.c.cache_key == task.cache_key)
+                        .where(self.tasks_table.c.in_transaction_schema == False)
+                    )
+                    .mappings()
+                    .one_or_none()
                 )
-                .mappings()
-                .one_or_none()
-            )
+        except sa.exc.MultipleResultsFound:
+            raise CacheError("Multiple results found task metadata")
 
         if result is None:
             raise CacheError(f"Couldn't retrieve task for cache key {task.cache_key}")
@@ -249,7 +266,7 @@ class SQLTableStore(BaseTableStore):
             raise CacheError("Multiple results found for lazy table cache key")
 
         if result is None:
-            raise CacheError("")
+            raise CacheError("No result found for lazy table cache key")
 
         return LazyTableMetadata(
             name=result.name,
@@ -261,7 +278,7 @@ class SQLTableStore(BaseTableStore):
 @SQLTableStore.register_table()
 class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @classmethod
-    def can_materialise(cls, type_) -> bool:
+    def can_materialize(cls, type_) -> bool:
         return issubclass(type_, sa.sql.Select)
 
     @classmethod
@@ -269,8 +286,8 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         return type_ == sa.Table
 
     @classmethod
-    def materialise(cls, store, table: Table[sa.sql.Select], stage_name):
-        prefect.context.logger.info(f"Performing CREATE TABLE AS SELECT ({table})")
+    def materialize(cls, store, table: Table[sa.sql.Select], stage_name):
+        store.logger.info(f"Performing CREATE TABLE AS SELECT ({table})")
         with store.engine.connect() as conn:
             conn.execute(CreateTableAsSelect(table.name, stage_name, table.obj))
 
@@ -291,7 +308,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 @SQLTableStore.register_table(pd)
 class PandasTableHook(TableHook[SQLTableStore]):
     @classmethod
-    def can_materialise(cls, type_) -> bool:
+    def can_materialize(cls, type_) -> bool:
         return issubclass(type_, pd.DataFrame)
 
     @classmethod
@@ -299,7 +316,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         return type_ == pd.DataFrame
 
     @classmethod
-    def materialise(cls, store, table: Table[pd.DataFrame], stage_name):
+    def materialize(cls, store, table: Table[pd.DataFrame], stage_name):
         table.obj.to_sql(
             table.name,
             store.engine,
@@ -330,7 +347,7 @@ except ImportError as e:
 @SQLTableStore.register_table(pdt)
 class PydiverseTransformTableHook(TableHook[SQLTableStore]):
     @classmethod
-    def can_materialise(cls, type_) -> bool:
+    def can_materialize(cls, type_) -> bool:
         return issubclass(type_, pdt.Table)
 
     @classmethod
@@ -341,7 +358,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         return issubclass(type_, (PandasTableImpl, SQLTableImpl))
 
     @classmethod
-    def materialise(cls, store, table: Table[pdt.Table], stage_name):
+    def materialize(cls, store, table: Table[pdt.Table], stage_name):
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
 
@@ -350,10 +367,10 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             from pydiverse.transform.core.verbs import collect
 
             table.obj = t >> collect()
-            return PandasTableHook.materialise(store, table, stage_name)
+            return PandasTableHook.materialize(store, table, stage_name)
         if isinstance(t._impl, SQLTableImpl):
             table.obj = t._impl.build_select()
-            return SQLAlchemyTableHook.materialise(store, table, stage_name)
+            return SQLAlchemyTableHook.materialize(store, table, stage_name)
         raise NotImplementedError
 
     @classmethod

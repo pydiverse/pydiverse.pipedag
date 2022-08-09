@@ -1,12 +1,10 @@
-from . import backend, config
-from .core.container import Blob, Table
-from .core.materialise import materialise
-from .core.stage import Stage
+from pydiverse.pipedag.core import Flow, Stage, Task
+from pydiverse.pipedag.materialize import Blob, Table, materialize
 
 __all__ = [
-    "config",
-    "materialise",
+    "Blob",
+    "Flow",
     "Stage",
     "Table",
-    "Blob",
+    "materialize",
 ]

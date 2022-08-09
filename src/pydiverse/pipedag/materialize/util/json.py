@@ -1,14 +1,14 @@
 """Utilities for JSON to support PipeDAG objects
 
-PipeDAG objects get serialised as JSON objects with a special `_pipedag_type_`
+PipeDAG objects get serialized as JSON objects with a special `_pipedag_type_`
 key to identify them when decoding. The associated value encodes the
 type of the object.
 """
 
 from __future__ import annotations
 
-import pydiverse.pipedag
-from pydiverse.pipedag.core import Blob, Table
+from pydiverse.pipedag.context import RunContext
+from pydiverse.pipedag.materialize.container import Blob, Table
 
 PIPEDAG_TYPE = "_pipedag_type_"
 PIPEDAG_TYPE_TABLE = "table"
@@ -39,16 +39,19 @@ def json_object_hook(d: dict):
     """Decode json with `Table` and `Blob` objects"""
     pipedag_type = d.get(PIPEDAG_TYPE)
     if pipedag_type:
+        run_context = RunContext.get()
+        stages = run_context.flow.stages
+
         if pipedag_type == PIPEDAG_TYPE_TABLE:
             return Table(
                 name=d["name"],
-                stage=pydiverse.pipedag.config.store.stages[d["stage"]],
+                stage=stages[d["stage"]],
                 cache_key=d["cache_key"],
             )
         elif pipedag_type == PIPEDAG_TYPE_BLOB:
             return Blob(
                 name=d["name"],
-                stage=pydiverse.pipedag.config.store.stages[d["stage"]],
+                stage=stages[d["stage"]],
                 cache_key=d["cache_key"],
             )
         else:

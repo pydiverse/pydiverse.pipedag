@@ -2,16 +2,12 @@ from __future__ import annotations
 
 import pandas as pd
 import sqlalchemy as sa
-from prefect import Flow
 
-from pydiverse.pipedag import Blob, Stage, Table, materialise
-
-# noinspection PyUnresolvedReferences
-from .util import setup_pipedag
+from pydiverse.pipedag import Blob, Flow, Stage, Table, materialize
 
 
 def test_simple_flow():
-    @materialise(nout=2, version="1")
+    @materialize(nout=2, version="1")
     def inputs():
         dfA = pd.DataFrame(
             {
@@ -32,20 +28,20 @@ def test_simple_flow():
         time.sleep(1)
         return Table(dfA, "dfA"), Table(dfB, "dfA_%%")
 
-    @materialise(input_type=pd.DataFrame)
+    @materialize(input_type=pd.DataFrame)
     def double_values(df: pd.DataFrame):
         return Table(df.transform(lambda x: x * 2))
 
-    @materialise(input_type=sa.Table, lazy=True)
+    @materialize(input_type=sa.Table, lazy=True)
     def join_on_a(left: sa.Table, right: sa.Table):
         return Table(left.select().join(right, left.c.a == right.c.a))
 
-    @materialise(input_type=pd.DataFrame)
+    @materialize(input_type=pd.DataFrame)
     def list_arg(x: list[pd.DataFrame]):
         assert isinstance(x[0], pd.DataFrame)
         return Blob(x)
 
-    @materialise()
+    @materialize()
     def blob_task(x, y):
         return Blob(x), Blob(y)
 
@@ -67,4 +63,8 @@ def test_simple_flow():
             v = blob_task(v, v)
 
     result = flow.run()
-    assert result.is_successful()
+    assert result.successful
+
+
+if __name__ == "__main__":
+    test_simple_flow()
