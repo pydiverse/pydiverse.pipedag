@@ -7,11 +7,9 @@ import threading
 from collections import defaultdict
 from typing import Any, Callable, Type
 
-import prefect
-
 import pydiverse.pipedag
 from pydiverse.pipedag._typing import CallableT
-from pydiverse.pipedag.core.stage import stage_ref_counter_handler
+from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import CacheError, FlowError
 from pydiverse.pipedag.util import deepmutate
 
@@ -35,7 +33,7 @@ def materialise(**kwargs):
     return wrapper
 
 
-class MaterialisingTask(prefect.Task):
+class MaterialisingTask(Task):
     """Task whose outputs get materialised
 
     All the values a materialising task returns get written to the appropriate
@@ -80,26 +78,12 @@ class MaterialisingTask(prefect.Task):
         input_type: type = None,
         version: str = None,
         lazy: bool = False,
-        **kwargs: Any,
+        nout: int = None,
     ):
-        if not callable(fn):
-            raise TypeError("`fn` must be callable")
-
-        # Set the Prefect name from the function
-        if name is None:
-            name = getattr(fn, "__name__", type(self).__name__)
-        self.original_name = name
-
-        # Run / Signature Handling
-        prefect.core.task._validate_run_signature(fn)
-
-        self.run = lambda: self.run()
+        self.original_fn = fn
         self.wrapped_fn = MaterialisationWrapper(fn)
 
-        functools.update_wrapper(self.run, fn)
-        functools.update_wrapper(self, fn)
-
-        super().__init__(name=name, **kwargs)
+        super().__init__(fn, name=name, nout=nout)
 
         self.input_type = input_type
         self.version = version
@@ -109,48 +93,8 @@ class MaterialisingTask(prefect.Task):
         self.upstream_stages = None
         self.cache_key = None
 
-        self.state_handlers.append(stage_ref_counter_handler)
-        self.state_handlers.append(self.wrapped_fn.task_state_handler)
-
-    def run(self) -> None:
-        # This is just a stub.
-        # As soon as this object called, this run method gets replaced with
-        # the actual implementation.
-        raise NotImplementedError
-
-    def __call__(self, *args, **kwargs):
-        new: MaterialisingTask = super().__call__(*args, **kwargs)  # type: ignore
-        new._update_new_task()
-        return new
-
-    def map(self, *args, **kwargs):
-        new: MaterialisingTask = super().map(*args, **kwargs)  # type: ignore
-        new._update_new_task()
-        return new
-
-    def _update_new_task(self):
-        """
-        Both `__call__` and `map` create new instances of the Task. This
-        method is used to modify those copies, add relevant metadata, and
-        add them to the stage in which they were created.
-        """
-
-        self.stage = prefect.context.get("pipedag_stage")
-        self.name = f"{self.original_name}({self.stage.name})"
-        if self.stage is None:
-            raise FlowError(
-                "Stage missing for materialised task. Materialised tasks must "
-                "be used inside a stage block."
-            )
-
-        # Create run method
-        self.run = lambda *args, **kwargs: self.wrapped_fn(
-            *args, **kwargs, _pipedag_task_=self
-        )
-        functools.update_wrapper(self.run, self.wrapped_fn)
-
-        # Add task to stage
-        self.stage.add_task(self)
+        # self.state_handlers.append(stage_ref_counter_handler)
+        # self.state_handlers.append(self.wrapped_fn.task_state_handler)
 
     def _incr_stage_ref_count(self, by: int = 1):
         """

@@ -2,17 +2,125 @@ from __future__ import annotations
 
 import contextlib
 import threading
-from typing import Callable, Iterator
+from typing import TYPE_CHECKING, Callable, Iterator
 
 import prefect
 
 import pydiverse.pipedag
-from pydiverse.pipedag.core import materialise
+from pydiverse.pipedag.context import DAGContext
+from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import StageError
 from pydiverse.pipedag.util import normalise_name
 
+if TYPE_CHECKING:
+    from pydiverse.pipedag.core.flow import Flow
+
 
 class Stage:
+    def __init__(self, name: str):
+        self._name = normalise_name(name)
+
+        self.tasks: list[Task] = []
+        self.commit_task: CommitStageTask = None  # type: ignore
+        self.outer_stage: Stage | None = None
+
+        # Reference Counting
+        self.__lock = threading.Lock()
+        self.__ref_count = 0
+        self.__ref_count_free_handler: Callable[[Stage], None] | None = None
+
+    @property
+    def name(self):
+        return self._name
+
+    def __repr__(self):
+        return f"<Stage: {self.name}>"
+
+    def __enter__(self):
+        outer_ctx = DAGContext.get()
+        outer_ctx.flow.add_stage(self)
+
+        if outer_ctx.stage is not None:
+            self.outer_stage = outer_ctx.stage
+
+        self._ctx = DAGContext(
+            flow=outer_ctx.flow,
+            stage=self,
+        )
+        self._ctx.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.commit_task = CommitStageTask(self, self._ctx.flow)
+        self._ctx.__exit__()
+
+    def is_inner(self, other: Stage):
+        outer = self.outer_stage
+        while outer is not None:
+            if outer == other:
+                return True
+            outer = outer.outer_stage
+        return False
+
+    def prepare_for_run(self):
+        # Reset reference counter
+        if self.__ref_count != 0 and self.__ref_count_free_handler is not None:
+            self.__ref_count = 0
+            self.__ref_count_free_handler(self)
+
+        # Increase reference counter
+        for task in self.tasks:
+            task.prepare_for_run()
+        self.commit_task.prepare_for_run()
+
+    # Reference Counting
+
+    @property
+    def ref_count(self):
+        """The current reference counter value"""
+        with self.__lock:
+            return self.__ref_count
+
+    def incr_ref_count(self, by: int = 1):
+        with self.__lock:
+            self.__ref_count += by
+            print("----------------------------------", self, self.__ref_count)
+
+    def decr_ref_count(self, by: int = 1):
+        with self.__lock:
+            self.__ref_count -= by
+            print("----------------------------------", self, self.__ref_count)
+            assert self.__ref_count >= 0
+
+            if self.__ref_count == 0 and callable(self.__ref_count_free_handler):
+                self.__ref_count_free_handler(self)
+
+    def set_ref_count_free_handler(self, handler: Callable[[Stage], None] | None):
+        assert callable(handler) or handler is None
+        with self.__lock:
+            self.__ref_count_free_handler = handler
+
+
+class CommitStageTask(Task):
+    def __init__(self, stage: Stage, flow: Flow):
+        super().__init__(
+            name=f"Commit '{stage.name}'",
+            fn=self.fn,
+        )
+
+        self.stage = stage
+        self.flow = flow
+        self.upstream_stages = {stage}
+
+        self._bound_args = self._signature.bind()
+
+    def fn(self):
+        print(f"Committing Stage '{self.stage.name}'")
+        # self.logger.info("Committing stage")
+        # pydiverse.pipedag.config.store.commit_stage(self.stage)
+
+
+class StageX:
     """The Stage class is used group a collection of related tasks
 
     The main purpose of a Stage is to allow for a transactionality mechanism.
@@ -83,6 +191,8 @@ class Stage:
         self.__ref_count_free_handler = None
 
         # Tasks
+        from pydiverse.pipedag.core import materialise
+
         self.task = StageCommitTask(self)
         self.materialising_tasks: list[materialise.MaterialisingTask] = []
 
@@ -134,6 +244,8 @@ class Stage:
 
         Creates missing up- and downstream dependencies for StageCommitTask.
         """
+
+        from pydiverse.pipedag.core import materialise
 
         upstream_edges = self.flow.all_upstream_edges()
         downstream_edges = self.flow.all_downstream_edges()
@@ -198,8 +310,10 @@ class Stage:
         # Restore context
         prefect.context.pipedag_stage = self._enter_stage
 
-    def add_task(self, task: materialise.MaterialisingTask):
+    def add_task(self, task):
         """Add a MaterialisingTask to the Stage"""
+        from pydiverse.pipedag.core import materialise
+
         assert isinstance(task, materialise.MaterialisingTask)
         self.materialising_tasks.append(task)
 
@@ -215,28 +329,6 @@ class Stage:
             return self.name
         else:
             return self.transaction_name
-
-    @property
-    def did_commit(self) -> bool:
-        with self.__lock:
-            return self.__did_commit
-
-    @contextlib.contextmanager
-    def commit_context(self):
-        """Context manager to update the `did_swap` property
-
-        When the backend commits a stage, this must be done inside
-        a with statement using this context manager. This ensures that
-        a stage never gets committed twice (in case of a race condition).
-        """
-        with self.__lock:
-            if self.__did_commit:
-                raise StageError(f"Stage {self.name} has already been committed.")
-
-            try:
-                yield self
-            finally:
-                self.__did_commit = True
 
     @property
     def _ref_count(self):
@@ -262,7 +354,7 @@ class Stage:
             self.__ref_count_free_handler = handler
 
 
-class StageCommitTask(prefect.Task):
+class StageCommitTaskX(prefect.Task):
     """Commits a stage once all materialising task have finished successfully"""
 
     def __init__(self, stage: Stage):
@@ -281,32 +373,3 @@ class StageCommitTask(prefect.Task):
 
     def _decr_stage_ref_count(self, by: int = 1):
         self.stage._decr_ref_count(by)
-
-
-def stage_ref_counter_handler(task, old_state, new_state):
-    """Prefect Task state handler to update the stage's reference counter
-
-    For internal use only;
-    Decreases the reference counters of all stages associated with a task
-    by one once the task has finished running.
-
-    Requires the task to implement the following methods:
-    ::
-        task._incr_stage_ref_count(by: int = 1)
-        task._decr_stage_ref_count(by: int = 1)
-    """
-
-    if new_state.is_mapped():
-        # Is mapping task -> Increment reference counter by the number
-        # of child tasks.
-        task._incr_stage_ref_count(new_state.n_map_states)
-
-    if new_state.is_failed():
-        run_count = prefect.context.get("task_run_count", 0)
-        if run_count <= task.max_retries:
-            # Will retry -> Don't decrement ref counter
-            return
-
-    if new_state.is_finished():
-        # Did finish task and won't retry -> Decrement ref counter
-        task._decr_stage_ref_count()

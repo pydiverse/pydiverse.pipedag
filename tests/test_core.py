@@ -4,10 +4,9 @@ import datetime
 import time
 
 import pytest
-from prefect import Flow
 from pytest_mock import MockerFixture
 
-from pydiverse.pipedag import Stage, materialise
+from pydiverse.pipedag import Flow, Stage, materialise
 
 # noinspection PyUnresolvedReferences
 from tests.util import setup_pipedag
@@ -47,14 +46,6 @@ def m_raise(x, r: bool):
     return x
 
 
-@materialise(max_retries=3, retry_delay=datetime.timedelta(seconds=0.1))
-def m_raise_retry(x, r: bool):
-    time.sleep(0.1)
-    if r:
-        raise Exception
-    return x
-
-
 def m_assert(condition):
     @materialise(lazy=True)
     def _m_assert(x):
@@ -70,7 +61,7 @@ def test_stage_attach_tasks():
             task_1 = m_1()
             task_2 = m_2()
 
-    assert s.materialising_tasks == [task_1, task_2]
+    assert s.tasks == [task_1, task_2]
     assert task_1.stage is s
     assert task_2.stage is s
     assert task_1.upstream_stages == []
@@ -86,13 +77,13 @@ def test_nested_stage_attach_tasks():
                 task_2_inner = m_2()
             task_2_outer = m_2()
 
-    assert outer.materialising_tasks == [task_1_outer, task_2_outer]
+    assert outer.tasks == [task_1_outer, task_2_outer]
     assert task_1_outer.stage is outer
     assert task_2_outer.stage is outer
     assert task_1_inner.upstream_stages == []
     assert task_2_inner.upstream_stages == []
 
-    assert inner.materialising_tasks == [task_1_inner, task_2_inner]
+    assert inner.tasks == [task_1_inner, task_2_inner]
     assert task_1_inner.stage is inner
     assert task_2_inner.stage is inner
     assert task_1_inner.upstream_stages == []
