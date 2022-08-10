@@ -11,14 +11,14 @@ from typing import Callable, ContextManager
 
 import prefect.utilities.logging
 
-from pydiverse.pipedag import backend, config
+from pydiverse.pipedag import Blob, Stage, Table, backend, config
 from pydiverse.pipedag._typing import Materialisable
 from pydiverse.pipedag.backend.lock import LockState
 from pydiverse.pipedag.backend.metadata import TaskMetadata
 from pydiverse.pipedag.backend.util import compute_cache_key
 from pydiverse.pipedag.backend.util import json as json_util
-from pydiverse.pipedag.core import Blob, MaterialisingTask, Stage, Table
 from pydiverse.pipedag.errors import DuplicateNameError, LockError, StageError
+from pydiverse.pipedag.materialise.core import MaterialisingTask
 from pydiverse.pipedag.util import deepmutate
 
 

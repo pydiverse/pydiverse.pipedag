@@ -6,11 +6,12 @@ from typing import Any, Generic
 import prefect
 from typing_extensions import Self
 
+from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag._typing import StoreT, T
 from pydiverse.pipedag.backend.metadata import LazyTableMetadata, TaskMetadata
 from pydiverse.pipedag.backend.util import compute_cache_key
-from pydiverse.pipedag.core import MaterialisingTask, Stage, Table
 from pydiverse.pipedag.errors import CacheError
+from pydiverse.pipedag.materialise.core import MaterialisingTask
 from pydiverse.pipedag.util import requires
 
 
@@ -51,7 +52,7 @@ class BaseTableStore(metaclass=_TableStoreMeta):
     To implement the stage transaction and commit mechanism, a technique
     called schema swapping is used:
 
-    All outputs from materializing tasks get materialized into a temporary
+    All outputs from materialising tasks get materialised into a temporary
     empty schema (`stage.transaction_name`) and only if all tasks have
     finished running *successfully* you swap the 'base schema' (original stage,
     or cache) with the 'transaction schema'. This is usually done by renaming

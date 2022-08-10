@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Generic
+from typing import TYPE_CHECKING, Generic
 
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.util import normalise_name
@@ -54,7 +54,7 @@ class Table(Generic[T]):
         self._name = normalise_name(value)
 
 
-class Blob:
+class Blob(Generic[T]):
     """Blob (binary large object) container
 
     Used to wrap arbitrary python objects that get returned from materialising
@@ -68,7 +68,7 @@ class Blob:
 
     def __init__(
         self,
-        obj: Any = None,
+        obj: T = None,
         name: str = None,
         stage: Stage = None,
         cache_key: str = None,

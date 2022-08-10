@@ -1,4 +1,6 @@
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 import prefect
 from packaging.version import parse as parse_version
@@ -6,9 +8,10 @@ from packaging.version import parse as parse_version
 if parse_version(prefect.__version__) >= parse_version("2.0"):
     raise ImportError(f"Requires prefect 1.x (found {prefect.__version__}).")
 
-from pydiverse.pipedag.core.flow import Flow as PPDFlow
-from pydiverse.pipedag.core.task import Task as PPDTask
 from pydiverse.pipedag.engines.base import Engine
+
+if TYPE_CHECKING:
+    from pydiverse.pipedag.core import Flow, Task
 
 
 class PrefectOneEngine(Engine):
@@ -18,13 +21,14 @@ class PrefectOneEngine(Engine):
     ):
         self.flow_kwargs = flow_kwargs or {}
 
-    def construct_workflow(self, f: PPDFlow):
-        g = f.build_graph()
+    def construct_workflow(self, f: Flow):
+        g = f.explicit_graph
+        assert g is not None
 
         flow = prefect.Flow(f.name, **self.flow_kwargs)
-        tasks: dict[PPDTask, prefect.Task] = {}
+        tasks: dict[Task, prefect.Task] = {}
 
-        for t in g.nodes:  # type: PPDTask
+        for t in g.nodes:  # type: Task
             task = prefect.task(
                 name=t.name,
                 state_handlers=[stage_ref_counter_handler],
@@ -47,7 +51,7 @@ def stage_ref_counter_handler(prefect_task, old_state, new_state):
     by one once the task has finished running.
     """
 
-    task: PPDTask = prefect_task._pipedag
+    task: Task = prefect_task._pipedag
 
     if new_state.is_mapped():
         # Is mapping task -> Increment reference counter by the number

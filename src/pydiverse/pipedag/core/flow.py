@@ -7,6 +7,7 @@ import networkx as nx
 import pydot
 
 from pydiverse.pipedag.context import DAGContext
+from pydiverse.pipedag.engines.prefect_one import PrefectOneEngine
 from pydiverse.pipedag.errors import FlowError
 
 if TYPE_CHECKING:
@@ -25,6 +26,7 @@ class Flow:
         self.tasks: list[Task] = []
 
         self.graph = nx.DiGraph()
+        self.explicit_graph: nx.DiGraph | None = None
 
     def __enter__(self):
         # Check that flows don't get nested
@@ -42,12 +44,20 @@ class Flow:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._ctx.__exit__()
-        # TODO: Build graph here...
+        self.explicit_graph = self.build_graph()
 
     def add_stage(self, stage: Stage):
+        assert stage not in self.stages
         self.stages.append(stage)
 
     def add_task(self, task: Task):
+        # TODO: This is not ideal, because self.stages is a list (slow).
+        #       In the future, this should be replaced with an ordered
+        #       set (implementation from pydiverse.transform). This might
+        #       require a shared library with common util code or
+        #       alternatively a submodule with shared code.
+        assert task.stage in self.stages
+
         self.tasks.append(task)
         self.graph.add_node(task)
 
@@ -109,8 +119,7 @@ class Flow:
                     "Either IPython isn't running or SVG aren't supported."
                 )
 
-            plt = SVG(dot.create_svg())  # type: ignore
-            display(plt)
+            display(SVG(dot.create_svg()))  # type: ignore
         except (ImportError, RuntimeError):
             import tempfile
             import webbrowser
@@ -155,17 +164,41 @@ class Flow:
                     continue
                 leaf_nodes[stage].append(task)
 
-        edges = self.graph.edges
+        # Add commit task downstream dependencies to leaf nodes
         for stage in self.stages:
             for leaf in leaf_nodes[stage]:
                 commit_task = commit_tasks[stage]
                 explicit_graph.add_edge(leaf, commit_task)
 
-                for _, child in edges(leaf):  # type: Task
-                    explicit_graph.add_edge(commit_task, child)
+        # Add commit task upstream dependencies
+        for task in self.tasks:
+            for parent, _ in self.graph.in_edges(task):  # type: Task
+                if parent.stage == task.stage:
+                    continue
+                if task.stage.is_inner(parent.stage):
+                    continue
+
+                commit_task = commit_tasks[parent.stage]
+                explicit_graph.add_edge(commit_task, task)
+
+        # Ensure inner stages get committed before outer stages
+        for stage in self.stages:
+            if stage.outer_stage is not None:
+                explicit_graph.add_edge(
+                    commit_tasks[stage], commit_tasks[stage.outer_stage]
+                )
 
         return explicit_graph
 
     def prepare_for_run(self):
         for stage in self.stages:
             stage.prepare_for_run()
+
+    def run(self):
+        self.prepare_for_run()
+
+        # TODO: Allow customization of backend
+        pf = PrefectOneEngine().construct_workflow(self)
+        res = pf.run()
+
+        return res

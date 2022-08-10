@@ -6,8 +6,7 @@ import shutil
 from abc import ABC, abstractmethod
 from typing import Any
 
-from pydiverse.pipedag import config
-from pydiverse.pipedag.core import Blob, Stage
+from pydiverse.pipedag import Blob, Stage, config
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.util import normalise_name
 

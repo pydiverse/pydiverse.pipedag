@@ -3,8 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Callable, Dict, List, Tuple, TypeVar, Union
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag.backend.table.base import BaseTableStore
-    from pydiverse.pipedag.core.container import Blob, Table
+    pass
 
 
 def decorator_hint(decorator: Callable) -> Callable:

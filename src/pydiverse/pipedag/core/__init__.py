@@ -1,12 +1,9 @@
-from .container import Blob, Table
 from .flow import Flow
-from .materialise import MaterialisingTask
 from .stage import Stage
+from .task import Task
 
 __all__ = [
-    "Blob",
     "Flow",
-    "MaterialisingTask",
     "Stage",
-    "Table",
+    "Task",
 ]

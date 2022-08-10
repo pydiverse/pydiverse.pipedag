@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import copy
-import functools
 import inspect
 import threading
 from collections import defaultdict
-from typing import Any, Callable, Type
+from typing import Callable
 
 import pydiverse.pipedag
 from pydiverse.pipedag._typing import CallableT
 from pydiverse.pipedag.core.task import Task
-from pydiverse.pipedag.errors import CacheError, FlowError
+from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.util import deepmutate
 
 

@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-import contextlib
 import threading
-from typing import TYPE_CHECKING, Callable, Iterator
-
-import prefect
+from typing import TYPE_CHECKING, Callable
 
 import pydiverse.pipedag
 from pydiverse.pipedag.context import DAGContext
 from pydiverse.pipedag.core.task import Task
-from pydiverse.pipedag.errors import StageError
 from pydiverse.pipedag.util import normalise_name
 
 if TYPE_CHECKING:
@@ -191,7 +187,7 @@ class StageX:
         self.__ref_count_free_handler = None
 
         # Tasks
-        from pydiverse.pipedag.core import materialise
+        from pydiverse.pipedag.materialise import core
 
         self.task = StageCommitTask(self)
         self.materialising_tasks: list[materialise.MaterialisingTask] = []
@@ -199,123 +195,6 @@ class StageX:
         # Make sure that  exists on database
         # This also ensures that this stage's name is unique
         pydiverse.pipedag.config.store.register_stage(self)
-
-    @property
-    def name(self):
-        return self._name
-
-    @name.setter
-    def name(self, value):
-        self._name = normalise_name(value)
-
-    def __repr__(self):
-        return f"<Stage: {self.name}>"
-
-    def __hash__(self):
-        return hash(self.name)
-
-    def __eq__(self, other):
-        if not isinstance(other, Stage):
-            return False
-        return self.name == other.name
-
-    def __enter__(self) -> Stage:
-        """Stage context manager - enter
-
-        Adds the current stage to the prefect context as 'pipedag_stage'
-        and adds the stage commit task to the flow.
-
-        All MaterialisingTasks that get defined in this context must call
-        this stage's `add_task` method.
-        """
-        self.flow: prefect.Flow = prefect.context.flow
-
-        # Store current stage in context
-        self._enter_stage = prefect.context.get("pipedag_stage")
-        prefect.context.pipedag_stage = self
-
-        # Add stage commit task to flow
-        self.flow.add_task(self.task)
-
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Stage context manager - exit
-
-        Creates missing up- and downstream dependencies for StageCommitTask.
-        """
-
-        from pydiverse.pipedag.core import materialise
-
-        upstream_edges = self.flow.all_upstream_edges()
-        downstream_edges = self.flow.all_downstream_edges()
-
-        def get_upstream_stages(task: prefect.Task) -> Iterator[Stage]:
-            """Get all direct stage dependencies of a task
-
-            The direct stage dependencies is the set of all stages
-            (excluding the stage of the task itself) that get visited
-            by a DFS on the upstream tasks that stops whenever it
-            encounters a materialising task.
-            In other words: it is the set of all upstream stages that can
-            be reached without going through another materialising task.
-
-            This recursive implementation seems to be better than a
-            classic DFS that also keeps track of which nodes it has already
-            visited. But because (almost) all inputs of a task are also
-            materialising tasks, this function should never recurse deep.
-
-            :param task: The task for which to get the upstream stages
-            :return: Yields all upstream stages
-            """
-            for up_task in [edge.upstream_task for edge in upstream_edges[task]]:
-                if isinstance(up_task, materialise.MaterialisingTask):
-                    if up_task.stage is not self:
-                        yield up_task.stage
-                    continue
-                yield from get_upstream_stages(up_task)
-
-        def needs_downstream(task: prefect.Task) -> bool:
-            """Determine if a task needs the downstream stage commit dependency
-
-            Only tasks that don't have other tasks of the same stage as
-            downstream dependencies need to add the stage commit task as
-            a downstream dependency.
-            """
-            for edge in downstream_edges[task]:
-                down_task = edge.downstream_task
-                if isinstance(down_task, materialise.MaterialisingTask):
-                    if down_task.stage is self:
-                        return False
-                    if not needs_downstream(down_task):
-                        return False
-            return True
-
-        # For each task, add the appropriate upstream stage commit dependencies
-        for task in self.materialising_tasks:
-            upstream_stages = list(get_upstream_stages(task))
-            task.upstream_stages = upstream_stages
-            for dependency in upstream_stages:
-                task.set_upstream(dependency.task)
-
-            # Must be done here, because _incr_stage_ref_count depends
-            # on the list of upstream stages
-            task._incr_stage_ref_count()
-
-        # Add downstream stage commit dependency
-        for task in self.materialising_tasks:
-            if needs_downstream(task):
-                task.set_downstream(self.task)
-
-        # Restore context
-        prefect.context.pipedag_stage = self._enter_stage
-
-    def add_task(self, task):
-        """Add a MaterialisingTask to the Stage"""
-        from pydiverse.pipedag.core import materialise
-
-        assert isinstance(task, materialise.MaterialisingTask)
-        self.materialising_tasks.append(task)
 
     @property
     def current_name(self) -> str:
@@ -329,47 +208,3 @@ class StageX:
             return self.name
         else:
             return self.transaction_name
-
-    @property
-    def _ref_count(self):
-        """The current reference counter value. For testing purposes only!"""
-        with self.__lock:
-            return self.__ref_count
-
-    def _incr_ref_count(self, by: int = 1):
-        with self.__lock:
-            self.__ref_count += by
-
-    def _decr_ref_count(self, by: int = 1):
-        with self.__lock:
-            self.__ref_count -= by
-            assert self.__ref_count >= 0
-
-            if self.__ref_count == 0 and callable(self.__ref_count_free_handler):
-                self.__ref_count_free_handler(self)
-
-    def _set_ref_count_free_handler(self, handler: Callable[[Stage], None]):
-        assert callable(handler) or handler is None
-        with self.__lock:
-            self.__ref_count_free_handler = handler
-
-
-class StageCommitTaskX(prefect.Task):
-    """Commits a stage once all materialising task have finished successfully"""
-
-    def __init__(self, stage: Stage):
-        super().__init__(name=f"StageCommitTask({stage.name})")
-        self.stage = stage
-
-        self._incr_stage_ref_count()
-        self.state_handlers.append(stage_ref_counter_handler)
-
-    def run(self):
-        self.logger.info("Committing stage")
-        pydiverse.pipedag.config.store.commit_stage(self.stage)
-
-    def _incr_stage_ref_count(self, by: int = 1):
-        self.stage._incr_ref_count(by)
-
-    def _decr_stage_ref_count(self, by: int = 1):
-        self.stage._decr_ref_count(by)

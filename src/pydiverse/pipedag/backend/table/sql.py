@@ -6,6 +6,7 @@ import pandas as pd
 import prefect
 import sqlalchemy as sa
 
+from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.metadata import LazyTableMetadata, TaskMetadata
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
 from pydiverse.pipedag.backend.table.util.sql_ddl import (
@@ -16,8 +17,8 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     DropTable,
     RenameSchema,
 )
-from pydiverse.pipedag.core import MaterialisingTask, Stage, Table
 from pydiverse.pipedag.errors import CacheError
+from pydiverse.pipedag.materialise.core import MaterialisingTask
 
 
 class SQLTableStore(BaseTableStore):

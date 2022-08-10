@@ -35,11 +35,18 @@ class Task:
         self.flow: Flow = None  # type: ignore
         self.stage: Stage = None  # type: ignore
         self.upstream_stages: list[Stage] = None  # type: ignore
+        self.input_tasks: list[Task] = None  # type: ignore
 
         self._signature = inspect.signature(fn)
         self._bound_args: inspect.BoundArguments = None  # type: ignore
 
         self.value = None
+
+    def __repr__(self):
+        return f"<Task '{self.name}' {hex(id(self))}>"
+
+    def __hash__(self):
+        return id(self)
 
     def __getitem__(self, item):
         return TaskGetItem(self, self, item)
@@ -50,12 +57,9 @@ class Task:
         for i in range(self.nout):
             return TaskGetItem(self, self, i)
 
-    def __hash__(self):
-        return id(self)
-
-    def __call__(self, *args, **kwargs):
+    def __call__(self_, *args, **kwargs):
         """Do the wiring"""
-        new = copy.copy(self)
+        new = copy.copy(self_)
 
         ctx = DAGContext.get()
         new.flow = ctx.flow
@@ -66,9 +70,22 @@ class Task:
         new.flow.add_task(new)
         new.stage.tasks.append(new)
 
-        input_tasks = new.get_input_tasks(new._bound_args.args, new._bound_args.kwargs)
+        # Compute input tasks
+        new.input_tasks = []
+
+        def mutator(x):
+            if isinstance(x, Task):
+                new.input_tasks.append(x)
+            elif isinstance(x, TaskGetItem):
+                new.input_tasks.append(x.task)
+            return x
+
+        deepmutate(new._bound_args.args, mutator)
+        deepmutate(new._bound_args.kwargs, mutator)
+
+        # Add upstream edges
         upstream_stages_set = set()
-        for input_task in input_tasks:
+        for input_task in new.input_tasks:
             new.flow.add_edge(input_task, new)
             upstream_stages_set.add(input_task.stage)
 
@@ -127,7 +144,7 @@ class Task:
 
 class TaskGetItem:
     """
-    Wrapper for
+    Wrapper __getitem__ on tasks
     """
 
     def __init__(self, task: Task, parent: Task | TaskGetItem, item: Any):
