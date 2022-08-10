@@ -8,7 +8,7 @@ import pydot
 
 from pydiverse.pipedag.context import DAGContext
 from pydiverse.pipedag.engines.prefect_one import PrefectOneEngine
-from pydiverse.pipedag.errors import FlowError
+from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core.stage import CommitStageTask, Stage
@@ -27,6 +27,8 @@ class Flow:
 
         self.graph = nx.DiGraph()
         self.explicit_graph: nx.DiGraph | None = None
+
+        self._stage_names: set[str] = set()
 
     def __enter__(self):
         # Check that flows don't get nested
@@ -47,7 +49,10 @@ class Flow:
         self.explicit_graph = self.build_graph()
 
     def add_stage(self, stage: Stage):
-        assert stage not in self.stages
+        if stage.name in self._stage_names:
+            raise DuplicateNameError(f"Stage with name '{stage.name}' already exists.")
+        self._stage_names.add(stage.name)
+
         self.stages.append(stage)
 
     def add_task(self, task: Task):

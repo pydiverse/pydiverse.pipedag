@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Callable
 import pydiverse.pipedag
 from pydiverse.pipedag.context import DAGContext
 from pydiverse.pipedag.core.task import Task
+from pydiverse.pipedag.errors import StageError
 from pydiverse.pipedag.util import normalise_name
 
 if TYPE_CHECKING:
@@ -20,10 +21,11 @@ class Stage:
         self.commit_task: CommitStageTask = None  # type: ignore
         self.outer_stage: Stage | None = None
 
-        # Reference Counting
+        # Reference Counting & Co
         self.__lock = threading.Lock()
         self.__ref_count = 0
         self.__ref_count_free_handler: Callable[[Stage], None] | None = None
+        self.__did_enter = False
 
     @property
     def name(self):
@@ -33,6 +35,14 @@ class Stage:
         return f"<Stage: {self.name}>"
 
     def __enter__(self):
+        with self.__lock:
+            if self.__did_enter:
+                raise StageError(
+                    f"Stage '{self.name}' has already been entered."
+                    " Can't reuse the same stage twice."
+                )
+            self.__did_enter = True
+
         outer_ctx = DAGContext.get()
         outer_ctx.flow.add_stage(self)
 

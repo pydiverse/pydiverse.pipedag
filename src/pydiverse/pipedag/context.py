@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextvars import ContextVar, Token
 from typing import TYPE_CHECKING, ClassVar
 
-from attrs import define, field
+from attrs import define
 
 from pydiverse.pipedag._typing import T
 

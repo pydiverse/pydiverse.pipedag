@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import time
 
+import pytest
 from pytest_mock import MockerFixture
 
 from pydiverse.pipedag import Flow, Stage, materialise
+from pydiverse.pipedag.errors import DuplicateNameError, StageError
 
 # noinspection PyUnresolvedReferences
 from tests.util import setup_pipedag
@@ -212,3 +214,42 @@ def test_materialise_memo_with_failures():
             t_map = m_noop([t_1, t_2, t_3, t_4, t_5, t_6, t_7, t_8])
 
     assert f.run().is_failed()
+
+
+def test_duplicate_stage_name():
+    with Flow("flow 1"):
+        with Stage("stage"):
+            # Nested
+            with pytest.raises(DuplicateNameError):
+                with Stage("stage"):
+                    ...
+
+        # Consecutive
+        with pytest.raises(DuplicateNameError):
+            with Stage("stage"):
+                ...
+
+    # Should be able to reuse name in different flow
+    with Flow("flow 2"):
+        with Stage("stage"):
+            ...
+
+
+def test_reuse_stage():
+    with Flow("flow 1"):
+        with Stage("stage") as s:
+            # Nested
+            with pytest.raises(StageError):
+                with s:
+                    ...
+
+        # Consecutive
+        with pytest.raises(StageError):
+            with s:
+                ...
+
+    with Flow("flow 2"):
+        # Different flow
+        with pytest.raises(StageError):
+            with s:
+                ...
