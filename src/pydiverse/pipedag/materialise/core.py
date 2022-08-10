@@ -4,6 +4,7 @@ import copy
 import inspect
 import threading
 from collections import defaultdict
+from functools import partial
 from typing import Callable
 
 import pydiverse.pipedag
@@ -13,23 +14,33 @@ from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.util import deepmutate
 
 
-def materialise(**kwargs):
-    """Decorator to create MaterialisingTasks from functions
+def materialise(
+    fn: CallableT = None,
+    *,
+    name: str = None,
+    input_type: type = None,
+    version: str = None,
+    lazy: bool = False,
+    nout: int = 1,
+) -> CallableT | MaterialisingTask:
+    if fn is None:
+        return partial(
+            materialise,
+            name=name,
+            input_type=input_type,
+            version=version,
+            lazy=lazy,
+            nout=nout,
+        )
 
-    For a list of arguments, check out the `MaterialisingTask` documentation.
-
-    Usage example:
-    ::
-        @materialise(input_type = pd.DataFrame, version = "1.0")
-        def multiply_df(df: pd.DataFrame, by: float):
-            return Table(df * by)
-
-    """
-
-    def wrapper(fn: CallableT) -> CallableT:
-        return MaterialisingTask(fn, **kwargs)
-
-    return wrapper
+    return MaterialisingTask(
+        fn,
+        name=name,
+        input_type=input_type,
+        version=version,
+        lazy=lazy,
+        nout=nout,
+    )
 
 
 class MaterialisingTask(Task):
@@ -77,12 +88,16 @@ class MaterialisingTask(Task):
         input_type: type = None,
         version: str = None,
         lazy: bool = False,
-        nout: int = None,
+        nout: int = 1,
     ):
         self.original_fn = fn
         self.wrapped_fn = MaterialisationWrapper(fn)
 
-        super().__init__(fn, name=name, nout=nout)
+        super().__init__(
+            fn,
+            name=name,
+            nout=nout,
+        )
 
         self.input_type = input_type
         self.version = version
