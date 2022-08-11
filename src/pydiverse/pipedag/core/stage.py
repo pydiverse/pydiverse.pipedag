@@ -3,7 +3,8 @@ from __future__ import annotations
 import threading
 from typing import TYPE_CHECKING, Callable
 
-import pydiverse.pipedag
+from attrs import frozen
+
 from pydiverse.pipedag.context import DAGContext
 from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import StageError
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
 class Stage:
     def __init__(self, name: str):
         self._name = normalise_name(name)
+        self._transaction_name = f"{self._name}__tmp"
 
         self.tasks: list[Task] = []
         self.commit_task: CommitStageTask = None  # type: ignore
@@ -26,10 +28,33 @@ class Stage:
         self.__ref_count = 0
         self.__ref_count_free_handler: Callable[[Stage], None] | None = None
         self.__did_enter = False
+        self.__did_commit = False
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self._name
+
+    @property
+    def transaction_name(self) -> str:
+        return self._transaction_name
+
+    @property
+    def current_name(self) -> str:
+        """The name of the stage where the data currently lives
+
+        Before a task has been committed this is the transaction name,
+        after the commit it is the base name.
+        """
+
+        if self.did_commit:
+            return self.name
+        else:
+            return self.transaction_name
+
+    @property
+    def did_commit(self) -> bool:
+        with self.__lock:
+            return self.__did_commit
 
     def __repr__(self):
         return f"<Stage: {self.name}>"
@@ -69,6 +94,8 @@ class Stage:
         return False
 
     def prepare_for_run(self):
+        self.__did_commit = False
+
         # Reset reference counter
         if self.__ref_count != 0 and self.__ref_count_free_handler is not None:
             self.__ref_count = 0
@@ -107,11 +134,16 @@ class Stage:
             self.__ref_count_free_handler = handler
 
 
+@frozen
+class StageReference:
+    name: str
+
+
 class CommitStageTask(Task):
     def __init__(self, stage: Stage, flow: Flow):
         super().__init__(
-            name=f"Commit '{stage.name}'",
             fn=self.fn,
+            name=f"Commit '{stage.name}'",
         )
 
         self.stage = stage

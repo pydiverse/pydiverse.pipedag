@@ -18,7 +18,7 @@ def validate_dependencies(flow: Flow):
     assert nx.is_directed_acyclic_graph(g)
     assert nx.is_directed_acyclic_graph(expl_g)
 
-    stages = flow.stages
+    stages = flow.stages.values()
     tasks = flow.tasks
 
     # Check flow.graph is correct

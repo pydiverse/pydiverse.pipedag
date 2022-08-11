@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import pandas as pd
 import sqlalchemy as sa
-from prefect import Flow
 
-from pydiverse.pipedag import Blob, Stage, Table, materialise
+from pydiverse.pipedag import Blob, Flow, Stage, Table, materialise
 
 # noinspection PyUnresolvedReferences
 from .util import setup_pipedag

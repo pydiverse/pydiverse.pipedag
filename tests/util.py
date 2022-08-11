@@ -32,12 +32,6 @@ def setup_pipedag():
         lock=ZooKeeperLockManager(kazoo_client),
     )
 
-    yield
-
-    # Teardown
-    # -> Reset everything and release any locks still held
-    pdd.config.store._reset()
-
 
 @contextmanager
 def settings(**kwargs):

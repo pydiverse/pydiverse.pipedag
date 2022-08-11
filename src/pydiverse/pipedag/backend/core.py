@@ -17,6 +17,7 @@ from pydiverse.pipedag.backend.lock import LockState
 from pydiverse.pipedag.backend.metadata import TaskMetadata
 from pydiverse.pipedag.backend.util import compute_cache_key
 from pydiverse.pipedag.backend.util import json as json_util
+from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.errors import DuplicateNameError, LockError, StageError
 from pydiverse.pipedag.materialise.core import MaterialisingTask
 from pydiverse.pipedag.util import deepmutate
@@ -43,12 +44,6 @@ class PipeDAGStore:
         self.blob_store = blob
         self.lock_manager = lock
 
-        self.__lock = threading.RLock()
-        self.stages: dict[str, Stage] = dict()
-        self.created_stages: set[Stage] = set()
-        self.table_names: defaultdict[Stage, set[str]] = defaultdict(set)
-        self.blob_names: defaultdict[Stage, set[str]] = defaultdict(set)
-        self.run_id = uuid.uuid4().hex[:20]
         self.logger = prefect.utilities.logging.get_logger("pipeDAG")
 
         self.json_encoder = json.JSONEncoder(
@@ -97,25 +92,21 @@ class PipeDAGStore:
         Don't use this function directly. Instead, use `ensure_stage_is_ready`
         to prevent unnecessary locking.
         """
-        with self.__lock:
-            if stage in self.created_stages:
+        context = RunContext.get()
+        with context.lock:
+            if stage in context.created_stages:
                 raise StageError(f"Stage '{stage.name}' has already been created.")
-            if stage.name not in self.stages:
-                raise StageError(
-                    f"Can't create stage '{stage.name}' because it hasn't been"
-                    " registered."
-                )
-            self.created_stages.add(stage)
+            context.created_stages.add(stage)
 
-        # Lock the stage and then create it
-        self.acquire_stage_lock(stage)
-        self.table_store.init_stage(stage)
-        self.blob_store.init_stage(stage)
+            # Lock the stage and then create it
+            self.acquire_stage_lock(stage)
+            self.table_store.init_stage(stage)
+            self.blob_store.init_stage(stage)
 
-        # Once stage reference counter hits 0 (this means all tasks that
-        # have any task contained in the stage as an upstream dependency),
-        # we can release the stage lock.
-        stage._set_ref_count_free_handler(self.release_stage_lock)
+            # Once stage reference counter hits 0 (this means all tasks that
+            # have any task contained in the stage as an upstream dependency),
+            # we can release the stage lock.
+            stage.set_ref_count_free_handler(self.release_stage_lock)
 
     def ensure_stage_is_ready(self, stage: Stage):
         """Initializes a stage if it hasn't been created yet
@@ -123,8 +114,9 @@ class PipeDAGStore:
         This allows the creation of stages in a lazy way. This ensures
         that a stage only gets locked right before it is needed.
         """
-        with self.__lock:
-            if stage in self.created_stages:
+        context = RunContext.get()
+        with context.lock:
+            if stage in context.created_stages:
                 return
             self.init_stage(stage)
 
@@ -190,7 +182,9 @@ class PipeDAGStore:
         """
 
         stage = task.stage
-        if stage not in self.created_stages:
+        context = RunContext.get()
+
+        if stage not in context.created_stages:
             raise StageError(
                 f"Can't materialise because stage '{stage.name}' has not been created."
             )
@@ -222,7 +216,7 @@ class PipeDAGStore:
                 # - If the provided name ends with %%, perform name mangling
                 auto_suffix = f"{task.cache_key}_{next(tbl_id):04d}"
                 if x.name is None:
-                    x.name = task.original_name + "_" + auto_suffix
+                    x.name = task.name + "_" + auto_suffix
                 elif x.name.endswith("%%"):
                     x.name = x.name[:-2] + auto_suffix
 
@@ -257,11 +251,11 @@ class PipeDAGStore:
         # Metadata
         output_json = self.json_encode(m_value)
         metadata = TaskMetadata(
-            name=task.original_name,
+            name=task.name,
             stage=stage.name,
             version=task.version,
             timestamp=datetime.datetime.now(),
-            run_id=self.run_id,
+            run_id=context.run_id,
             cache_key=task.cache_key,
             output_json=output_json,
         )
@@ -289,14 +283,15 @@ class PipeDAGStore:
         stored_objects: list[Table | Blob] = []
 
         def name_checker(obj: Table | Blob):
-            if isinstance(obj, Table):
-                name_store = self.table_names
-            elif isinstance(obj, Blob):
-                name_store = self.blob_names
-            else:
-                raise TypeError
+            context = RunContext.get()
+            with context.lock:
+                if isinstance(obj, Table):
+                    name_store = context.table_names
+                elif isinstance(obj, Blob):
+                    name_store = context.blob_names
+                else:
+                    raise TypeError
 
-            with self.__lock:
                 if obj.name in name_store[obj.stage]:
                     raise DuplicateNameError(
                         f"{type(obj).__name__} with name '{obj.name}' already"
@@ -312,13 +307,14 @@ class PipeDAGStore:
             yield name_checker
         except Exception as e:
             # Clean up
-            with self.__lock:
+            context = RunContext.get()
+            with context.lock:
                 for obj in stored_objects:
                     if isinstance(obj, Table):
-                        self.table_names[obj.stage].remove(obj.name)
+                        context.table_names[obj.stage].remove(obj.name)
                         self.table_store.delete_table_from_transaction(obj)
                     elif isinstance(obj, Blob):
-                        self.blob_names[obj.stage].remove(obj.name)
+                        context.blob_names[obj.stage].remove(obj.name)
                         self.blob_store.delete_blob_from_transaction(obj)
                     else:
                         raise TypeError
@@ -348,7 +344,7 @@ class PipeDAGStore:
         """
         return compute_cache_key(
             "TASK",
-            task.original_name,
+            task.name,
             task.version or "None",
             input_json,
         )

@@ -5,7 +5,10 @@ import functools
 import inspect
 from typing import TYPE_CHECKING, Any, Callable
 
-from pydiverse.pipedag.context import DAGContext
+import structlog
+
+from pydiverse.pipedag.context import DAGContext, TaskContext
+from pydiverse.pipedag.errors import FlowError, StageError
 from pydiverse.pipedag.util import deepmutate
 
 if TYPE_CHECKING:
@@ -19,6 +22,7 @@ class Task:
         *,
         name: str = None,
         nout: int = None,
+        pass_task: bool = False,
     ):
         if not callable(fn):
             raise TypeError("`fn` must be callable")
@@ -29,8 +33,7 @@ class Task:
         self.fn = fn
         self.name = name
         self.nout = nout
-
-        functools.update_wrapper(self, self.fn)
+        self.pass_task = pass_task
 
         self.flow: Flow = None  # type: ignore
         self.stage: Stage = None  # type: ignore
@@ -39,6 +42,8 @@ class Task:
 
         self._signature = inspect.signature(fn)
         self._bound_args: inspect.BoundArguments = None  # type: ignore
+
+        self.logger = structlog.get_logger()
 
         self.value = None
 
@@ -55,13 +60,19 @@ class Task:
         if self.nout is None:
             raise ValueError("Can't iterate over task without specifying `nout`.")
         for i in range(self.nout):
-            return TaskGetItem(self, self, i)
+            yield TaskGetItem(self, self, i)
 
     def __call__(self_, *args, **kwargs):
         """Do the wiring"""
-        new = copy.copy(self_)
+        try:
+            ctx = DAGContext.get()
+        except LookupError:
+            raise FlowError("Can't call pipedag task outside of a flow.")
 
-        ctx = DAGContext.get()
+        if ctx.stage is None:
+            raise StageError("Can't call pipedag task outside of a stage.")
+
+        new = copy.copy(self_)
         new.flow = ctx.flow
         new.stage = ctx.stage
 
@@ -73,15 +84,15 @@ class Task:
         # Compute input tasks
         new.input_tasks = []
 
-        def mutator(x):
+        def visitor(x):
             if isinstance(x, Task):
                 new.input_tasks.append(x)
             elif isinstance(x, TaskGetItem):
                 new.input_tasks.append(x.task)
             return x
 
-        deepmutate(new._bound_args.args, mutator)
-        deepmutate(new._bound_args.kwargs, mutator)
+        deepmutate(new._bound_args.args, visitor)
+        deepmutate(new._bound_args.kwargs, visitor)
 
         # Add upstream edges
         upstream_stages_set = set()
@@ -107,7 +118,8 @@ class Task:
         args = deepmutate(args, task_result_mutator)
         kwargs = deepmutate(kwargs, task_result_mutator)
 
-        result = self.fn(*args, **kwargs)
+        with TaskContext(task=self):
+            result = self.fn(*args, **kwargs)
         self.value = result
 
         return result

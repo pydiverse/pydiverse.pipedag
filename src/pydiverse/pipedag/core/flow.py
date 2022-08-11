@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import networkx as nx
 import pydot
 
-from pydiverse.pipedag.context import DAGContext
+from pydiverse.pipedag.context import DAGContext, RunContext
 from pydiverse.pipedag.engines.prefect_one import PrefectOneEngine
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 
@@ -22,13 +22,11 @@ class Flow:
     ):
         self.name = name
 
-        self.stages: list[Stage] = []
+        self.stages: dict[str, Stage] = {}
         self.tasks: list[Task] = []
 
         self.graph = nx.DiGraph()
         self.explicit_graph: nx.DiGraph | None = None
-
-        self._stage_names: set[str] = set()
 
     def __enter__(self):
         # Check that flows don't get nested
@@ -49,19 +47,12 @@ class Flow:
         self.explicit_graph = self.build_graph()
 
     def add_stage(self, stage: Stage):
-        if stage.name in self._stage_names:
+        if stage.name in self.stages:
             raise DuplicateNameError(f"Stage with name '{stage.name}' already exists.")
-        self._stage_names.add(stage.name)
-
-        self.stages.append(stage)
+        self.stages[stage.name] = stage
 
     def add_task(self, task: Task):
-        # TODO: This is not ideal, because self.stages is a list (slow).
-        #       In the future, this should be replaced with an ordered
-        #       set (implementation from pydiverse.transform). This might
-        #       require a shared library with common util code or
-        #       alternatively a submodule with shared code.
-        assert task.stage in self.stages
+        assert self.stages[task.stage.name] is task.stage
 
         self.tasks.append(task)
         self.graph.add_node(task)
@@ -84,7 +75,7 @@ class Flow:
         subgraphs: dict[Stage, pydot.Subgraph] = {}
         nodes: dict[Task, pydot.Node] = {}
 
-        for stage in self.stages:
+        for stage in self.stages.values():
             s = pydot.Subgraph(
                 f"cluster_{stage.name}",
                 label=stage.name,
@@ -143,10 +134,11 @@ class Flow:
             raise FlowError("Graph is not a DAG")
 
         explicit_graph = self.graph.copy()
+        stages = self.stages.values()
 
         # Commit Tasks
         commit_tasks: dict[Stage, CommitStageTask] = {}
-        for stage in self.stages:
+        for stage in stages:
             commit_tasks[stage] = stage.commit_task
             explicit_graph.add_node(stage.commit_task)
 
@@ -156,13 +148,13 @@ class Flow:
         contained_tasks: defaultdict[Stage, list[Task]] = defaultdict(lambda: [])
         leaf_nodes: defaultdict[Stage, list[Task]] = defaultdict(lambda: [])
 
-        for stage in self.stages:
+        for stage in stages:
             s = stage
             while s is not None:
                 contained_tasks[s].extend(stage.tasks)
                 s = s.outer_stage
 
-        for stage in self.stages:
+        for stage in stages:
             subgraph = self.graph.subgraph(contained_tasks[stage])  # type: nx.DiGraph
             for task, degree in subgraph.out_degree:  # type: ignore
                 if degree != 0:
@@ -170,7 +162,7 @@ class Flow:
                 leaf_nodes[stage].append(task)
 
         # Add commit task downstream dependencies to leaf nodes
-        for stage in self.stages:
+        for stage in stages:
             for leaf in leaf_nodes[stage]:
                 commit_task = commit_tasks[stage]
                 explicit_graph.add_edge(leaf, commit_task)
@@ -187,7 +179,7 @@ class Flow:
                 explicit_graph.add_edge(commit_task, task)
 
         # Ensure inner stages get committed before outer stages
-        for stage in self.stages:
+        for stage in stages:
             if stage.outer_stage is not None:
                 explicit_graph.add_edge(
                     commit_tasks[stage], commit_tasks[stage.outer_stage]
@@ -196,14 +188,15 @@ class Flow:
         return explicit_graph
 
     def prepare_for_run(self):
-        for stage in self.stages:
+        for stage in self.stages.values():
             stage.prepare_for_run()
 
     def run(self):
-        self.prepare_for_run()
-
-        # TODO: Allow customization of backend
-        pf = PrefectOneEngine().construct_workflow(self)
-        res = pf.run()
+        with RunContext(flow=self):
+            self.prepare_for_run()
+            # TODO: Allow customization of backend
+            pf = PrefectOneEngine().construct_workflow(self)
+            # TODO: The store should start listening for reference counter hitting 0 here
+            res = pf.run()
 
         return res

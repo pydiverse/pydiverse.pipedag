@@ -6,7 +6,7 @@ import pytest
 from pytest_mock import MockerFixture
 
 from pydiverse.pipedag import Flow, Stage, materialise
-from pydiverse.pipedag.errors import DuplicateNameError, StageError
+from pydiverse.pipedag.errors import DuplicateNameError, FlowError, StageError
 
 # noinspection PyUnresolvedReferences
 from tests.util import setup_pipedag
@@ -253,3 +253,25 @@ def test_reuse_stage():
         with pytest.raises(StageError):
             with s:
                 ...
+
+
+def test_task_outside_flow():
+    with pytest.raises(FlowError):
+        task = m_1()
+
+
+def test_task_outside_stage():
+    with Flow("flow"):
+        with pytest.raises(StageError):
+            task = m_1()
+
+
+def test_reference_task_in_wrong_flow():
+    with Flow("flow 1"):
+        with Stage("stage"):
+            task = m_1()
+
+    with Flow("flow 2"):
+        with Stage("stage"):
+            with pytest.raises(FlowError):
+                bad_task = m_noop(task)

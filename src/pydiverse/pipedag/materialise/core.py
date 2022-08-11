@@ -1,17 +1,24 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import copy
+import functools
 import inspect
-import threading
 from collections import defaultdict
 from functools import partial
-from typing import Callable
+from threading import Condition, Lock
+from typing import TYPE_CHECKING, Any, Callable
 
 import pydiverse.pipedag
 from pydiverse.pipedag._typing import CallableT
+from pydiverse.pipedag.context import TaskContext
 from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.util import deepmutate
+
+if TYPE_CHECKING:
+    from pydiverse.pipedag import Stage
 
 
 def materialise(
@@ -90,49 +97,23 @@ class MaterialisingTask(Task):
         lazy: bool = False,
         nout: int = 1,
     ):
-        self.original_fn = fn
-        self.wrapped_fn = MaterialisationWrapper(fn)
-
         super().__init__(
-            fn,
+            MaterialisationWrapper(fn),
             name=name,
             nout=nout,
+            pass_task=True,
         )
 
         self.input_type = input_type
         self.version = version
         self.lazy = lazy
 
-        self.stage = None
-        self.upstream_stages = None
         self.cache_key = None
 
-        # self.state_handlers.append(stage_ref_counter_handler)
-        # self.state_handlers.append(self.wrapped_fn.task_state_handler)
-
-    def _incr_stage_ref_count(self, by: int = 1):
-        """
-        Private method required for stage reference counting:
-        `pydiverse.pipedag.core.stage.stage_ref_counter_handler`
-
-        Increments the reference count to the stage in which this task was
-        defined, and all stage that appear in its inputs.
-        """
-        self.stage._incr_ref_count(by)
-        for upstream_stage in self.upstream_stages:
-            upstream_stage._incr_ref_count(by)
-
-    def _decr_stage_ref_count(self, by: int = 1):
-        """
-        Private method required for stage reference counting:
-        `pydiverse.pipedag.core.stage.stage_ref_counter_handler`
-
-        Decrements the reference count to the stage in which this task was
-        defined, and all stage that appear in its inputs.
-        """
-        self.stage._decr_ref_count(by)
-        for upstream_stage in self.upstream_stages:
-            upstream_stage._decr_ref_count(by)
+    def prepare_for_run(self):
+        super().prepare_for_run()
+        self.cache_key = None
+        # self.fn.memo.clear()  # type: ignore
 
 
 class MaterialisationWrapper:
@@ -142,13 +123,16 @@ class MaterialisationWrapper:
     """
 
     def __init__(self, fn: Callable):
+        functools.update_wrapper(self, fn)
+
         self.fn = fn
         self.fn_signature = inspect.signature(fn)
 
-        self.__lock = threading.Lock()
-        self.memo = defaultdict(dict)
+        self.__lock = Lock()
+        self.memo: defaultdict[Stage, dict[str, Any]] = defaultdict(dict)
+        self.conditions: defaultdict[Stage, dict[str, Condition]] = defaultdict(dict)
 
-    def __call__(self, *args, _pipedag_task_: MaterialisingTask, **kwargs):
+    def __call__(self, *args, **kwargs):
         """Function wrapper / materialisation logic
 
         :param args: The arguments passed to the function
@@ -158,14 +142,13 @@ class MaterialisationWrapper:
         :return: A copy of what the original function returns annotated
             with some additional metadata.
         """
-        task = _pipedag_task_
-        store = pydiverse.pipedag.config.store
+
+        task = TaskContext.get().task
+        store = pydiverse.pipedag.config.store  # TODO: Probably get this from a context
         bound = self.fn_signature.bind(*args, **kwargs)
 
         if task is None:
             raise TypeError("Task can't be None.")
-        if task.stage is None:
-            raise TypeError("Task stage can't be None")
 
         # If this is the first task in this stage to be executed, ensure that
         # the stage has been initialized and locked.
@@ -181,10 +164,10 @@ class MaterialisationWrapper:
         with self.__lock:
             memo_result = self.memo[task.stage].get(cache_key, _nil)
             if memo_result is _nil:
-                self.memo[task.stage][cache_key] = threading.Condition()
+                self.memo[task.stage][cache_key] = Condition()
 
         if memo_result is not _nil:
-            if isinstance(memo_result, threading.Condition):
+            if isinstance(memo_result, Condition):
                 task.logger.info(
                     "Task is currently being run with the same inputs."
                     " Waiting for the other task to finish..."
@@ -195,7 +178,7 @@ class MaterialisationWrapper:
                     " Using memoized results."
                 )
 
-            while isinstance(memo_result, threading.Condition):
+            while isinstance(memo_result, Condition):
                 with memo_result:
                     if memo_result.wait(timeout=60):
                         task.logger.info("Other task finished. Using memoized result.")
@@ -222,7 +205,17 @@ class MaterialisationWrapper:
 
         # Not found in cache / lazy -> Evaluate Function
         args, kwargs = store.dematerialise_task_inputs(task, bound.args, bound.kwargs)
-        result = self.fn(*args, **kwargs)
+
+        try:
+            result = self.fn(*args, **kwargs)
+        except Exception as e:
+            # TODO: CLEAN UP............................................................
+            #       THIS HERE IS JUST AN EXPERIMENT ....................................
+            cond = self.memo[task.stage][cache_key]
+            with cond:
+                del self.memo[task.stage][cache_key]
+                cond.notify_all()
+            raise e
 
         # Materialise
         materialised_result = store.materialise_task(task, result)
@@ -230,11 +223,15 @@ class MaterialisationWrapper:
 
         return materialised_result
 
-    def store_in_memo(self, result, task, cache_key):
+    def get_memoized_result(self, task: Task, cache_key: str):
+        with self.__lock:
+            memo_result = self.memo[task.stage].get(cache_key, _nil)
+
+    def store_in_memo(self, result, task: Task, cache_key: str):
         with self.__lock:
             condition = self.memo[task.stage][cache_key]
-            self.memo[task.stage][cache_key] = result
             with condition:
+                self.memo[task.stage][cache_key] = result
                 condition.notify_all()
 
     def task_state_handler(self, task: MaterialisingTask, old_state, new_state):
@@ -244,7 +241,7 @@ class MaterialisationWrapper:
         if new_state.is_failed():
             with self.__lock:
                 memo_result = self.memo[task.stage].get(task.cache_key, _nil)
-                if isinstance(memo_result, threading.Condition):
+                if isinstance(memo_result, Condition):
                     with memo_result:
                         memo_result.notify_all()
                         self.memo[task.stage][task.cache_key] = _nil
