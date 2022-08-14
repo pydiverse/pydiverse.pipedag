@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING, Callable
 
 from attrs import frozen
 
-from pydiverse.pipedag.context import DAGContext
+from pydiverse.pipedag.context import DAGContext, RunContext
+from pydiverse.pipedag.context.run.base import StageState
 from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import StageError
 from pydiverse.pipedag.util import normalise_name
@@ -23,12 +24,11 @@ class Stage:
         self.commit_task: CommitStageTask = None  # type: ignore
         self.outer_stage: Stage | None = None
 
-        # Reference Counting & Co
-        self.__lock = threading.Lock()
-        self.__ref_count = 0
+        self.stage_id: int = None  # type: ignore
+
+        # TODO: Probably needs to be moved to the main process
         self.__ref_count_free_handler: Callable[[Stage], None] | None = None
         self.__did_enter = False
-        self.__did_commit = False
 
     @property
     def name(self) -> str:
@@ -53,20 +53,18 @@ class Stage:
 
     @property
     def did_commit(self) -> bool:
-        with self.__lock:
-            return self.__did_commit
+        return RunContext.get().get_stage_state(self) == StageState.COMMITTED
 
     def __repr__(self):
         return f"<Stage: {self.name}>"
 
     def __enter__(self):
-        with self.__lock:
-            if self.__did_enter:
-                raise StageError(
-                    f"Stage '{self.name}' has already been entered."
-                    " Can't reuse the same stage twice."
-                )
-            self.__did_enter = True
+        if self.__did_enter:
+            raise StageError(
+                f"Stage '{self.name}' has already been entered."
+                " Can't reuse the same stage twice."
+            )
+        self.__did_enter = True
 
         outer_ctx = DAGContext.get()
         outer_ctx.flow.add_stage(self)
@@ -94,12 +92,12 @@ class Stage:
         return False
 
     def prepare_for_run(self):
-        self.__did_commit = False
-
-        # Reset reference counter
-        if self.__ref_count != 0 and self.__ref_count_free_handler is not None:
-            self.__ref_count = 0
-            self.__ref_count_free_handler(self)
+        # self.__did_commit = False
+        #
+        # # Reset reference counter
+        # if self.__ref_count != 0 and self.__ref_count_free_handler is not None:
+        #     self.__ref_count = 0
+        #     self.__ref_count_free_handler(self)
 
         # Increase reference counter
         for task in self.tasks:
@@ -111,27 +109,22 @@ class Stage:
     @property
     def ref_count(self):
         """The current reference counter value"""
-        with self.__lock:
-            return self.__ref_count
+        return RunContext.get().get_stage_ref_count(self)
 
     def incr_ref_count(self, by: int = 1):
-        with self.__lock:
-            self.__ref_count += by
-            print("----------------------------------", self, self.__ref_count)
+        rc = RunContext.get().incr_stage_ref_count(self, by)
+        print("----------------------------------", self, rc)
 
     def decr_ref_count(self, by: int = 1):
-        with self.__lock:
-            self.__ref_count -= by
-            print("----------------------------------", self, self.__ref_count)
-            assert self.__ref_count >= 0
+        rc = RunContext.get().decr_stage_ref_count(self, by)
+        if rc == 0 and callable(self.__ref_count_free_handler):
+            self.__ref_count_free_handler(self)
 
-            if self.__ref_count == 0 and callable(self.__ref_count_free_handler):
-                self.__ref_count_free_handler(self)
+        print("----------------------------------", self, rc)
 
     def set_ref_count_free_handler(self, handler: Callable[[Stage], None] | None):
         assert callable(handler) or handler is None
-        with self.__lock:
-            self.__ref_count_free_handler = handler
+        self.__ref_count_free_handler = handler
 
 
 @frozen

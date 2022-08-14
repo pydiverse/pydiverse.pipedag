@@ -4,9 +4,9 @@ from collections import defaultdict
 from typing import TYPE_CHECKING
 
 import networkx as nx
-import pydot
 
 from pydiverse.pipedag.context import DAGContext, RunContext
+from pydiverse.pipedag.context.run import MultiProcManager
 from pydiverse.pipedag.engines.prefect_one import PrefectOneEngine
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 
@@ -49,6 +49,8 @@ class Flow:
     def add_stage(self, stage: Stage):
         if stage.name in self.stages:
             raise DuplicateNameError(f"Stage with name '{stage.name}' already exists.")
+
+        stage.stage_id = len(self.stages)
         self.stages[stage.name] = stage
 
     def add_task(self, task: Task):
@@ -71,6 +73,8 @@ class Flow:
         self.graph.add_edge(from_, to)
 
     def visualize(self):
+        import pydot
+
         dot = pydot.Dot()
         subgraphs: dict[Stage, pydot.Subgraph] = {}
         nodes: dict[Task, pydot.Node] = {}
@@ -192,7 +196,8 @@ class Flow:
             stage.prepare_for_run()
 
     def run(self):
-        with RunContext(flow=self):
+        mgr = MultiProcManager()
+        with mgr(flow=self):
             self.prepare_for_run()
             # TODO: Allow customization of backend
             pf = PrefectOneEngine().construct_workflow(self)

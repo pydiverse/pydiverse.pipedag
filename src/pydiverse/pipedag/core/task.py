@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 import structlog
 
-from pydiverse.pipedag.context import DAGContext, TaskContext
+from pydiverse.pipedag.context import DAGContext, RunContext, TaskContext
 from pydiverse.pipedag.errors import FlowError, StageError
 from pydiverse.pipedag.util import deepmutate
 
@@ -123,6 +123,11 @@ class Task:
         self.value = result
 
         return result
+
+    def run_with_context(self, context: RunContext):
+        # Hand over run context if using multiprocessing
+        with context:
+            return self.run()
 
     def get_input_tasks(self, args, kwargs):
         input_tasks = []

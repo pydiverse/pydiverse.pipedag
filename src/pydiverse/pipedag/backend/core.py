@@ -18,6 +18,7 @@ from pydiverse.pipedag.backend.metadata import TaskMetadata
 from pydiverse.pipedag.backend.util import compute_cache_key
 from pydiverse.pipedag.backend.util import json as json_util
 from pydiverse.pipedag.context import RunContext
+from pydiverse.pipedag.context.run.base import StageState
 from pydiverse.pipedag.errors import DuplicateNameError, LockError, StageError
 from pydiverse.pipedag.materialise.core import MaterialisingTask
 from pydiverse.pipedag.util import deepmutate
@@ -65,7 +66,7 @@ class PipeDAGStore:
         self.table_store.setup()
         self.lock_manager.release("_pipedag_setup_")
 
-    #### STAGE ####
+    #### Stage ####
 
     def register_stage(self, stage: Stage):
         """Used by `Stage` objects to inform the backend about its existence
@@ -92,21 +93,16 @@ class PipeDAGStore:
         Don't use this function directly. Instead, use `ensure_stage_is_ready`
         to prevent unnecessary locking.
         """
-        context = RunContext.get()
-        with context.lock:
-            if stage in context.created_stages:
-                raise StageError(f"Stage '{stage.name}' has already been created.")
-            context.created_stages.add(stage)
 
-            # Lock the stage and then create it
-            self.acquire_stage_lock(stage)
-            self.table_store.init_stage(stage)
-            self.blob_store.init_stage(stage)
+        # Lock the stage and then create it
+        self.acquire_stage_lock(stage)
+        self.table_store.init_stage(stage)
+        self.blob_store.init_stage(stage)
 
-            # Once stage reference counter hits 0 (this means all tasks that
-            # have any task contained in the stage as an upstream dependency),
-            # we can release the stage lock.
-            stage.set_ref_count_free_handler(self.release_stage_lock)
+        # Once stage reference counter hits 0 (this means all tasks that
+        # have any task contained in the stage as an upstream dependency),
+        # we can release the stage lock.
+        stage.set_ref_count_free_handler(self.release_stage_lock)
 
     def ensure_stage_is_ready(self, stage: Stage):
         """Initializes a stage if it hasn't been created yet
@@ -114,9 +110,8 @@ class PipeDAGStore:
         This allows the creation of stages in a lazy way. This ensures
         that a stage only gets locked right before it is needed.
         """
-        context = RunContext.get()
-        with context.lock:
-            if stage in context.created_stages:
+        with RunContext.get().init_stage(stage) as should_continue:
+            if not should_continue:
                 return
             self.init_stage(stage)
 
@@ -127,7 +122,7 @@ class PipeDAGStore:
             self.table_store.commit_stage(stage)
             self.blob_store.commit_stage(stage)
 
-    #### Task ####
+    #### Materialization ####
 
     def dematerialise_task_inputs(
         self,
@@ -181,20 +176,19 @@ class PipeDAGStore:
         :return: A copy of `value` with additional metadata
         """
 
+        ctx = RunContext.get()
         stage = task.stage
-        context = RunContext.get()
 
-        if stage not in context.created_stages:
+        if (state := RunContext.get().get_stage_state(stage)) != StageState.READY:
             raise StageError(
-                f"Can't materialise because stage '{stage.name}' has not been created."
-            )
-        if stage.did_commit:
-            raise StageError(
-                f"Can't add new table to Stage '{stage.name}'."
-                " Stage has already been committed."
+                f"Can't materialise because stage '{stage.name}' is not ready "
+                f"(state: {state})."
             )
 
-        def materialise_mutator(x, tbl_id=itertools.count()):
+        tables = []
+        blobs = []
+
+        def materialise_mutator(x, counter=itertools.count()):
             # Automatically convert an object to a table / blob if its
             # type is inside either `config.auto_table` or `.auto_blob`.
             if isinstance(x, config.auto_table):
@@ -214,7 +208,7 @@ class PipeDAGStore:
                 # Update name:
                 # - If no name has been provided, generate on automatically
                 # - If the provided name ends with %%, perform name mangling
-                auto_suffix = f"{task.cache_key}_{next(tbl_id):04d}"
+                auto_suffix = f"{task.cache_key}_{next(counter):04d}"
                 if x.name is None:
                     x.name = task.name + "_" + auto_suffix
                 elif x.name.endswith("%%"):
@@ -224,29 +218,20 @@ class PipeDAGStore:
                 if isinstance(x, Table):
                     if x.obj is None:
                         raise TypeError("Underlying table object can't be None")
-
-                    name_checker(x)
-                    if task.lazy:
-                        self.table_store.store_table_lazy(x)
-                    else:
-                        self.table_store.store_table(x)
+                    tables.append(x)
                 elif isinstance(x, Blob):
                     if task.lazy:
                         raise NotImplementedError(
                             "Can't use Blobs with lazy tasks. Invalidation of the"
                             " downstream dependencies is not implemented."
                         )
-
-                    name_checker(x)
-                    self.blob_store.store_blob(x)
+                    blobs.append(x)
                 else:
                     raise NotImplementedError
 
             return x
 
-        # Materialise
-        with self.materialisation_context() as name_checker:
-            m_value = deepmutate(value, materialise_mutator)
+        m_value = deepmutate(value, materialise_mutator)
 
         # Metadata
         output_json = self.json_encode(m_value)
@@ -255,69 +240,102 @@ class PipeDAGStore:
             stage=stage.name,
             version=task.version,
             timestamp=datetime.datetime.now(),
-            run_id=context.run_id,
+            run_id=ctx.run_id,
             cache_key=task.cache_key,
             output_json=output_json,
         )
 
-        self.validate_lock_state(stage)
-        self.table_store.store_task_metadata(metadata, stage)
+        # Materialize
+        def store_table(table: Table):
+            if task.lazy:
+                self.table_store.store_table_lazy(table)
+            else:
+                self.table_store.store_table(table)
+
+        self._check_names(task, tables, blobs)
+        self._store_task_transaction(
+            task,
+            tables,
+            blobs,
+            store_table,
+            lambda blob: self.blob_store.store_blob(blob),
+            lambda _: self.table_store.store_task_metadata(metadata, stage),
+        )
 
         return m_value
 
-    @contextlib.contextmanager
-    def materialisation_context(self) -> ContextManager[Callable[[Table | Blob], None]]:
-        """Context manager for materialisation
+    def _check_names(
+        self, task: MaterialisingTask, tables: list[Table], blobs: list[Blob]
+    ):
+        # Check names: No duplicates in task
+        seen_tn = set()
+        seen_bn = set()
+        tn_dup = [e.name for e in tables if e.name in seen_tn or seen_tn.add(e.name)]
+        bn_dup = [e.name for e in blobs if e.name in seen_bn or seen_bn.add(e.name)]
 
-        All materialisation operations should be wrapped using this context
-        manager. It does the following things:
+        if tn_dup or bn_dup:
+            raise DuplicateNameError(
+                f"Task '{task.name}' returned multiple tables and/or blobs"
+                " with the same name.\n"
+                f"Duplicate table names: {', '.join(tn_dup) if tn_dup else 'None'}\n"
+                f"Duplicate blob names: {', '.join(bn_dup) if bn_dup else 'None'}\n"
+                "To enable automatic name mangling,"
+                " you can add '%%' at the end of the name."
+            )
 
-        - It returns a name checker function which, when called with either
-          a Table or Blob, checks if an object with the same name already
-          exists in the stage. If it does, it raises a `DuplicateNameError`.
+        # Check names: No duplicates in stage
+        ctx = RunContext.get()
+        success, t_dup, b_dup = ctx.add_names(tables, blobs)
 
-        - If an exception is raised inside the context, all objects that have
-          been materialised (given that the name checker function was called
-          with them), get deleted again.
-        """
-        stored_objects: list[Table | Blob] = []
+        if not success:
+            tn_dup = [t.name for t in t_dup]
+            bn_dup = [b.name for b in b_dup]
+            raise DuplicateNameError(
+                f"Task '{task.name}' returned tables and/or blobs"
+                f" whose name are not unique in the schema '{task.stage}'.\n"
+                f"Duplicate table names: {', '.join(tn_dup) if tn_dup else 'None'}\n"
+                f"Duplicate blob names: {', '.join(bn_dup) if bn_dup else 'None'}\n"
+                "To enable automatic name mangling,"
+                " you can add '%%' at the end of the name."
+            )
 
-        def name_checker(obj: Table | Blob):
-            context = RunContext.get()
-            with context.lock:
-                if isinstance(obj, Table):
-                    name_store = context.table_names
-                elif isinstance(obj, Blob):
-                    name_store = context.blob_names
-                else:
-                    raise TypeError
+    def _store_task_transaction(
+        self,
+        task: MaterialisingTask,
+        tables: list[Table],
+        blobs: list[Blob],
+        store_table: Callable[[Table], None],
+        store_blob: Callable[[Blob], None],
+        store_metadata: Callable[[MaterialisingTask], None],
+    ):
+        stage = task.stage
+        ctx = RunContext.get()
 
-                if obj.name in name_store[obj.stage]:
-                    raise DuplicateNameError(
-                        f"{type(obj).__name__} with name '{obj.name}' already"
-                        f" exists in stage '{obj.stage.name}'."
-                        " To enable automatic name mangling,"
-                        " you can add '%%' at the end of the name."
-                    )
-
-                stored_objects.append(obj)
-                name_store[obj.stage].add(obj.name)
+        stored_tables = []
+        stored_blobs = []
 
         try:
-            yield name_checker
+            for table in tables:
+                self.validate_lock_state(stage)
+                store_table(table)
+                stored_tables.append(table)
+            for blob in blobs:
+                self.validate_lock_state(stage)
+                store_blob(blob)
+                stored_blobs.append(blob)
+
+            self.validate_lock_state(task.stage)
+            store_metadata(task)
+
         except Exception as e:
-            # Clean up
-            context = RunContext.get()
-            with context.lock:
-                for obj in stored_objects:
-                    if isinstance(obj, Table):
-                        context.table_names[obj.stage].remove(obj.name)
-                        self.table_store.delete_table_from_transaction(obj)
-                    elif isinstance(obj, Blob):
-                        context.blob_names[obj.stage].remove(obj.name)
-                        self.blob_store.delete_blob_from_transaction(obj)
-                    else:
-                        raise TypeError
+            # Failed - Roll back everything
+            for table in stored_tables:
+                self.table_store.delete_table_from_transaction(table)
+            for blob in stored_blobs:
+                self.blob_store.delete_blob_from_transaction(blob)
+
+            ctx.remove_table_names(tables)
+            ctx.remove_blob_names(blobs)
             raise e
 
     #### Cache ####
@@ -381,22 +399,29 @@ class PipeDAGStore:
             in the cache.
         """
 
-        def visiting_mutator(x):
+        # Get Tables and Blobs from output
+        tables = []
+        blobs = []
+
+        def visitor(x):
             if isinstance(x, Table):
-                name_checker(x)
-                self.validate_lock_state(task.stage)
-                self.table_store.copy_table_to_transaction(x)
+                tables.append(x)
             elif isinstance(x, Blob):
-                name_checker(x)
-                self.validate_lock_state(task.stage)
-                self.blob_store.copy_blob_to_transaction(x)
+                blobs.append(x)
             return x
 
-        with self.materialisation_context() as name_checker:
-            deepmutate(output, visiting_mutator)
+        deepmutate(output, visitor)
 
-        self.validate_lock_state(task.stage)
-        self.table_store.copy_task_metadata_to_transaction(task)
+        # Materialize
+        self._check_names(task, tables, blobs)
+        self._store_task_transaction(
+            task,
+            tables,
+            blobs,
+            lambda table: self.table_store.copy_table_to_transaction(table),
+            lambda blob: self.blob_store.copy_blob_to_transaction(blob),
+            lambda task: self.table_store.copy_task_metadata_to_transaction(task),
+        )
 
     #### Locking ####
 
@@ -488,16 +513,3 @@ class PipeDAGStore:
         `Blob` objects.
         """
         return self.json_decoder.decode(value)
-
-    def _reset(self):
-        for stage in self.stages.values():
-            try:
-                self.lock_manager.release(stage)
-            except LockError:
-                pass
-
-        self.stages.clear()
-        self.created_stages.clear()
-        self.table_names.clear()
-        self.blob_names.clear()
-        self.run_id = uuid.uuid4().hex[:20]

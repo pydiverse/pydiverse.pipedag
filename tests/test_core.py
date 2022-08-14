@@ -143,10 +143,10 @@ def test_stage_ref_counter():
             x = m_assert(lambda _: s2.ref_count == 0)(x)
             m_assert(lambda _: s3.ref_count == 2)(x)
 
+    assert f.run().is_successful()
     assert s1.ref_count == 0
     assert s2.ref_count == 0
     assert s3.ref_count == 0
-    assert f.run().is_successful()
 
 
 def test_stage_ref_count_free_handler(mocker: MockerFixture):
@@ -275,3 +275,19 @@ def test_reference_task_in_wrong_flow():
         with Stage("stage"):
             with pytest.raises(FlowError):
                 bad_task = m_noop(task)
+
+
+def test_stage_id():
+    with Flow("flow"):
+        with Stage("stage 1") as s1:
+            ...
+        with Stage("stage 2") as s2:
+            with Stage("stage 3") as s3:
+                ...
+        with Stage("stage 4") as s4:
+            ...
+
+    assert s1.stage_id == 0
+    assert s2.stage_id == 1
+    assert s3.stage_id == 2
+    assert s4.stage_id == 3

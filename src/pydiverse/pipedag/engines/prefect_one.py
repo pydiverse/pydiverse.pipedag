@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING, Any
 import prefect
 from packaging.version import parse as parse_version
 
+from pydiverse.pipedag.context import RunContext
+
 if parse_version(prefect.__version__) >= parse_version("2.0"):
     raise ImportError(f"Requires prefect 1.x (found {prefect.__version__}).")
 
@@ -32,10 +34,12 @@ class PrefectOneEngine(Engine):
             task = prefect.task(
                 name=t.name,
                 state_handlers=[stage_ref_counter_handler],
-            )(t.run)
+            )(t.run_with_context)
             task._pipedag = t
             tasks[t] = task
+
             flow.add_task(task)
+            flow.set_dependencies(task, keyword_tasks={"context": RunContext.get()})
 
         for u, v in g.edges:
             flow.add_edge(tasks[u], tasks[v])
