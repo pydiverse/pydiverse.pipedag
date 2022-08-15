@@ -7,11 +7,11 @@ import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from enum import Enum
-from typing import Callable, Union
+from typing import Any, Callable, Union
 
 import prefect
 
-from pydiverse.pipedag import config
+from pydiverse.pipedag.context import ConfigContext
 from pydiverse.pipedag.core.stage import Stage
 from pydiverse.pipedag.errors import LockError
 from pydiverse.pipedag.util import normalise_name, requires
@@ -238,9 +238,15 @@ class ZooKeeperLockManager(BaseLockManager):
 
         self.locks: dict[Lockable, KazooLock] = {}
         self.base_path = "/pipedag/locks/"
+        config = ConfigContext.get()
         if config.name is not None:
             project_name = normalise_name(config.name)
             self.base_path += project_name + "/"
+
+    @classmethod
+    def _init_conf_(cls, config: dict[str, Any]):
+        client = KazooClient(**config)
+        return cls(client)
 
     def acquire(self, lock: Lockable):
         zk_lock = self.client.Lock(self.lock_path(lock))

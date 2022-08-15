@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextvars import ContextVar, Token
+from functools import cached_property
 from threading import Lock
 from typing import TYPE_CHECKING, ClassVar
 
@@ -42,17 +43,12 @@ class BaseContext:
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        del state["_context_var"]
         del state["_token"]
         del state["_enter_counter"]
-        del state["_lock"]
         return state
 
-    def __setstate__(self, state):
-        self.__dict__.update(state)
 
-
-@frozen
+@frozen(slots=False)
 class BaseAttrsContext(BaseContext):
     pass
 
@@ -74,3 +70,46 @@ class TaskContext(BaseAttrsContext):
     task: Task
 
     _context_var = ContextVar("task_context")
+
+
+@frozen(slots=False)
+class ConfigContext(BaseAttrsContext):
+    """Configuration context"""
+
+    config_dict: dict
+
+    name: str
+    auto_table: tuple[type, ...]
+    auto_blob: tuple[type, ...]
+
+    @cached_property
+    def store(self):
+        from pydiverse.pipedag.backend import PipeDAGStore
+        from pydiverse.pipedag.config import load_instance
+
+        print(self)
+
+        table_store = load_instance(self.config_dict["table_store"])
+        blob_store = load_instance(self.config_dict["blob_store"])
+        lock_manager = load_instance(self.config_dict["lock_manager"])
+
+        return PipeDAGStore(
+            table=table_store,
+            blob=blob_store,
+            lock=lock_manager,
+        )
+
+    @classmethod
+    def from_file(cls, path: str = None):
+        from pydiverse.pipedag import config
+
+        if path is None:
+            return config.auto_load_config()
+        return config.load_config(path)
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        state.pop("store", None)
+        return state
+
+    _context_var = ContextVar("config_context")

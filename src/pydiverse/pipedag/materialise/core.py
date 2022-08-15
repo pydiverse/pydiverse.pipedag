@@ -1,18 +1,16 @@
 from __future__ import annotations
 
-import asyncio
-import contextlib
 import copy
 import functools
 import inspect
 from collections import defaultdict
 from functools import partial
-from threading import Condition, Lock
+from threading import Condition
 from typing import TYPE_CHECKING, Any, Callable
 
 import pydiverse.pipedag
 from pydiverse.pipedag._typing import CallableT
-from pydiverse.pipedag.context import TaskContext
+from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.util import deepmutate
@@ -128,7 +126,7 @@ class MaterialisationWrapper:
         self.fn = fn
         self.fn_signature = inspect.signature(fn)
 
-        self.__lock = Lock()
+        # self.__lock = threading.Lock()
         self.memo: defaultdict[Stage, dict[str, Any]] = defaultdict(dict)
         self.conditions: defaultdict[Stage, dict[str, Condition]] = defaultdict(dict)
 
@@ -144,7 +142,7 @@ class MaterialisationWrapper:
         """
 
         task = TaskContext.get().task
-        store = pydiverse.pipedag.config.store  # TODO: Probably get this from a context
+        store = ConfigContext.get().store
         bound = self.fn_signature.bind(*args, **kwargs)
 
         if task is None:
@@ -161,7 +159,7 @@ class MaterialisationWrapper:
 
         # Check if this task has already been run with the same inputs
         # If yes, return memoized result. This prevents DuplicateNameExceptions
-        with self.__lock:
+        if True:  # with self.__lock:
             memo_result = self.memo[task.stage].get(cache_key, _nil)
             if memo_result is _nil:
                 self.memo[task.stage][cache_key] = Condition()
@@ -184,7 +182,7 @@ class MaterialisationWrapper:
                         task.logger.info("Other task finished. Using memoized result.")
                     else:
                         task.logger.info("Waiting...")
-                with self.__lock:
+                if True:  # with self.__lock:
                     memo_result = self.memo[task.stage][cache_key]
 
             # Must make a semi-deepcopy of the memoized result:
@@ -196,7 +194,7 @@ class MaterialisationWrapper:
             try:
                 cached_output = store.retrieve_cached_output(task)
                 store.copy_cached_output_to_transaction_stage(cached_output, task)
-                self.store_in_memo(cached_output, task, cache_key)
+                # self.store_in_memo(cached_output, task, cache_key)
                 task.logger.info(f"Found task in cache. Using cached result.")
                 return cached_output
             except CacheError as e:
@@ -219,7 +217,7 @@ class MaterialisationWrapper:
 
         # Materialise
         materialised_result = store.materialise_task(task, result)
-        self.store_in_memo(materialised_result, task, cache_key)
+        # self.store_in_memo(materialised_result, task, cache_key)
 
         return materialised_result
 

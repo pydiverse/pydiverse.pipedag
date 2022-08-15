@@ -82,6 +82,7 @@ class Stage:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.commit_task = CommitStageTask(self, self._ctx.flow)
         self._ctx.__exit__()
+        del self._ctx
 
     def is_inner(self, other: Stage):
         outer = self.outer_stage

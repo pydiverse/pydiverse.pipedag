@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import networkx as nx
 
-from pydiverse.pipedag.context import DAGContext, RunContext
+from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext
 from pydiverse.pipedag.context.run import MultiProcManager
 from pydiverse.pipedag.engines.prefect_one import PrefectOneEngine
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
@@ -196,12 +196,21 @@ class Flow:
             stage.prepare_for_run()
 
     def run(self):
-        mgr = MultiProcManager()
-        with mgr(flow=self):
+        run_context_manager = MultiProcManager()
+        config_context = ConfigContext.from_file()
+
+        print(config_context)
+
+        with run_context_manager(flow=self), config_context:
             self.prepare_for_run()
             # TODO: Allow customization of backend
             pf = PrefectOneEngine().construct_workflow(self)
             # TODO: The store should start listening for reference counter hitting 0 here
-            res = pf.run()
+            from prefect.executors import DaskExecutor
+
+            executor = DaskExecutor(
+                cluster_kwargs={"n_workers": 2},
+            )
+            res = pf.run(executor=executor)
 
         return res

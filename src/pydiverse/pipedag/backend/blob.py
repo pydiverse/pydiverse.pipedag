@@ -6,7 +6,8 @@ import shutil
 from abc import ABC, abstractmethod
 from typing import Any
 
-from pydiverse.pipedag import Blob, Stage, config
+from pydiverse.pipedag import Blob, Stage
+from pydiverse.pipedag.context import ConfigContext
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.util import normalise_name
 
@@ -85,6 +86,7 @@ class FileBlobStore(BaseBlobStore):
 
     def __init__(self, base_path: str):
         self.base_path = os.path.abspath(base_path)
+        config = ConfigContext.get()
         if config.name is not None:
             project_name = normalise_name(config.name)
             self.base_path = os.path.join(self.base_path, project_name)

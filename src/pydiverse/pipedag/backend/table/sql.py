@@ -65,6 +65,18 @@ class SQLTableStore(BaseTableStore):
             schema=self.METADATA_SCHEMA,
         )
 
+    @classmethod
+    def _init_conf_(cls, config: dict):
+        engine_config = config.pop("engine")
+        if isinstance(engine_config, str):
+            engine_config = {"url": engine_config}
+
+        engine_url = engine_config.pop("url")
+        engine_config["_coerce_config"] = True
+        engine = sa.create_engine(engine_url)
+
+        return cls(engine=engine, **config)
+
     def setup(self):
         super().setup()
         with self.engine.connect() as conn:

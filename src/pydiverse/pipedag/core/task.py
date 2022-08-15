@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import copy
-import functools
 import inspect
 from typing import TYPE_CHECKING, Any, Callable
 
 import structlog
 
-from pydiverse.pipedag.context import DAGContext, RunContext, TaskContext
+from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext, TaskContext
 from pydiverse.pipedag.errors import FlowError, StageError
 from pydiverse.pipedag.util import deepmutate
 
@@ -104,7 +103,7 @@ class Task:
 
         return new
 
-    def run(self):
+    def _run(self):
         args = self._bound_args.args
         kwargs = self._bound_args.kwargs
 
@@ -124,10 +123,21 @@ class Task:
 
         return result
 
-    def run_with_context(self, context: RunContext):
+    def run(self, run_context: RunContext = None, config_context: ConfigContext = None):
         # Hand over run context if using multiprocessing
-        with context:
-            return self.run()
+        if run_context is None:
+            run_context = RunContext.get()
+        if config_context is None:
+            config_context = ConfigContext.get()
+
+        with run_context, config_context:
+            try:
+                result = self._run()
+                self.on_success()
+                return result
+            except Exception as e:
+                self.on_failure()
+                raise e
 
     def get_input_tasks(self, args, kwargs):
         input_tasks = []

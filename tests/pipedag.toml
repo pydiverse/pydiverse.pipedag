@@ -1,0 +1,19 @@
+name = "pipedag_tests"
+auto_table = [
+    "pandas.DataFrame",
+]
+
+# Table Store
+[table_store]
+class = "pydiverse.pipedag.backend.table.SQLTableStore"
+engine = "postgresql://postgres:pipedag@127.0.0.1/pipedag"
+
+# Blob Store
+[blob_store]
+class = "pydiverse.pipedag.backend.blob.FileBlobStore"
+base_path = "/tmp/pipedag/blobs"
+
+# Lock Manager
+[lock_manager]
+class = "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
+hosts = "localhost:2181"
