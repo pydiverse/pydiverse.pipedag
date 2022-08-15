@@ -10,6 +10,7 @@ from enum import Enum
 from typing import Any, Callable, Union
 
 import prefect
+import structlog
 
 from pydiverse.pipedag.context import ConfigContext
 from pydiverse.pipedag.core.stage import Stage
@@ -70,7 +71,7 @@ class BaseLockManager(ABC):
     """
 
     def __init__(self):
-        self.logger = prefect.utilities.logging.get_logger(type(self).__name__)
+        self.logger = structlog.get_logger(type(self).__name__)
 
         self.state_listeners = set()
         self.lock_states = defaultdict(lambda: LockState.UNLOCKED)

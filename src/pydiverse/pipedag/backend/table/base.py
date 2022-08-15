@@ -4,6 +4,7 @@ from abc import ABC, ABCMeta, abstractmethod
 from typing import Any, Generic
 
 import prefect
+import structlog
 from typing_extensions import Self
 
 from pydiverse.pipedag import Stage, Table
@@ -63,6 +64,9 @@ class BaseTableStore(metaclass=_TableStoreMeta):
     _REGISTERED_TABLES: list[TableHook]
     _M_TABLE_CACHE: dict[type, TableHook]
     _R_TABLE_CACHE: dict[type, TableHook]
+
+    def __init__(self):
+        self.logger = structlog.get_logger(type(self).__name__)
 
     def setup(self):
         """Setup function
@@ -202,9 +206,9 @@ class BaseTableStore(metaclass=_TableStoreMeta):
             # to the transaction stage
             metadata = self.retrieve_lazy_table_metadata(lazy_cache_key, table.stage)
             self.copy_lazy_table_to_transaction(metadata, table)
-            prefect.context.logger.info(f"Lazy cache of table '{table.name}' found")
+            self.logger.info(f"Lazy cache of table '{table.name}' found")
         except CacheError as e:
-            prefect.context.logger.warn(e)
+            self.logger.warn(e)
 
             # Either not found in cache, or copying failed -> fallback
             self.store_table(table)

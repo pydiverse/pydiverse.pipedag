@@ -44,6 +44,7 @@ class Flow:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._ctx.__exit__()
+        self._ctx = None
         self.explicit_graph = self.build_graph()
 
     def add_stage(self, stage: Stage):

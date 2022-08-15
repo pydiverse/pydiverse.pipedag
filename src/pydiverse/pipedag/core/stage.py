@@ -143,6 +143,7 @@ class CommitStageTask(Task):
         self.stage = stage
         self.flow = flow
         self.upstream_stages = {stage}
+        self.input_tasks = []
 
         self._bound_args = self._signature.bind()
 

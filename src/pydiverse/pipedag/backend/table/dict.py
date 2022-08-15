@@ -18,6 +18,7 @@ class DictTableStore(BaseTableStore):
     """
 
     def __init__(self):
+        super().__init__()
         self.store = dict()
 
         self.metadata = dict()

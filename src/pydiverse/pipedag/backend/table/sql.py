@@ -33,6 +33,8 @@ class SQLTableStore(BaseTableStore):
     METADATA_SCHEMA = "pipedag_metadata"
 
     def __init__(self, engine: sa.engine.Engine):
+        super().__init__()
+
         self.engine = engine
 
         # Set up metadata tables and schema
@@ -283,7 +285,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def materialise(cls, store, table: Table[sa.sql.Select], stage_name):
-        prefect.context.logger.info(f"Performing CREATE TABLE AS SELECT ({table})")
+        store.logger.info(f"Performing CREATE TABLE AS SELECT ({table})")
         with store.engine.connect() as conn:
             conn.execute(CreateTableAsSelect(table.name, stage_name, table.obj))
 

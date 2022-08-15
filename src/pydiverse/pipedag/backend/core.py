@@ -1,23 +1,21 @@
 from __future__ import annotations
 
-import contextlib
 import datetime
 import itertools
 import json
 import threading
-import uuid
 from collections import defaultdict
-from typing import Callable, ContextManager
+from typing import Callable
 
-import prefect.utilities.logging
+import structlog
 
-from pydiverse.pipedag import Blob, Stage, Table, backend, config
+from pydiverse.pipedag import Blob, Stage, Table, backend
 from pydiverse.pipedag._typing import Materialisable
 from pydiverse.pipedag.backend.lock import LockState
 from pydiverse.pipedag.backend.metadata import TaskMetadata
 from pydiverse.pipedag.backend.util import compute_cache_key
 from pydiverse.pipedag.backend.util import json as json_util
-from pydiverse.pipedag.context import RunContext
+from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.context.run.base import StageState
 from pydiverse.pipedag.errors import DuplicateNameError, LockError, StageError
 from pydiverse.pipedag.materialise.core import MaterialisingTask
@@ -45,7 +43,7 @@ class PipeDAGStore:
         self.blob_store = blob
         self.lock_manager = lock
 
-        self.logger = prefect.utilities.logging.get_logger("pipeDAG")
+        self.logger = structlog.get_logger("pipedag")
 
         self.json_encoder = json.JSONEncoder(
             ensure_ascii=False,
@@ -187,6 +185,8 @@ class PipeDAGStore:
 
         tables = []
         blobs = []
+
+        config = ConfigContext.get()
 
         def materialise_mutator(x, counter=itertools.count()):
             # Automatically convert an object to a table / blob if its
