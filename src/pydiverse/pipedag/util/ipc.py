@@ -3,6 +3,7 @@ from __future__ import annotations
 import ipaddress
 import struct
 import threading
+import uuid
 from functools import cached_property
 from typing import Any
 
@@ -14,31 +15,32 @@ import structlog
 class IPCServer:
     def __init__(self):
         self.socket = pynng.Rep0(listen="tcp://localhost:0", recv_timeout=1000)
-        self.threads = []
+        self.main_thread = None
+        self.worker_threads: dict[Any, threading.Thread] = {}
+
         self.kill_sig = threading.Event()
-        self.running = False
         self.logger = structlog.get_logger()
 
     def start(self):
-        assert not self.running
-        self.running = True
+        assert self.main_thread is None
 
         self.logger.info("Starting IPCServer", address=self.address)
-
-        # Start the main thread that handles requests
-        thread = threading.Thread(name="IPC Server", target=self._run, daemon=True)
-        thread.start()
-        self.threads.append(thread)
+        self.main_thread = threading.Thread(
+            name="IPC Server", target=self.run_loop, daemon=True
+        )
+        self.main_thread.start()
 
     def stop(self):
-        assert self.running
+        assert self.main_thread is not None
+
         self.kill_sig.set()
-        for thread in self.threads:
+        self.main_thread.join()
+
+        for thread in self.worker_threads.values():
             thread.join()
 
         self.kill_sig.clear()
-        self.running = False
-
+        self.main_thread = None
         self.logger.info("Did stop IPCServer", address=self.address)
 
     def __enter__(self):
@@ -48,26 +50,39 @@ class IPCServer:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop()
 
-    def _run(self):
+    def run_loop(self):
         socket = self.socket.new_context()
         while not self.kill_sig.is_set():
             try:
                 data = socket.recv()
+                unpacker = msgpack.Unpacker(use_list=False)
+                unpacker.feed(data)
+
+                # Expected: (NONCE, PAYLOAD)
+                assert unpacker.read_array_header() == 2
+                nonce = unpacker.unpack()
+
+                if thread := self.worker_threads.get(nonce):
+                    if thread.is_alive():
+                        # Already processing this request
+                        self.logger.debug("Already processing request", nonce=nonce)
+                        return
+
                 thread = threading.Thread(
                     name="IPC Worker",
                     target=self._serve,
-                    args=[socket, data],
+                    args=[socket, unpacker],
                     daemon=True,
                 )
                 thread.start()
-                self.threads.append(thread)
+                self.worker_threads[nonce] = thread
             except pynng.Timeout:
                 pass
             else:
                 socket = self.socket.new_context()
 
-    def _serve(self, socket, data):
-        msg = msgpack.unpackb(data, use_list=False)
+    def _serve(self, socket, unpacker):
+        msg = unpacker.unpack()
         self.logger.debug("IPCServer Received", message=msg)
         reply = self.handle_request(msg)
         self.logger.debug("IPCServer Reply", reply=reply)
@@ -108,11 +123,12 @@ class IPCClient:
         self.socket = self._connect()
 
     def _connect(self):
-        return pynng.Req0(dial=self.addr)
+        return pynng.Req0(dial=self.addr, resend_time=30_000)
 
     def request(self, payload: Any) -> Any:
         with self.socket.new_context() as socket:
-            msg = msgpack.packb(payload)
+            nonce = uuid.uuid4().hex
+            msg = msgpack.packb((nonce, payload))
             socket.send(msg)
 
             response_msg = socket.recv()
