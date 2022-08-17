@@ -138,7 +138,7 @@ class IPCClient:
 
     def request(self, payload: Any) -> Any:
         with self.socket.new_context() as socket:
-            nonce = uuid.uuid4().bytes
+            nonce = uuid.uuid4().bytes[:8]
             msg = msgpack.packb((nonce, payload), default=self.msg_default)
             socket.send(msg)
 

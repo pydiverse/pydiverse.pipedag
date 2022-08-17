@@ -47,6 +47,11 @@ class SetEvent(threading.Event):
 
 
 class RunContextServer(IPCServer):
+    """
+    REQUEST: [method_name, arguments]
+    RESPONSE: [error, result]
+    """
+
     def __init__(self, flow: Flow):
         super().__init__(msg_default=_msg_default, msg_ext_hook=_msg_ext_hook)
 
@@ -91,21 +96,19 @@ class RunContextServer(IPCServer):
         super().__exit__(exc_type, exc_val, exc_tb)
 
     def handle_request(self, request):
-        try:
-            op_name = request["op"]
-            op = getattr(self, op_name)
+        op_name, args = request
 
+        try:
+            op = getattr(self, op_name)
             if not callable(op):
                 raise TypeError(f"OP '{op_name}' is not callable")
 
-            args = request.get("args", ())
-            kwargs = request.get("kwargs", {})
-            result = op(*args, **kwargs)
-            return {"status": 0, "op": op_name, "result": result}
+            result = op(*args)
+            return [None, result]
 
         except Exception as e:
             pickled_exception = pickle.dumps(e)
-            return {"status": -1, "op": op_name, "exception": pickled_exception}
+            return [pickled_exception, None]
 
     # STAGE: Reference Counting
 
@@ -375,20 +378,12 @@ class RunContextProxy(BaseContext):
         self.flow = server.flow
         self.run_id = server.run_id
 
-    def _request(self, op: str, *args, **kwargs):
-        response = self.client.request(
-            {
-                "op": op,
-                "args": args,
-                "kwargs": kwargs,
-            }
-        )
+    def _request(self, op: str, *args):
+        error, result = self.client.request([op, args])
 
-        if response["status"] != 0:
-            pickled_exception = response["exception"]
-            raise pickle.loads(pickled_exception)
-
-        return response["result"]
+        if error is not None:
+            raise pickle.loads(error)
+        return result
 
     # STAGE: Reference Counting
 
