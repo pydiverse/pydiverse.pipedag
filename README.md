@@ -10,6 +10,11 @@ To install the package locally in development mode, you first have to install
 [Poetry](https://python-poetry.org/docs/#installation).
 After that, install pydiverse pipedag like this:
 
+> Currently, development on pipedag is not possible with Windows. The current setup of installing prefect and running
+> tests with docker (to spin up Postgres and Zookeeper) fail in poetry dependency resolution. It would be a nice
+> contribution to find drop-in replacements for both that run as simple python dependency without docker and moving
+> docker based tests to github actions (multi-DB target tests will be moved to cloud anyways).
+
 ```bash
 git clone https://github.com/pydiverse/pydiverse.pipedag.git
 cd pydiverse.pipedag
@@ -23,7 +28,8 @@ pre-commit install
 ## Testing
 
 To facilitate easy testing, we provide a Docker Compose file to start all required servers.
-Just run `docker compose up` in the root directory of the project to start everything, and then run `pytest` in a new tab.
+Just run `docker compose up` in the root directory of the project to start everything, and then run `pytest` in a new
+tab.
 
 You can inspect the contents of the PipeDAT Postgres database at `postgresql://postgres:pipedag@127.0.0.1/pipedag`.
 To reset the state of the docker containers you can run `docker compose down`.
