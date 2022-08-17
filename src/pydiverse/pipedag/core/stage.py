@@ -3,10 +3,11 @@ from __future__ import annotations
 import threading
 from typing import TYPE_CHECKING, Callable
 
+import structlog
 from attrs import frozen
 
-from pydiverse.pipedag.context import DAGContext, RunContext
-from pydiverse.pipedag.context.run.base import StageState
+from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContextProxy
+from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import StageError
 from pydiverse.pipedag.util import normalise_name
@@ -24,11 +25,12 @@ class Stage:
         self.commit_task: CommitStageTask = None  # type: ignore
         self.outer_stage: Stage | None = None
 
-        self.stage_id: int = None  # type: ignore
+        self.logger = structlog.get_logger(stage=self)
+        self.id: int = None  # type: ignore
 
         # TODO: Probably needs to be moved to the main process
-        self.__ref_count_free_handler: Callable[[Stage], None] | None = None
-        self.__did_enter = False
+        self._ref_count_free_handler: Callable[[Stage], None] | None = None
+        self._did_enter = False
 
     @property
     def name(self) -> str:
@@ -53,18 +55,18 @@ class Stage:
 
     @property
     def did_commit(self) -> bool:
-        return RunContext.get().get_stage_state(self) == StageState.COMMITTED
+        return RunContextProxy.get().get_stage_state(self) == StageState.COMMITTED
 
     def __repr__(self):
         return f"<Stage: {self.name}>"
 
     def __enter__(self):
-        if self.__did_enter:
+        if self._did_enter:
             raise StageError(
                 f"Stage '{self.name}' has already been entered."
                 " Can't reuse the same stage twice."
             )
-        self.__did_enter = True
+        self._did_enter = True
 
         outer_ctx = DAGContext.get()
         outer_ctx.flow.add_stage(self)
@@ -110,22 +112,31 @@ class Stage:
     @property
     def ref_count(self):
         """The current reference counter value"""
-        return RunContext.get().get_stage_ref_count(self)
+        return RunContextProxy.get().get_stage_ref_count(self)
 
     def incr_ref_count(self, by: int = 1):
-        rc = RunContext.get().incr_stage_ref_count(self, by)
+        rc = RunContextProxy.get().incr_stage_ref_count(self, by)
         print("----------------------------------", self, rc)
 
     def decr_ref_count(self, by: int = 1):
-        rc = RunContext.get().decr_stage_ref_count(self, by)
-        if rc == 0 and callable(self.__ref_count_free_handler):
-            self.__ref_count_free_handler(self)
-
+        rc = RunContextProxy.get().decr_stage_ref_count(self, by)
         print("----------------------------------", self, rc)
 
     def set_ref_count_free_handler(self, handler: Callable[[Stage], None] | None):
         assert callable(handler) or handler is None
-        self.__ref_count_free_handler = handler
+        self._ref_count_free_handler = handler
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # TODO: Is it relly safe to just ignore tasks from pickling?
+        state.pop("tasks", None)
+        state.pop("commit_task", None)
+        state.pop("_ref_count_free_handler", None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._ref_count_free_handler = None
 
 
 @frozen
@@ -143,14 +154,13 @@ class CommitStageTask(Task):
         self.stage = stage
         self.flow = flow
         self.upstream_stages = {stage}
-        self.input_tasks = []
+        self.input_tasks = {}
 
         self._bound_args = self._signature.bind()
 
     def fn(self):
-        print(f"Committing Stage '{self.stage.name}'")
-        # self.logger.info("Committing stage")
-        # pydiverse.pipedag.config.store.commit_stage(self.stage)
+        self.logger.info(f"Committing stage '{self.stage.name}'")
+        ConfigContext.get().store.commit_stage(self.stage)
 
 
 class StageX:
@@ -228,10 +238,6 @@ class StageX:
 
         self.task = StageCommitTask(self)
         self.materialising_tasks: list[materialise.MaterialisingTask] = []
-
-        # Make sure that  exists on database
-        # This also ensures that this stage's name is unique
-        pydiverse.pipedag.config.store.register_stage(self)
 
     @property
     def current_name(self) -> str:

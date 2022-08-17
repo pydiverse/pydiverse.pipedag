@@ -8,9 +8,6 @@ from pytest_mock import MockerFixture
 from pydiverse.pipedag import Flow, Stage, materialise
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError, StageError
 
-# noinspection PyUnresolvedReferences
-from tests.util import setup_pipedag
-
 
 @materialise
 def m_1():
@@ -216,6 +213,10 @@ def test_materialise_memo_with_failures():
     assert f.run().is_failed()
 
 
+if __name__ == "__main__":
+    test_materialise_memo()
+
+
 def test_duplicate_stage_name():
     with Flow("flow 1"):
         with Stage("stage"):
@@ -287,7 +288,7 @@ def test_stage_id():
         with Stage("stage 4") as s4:
             ...
 
-    assert s1.stage_id == 0
-    assert s2.stage_id == 1
-    assert s3.stage_id == 2
-    assert s4.stage_id == 3
+    assert s1.id == 0
+    assert s2.id == 1
+    assert s3.id == 2
+    assert s4.id == 3

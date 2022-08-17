@@ -4,12 +4,15 @@ import os
 import pickle
 import shutil
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from pydiverse.pipedag import Blob, Stage
 from pydiverse.pipedag.context import ConfigContext
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.util import normalise_name
+
+if TYPE_CHECKING:
+    from pydiverse.pipedag.core import Stage
+    from pydiverse.pipedag.materialise import Blob
 
 __all__ = [
     "BaseBlobStore",

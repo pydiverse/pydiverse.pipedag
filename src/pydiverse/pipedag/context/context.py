@@ -9,6 +9,7 @@ from attrs import frozen
 
 if TYPE_CHECKING:
     from pydiverse.pipedag._typing import T
+    from pydiverse.pipedag.backend import BaseLockManager, PipeDAGStore
     from pydiverse.pipedag.core import Flow, Stage, Task
 
 
@@ -83,21 +84,22 @@ class ConfigContext(BaseAttrsContext):
     auto_blob: tuple[type, ...]
 
     @cached_property
-    def store(self):
+    def store(self) -> PipeDAGStore:
         from pydiverse.pipedag.backend import PipeDAGStore
         from pydiverse.pipedag.config import load_instance
 
-        print(self)
-
         table_store = load_instance(self.config_dict["table_store"])
         blob_store = load_instance(self.config_dict["blob_store"])
-        lock_manager = load_instance(self.config_dict["lock_manager"])
 
         return PipeDAGStore(
             table=table_store,
             blob=blob_store,
-            lock=lock_manager,
         )
+
+    def get_lock_manager(self) -> BaseLockManager:
+        from pydiverse.pipedag.config import load_instance
+
+        return load_instance(self.config_dict["lock_manager"])
 
     @classmethod
     def from_file(cls, path: str = None):

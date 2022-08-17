@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import atexit
 import struct
+import sys
 import time
 from contextlib import contextmanager
 from hashlib import sha256
@@ -35,10 +36,11 @@ from typing import TYPE_CHECKING, Iterable
 
 import atomics
 
-from pydiverse.pipedag.context.run.base import RunContext, StageState
+from pydiverse.pipedag.context.run_context import RunContext, StageState
 from pydiverse.pipedag.errors import StageError
 
 if TYPE_CHECKING:
+    from pydiverse.pipedag.backend import LockState
     from pydiverse.pipedag.core import Flow, Stage
     from pydiverse.pipedag.materialise import Blob, Table
 
@@ -50,7 +52,7 @@ class MultiProcManager:
     @contextmanager
     def __call__(self, flow: Flow):
         with SharedMemoryManager() as smm:
-            requested_size = 2 * 8 * len(flow.stages)
+            requested_size = 3 * 8 * len(flow.stages)
             stage_shm = smm.SharedMemory(requested_size)
 
             table_shs = SharedHashSet.using_smm(smm, self.hash_set_size)
@@ -88,135 +90,142 @@ class MultiProcRunContext(RunContext):
 
     # STAGE REFERENCE COUNTING
 
-    def get_stage_ref_count(self, stage: Stage):
-        offset = stage.stage_id * 8
-        with atomics.atomicview(
-            buffer=self._stage_shm.buf[offset : offset + 8],
-            atype=atomics.INT,
-        ) as a:
-            return a.load()
-
-    def incr_stage_ref_count(self, stage: Stage, by: int = 1) -> int:
-        offset = stage.stage_id * 8
-        with atomics.atomicview(
-            buffer=self._stage_shm.buf[offset : offset + 8],
-            atype=atomics.INT,
-        ) as a:
-            if by == 1:
-                return a.fetch_inc() + 1
-            else:
-                return a.fetch_add(by) + by
-
-    def decr_stage_ref_count(self, stage: Stage, by: int = 1) -> int:
-        offset = stage.stage_id * 8
-        with atomics.atomicview(
-            buffer=self._stage_shm.buf[offset : offset + 8],
-            atype=atomics.INT,
-        ) as a:
-            if by == 1:
-                return a.fetch_dec() - 1
-            else:
-                return a.fetch_sub(by) - by
+    # def get_stage_ref_count(self, stage: Stage):
+    #     offset = stage.stage_id * 8
+    #     return int.from_bytes(self._stage_shm.buf[offset : offset + 8], sys.byteorder)
+    #
+    # def incr_stage_ref_count(self, stage: Stage, by: int = 1) -> int:
+    #     offset = stage.stage_id * 8
+    #     with atomics.atomicview(
+    #         buffer=self._stage_shm.buf[offset : offset + 8],
+    #         atype=atomics.INT,
+    #     ) as a:
+    #         if by == 1:
+    #             return a.fetch_inc() + 1
+    #         else:
+    #             return a.fetch_add(by) + by
+    #
+    # def decr_stage_ref_count(self, stage: Stage, by: int = 1) -> int:
+    #     offset = stage.stage_id * 8
+    #     with atomics.atomicview(
+    #         buffer=self._stage_shm.buf[offset : offset + 8],
+    #         atype=atomics.INT,
+    #     ) as a:
+    #         if by == 1:
+    #             return a.fetch_dec() - 1
+    #         else:
+    #             return a.fetch_sub(by) - by
 
     # STAGE STATES
 
-    def get_stage_state(self, stage: Stage) -> StageState:
-        offset = (self._num_stages + stage.stage_id) * 8
-        with atomics.atomicview(
-            buffer=self._stage_shm.buf[offset : offset + 8],
-            atype=atomics.INT,
-        ) as a:
-            return StageState(a.load())
+    # def get_stage_state(self, stage: Stage) -> StageState:
+    #     offset = (self._num_stages + stage.stage_id) * 8
+    #     val = int.from_bytes(self._stage_shm.buf[offset : offset + 8], sys.byteorder)
+    #     return StageState(val)
+    #
+    # def init_stage(self, stage: Stage):
+    #     return self._wait_for_state_change(
+    #         stage,
+    #         StageState.UNINITIALIZED,
+    #         StageState.INITIALIZING,
+    #         StageState.READY,
+    #     )
+    #
+    # def commit_stage(self, stage: Stage):
+    #     return self._wait_for_state_change(
+    #         stage,
+    #         StageState.READY,
+    #         StageState.COMMITTING,
+    #         StageState.COMMITTED,
+    #     )
+    #
+    # @contextmanager
+    # def _wait_for_state_change(
+    #     self, stage: Stage, from_: StageState, transition: StageState, to: StageState
+    # ):
+    #     offset = (self._num_stages + stage.stage_id) * 8
+    #     with atomics.atomicview(
+    #         buffer=self._stage_shm.buf[offset : offset + 8],
+    #         atype=atomics.INT,
+    #     ) as a:
+    #         success = a.cmpxchg_strong(
+    #             expected=from_.value,
+    #             desired=transition.value,
+    #         )
+    #
+    #         if not success:
+    #             # Wait until transition done
+    #             while a.load() == transition.value:
+    #                 time.sleep(0.0001)
+    #             if a.load() == StageState.FAILED.value:
+    #                 raise StageError
+    #
+    #             yield False
+    #             return
+    #
+    #         try:
+    #             yield True
+    #             if not a.cmpxchg_strong(
+    #                 expected=transition.value,
+    #                 desired=to.value,
+    #             ):
+    #                 raise RuntimeError
+    #
+    #         except Exception as e:
+    #             # Failed creating stage
+    #             a.store(StageState.FAILED.value)
+    #             raise StageError from e
 
-    def init_stage(self, stage: Stage):
-        return self._wait_for_state_change(
-            stage,
-            StageState.UNINITIALIZED,
-            StageState.INITIALIZING,
-            StageState.READY,
-        )
+    # STAGE LOCK
 
-    def commit_stage(self, stage: Stage):
-        return self._wait_for_state_change(
-            stage,
-            StageState.READY,
-            StageState.COMMITTING,
-            StageState.COMMITTED,
-        )
+    def get_stage_lock_state(self, stage: Stage) -> LockState:
+        from pydiverse.pipedag.backend import LockState
 
-    @contextmanager
-    def _wait_for_state_change(
-        self, stage: Stage, from_: StageState, transition: StageState, to: StageState
-    ):
-        offset = (self._num_stages + stage.stage_id) * 8
-        with atomics.atomicview(
-            buffer=self._stage_shm.buf[offset : offset + 8],
-            atype=atomics.INT,
-        ) as a:
-            success = a.cmpxchg_strong(
-                expected=from_.value,
-                desired=transition.value,
-            )
+        offset = (self._num_stages + stage.id) * 8
+        val = int.from_bytes(self._stage_shm.buf[offset : offset + 8], sys.byteorder)
+        return LockState(val)
 
-            if not success:
-                # Wait until transition done
-                while a.load() == transition.value:
-                    time.sleep(0.0001)
-                if a.load() == StageState.FAILED.value:
-                    raise StageError
-
-                yield False
-                return
-
-            try:
-                yield True
-                if not a.cmpxchg_strong(
-                    expected=transition.value,
-                    desired=to.value,
-                ):
-                    raise RuntimeError
-
-            except Exception as e:
-                # Failed creating stage
-                a.store(StageState.FAILED.value)
-                raise StageError from e
+    def set_stage_lock_state(self, stage: Stage, state: LockState):
+        offset = (self._num_stages + stage.id) * 8
+        state_bytes = state.value.to_bytes(sys.byteorder)
+        self._stage_shm.buf[offset : offset + 8] = state_bytes
 
     # TABLE / BLOB
 
-    @staticmethod
-    def _name_to_id(obj: Table | Blob) -> str:
-        return f"STAGE: {obj.stage.name} -*- NAME: {obj.name}"
-
-    def add_names(self, tables: list[Table], blobs: list[Blob]):
-        table_duplicates = []
-        blob_duplicates = []
-
-        with self._table_shs._lock, self._blob_shs._lock:
-            for table in tables:
-                if self._table_shs._contains(self._name_to_id(table)):
-                    table_duplicates.append(table)
-
-            for blob in blobs:
-                if self._blob_shs._contains(self._name_to_id(blob)):
-                    blob_duplicates.append(blob)
-
-            success = not table_duplicates and not blob_duplicates
-            if success:
-                for table in tables:
-                    if not self._table_shs._add(self._name_to_id(table)):
-                        raise RuntimeError
-
-                for blob in blobs:
-                    if not self._blob_shs._add(self._name_to_id(blob)):
-                        raise RuntimeError
-
-            return success, table_duplicates, blob_duplicates
-
-    def remove_table_names(self, tables):
-        self._table_shs.remove_bulk([self._name_to_id(table) for table in tables])
-
-    def remove_blob_names(self, blobs):
-        self._blob_shs.remove_bulk([self._name_to_id(blob) for blob in blobs])
+    # @staticmethod
+    # def _name_to_id(obj: Table | Blob) -> str:
+    #     return f"STAGE: {obj.stage.name} -*- NAME: {obj.name}"
+    #
+    # def add_names(self, tables: list[Table], blobs: list[Blob]):
+    #     table_duplicates = []
+    #     blob_duplicates = []
+    #
+    #     with self._table_shs._lock, self._blob_shs._lock:
+    #         for table in tables:
+    #             if self._table_shs._contains(self._name_to_id(table)):
+    #                 table_duplicates.append(table)
+    #
+    #         for blob in blobs:
+    #             if self._blob_shs._contains(self._name_to_id(blob)):
+    #                 blob_duplicates.append(blob)
+    #
+    #         success = not table_duplicates and not blob_duplicates
+    #         if success:
+    #             for table in tables:
+    #                 if not self._table_shs._add(self._name_to_id(table)):
+    #                     raise RuntimeError
+    #
+    #             for blob in blobs:
+    #                 if not self._blob_shs._add(self._name_to_id(blob)):
+    #                     raise RuntimeError
+    #
+    #         return success, table_duplicates, blob_duplicates
+    #
+    # def remove_table_names(self, tables):
+    #     self._table_shs.remove_bulk([self._name_to_id(table) for table in tables])
+    #
+    # def remove_blob_names(self, blobs):
+    #     self._blob_shs.remove_bulk([self._name_to_id(blob) for blob in blobs])
 
     # TASK MEMO
 

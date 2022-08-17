@@ -208,18 +208,21 @@ class SQLTableStore(BaseTableStore):
             conn.execute(self.tasks_table.insert().values(**metadata_copy))
 
     def retrieve_task_metadata(self, task: MaterialisingTask) -> TaskMetadata:
-        with self.engine.connect() as conn:
-            result = (
-                conn.execute(
-                    self.tasks_table.select()
-                    .where(self.tasks_table.c.stage == task.stage.name)
-                    .where(self.tasks_table.c.version == task.version)
-                    .where(self.tasks_table.c.cache_key == task.cache_key)
-                    .where(self.tasks_table.c.in_transaction_schema == False)
+        try:
+            with self.engine.connect() as conn:
+                result = (
+                    conn.execute(
+                        self.tasks_table.select()
+                        .where(self.tasks_table.c.stage == task.stage.name)
+                        .where(self.tasks_table.c.version == task.version)
+                        .where(self.tasks_table.c.cache_key == task.cache_key)
+                        .where(self.tasks_table.c.in_transaction_schema == False)
+                    )
+                    .mappings()
+                    .one_or_none()
                 )
-                .mappings()
-                .one_or_none()
-            )
+        except sa.exc.MultipleResultsFound:
+            raise CacheError("Multiple results found task metadata")
 
         if result is None:
             raise CacheError(f"Couldn't retrieve task for cache key {task.cache_key}")
@@ -264,7 +267,7 @@ class SQLTableStore(BaseTableStore):
             raise CacheError("Multiple results found for lazy table cache key")
 
         if result is None:
-            raise CacheError("")
+            raise CacheError("No result found for lazy table cache key")
 
         return LazyTableMetadata(
             name=result.name,

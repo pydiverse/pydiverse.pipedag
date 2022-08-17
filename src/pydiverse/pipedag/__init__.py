@@ -1,4 +1,3 @@
-from pydiverse.pipedag import config, context
 from pydiverse.pipedag.core import Flow, Stage, Task
 from pydiverse.pipedag.materialise import Blob, Table, materialise
 

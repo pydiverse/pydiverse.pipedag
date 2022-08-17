@@ -9,10 +9,9 @@ from collections import defaultdict
 from enum import Enum
 from typing import Any, Callable, Union
 
-import prefect
 import structlog
 
-from pydiverse.pipedag.context import ConfigContext
+from pydiverse.pipedag.context.context import ConfigContext
 from pydiverse.pipedag.core.stage import Stage
 from pydiverse.pipedag.errors import LockError
 from pydiverse.pipedag.util import normalise_name, requires
@@ -26,7 +25,7 @@ __all__ = [
 ]
 
 
-class LockState(str, Enum):
+class LockState(Enum):
     """Lock State
 
     Represent the current state of a lock.
@@ -52,10 +51,10 @@ class LockState(str, Enum):
         is that a lock transitions from `LOCKED -> UNCERTAIN -> INVALID`.
     """
 
-    UNLOCKED = "UNLOCKED"
-    LOCKED = "LOCKED"
-    UNCERTAIN = "UNCERTAIN"
-    INVALID = "INVALID"
+    UNLOCKED = 0
+    LOCKED = 1
+    UNCERTAIN = 2
+    INVALID = 3
 
 
 Lockable = Union[Stage, str]
@@ -71,7 +70,7 @@ class BaseLockManager(ABC):
     """
 
     def __init__(self):
-        self.logger = structlog.get_logger(type(self).__name__)
+        self.logger = structlog.get_logger(lock=type(self).__name__)
 
         self.state_listeners = set()
         self.lock_states = defaultdict(lambda: LockState.UNLOCKED)

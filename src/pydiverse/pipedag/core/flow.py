@@ -5,9 +5,8 @@ from typing import TYPE_CHECKING
 
 import networkx as nx
 
-from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext
-from pydiverse.pipedag.context.run import MultiProcManager
-from pydiverse.pipedag.engines.prefect_one import PrefectOneEngine
+from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContextServer
+from pydiverse.pipedag.engines.prefect_one import PrefectEngine
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 
 if TYPE_CHECKING:
@@ -44,19 +43,21 @@ class Flow:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._ctx.__exit__()
-        self._ctx = None
+        del self._ctx
+
         self.explicit_graph = self.build_graph()
 
     def add_stage(self, stage: Stage):
         if stage.name in self.stages:
             raise DuplicateNameError(f"Stage with name '{stage.name}' already exists.")
 
-        stage.stage_id = len(self.stages)
+        stage.id = len(self.stages)
         self.stages[stage.name] = stage
 
     def add_task(self, task: Task):
         assert self.stages[task.stage.name] is task.stage
 
+        task.id = len(self.tasks)
         self.tasks.append(task)
         self.graph.add_node(task)
 
@@ -197,15 +198,12 @@ class Flow:
             stage.prepare_for_run()
 
     def run(self):
-        run_context_manager = MultiProcManager()
-        config_context = ConfigContext.from_file()
-
-        print(config_context)
-
-        with run_context_manager(flow=self), config_context:
+        # TODO: REPLACE ENTIRELY
+        with ConfigContext.from_file(), RunContextServer(self):
             self.prepare_for_run()
+
             # TODO: Allow customization of backend
-            pf = PrefectOneEngine().construct_workflow(self)
+            pf = PrefectEngine().construct_workflow(self)
             # TODO: The store should start listening for reference counter hitting 0 here
             from prefect.executors import DaskExecutor
 
@@ -213,5 +211,6 @@ class Flow:
                 cluster_kwargs={"n_workers": 2},
             )
             res = pf.run(executor=executor)
+            # res = pf(return_state=True)
 
         return res

@@ -6,7 +6,12 @@ from typing import TYPE_CHECKING, Any, Callable
 
 import structlog
 
-from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext, TaskContext
+from pydiverse.pipedag.context import (
+    ConfigContext,
+    DAGContext,
+    RunContextProxy,
+    TaskContext,
+)
 from pydiverse.pipedag.errors import FlowError, StageError
 from pydiverse.pipedag.util import deepmutate
 
@@ -37,7 +42,7 @@ class Task:
         self.flow: Flow = None  # type: ignore
         self.stage: Stage = None  # type: ignore
         self.upstream_stages: list[Stage] = None  # type: ignore
-        self.input_tasks: list[Task] = None  # type: ignore
+        self.input_tasks: dict[int, Task] = None  # type: ignore
 
         self._signature = inspect.signature(fn)
         self._bound_args: inspect.BoundArguments = None  # type: ignore
@@ -45,6 +50,7 @@ class Task:
         self.logger = structlog.get_logger()
 
         self.value = None
+        self.id: int = None  # type: ignore
 
     def __repr__(self):
         return f"<Task '{self.name}' {hex(id(self))}>"
@@ -81,13 +87,13 @@ class Task:
         new.stage.tasks.append(new)
 
         # Compute input tasks
-        new.input_tasks = []
+        new.input_tasks = {}
 
         def visitor(x):
             if isinstance(x, Task):
-                new.input_tasks.append(x)
+                new.input_tasks[x.id] = x
             elif isinstance(x, TaskGetItem):
-                new.input_tasks.append(x.task)
+                new.input_tasks[x.task.id] = x.task
             return x
 
         deepmutate(new._bound_args.args, visitor)
@@ -95,13 +101,43 @@ class Task:
 
         # Add upstream edges
         upstream_stages_set = set()
-        for input_task in new.input_tasks:
+        for input_task in new.input_tasks.values():
             new.flow.add_edge(input_task, new)
             upstream_stages_set.add(input_task.stage)
 
         new.upstream_stages = list(upstream_stages_set)
 
         return new
+
+    def run(
+        self,
+        inputs: dict[int, Any],
+        run_context: RunContextProxy = None,
+        config_context: ConfigContext = None,
+    ):
+        # Hand over run context if using multiprocessing
+        if run_context is None:
+            run_context = RunContextProxy.get()
+        if config_context is None:
+            config_context = ConfigContext.get()
+
+        # With multiprocessing the task value doesn't get shared between
+        # processes. That's why we must take a dict of inputs as arguments
+        # (when running with multiprocessing) and update the value of all
+        # relevant tasks.
+        for task_id, value in inputs.items():
+            task = self.input_tasks[task_id]
+            task.value = value
+
+        with run_context, config_context:
+            try:
+                result = self._run()
+            except Exception as e:
+                self.on_failure()
+                raise e
+            else:
+                self.on_success()
+                return result
 
     def _run(self):
         args = self._bound_args.args
@@ -123,37 +159,6 @@ class Task:
 
         return result
 
-    def run(self, run_context: RunContext = None, config_context: ConfigContext = None):
-        # Hand over run context if using multiprocessing
-        if run_context is None:
-            run_context = RunContext.get()
-        if config_context is None:
-            config_context = ConfigContext.get()
-
-        with run_context, config_context:
-            try:
-                result = self._run()
-                self.on_success()
-                return result
-            except Exception as e:
-                self.on_failure()
-                raise e
-
-    def get_input_tasks(self, args, kwargs):
-        input_tasks = []
-
-        def mutator(x):
-            if isinstance(x, Task):
-                input_tasks.append(x)
-            elif isinstance(x, TaskGetItem):
-                input_tasks.append(x.task)
-            return x
-
-        deepmutate(args, mutator)
-        deepmutate(kwargs, mutator)
-
-        return input_tasks
-
     # Run Metadata
 
     def prepare_for_run(self):
@@ -161,10 +166,12 @@ class Task:
             stage.incr_ref_count()
 
     def on_success(self):
+        self.logger.info("Task finished successfully", task=self)
         for stage in self.upstream_stages:
             stage.decr_ref_count()
 
     def on_failure(self):
+        self.logger.warning("Task failed", task=self)
         for stage in self.upstream_stages:
             stage.decr_ref_count()
 
@@ -184,4 +191,6 @@ class TaskGetItem:
 
     @property
     def value(self):
+        if self.parent.value is None:
+            raise TypeError(f"Parent ({self.parent}) value is None.")
         return self.parent.value[self.item]

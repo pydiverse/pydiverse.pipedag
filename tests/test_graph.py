@@ -27,11 +27,11 @@ def validate_dependencies(flow: Flow):
         assert task in expl_g
 
         parents = {edge[0] for edge in g.in_edges(task)}
-        assert set(task.input_tasks) == parents
+        assert set(task.input_tasks.values()) == parents
 
     # Check inputs computed before task
     for task in tasks:
-        for input_task in task.input_tasks:
+        for input_task in task.input_tasks.values():
             assert nx.shortest_path(expl_g, input_task, task)
 
     # Check each task in stage happens before commit

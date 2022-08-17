@@ -7,8 +7,8 @@ type of the object.
 
 from __future__ import annotations
 
-from pydiverse.pipedag import Blob, Table, config
-from pydiverse.pipedag.context import RunContext
+from pydiverse.pipedag import Blob, Table
+from pydiverse.pipedag.context import RunContextProxy
 
 PIPEDAG_TYPE = "_pipedag_type_"
 PIPEDAG_TYPE_TABLE = "table"
@@ -39,7 +39,7 @@ def json_object_hook(d: dict):
     """Decode json with `Table` and `Blob` objects"""
     pipedag_type = d.get(PIPEDAG_TYPE)
     if pipedag_type:
-        run_context = RunContext.get()
+        run_context = RunContextProxy.get()
         stages = run_context.flow.stages
 
         if pipedag_type == PIPEDAG_TYPE_TABLE:

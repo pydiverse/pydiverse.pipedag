@@ -8,11 +8,11 @@ from functools import partial
 from threading import Condition
 from typing import TYPE_CHECKING, Any, Callable
 
-import pydiverse.pipedag
 from pydiverse.pipedag._typing import CallableT
-from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
+from pydiverse.pipedag.context import ConfigContext, TaskContext
 from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import CacheError
+from pydiverse.pipedag.materialise.container import Blob, Table
 from pydiverse.pipedag.util import deepmutate
 
 if TYPE_CHECKING:
@@ -218,6 +218,14 @@ class MaterialisationWrapper:
         # Materialise
         materialised_result = store.materialise_task(task, result)
         # self.store_in_memo(materialised_result, task, cache_key)
+
+        def obj_del_mutator(x):
+            if isinstance(x, (Table, Blob)):
+                x.obj = None
+            return x
+
+        result = deepmutate(result, obj_del_mutator)
+        self.value = result
 
         return materialised_result
 

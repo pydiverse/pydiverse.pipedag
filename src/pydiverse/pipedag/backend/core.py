@@ -15,8 +15,8 @@ from pydiverse.pipedag.backend.lock import LockState
 from pydiverse.pipedag.backend.metadata import TaskMetadata
 from pydiverse.pipedag.backend.util import compute_cache_key
 from pydiverse.pipedag.backend.util import json as json_util
-from pydiverse.pipedag.context import ConfigContext, RunContext
-from pydiverse.pipedag.context.run.base import StageState
+from pydiverse.pipedag.context import ConfigContext, RunContextProxy
+from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.errors import DuplicateNameError, LockError, StageError
 from pydiverse.pipedag.materialise.core import MaterialisingTask
 from pydiverse.pipedag.util import deepmutate
@@ -37,14 +37,11 @@ class PipeDAGStore:
         self,
         table: backend.table.BaseTableStore,
         blob: backend.blob.BaseBlobStore,
-        lock: backend.lock.BaseLockManager,
     ):
         self.table_store = table
         self.blob_store = blob
-        self.lock_manager = lock
 
-        self.logger = structlog.get_logger("pipedag")
-
+        self.logger = structlog.get_logger()
         self.json_encoder = json.JSONEncoder(
             ensure_ascii=False,
             allow_nan=False,
@@ -54,31 +51,19 @@ class PipeDAGStore:
         )
         self.json_decoder = json.JSONDecoder(object_hook=json_util.json_object_hook)
 
-        self.lock_conditions = defaultdict(lambda: threading.Condition())
-        self.lock_manager.add_lock_state_listener(self._lock_state_listener)
+        # self.lock_conditions = defaultdict(lambda: threading.Condition())
+        # self.lock_manager.add_lock_state_listener(self._lock_state_listener)
 
         # Perform setup operations with lock
         # This is to prevent race conditions, for example, when creating
         # the metadata schema with the SQL backend.
-        self.lock_manager.acquire("_pipedag_setup_")
-        self.table_store.setup()
-        self.lock_manager.release("_pipedag_setup_")
+
+        # TODO: SET UP AGAIN
+        # self.lock_manager.acquire("_pipedag_setup_")
+        # self.table_store.setup()
+        # self.lock_manager.release("_pipedag_setup_")
 
     #### Stage ####
-
-    def register_stage(self, stage: Stage):
-        """Used by `Stage` objects to inform the backend about its existence
-
-        As of right now, the mains purpose of this function is to prevent
-        creating two stages with the same name, and to be able to retrieve
-        a stage object based on its name.
-        """
-        with self.__lock:
-            if stage.name in self.stages:
-                raise DuplicateNameError(
-                    f"Stage with name '{stage.name}' already exists."
-                )
-            self.stages[stage.name] = stage
 
     def init_stage(self, stage: Stage):
         """Initializes the stage in all backends
@@ -108,14 +93,16 @@ class PipeDAGStore:
         This allows the creation of stages in a lazy way. This ensures
         that a stage only gets locked right before it is needed.
         """
-        with RunContext.get().init_stage(stage) as should_continue:
+        with RunContextProxy.get().init_stage(stage) as should_continue:
             if not should_continue:
                 return
             self.init_stage(stage)
 
     def commit_stage(self, stage: Stage):
         """Commit the stage"""
-        with stage.commit_context():
+        with RunContextProxy.get().commit_stage(stage) as should_continue:
+            if not should_continue:
+                raise StageError
             self.validate_lock_state(stage)
             self.table_store.commit_stage(stage)
             self.blob_store.commit_stage(stage)
@@ -174,10 +161,10 @@ class PipeDAGStore:
         :return: A copy of `value` with additional metadata
         """
 
-        ctx = RunContext.get()
         stage = task.stage
+        ctx = RunContextProxy.get()
 
-        if (state := RunContext.get().get_stage_state(stage)) != StageState.READY:
+        if (state := ctx.get_stage_state(stage)) != StageState.READY:
             raise StageError(
                 f"Can't materialise because stage '{stage.name}' is not ready "
                 f"(state: {state})."
@@ -267,6 +254,10 @@ class PipeDAGStore:
     def _check_names(
         self, task: MaterialisingTask, tables: list[Table], blobs: list[Blob]
     ):
+        if not tables and not blobs:
+            # Nothing to check
+            return
+
         # Check names: No duplicates in task
         seen_tn = set()
         seen_bn = set()
@@ -284,12 +275,10 @@ class PipeDAGStore:
             )
 
         # Check names: No duplicates in stage
-        ctx = RunContext.get()
-        success, t_dup, b_dup = ctx.add_names(tables, blobs)
+        ctx = RunContextProxy.get()
+        success, tn_dup, bn_dup = ctx.add_names(task.stage, tables, blobs)
 
         if not success:
-            tn_dup = [t.name for t in t_dup]
-            bn_dup = [b.name for b in b_dup]
             raise DuplicateNameError(
                 f"Task '{task.name}' returned tables and/or blobs"
                 f" whose name are not unique in the schema '{task.stage}'.\n"
@@ -309,7 +298,7 @@ class PipeDAGStore:
         store_metadata: Callable[[MaterialisingTask], None],
     ):
         stage = task.stage
-        ctx = RunContext.get()
+        ctx = RunContextProxy.get()
 
         stored_tables = []
         stored_blobs = []
@@ -334,8 +323,7 @@ class PipeDAGStore:
             for blob in stored_blobs:
                 self.blob_store.delete_blob_from_transaction(blob)
 
-            ctx.remove_table_names(tables)
-            ctx.remove_blob_names(blobs)
+            ctx.remove_names(stage, tables, blobs)
             raise e
 
     #### Cache ####
@@ -427,11 +415,11 @@ class PipeDAGStore:
 
     def acquire_stage_lock(self, stage: Stage):
         """Acquires a lock to access the given stage"""
-        self.lock_manager.acquire(stage)
+        RunContextProxy.get().acquire_stage_lock(stage)
 
     def release_stage_lock(self, stage: Stage):
         """Releases a previously acquired lock on a stage"""
-        self.lock_manager.release(stage)
+        RunContextProxy.get().release_stage_lock(stage)
 
     def validate_lock_state(self, stage: Stage):
         """Validate that a lock is still in the LOCKED state
@@ -449,8 +437,13 @@ class PipeDAGStore:
 
         :raises LockError: if the lock is unlocked
         """
+
+        # TODO: Implement with shared state
+        return
+        ctx = RunContext.get()
+
         while True:
-            state = self.lock_manager.get_lock_state(stage)
+            state = ctx.get_stage_lock_state(stage)
             if state == LockState.LOCKED:
                 return
             elif state == LockState.UNLOCKED:
@@ -467,31 +460,6 @@ class PipeDAGStore:
                     cond.wait()
             else:
                 raise ValueError(f"Invalid state '{state}'.")
-
-    def _lock_state_listener(
-        self, stage: Stage, old_state: LockState, new_state: LockState
-    ):
-        """Internal listener that gets notified when the state of a lock changes"""
-        if not isinstance(stage, Stage):
-            return
-
-        # Notify all waiting threads that the lock state has changed
-        cond = self.lock_conditions[stage]
-        with cond:
-            cond.notify_all()
-
-        # Logging
-        if new_state == LockState.UNCERTAIN:
-            self.logger.warning(
-                f"Lock for stage '{stage.name}' transitioned to UNCERTAIN state."
-            )
-        if old_state == LockState.UNCERTAIN and new_state == LockState.LOCKED:
-            self.logger.info(
-                f"Lock for stage '{stage.name}' is still LOCKED (after being"
-                " UNCERTAIN)."
-            )
-        if old_state == LockState.UNCERTAIN and new_state == LockState.INVALID:
-            self.logger.error(f"Lock for stage '{stage.name}' has become INVALID.")
 
     #### Utils ####
 
