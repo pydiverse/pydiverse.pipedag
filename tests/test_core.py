@@ -5,7 +5,7 @@ import time
 import pytest
 from pytest_mock import MockerFixture
 
-from pydiverse.pipedag import Flow, Stage, materialise
+from pydiverse.pipedag import Blob, Flow, Stage, materialise
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError, StageError
 
 
@@ -33,6 +33,12 @@ def m_noop(x):
 def m_sleep_noop(x, duration=0.05):
     time.sleep(duration)
     return x
+
+
+@materialise
+def m_sleep_blob_noop(x, duration=0.25):
+    time.sleep(duration)
+    return Blob(x)
 
 
 @materialise
@@ -176,16 +182,16 @@ def test_materialise_memo():
     # more than once and still run successfully.
     with Flow("flow") as f:
         with Stage("stage1"):
-            t_1 = m_sleep_noop(1)
-            t_2 = m_sleep_noop(1)
-            t_3 = m_sleep_noop(1)
-            t_4 = m_sleep_noop(1)
+            t_1 = m_sleep_blob_noop(1)
+            t_2 = m_sleep_blob_noop(1)
+            t_3 = m_sleep_blob_noop(1)
+            t_4 = m_sleep_blob_noop(1)
 
         with Stage("stage2"):
-            t_5 = m_sleep_noop(1)
-            t_6 = m_sleep_noop(t_5)
-            t_7 = m_sleep_noop(t_6)
-            t_8 = m_sleep_noop(t_7)
+            t_5 = m_sleep_blob_noop(1)
+            t_6 = m_sleep_blob_noop(t_5)
+            t_7 = m_sleep_blob_noop(t_6)
+            t_8 = m_sleep_blob_noop(t_7)
 
         with Stage("stage3"):
             t_map = m_noop([t_1, t_2, t_3, t_4, t_5, t_6, t_7, t_8])

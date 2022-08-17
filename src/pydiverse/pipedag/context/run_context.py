@@ -1,23 +1,29 @@
 from __future__ import annotations
 
 import functools
+import pickle
 import threading
 import time
 import uuid
+from collections import defaultdict
 from contextlib import contextmanager
 from contextvars import ContextVar
 from enum import Enum
 from threading import Lock
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+import msgpack
 
 from pydiverse.pipedag.context.context import BaseContext, ConfigContext
-from pydiverse.pipedag.errors import StageError
+from pydiverse.pipedag.errors import LockError, StageError
 from pydiverse.pipedag.util.ipc import IPCServer
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag import Blob, Flow, Stage, Table
+    from pydiverse.pipedag import Flow, Stage
     from pydiverse.pipedag._typing import T
     from pydiverse.pipedag.backend import LockState
+    from pydiverse.pipedag.core import Task
+    from pydiverse.pipedag.materialise import Blob, Table
 
 
 def synchronized(lock_attr: str):
@@ -42,9 +48,7 @@ class SetEvent(threading.Event):
 
 class RunContextServer(IPCServer):
     def __init__(self, flow: Flow):
-        super().__init__()
-
-        from pydiverse.pipedag.backend import LockState
+        super().__init__(msg_default=_msg_default, msg_ext_hook=_msg_ext_hook)
 
         self.flow = flow
         self.run_id = uuid.uuid4().hex[:20]
@@ -61,15 +65,15 @@ class RunContextServer(IPCServer):
         self.table_names = [set() for _ in range(num_stages)]
         self.blob_names = [set() for _ in range(num_stages)]
 
+        self.task_memo: defaultdict[Any, Any] = defaultdict(lambda: MemoState.NONE)
+
         # STATE LOCKS
         self.ref_count_lock = Lock()
         self.stage_state_lock = Lock()
         self.names_lock = Lock()
+        self.task_memo_lock = Lock()
 
         # LOCKING
-        # self.stage_lock_certain_event = [SetEvent() for _ in range(num_stages)]
-        # self.stage_lock_state_lock = Lock()
-
         self.lock_manager = ConfigContext.get().get_lock_manager()
         self.lock_manager.add_lock_state_listener(self._lock_state_listener)
 
@@ -87,19 +91,21 @@ class RunContextServer(IPCServer):
         super().__exit__(exc_type, exc_val, exc_tb)
 
     def handle_request(self, request):
-        op_name = request["op"]
-        op = getattr(self, op_name)
-
-        if not callable(op):
-            raise TypeError(f"OP '{op_name}' is not callable")
-
         try:
+            op_name = request["op"]
+            op = getattr(self, op_name)
+
+            if not callable(op):
+                raise TypeError(f"OP '{op_name}' is not callable")
+
             args = request.get("args", ())
             kwargs = request.get("kwargs", {})
             result = op(*args, **kwargs)
             return {"status": 0, "op": op_name, "result": result}
+
         except Exception as e:
-            return {"status": -1, "op": op_name, "message": repr(e)}
+            pickled_exception = pickle.dumps(e)
+            return {"status": -1, "op": op_name, "exception": pickled_exception}
 
     # STAGE: Reference Counting
 
@@ -253,17 +259,32 @@ class RunContextServer(IPCServer):
         stage = self.stages[stage_id]
         self.lock_manager.release(stage)
 
-    # @synchronized("stage_lock_state_lock")
-    # def set_stage_lock_state(self, stage_id: int, state: int) -> int:
-    #     from pydiverse.pipedag.backend.lock import LockState
-    #
-    #     old_state = self.stage_lock_state[stage_id]
-    #     self.stage_lock_state[stage_id] = LockState(state)
-    #     return old_state.value
+    def validate_stage_lock(self, stage_id: int):
+        from pydiverse.pipedag.backend.lock import LockState
 
-    # @synchronized("stage_lock_state_lock")
-    # def wait_stage_lock_state_certain(self, stage_id: int) -> int:
-    #     self.stage_lock_certain_event[stage_id].wait()
+        stage = self.stages[stage_id]
+        did_log = False
+        while True:
+            state = self.lock_manager.get_lock_state(stage)
+
+            if state == LockState.LOCKED:
+                return
+            elif state == LockState.UNLOCKED:
+                raise LockError(f"Lock for stage '{stage.name}' is unlocked.")
+            elif state == LockState.INVALID:
+                raise LockError(f"Lock for stage '{stage.name}' is invalid.")
+            elif state == LockState.UNCERTAIN:
+                if not did_log:
+                    self.logger.info(
+                        f"Waiting for stage '{stage.name}' lock state to"
+                        " become known again..."
+                    )
+                    did_log = True
+
+                time.sleep(0.001)
+
+            else:
+                raise ValueError(f"Invalid state '{state}'.")
 
     # TABLE / BLOB: Names
 
@@ -304,7 +325,46 @@ class RunContextServer(IPCServer):
 
     # TASK: Memo
 
-    ...
+    def enter_task_memo(self, stage_id: int, cache_key: str) -> tuple[bool, Any]:
+        memo_key = (stage_id, cache_key)
+
+        with self.task_memo_lock:
+            memo = self.task_memo[memo_key]
+            if memo is MemoState.NONE:
+                self.task_memo[memo_key] = MemoState.WAITING
+                return False, None
+
+        while memo is MemoState.WAITING:
+            time.sleep(0.001)
+            memo = self.task_memo[memo_key]
+
+        if memo is MemoState.FAILED:
+            # TODO: Should this get handled differently?
+            raise Exception("Memo task failed")
+        if isinstance(memo, MemoState):
+            raise Exception
+
+        return True, memo
+
+    @synchronized("task_memo_lock")
+    def exit_task_memo(self, stage_id: int, cache_key: str, success: bool):
+        if not success:
+            self.task_memo[(stage_id, cache_key)] = MemoState.FAILED
+            return
+
+        memo = self.task_memo[(stage_id, cache_key)]
+        if isinstance(memo, MemoState):
+            raise Exception("set_task_memo not called")
+
+    @synchronized("task_memo_lock")
+    def store_task_memo(self, stage_id: int, cache_key: str, value: Any):
+        memo_key = (stage_id, cache_key)
+        memo = self.task_memo[memo_key]
+
+        if memo is not MemoState.WAITING:
+            raise Exception("Expected memo state to be waiting")
+
+        self.task_memo[memo_key] = value
 
 
 class RunContextProxy(BaseContext):
@@ -325,7 +385,9 @@ class RunContextProxy(BaseContext):
         )
 
         if response["status"] != 0:
-            raise Exception(response["message"])
+            pickled_exception = response["exception"]
+            raise pickle.loads(pickled_exception)
+
         return response["result"]
 
     # STAGE: Reference Counting
@@ -385,6 +447,9 @@ class RunContextProxy(BaseContext):
     def release_stage_lock(self, stage: Stage):
         self._request("release_stage_lock", stage.id)
 
+    def validate_stage_lock(self, stage: Stage):
+        self._request("validate_stage_lock", stage.id)
+
     # TABLE / BLOB: Names
 
     def add_names(
@@ -412,7 +477,20 @@ class RunContextProxy(BaseContext):
 
     # TASK: Memo
 
-    ...
+    @contextmanager
+    def task_memo(self, task: Task, cache_key: str):
+        success, memo = self._request("enter_task_memo", task.stage.id, cache_key)
+
+        try:
+            yield success, memo
+        except Exception as e:
+            self._request("exit_task_memo", task.stage.id, cache_key, False)
+            raise e
+        else:
+            self._request("exit_task_memo", task.stage.id, cache_key, True)
+
+    def store_task_memo(self, task: Task, cache_key: str, result: Any):
+        self._request("store_task_memo", task.stage.id, cache_key, result)
 
 
 class StageState(Enum):
@@ -423,3 +501,25 @@ class StageState(Enum):
     COMMITTED = 4
 
     FAILED = 255
+
+
+class MemoState(Enum):
+    NONE = 0
+    WAITING = 1
+
+    FAILED = 255
+
+
+# msgpack hooks
+# Only used to transmit Table and Blob type metadata
+# TODO: Maybe replace pickle implementation with more efficient one
+
+
+def _msg_default(obj):
+    return msgpack.ExtType(0, pickle.dumps(obj))
+
+
+def _msg_ext_hook(code, data):
+    if code == 0:
+        return pickle.loads(data)
+    return msgpack.ExtType(code, data)

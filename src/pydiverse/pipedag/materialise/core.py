@@ -9,7 +9,7 @@ from threading import Condition
 from typing import TYPE_CHECKING, Any, Callable
 
 from pydiverse.pipedag._typing import CallableT
-from pydiverse.pipedag.context import ConfigContext, TaskContext
+from pydiverse.pipedag.context import ConfigContext, RunContextProxy, TaskContext
 from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialise.container import Blob, Table
@@ -126,10 +126,6 @@ class MaterialisationWrapper:
         self.fn = fn
         self.fn_signature = inspect.signature(fn)
 
-        # self.__lock = threading.Lock()
-        self.memo: defaultdict[Stage, dict[str, Any]] = defaultdict(dict)
-        self.conditions: defaultdict[Stage, dict[str, Condition]] = defaultdict(dict)
-
     def __call__(self, *args, **kwargs):
         """Function wrapper / materialisation logic
 
@@ -157,77 +153,54 @@ class MaterialisationWrapper:
         cache_key = store.compute_task_cache_key(task, input_json)
         task.cache_key = cache_key
 
+        # task.logger.info(
+        #     "Task is currently being run with the same inputs."
+        #     " Waiting for the other task to finish..."
+        # )
+
         # Check if this task has already been run with the same inputs
         # If yes, return memoized result. This prevents DuplicateNameExceptions
-        if True:  # with self.__lock:
-            memo_result = self.memo[task.stage].get(cache_key, _nil)
-            if memo_result is _nil:
-                self.memo[task.stage][cache_key] = Condition()
-
-        if memo_result is not _nil:
-            if isinstance(memo_result, Condition):
-                task.logger.info(
-                    "Task is currently being run with the same inputs."
-                    " Waiting for the other task to finish..."
-                )
-            else:
+        ctx = RunContextProxy.get()
+        with ctx.task_memo(task, cache_key) as (success, memo):
+            if success:
                 task.logger.info(
                     "Task has already been run with the same inputs."
                     " Using memoized results."
                 )
 
-            while isinstance(memo_result, Condition):
-                with memo_result:
-                    if memo_result.wait(timeout=60):
-                        task.logger.info("Other task finished. Using memoized result.")
-                    else:
-                        task.logger.info("Waiting...")
-                if True:  # with self.__lock:
-                    memo_result = self.memo[task.stage][cache_key]
+                return memo
 
-            # Must make a semi-deepcopy of the memoized result:
-            # Deepcopy of python container types, shallow copy of everything else.
-            return deepmutate(memo_result, copy.copy)
+            # If task is not lazy, check the cache
+            if not task.lazy:
+                try:
+                    cached_output = store.retrieve_cached_output(task)
+                    store.copy_cached_output_to_transaction_stage(cached_output, task)
+                    ctx.store_task_memo(task, cache_key, cached_output)
+                    task.logger.info(f"Found task in cache. Using cached result.")
+                    return cached_output
+                except CacheError as e:
+                    task.logger.info(f"Failed to retrieve task from cache. {e}")
+                    pass
 
-        # If task is not lazy, check the cache
-        if not task.lazy:
-            try:
-                cached_output = store.retrieve_cached_output(task)
-                store.copy_cached_output_to_transaction_stage(cached_output, task)
-                # self.store_in_memo(cached_output, task, cache_key)
-                task.logger.info(f"Found task in cache. Using cached result.")
-                return cached_output
-            except CacheError as e:
-                task.logger.info(f"Failed to retrieve task from cache. {e}")
-                pass
+            # Not found in cache / lazy -> Evaluate Function
+            args, kwargs = store.dematerialise_task_inputs(
+                task, bound.args, bound.kwargs
+            )
 
-        # Not found in cache / lazy -> Evaluate Function
-        args, kwargs = store.dematerialise_task_inputs(task, bound.args, bound.kwargs)
-
-        try:
             result = self.fn(*args, **kwargs)
-        except Exception as e:
-            # TODO: CLEAN UP............................................................
-            #       THIS HERE IS JUST AN EXPERIMENT ....................................
-            cond = self.memo[task.stage][cache_key]
-            with cond:
-                del self.memo[task.stage][cache_key]
-                cond.notify_all()
-            raise e
+            result = store.materialise_task(task, result)
 
-        # Materialise
-        materialised_result = store.materialise_task(task, result)
-        # self.store_in_memo(materialised_result, task, cache_key)
+            # Delete underlying objects from result (after materialising them)
+            def obj_del_mutator(x):
+                if isinstance(x, (Table, Blob)):
+                    x.obj = None
+                return x
 
-        def obj_del_mutator(x):
-            if isinstance(x, (Table, Blob)):
-                x.obj = None
-            return x
+            result = deepmutate(result, obj_del_mutator)
+            ctx.store_task_memo(task, cache_key, result)
+            self.value = result
 
-        result = deepmutate(result, obj_del_mutator)
-        self.value = result
-
-        return materialised_result
+            return result
 
     def get_memoized_result(self, task: Task, cache_key: str):
         with self.__lock:
@@ -251,6 +224,3 @@ class MaterialisationWrapper:
                     with memo_result:
                         memo_result.notify_all()
                         self.memo[task.stage][task.cache_key] = _nil
-
-
-_nil = object()

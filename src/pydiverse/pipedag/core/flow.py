@@ -204,7 +204,7 @@ class Flow:
 
             # TODO: Allow customization of backend
             pf = PrefectEngine().construct_workflow(self)
-            # TODO: The store should start listening for reference counter hitting 0 here
+
             from prefect.executors import DaskExecutor
 
             executor = DaskExecutor(

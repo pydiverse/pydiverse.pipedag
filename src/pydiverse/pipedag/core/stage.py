@@ -28,8 +28,6 @@ class Stage:
         self.logger = structlog.get_logger(stage=self)
         self.id: int = None  # type: ignore
 
-        # TODO: Probably needs to be moved to the main process
-        self._ref_count_free_handler: Callable[[Stage], None] | None = None
         self._did_enter = False
 
     @property
@@ -95,48 +93,18 @@ class Stage:
         return False
 
     def prepare_for_run(self):
-        # self.__did_commit = False
-        #
-        # # Reset reference counter
-        # if self.__ref_count != 0 and self.__ref_count_free_handler is not None:
-        #     self.__ref_count = 0
-        #     self.__ref_count_free_handler(self)
-
         # Increase reference counter
         for task in self.tasks:
             task.prepare_for_run()
         self.commit_task.prepare_for_run()
 
-    # Reference Counting
-
-    @property
-    def ref_count(self):
-        """The current reference counter value"""
-        return RunContextProxy.get().get_stage_ref_count(self)
-
-    def incr_ref_count(self, by: int = 1):
-        rc = RunContextProxy.get().incr_stage_ref_count(self, by)
-        print("----------------------------------", self, rc)
-
-    def decr_ref_count(self, by: int = 1):
-        rc = RunContextProxy.get().decr_stage_ref_count(self, by)
-        print("----------------------------------", self, rc)
-
-    def set_ref_count_free_handler(self, handler: Callable[[Stage], None] | None):
-        assert callable(handler) or handler is None
-        self._ref_count_free_handler = handler
-
     def __getstate__(self):
         state = self.__dict__.copy()
-        # TODO: Is it relly safe to just ignore tasks from pickling?
         state.pop("tasks", None)
         state.pop("commit_task", None)
-        state.pop("_ref_count_free_handler", None)
+        state.pop("outer_stage", None)
+        state.pop("logger", None)
         return state
-
-    def __setstate__(self, state):
-        self.__dict__.update(state)
-        self._ref_count_free_handler = None
 
 
 @frozen

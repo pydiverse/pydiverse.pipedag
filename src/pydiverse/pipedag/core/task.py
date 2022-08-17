@@ -163,17 +163,17 @@ class Task:
 
     def prepare_for_run(self):
         for stage in self.upstream_stages:
-            stage.incr_ref_count()
+            RunContextProxy.get().incr_stage_ref_count(stage)
 
     def on_success(self):
         self.logger.info("Task finished successfully", task=self)
         for stage in self.upstream_stages:
-            stage.decr_ref_count()
+            RunContextProxy.get().decr_stage_ref_count(stage)
 
     def on_failure(self):
         self.logger.warning("Task failed", task=self)
         for stage in self.upstream_stages:
-            stage.decr_ref_count()
+            RunContextProxy.get().decr_stage_ref_count(stage)
 
 
 class TaskGetItem:

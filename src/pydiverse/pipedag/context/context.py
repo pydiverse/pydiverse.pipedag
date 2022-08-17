@@ -86,7 +86,7 @@ class ConfigContext(BaseAttrsContext):
     @cached_property
     def store(self) -> PipeDAGStore:
         from pydiverse.pipedag.backend import PipeDAGStore
-        from pydiverse.pipedag.config import load_instance
+        from pydiverse.pipedag.util.config import load_instance
 
         table_store = load_instance(self.config_dict["table_store"])
         blob_store = load_instance(self.config_dict["blob_store"])
@@ -97,13 +97,13 @@ class ConfigContext(BaseAttrsContext):
         )
 
     def get_lock_manager(self) -> BaseLockManager:
-        from pydiverse.pipedag.config import load_instance
+        from pydiverse.pipedag.util.config import load_instance
 
         return load_instance(self.config_dict["lock_manager"])
 
     @classmethod
     def from_file(cls, path: str = None):
-        from pydiverse.pipedag import config
+        from pydiverse.pipedag.util import config
 
         if path is None:
             return config.auto_load_config()

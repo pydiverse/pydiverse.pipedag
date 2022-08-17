@@ -13,13 +13,16 @@ import structlog
 
 
 class IPCServer:
-    def __init__(self):
+    def __init__(self, msg_default=None, msg_ext_hook=None):
         self.socket = pynng.Rep0(listen="tcp://localhost:0", recv_timeout=1000)
         self.main_thread = None
         self.worker_threads: dict[Any, threading.Thread] = {}
 
         self.kill_sig = threading.Event()
         self.logger = structlog.get_logger()
+
+        self.msg_default = msg_default
+        self.msg_ext_hook = msg_ext_hook
 
     def start(self):
         assert self.main_thread is None
@@ -55,23 +58,24 @@ class IPCServer:
         while not self.kill_sig.is_set():
             try:
                 data = socket.recv()
-                unpacker = msgpack.Unpacker(use_list=False)
+                unpacker = msgpack.Unpacker(use_list=False, ext_hook=self.msg_ext_hook)
                 unpacker.feed(data)
 
                 # Expected: (NONCE, PAYLOAD)
                 assert unpacker.read_array_header() == 2
                 nonce = unpacker.unpack()
+                nonce_hex = nonce.hex()
 
                 if thread := self.worker_threads.get(nonce):
                     if thread.is_alive():
                         # Already processing this request
-                        self.logger.debug("Already processing request", nonce=nonce)
+                        self.logger.debug("Already processing request", nonce=nonce_hex)
                         return
 
                 thread = threading.Thread(
                     name="IPC Worker",
                     target=self._serve,
-                    args=[socket, unpacker],
+                    args=[socket, unpacker, nonce_hex],
                     daemon=True,
                 )
                 thread.start()
@@ -81,12 +85,12 @@ class IPCServer:
             else:
                 socket = self.socket.new_context()
 
-    def _serve(self, socket, unpacker):
+    def _serve(self, socket, unpacker, nonce_hex):
         msg = unpacker.unpack()
-        self.logger.debug("IPCServer Received", message=msg)
+        self.logger.debug("IPCServer Received", message=msg, nonce=nonce_hex)
         reply = self.handle_request(msg)
-        self.logger.debug("IPCServer Reply", reply=reply)
-        socket.send(msgpack.packb(reply))
+        self.logger.debug("IPCServer Reply", reply=reply, nonce=nonce_hex)
+        socket.send(msgpack.packb(reply, default=self.msg_default))
 
     def handle_request(self, request: dict[str, Any]) -> dict[str, Any]:
         reply = {
@@ -114,25 +118,34 @@ class IPCServer:
             return f"tcp://[{ip}]:{port}"
 
     def get_client(self) -> IPCClient:
-        return IPCClient(addr=self.address)
+        return IPCClient(
+            addr=self.address,
+            msg_default=self.msg_default,
+            msg_ext_hook=self.msg_ext_hook,
+        )
 
 
 class IPCClient:
-    def __init__(self, addr: str):
+    def __init__(self, addr: str, msg_default=None, msg_ext_hook=None):
         self.addr = addr
         self.socket = self._connect()
+
+        self.msg_default = msg_default
+        self.msg_ext_hook = msg_ext_hook
 
     def _connect(self):
         return pynng.Req0(dial=self.addr, resend_time=30_000)
 
     def request(self, payload: Any) -> Any:
         with self.socket.new_context() as socket:
-            nonce = uuid.uuid4().hex
-            msg = msgpack.packb((nonce, payload))
+            nonce = uuid.uuid4().bytes
+            msg = msgpack.packb((nonce, payload), default=self.msg_default)
             socket.send(msg)
 
             response_msg = socket.recv()
-            response = msgpack.unpackb(response_msg, use_list=False)
+            response = msgpack.unpackb(
+                response_msg, use_list=False, ext_hook=self.msg_ext_hook
+            )
             return response
 
     def __getstate__(self):

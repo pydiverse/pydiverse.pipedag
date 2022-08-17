@@ -3,8 +3,6 @@ from __future__ import annotations
 import datetime
 import itertools
 import json
-import threading
-from collections import defaultdict
 from typing import Callable
 
 import structlog
@@ -51,13 +49,6 @@ class PipeDAGStore:
         )
         self.json_decoder = json.JSONDecoder(object_hook=json_util.json_object_hook)
 
-        # self.lock_conditions = defaultdict(lambda: threading.Condition())
-        # self.lock_manager.add_lock_state_listener(self._lock_state_listener)
-
-        # Perform setup operations with lock
-        # This is to prevent race conditions, for example, when creating
-        # the metadata schema with the SQL backend.
-
         # TODO: SET UP AGAIN
         # self.lock_manager.acquire("_pipedag_setup_")
         # self.table_store.setup()
@@ -78,14 +69,13 @@ class PipeDAGStore:
         """
 
         # Lock the stage and then create it
-        self.acquire_stage_lock(stage)
+        RunContextProxy.get().acquire_stage_lock(stage)
         self.table_store.init_stage(stage)
         self.blob_store.init_stage(stage)
 
         # Once stage reference counter hits 0 (this means all tasks that
         # have any task contained in the stage as an upstream dependency),
-        # we can release the stage lock.
-        stage.set_ref_count_free_handler(self.release_stage_lock)
+        # the lock gets automatically released by the RunContextServer
 
     def ensure_stage_is_ready(self, stage: Stage):
         """Initializes a stage if it hasn't been created yet
@@ -100,10 +90,11 @@ class PipeDAGStore:
 
     def commit_stage(self, stage: Stage):
         """Commit the stage"""
-        with RunContextProxy.get().commit_stage(stage) as should_continue:
+        ctx = RunContextProxy.get()
+        with ctx.commit_stage(stage) as should_continue:
             if not should_continue:
                 raise StageError
-            self.validate_lock_state(stage)
+            ctx.validate_stage_lock(stage)
             self.table_store.commit_stage(stage)
             self.blob_store.commit_stage(stage)
 
@@ -126,12 +117,14 @@ class PipeDAGStore:
         :return: A tuple with the dematerialised args and kwargs
         """
 
+        ctx = RunContextProxy.get()
+
         def dematerialise_mutator(x):
             if isinstance(x, Table):
-                self.validate_lock_state(x.stage)
+                ctx.validate_stage_lock(x.stage)
                 return self.table_store.retrieve_table_obj(x, as_type=task.input_type)
             elif isinstance(x, Blob):
-                self.validate_lock_state(x.stage)
+                ctx.validate_stage_lock(x.stage)
                 return self.blob_store.retrieve_blob(x)
             return x
 
@@ -201,7 +194,7 @@ class PipeDAGStore:
                 elif x.name.endswith("%%"):
                     x.name = x.name[:-2] + auto_suffix
 
-                self.validate_lock_state(stage)
+                ctx.validate_stage_lock(stage)
                 if isinstance(x, Table):
                     if x.obj is None:
                         raise TypeError("Underlying table object can't be None")
@@ -305,15 +298,15 @@ class PipeDAGStore:
 
         try:
             for table in tables:
-                self.validate_lock_state(stage)
+                ctx.validate_stage_lock(stage)
                 store_table(table)
                 stored_tables.append(table)
             for blob in blobs:
-                self.validate_lock_state(stage)
+                ctx.validate_stage_lock(stage)
                 store_blob(blob)
                 stored_blobs.append(blob)
 
-            self.validate_lock_state(task.stage)
+            ctx.validate_stage_lock(task.stage)
             store_metadata(task)
 
         except Exception as e:
@@ -410,56 +403,6 @@ class PipeDAGStore:
             lambda blob: self.blob_store.copy_blob_to_transaction(blob),
             lambda task: self.table_store.copy_task_metadata_to_transaction(task),
         )
-
-    #### Locking ####
-
-    def acquire_stage_lock(self, stage: Stage):
-        """Acquires a lock to access the given stage"""
-        RunContextProxy.get().acquire_stage_lock(stage)
-
-    def release_stage_lock(self, stage: Stage):
-        """Releases a previously acquired lock on a stage"""
-        RunContextProxy.get().release_stage_lock(stage)
-
-    def validate_lock_state(self, stage: Stage):
-        """Validate that a lock is still in the LOCKED state
-
-        Depending on the lock manager, it might be possible that the state
-        of a lock can change unexpectedly.
-
-        If a lock becomes unlocked or invalid, we must abort the task (by
-        throwing an exception), because we can't guarantee that the data
-        it depends on hasn't been changed.
-        On the other hand, if we are uncertain about the state (for example
-        if connection to the internet is temporarily lost), we must pause
-        any task that depends on it and wait until the state of the lock
-        becomes known again.
-
-        :raises LockError: if the lock is unlocked
-        """
-
-        # TODO: Implement with shared state
-        return
-        ctx = RunContext.get()
-
-        while True:
-            state = ctx.get_stage_lock_state(stage)
-            if state == LockState.LOCKED:
-                return
-            elif state == LockState.UNLOCKED:
-                raise LockError(f"Lock for stage '{stage.name}' is unlocked.")
-            elif state == LockState.INVALID:
-                raise LockError(f"Lock for stage '{stage.name}' is invalid.")
-            elif state == LockState.UNCERTAIN:
-                self.logger.info(
-                    f"Waiting for stage '{stage.name}' lock state to become known"
-                    " again..."
-                )
-                cond = self.lock_conditions[stage]
-                with cond:
-                    cond.wait()
-            else:
-                raise ValueError(f"Invalid state '{state}'.")
 
     #### Utils ####
 
