@@ -6,7 +6,7 @@ from functools import partial
 from typing import Callable
 
 from pydiverse.pipedag._typing import CallableT
-from pydiverse.pipedag.context import ConfigContext, RunContextProxy, TaskContext
+from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialise.container import Blob, Table
@@ -153,7 +153,7 @@ class MaterialisationWrapper:
 
         # Check if this task has already been run with the same inputs
         # If yes, return memoized result. This prevents DuplicateNameExceptions
-        ctx = RunContextProxy.get()
+        ctx = RunContext.get()
         with ctx.task_memo(task, cache_key) as (success, memo):
             if success:
                 task.logger.info(

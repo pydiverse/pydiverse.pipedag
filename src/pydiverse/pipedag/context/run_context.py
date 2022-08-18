@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import functools
 import pickle
-import threading
 import time
 import uuid
 from collections import defaultdict
@@ -36,14 +35,6 @@ def synchronized(lock_attr: str):
         return synced_func
 
     return decorator
-
-
-class SetEvent(threading.Event):
-    """Just like threading.Event except its initial state is set"""
-
-    def __init__(self):
-        super().__init__()
-        self.set()
 
 
 class RunContextServer(IPCServer):
@@ -88,7 +79,7 @@ class RunContextServer(IPCServer):
 
     def __enter__(self):
         super().__enter__()
-        self.__context_proxy = RunContextProxy(self)
+        self.__context_proxy = RunContext(self)
         self.__context_proxy.__enter__()
         return self.__context_proxy
 
@@ -370,7 +361,7 @@ class RunContextServer(IPCServer):
         self.task_memo[memo_key] = value
 
 
-class RunContextProxy(BaseContext):
+class RunContext(BaseContext):
     _context_var = ContextVar("run_context_proxy")
 
     def __init__(self, server: RunContextServer):

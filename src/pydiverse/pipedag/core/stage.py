@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 
-from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContextProxy
+from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext
 from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import StageError
@@ -51,7 +51,7 @@ class Stage:
 
     @property
     def did_commit(self) -> bool:
-        return RunContextProxy.get().get_stage_state(self) == StageState.COMMITTED
+        return RunContext.get().get_stage_state(self) == StageState.COMMITTED
 
     def __repr__(self):
         return f"<Stage: {self.name}>"
@@ -101,7 +101,7 @@ class Stage:
         # deadlocking each other.
         # To lock the stage only when it's needed (may cause deadlocks), the lock
         # should get acquired in the `PipeDAGStore.init_stage` function instead.
-        RunContextProxy.get().acquire_stage_lock(self)
+        RunContext.get().acquire_stage_lock(self)
 
     def __getstate__(self):
         state = self.__dict__.copy()

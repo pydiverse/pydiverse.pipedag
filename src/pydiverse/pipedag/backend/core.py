@@ -13,7 +13,7 @@ from pydiverse.pipedag.backend.lock import LockState
 from pydiverse.pipedag.backend.metadata import TaskMetadata
 from pydiverse.pipedag.backend.util import compute_cache_key
 from pydiverse.pipedag.backend.util import json as json_util
-from pydiverse.pipedag.context import ConfigContext, RunContextProxy
+from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.errors import DuplicateNameError, LockError, StageError
 from pydiverse.pipedag.materialise.core import MaterialisingTask
@@ -68,7 +68,7 @@ class PipeDAGStore:
         to prevent unnecessary locking.
         """
 
-        RunContextProxy.get().validate_stage_lock(stage)
+        RunContext.get().validate_stage_lock(stage)
         self.table_store.init_stage(stage)
         self.blob_store.init_stage(stage)
 
@@ -82,14 +82,14 @@ class PipeDAGStore:
         This allows the creation of stages in a lazy way. This ensures
         that a stage only gets locked right before it is needed.
         """
-        with RunContextProxy.get().init_stage(stage) as should_continue:
+        with RunContext.get().init_stage(stage) as should_continue:
             if not should_continue:
                 return
             self.init_stage(stage)
 
     def commit_stage(self, stage: Stage):
         """Commit the stage"""
-        ctx = RunContextProxy.get()
+        ctx = RunContext.get()
         with ctx.commit_stage(stage) as should_continue:
             if not should_continue:
                 raise StageError
@@ -116,7 +116,7 @@ class PipeDAGStore:
         :return: A tuple with the dematerialised args and kwargs
         """
 
-        ctx = RunContextProxy.get()
+        ctx = RunContext.get()
 
         def dematerialise_mutator(x):
             if isinstance(x, Table):
@@ -154,7 +154,7 @@ class PipeDAGStore:
         """
 
         stage = task.stage
-        ctx = RunContextProxy.get()
+        ctx = RunContext.get()
 
         if (state := ctx.get_stage_state(stage)) != StageState.READY:
             raise StageError(
@@ -267,7 +267,7 @@ class PipeDAGStore:
             )
 
         # Check names: No duplicates in stage
-        ctx = RunContextProxy.get()
+        ctx = RunContext.get()
         success, tn_dup, bn_dup = ctx.add_names(task.stage, tables, blobs)
 
         if not success:
@@ -290,7 +290,7 @@ class PipeDAGStore:
         store_metadata: Callable[[MaterialisingTask], None],
     ):
         stage = task.stage
-        ctx = RunContextProxy.get()
+        ctx = RunContext.get()
 
         stored_tables = []
         stored_blobs = []

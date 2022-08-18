@@ -6,12 +6,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 import structlog
 
-from pydiverse.pipedag.context import (
-    ConfigContext,
-    DAGContext,
-    RunContextProxy,
-    TaskContext,
-)
+from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext, TaskContext
 from pydiverse.pipedag.errors import FlowError, StageError
 from pydiverse.pipedag.util import deepmutate
 
@@ -112,12 +107,12 @@ class Task:
     def run(
         self,
         inputs: dict[int, Any],
-        run_context: RunContextProxy = None,
+        run_context: RunContext = None,
         config_context: ConfigContext = None,
     ):
         # Hand over run context if using multiprocessing
         if run_context is None:
-            run_context = RunContextProxy.get()
+            run_context = RunContext.get()
         if config_context is None:
             config_context = ConfigContext.get()
 
@@ -163,17 +158,17 @@ class Task:
 
     def prepare_for_run(self):
         for stage in self.upstream_stages:
-            RunContextProxy.get().incr_stage_ref_count(stage)
+            RunContext.get().incr_stage_ref_count(stage)
 
     def on_success(self):
         self.logger.info("Task finished successfully", task=self)
         for stage in self.upstream_stages:
-            RunContextProxy.get().decr_stage_ref_count(stage)
+            RunContext.get().decr_stage_ref_count(stage)
 
     def on_failure(self):
         self.logger.warning("Task failed", task=self)
         for stage in self.upstream_stages:
-            RunContextProxy.get().decr_stage_ref_count(stage)
+            RunContext.get().decr_stage_ref_count(stage)
 
 
 class TaskGetItem:

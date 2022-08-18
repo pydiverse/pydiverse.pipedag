@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
-from pydiverse.pipedag.context import ConfigContext, RunContextProxy
+from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.engine.base import Engine
 from pydiverse.pipedag.util import requires
 
@@ -35,7 +35,7 @@ class PrefectOneEngine(Engine):
 
     def construct_prefect_flow(self, f: Flow):
         g = f.explicit_graph
-        run_context = RunContextProxy.get()
+        run_context = RunContext.get()
         config_context = ConfigContext.get()
 
         flow_kwargs = {
@@ -85,7 +85,7 @@ class PrefectTwoEngine(Engine):
         from pydiverse.pipedag.materialise.core import MaterialisingTask
 
         g = f.explicit_graph
-        run_context = RunContextProxy.get()
+        run_context = RunContext.get()
         config_context = ConfigContext.get()
 
         flow_kwargs = {
