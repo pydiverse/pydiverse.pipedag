@@ -4,8 +4,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 
-from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext
-from pydiverse.pipedag.context.run_context import StageState
+from pydiverse.pipedag.context import ConfigContext, DAGContext
 from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import StageError
 from pydiverse.pipedag.util import normalise_name
@@ -51,6 +50,8 @@ class Stage:
 
     @property
     def did_commit(self) -> bool:
+        from pydiverse.pipedag.context.run_context import RunContext, StageState
+
         return RunContext.get().get_stage_state(self) == StageState.COMMITTED
 
     def __repr__(self):

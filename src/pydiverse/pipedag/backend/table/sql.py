@@ -3,11 +3,9 @@ from __future__ import annotations
 import warnings
 
 import pandas as pd
-import prefect
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Stage, Table
-from pydiverse.pipedag.backend.metadata import LazyTableMetadata, TaskMetadata
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
 from pydiverse.pipedag.backend.table.util.sql_ddl import (
     CopyTable,
@@ -19,6 +17,7 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
 )
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialise.core import MaterialisingTask
+from pydiverse.pipedag.materialise.metadata import LazyTableMetadata, TaskMetadata
 
 
 class SQLTableStore(BaseTableStore):

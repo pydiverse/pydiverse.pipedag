@@ -9,13 +9,13 @@ import structlog
 
 from pydiverse.pipedag import Blob, Stage, Table, backend
 from pydiverse.pipedag._typing import Materialisable
-from pydiverse.pipedag.backend.metadata import TaskMetadata
-from pydiverse.pipedag.backend.util import compute_cache_key
-from pydiverse.pipedag.backend.util import json as json_util
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.errors import DuplicateNameError, StageError
 from pydiverse.pipedag.materialise.core import MaterialisingTask
+from pydiverse.pipedag.materialise.metadata import TaskMetadata
+from pydiverse.pipedag.materialise.util import compute_cache_key
+from pydiverse.pipedag.materialise.util import json as json_util
 from pydiverse.pipedag.util import deepmutate
 
 

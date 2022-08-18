@@ -5,10 +5,10 @@ import warnings
 import pandas as pd
 
 from pydiverse.pipedag import Stage, Table
-from pydiverse.pipedag.backend.metadata import LazyTableMetadata, TaskMetadata
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
 from pydiverse.pipedag.errors import CacheError, StageError
 from pydiverse.pipedag.materialise.core import MaterialisingTask
+from pydiverse.pipedag.materialise.metadata import LazyTableMetadata, TaskMetadata
 
 
 class DictTableStore(BaseTableStore):

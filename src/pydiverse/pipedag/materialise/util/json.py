@@ -7,8 +7,8 @@ type of the object.
 
 from __future__ import annotations
 
-from pydiverse.pipedag import Blob, Table
 from pydiverse.pipedag.context import RunContext
+from pydiverse.pipedag.materialise.container import Blob, Table
 
 PIPEDAG_TYPE = "_pipedag_type_"
 PIPEDAG_TYPE_TABLE = "table"

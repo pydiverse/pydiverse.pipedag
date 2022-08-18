@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 from abc import ABC, ABCMeta, abstractmethod
-from typing import Any, Generic
+from typing import TYPE_CHECKING, Any, Generic
 
-import prefect
 import structlog
 from typing_extensions import Self
 
-from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag._typing import StoreT, T
-from pydiverse.pipedag.backend.metadata import LazyTableMetadata, TaskMetadata
-from pydiverse.pipedag.backend.util import compute_cache_key
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialise.core import MaterialisingTask
+from pydiverse.pipedag.materialise.metadata import LazyTableMetadata, TaskMetadata
+from pydiverse.pipedag.materialise.util import compute_cache_key
 from pydiverse.pipedag.util import requires
+
+if TYPE_CHECKING:
+    from pydiverse.pipedag import Stage, Table
 
 
 class _TableStoreMeta(ABCMeta):
