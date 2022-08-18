@@ -16,10 +16,37 @@ if TYPE_CHECKING:
 
 
 def find_config(name="pipedag.toml"):
-    # TODO: Allow specifying config using environment variable
+    """Searches for a pipedag config file
+
+    The following paths get checked first.
+
+    - The path specified in the "PIPEDAG_CONFIG" environment variable
+
+    Else it searches in the following locations:
+
+    - Current working directory
+    - All parent directories
+    - The user folder
+
+    :param name: The name of the config file
+    :return: The path of the file.
+    :raises FileNotFoundError: if no config file could be found.
+    """
+
+    # Check PIPEDAG_CONFIG path
+    if path := os.environ.get("PIPEDAG_CONFIG", None):
+        path = Path(path).resolve().expanduser()
+        if path.is_file():
+            return path
+
+        path = path / name
+        if path.is_file():
+            return path
+
+    # Search in other directories
     dirs_to_check = [
-        Path("."),
-        *Path(".").resolve().parents,
+        Path.cwd(),
+        *Path.cwd().resolve().parents,
         Path("~").expanduser(),
     ]
 
