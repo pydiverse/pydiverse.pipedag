@@ -164,8 +164,9 @@ class FileLockManager(BaseLockManager):
     def __init__(self, base_path: str):
         super().__init__()
         self.base_path = os.path.abspath(base_path)
-        if config.name is not None:
-            project_name = normalise_name(config.name)
+        name = ConfigContext.get().name
+        if name is not None:
+            project_name = normalise_name(name)
             self.base_path = os.path.join(self.base_path, project_name)
         self.locks: dict[Lockable, fl.BaseFileLock] = {}
 
