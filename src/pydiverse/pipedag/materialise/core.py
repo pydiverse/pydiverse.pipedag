@@ -89,21 +89,22 @@ class MaterialisingTask(Task):
         lazy: bool = False,
         nout: int = 1,
     ):
+        # TODO: Provide a way to specify a custom cache function. This would enable:
+        #       - Don't cache at all
+        #       - Cache based on input files
+        #       - Invalidate based on date
         super().__init__(
             MaterialisationWrapper(fn),
             name=name,
             nout=nout,
-            pass_task=True,
         )
 
         self.input_type = input_type
         self.version = version
         self.lazy = lazy
 
-        self.cache_key = None
-
-    def prepare_for_run(self):
-        super().prepare_for_run()
+        # TODO: Remove cache key from instance
+        #       Inside a task instance there should be *no* state
         self.cache_key = None
 
 

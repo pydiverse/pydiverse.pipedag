@@ -9,13 +9,12 @@ import structlog
 
 from pydiverse.pipedag import Blob, Stage, Table, backend
 from pydiverse.pipedag._typing import Materialisable
-from pydiverse.pipedag.backend.lock import LockState
 from pydiverse.pipedag.backend.metadata import TaskMetadata
 from pydiverse.pipedag.backend.util import compute_cache_key
 from pydiverse.pipedag.backend.util import json as json_util
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.context.run_context import StageState
-from pydiverse.pipedag.errors import DuplicateNameError, LockError, StageError
+from pydiverse.pipedag.errors import DuplicateNameError, StageError
 from pydiverse.pipedag.materialise.core import MaterialisingTask
 from pydiverse.pipedag.util import deepmutate
 
@@ -48,11 +47,6 @@ class PipeDAGStore:
             default=json_util.json_default,
         )
         self.json_decoder = json.JSONDecoder(object_hook=json_util.json_object_hook)
-
-        # TODO: SET UP AGAIN
-        # self.lock_manager.acquire("_pipedag_setup_")
-        # self.table_store.setup()
-        # self.lock_manager.release("_pipedag_setup_")
 
     #### Stage ####
 

@@ -46,7 +46,7 @@ class PrefectOneEngine(Engine):
         flow = prefect.Flow(**flow_kwargs)
         tasks: dict[Task, prefect.Task] = {}
 
-        for t in g.nodes:  # type: Task
+        for t in f.tasks:
             task = prefect.task(name=t.name)(t.run)
             tasks[t] = task
 
@@ -98,7 +98,7 @@ class PrefectTwoEngine(Engine):
         def pipedag_flow():
             futures: dict[Task, prefect.futures.PrefectFuture] = {}
 
-            for t in g.nodes:  # type: Task
+            for t in f.tasks:
                 task_kwargs = {"name": t.name}
                 if isinstance(t, MaterialisingTask):
                     task_kwargs["version"] = t.version

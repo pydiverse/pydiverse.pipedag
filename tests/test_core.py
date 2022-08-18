@@ -3,9 +3,9 @@ from __future__ import annotations
 import time
 
 import pytest
-from pytest_mock import MockerFixture
 
 from pydiverse.pipedag import Blob, Flow, Stage, materialise
+from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError, StageError
 
 
@@ -96,8 +96,15 @@ def test_task_attach_to_nested_stage():
     assert inner.is_inner(outer)
 
 
-@pytest.mark.skip
 def test_stage_ref_counter():
+    def m_check_rc(stage, expected):
+        @materialise(lazy=True)
+        def _m_check_rc(x):
+            assert RunContext.get().get_stage_ref_count(stage) == expected
+            return x
+
+        return _m_check_rc
+
     # Super simple case with just two task inside one stage
     with Flow("flow") as f:
         with Stage("stage") as s:
@@ -105,10 +112,9 @@ def test_stage_ref_counter():
             task_2 = m_2()
 
             # One reference from the m_assert and commit
-            m_assert(lambda _: s.ref_count == 2)([task_1, task_2])
+            m_check_rc(s, 2)([task_1, task_2])
 
     assert f.run().is_successful()
-    assert s.ref_count == 0
 
     # Multiple tasks with interdependency inside one stage
     with Flow("flow") as f:
@@ -117,66 +123,36 @@ def test_stage_ref_counter():
             task_2 = m_2()
             task_tuple = m_tuple(task_1, task_2)
             # One reference from assert, noop, assert and commit
-            task_tuple = m_assert(lambda _: s.ref_count == 4)(task_tuple)
+            task_tuple = m_check_rc(s, 4)(task_tuple)
             task_tuple = m_noop(task_tuple)
             # One reference from assert and commit
-            m_assert(lambda _: s.ref_count == 2)(task_tuple)
+            m_check_rc(s, 2)(task_tuple)
 
     assert f.run().is_successful()
-    assert s.ref_count == 0
 
     # Multiple tasks spread over multiple stages
     with Flow("flow") as f:
         with Stage("stage 1") as s1:
             task_1 = m_1()
             # One reference from assert, noop, assert, commit and downstream
-            task_1 = m_assert(lambda _: s1.ref_count == 5)(task_1)
+            task_1 = m_check_rc(s1, 5)(task_1)
             task_1 = m_noop(task_1)
             # One reference from assert, commit and downstream
-            m_assert(lambda _: s1.ref_count == 3)(task_1)
+            m_check_rc(s1, 3)(task_1)
 
         with Stage("stage 2") as s2:
             task_2 = m_2()
             task_2 = m_noop([task_2])
-            m_assert(lambda _: s2.ref_count == 3)(task_2)
+            m_check_rc(s2, 3)(task_2)
 
         with Stage("stage 3") as s3:
             task_tuple = m_tuple(task_1, task_2)
             # Check that s1 and s2 have been freed
-            x = m_assert(lambda _: s1.ref_count == 0)(task_tuple)
-            x = m_assert(lambda _: s2.ref_count == 0)(x)
-            m_assert(lambda _: s3.ref_count == 2)(x)
+            x = m_check_rc(s1, 0)(task_tuple)
+            x = m_check_rc(s2, 0)(x)
+            m_check_rc(s3, 2)(x)
 
     assert f.run().is_successful()
-    assert s1.ref_count == 0
-    assert s2.ref_count == 0
-    assert s3.ref_count == 0
-
-
-@pytest.mark.skip
-def test_stage_ref_count_free_handler(mocker: MockerFixture):
-    with Flow("flow") as f:
-        with Stage("stage") as s:  # Commit task: 1 reference to s
-            task_1 = m_1()  # No reference to s
-            task_2 = m_2()  # No reference to s
-            task_3 = m_noop([task_1, task_2])  # 1 reference to s
-
-    stub = mocker.stub("stage ref counter free")
-    s.set_ref_count_free_handler(stub)
-
-    f.prepare_for_run()
-
-    assert s.ref_count == 2
-    task_1.on_success()
-    task_2.on_failure()
-    assert s.ref_count == 2
-    task_3.on_success()
-    assert s.ref_count == 1
-
-    stub.assert_not_called()
-    s.commit_task.on_success()
-    assert s.ref_count == 0
-    stub.assert_called_once_with(s)
 
 
 def test_materialise_memo():

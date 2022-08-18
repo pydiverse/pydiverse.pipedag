@@ -41,6 +41,8 @@ class RunContextServer(IPCServer):
     """
     REQUEST: [method_name, arguments]
     RESPONSE: [error, result]
+
+    TODO: Replace busy waiting with an interrupt based mechanism (eg threading.Event)
     """
 
     def __init__(self, flow: Flow):
@@ -50,9 +52,12 @@ class RunContextServer(IPCServer):
         self.run_id = uuid.uuid4().hex[:20]
 
         self.stages = list(self.flow.stages.values())
+        self.tasks = list(self.flow.tasks)
         self.stages.sort(key=lambda s: s.id)
+        self.tasks.sort(key=lambda t: t.id)
 
         num_stages = len(self.stages)
+        config_ctx = ConfigContext.get()
 
         # STATE
         self.ref_count = [0] * num_stages
@@ -70,12 +75,26 @@ class RunContextServer(IPCServer):
         self.task_memo_lock = Lock()
 
         # LOCKING
-        self.lock_manager = ConfigContext.get().get_lock_manager()
+        self.lock_manager = config_ctx.get_lock_manager()
         self.lock_manager.add_lock_state_listener(self._lock_state_listener)
 
-        # TODO: Initialize backend metadata stuff
-        # TODO: Initialize the reference counter here and also lock all stages here
-        # TODO: Provide a way to decrease reference counters in bulk
+        # INITIALIZE STORE
+        self.lock_manager.acquire("_pipedag_setup_")
+        config_ctx.store.table_store.setup()
+        self.lock_manager.release("_pipedag_setup_")
+
+        # INITIALIZE REFERENCE COUNTERS & LOCKS
+        for stage in self.stages:
+            for task in stage.all_tasks():
+                for s in task.upstream_stages:
+                    self.ref_count[s.id] += 1
+
+            # Acquire a lock on the stage
+            # We must lock all stages from the start to prevent two flows from
+            # deadlocking each other. To lock the stage only when it's needed
+            # (may result in deadlocks), the lock should get acquired in the
+            # `PipeDAGStore.init_stage` function instead.
+            self.acquire_stage_lock(stage.id)
 
     def __enter__(self):
         super().__enter__()
@@ -106,25 +125,6 @@ class RunContextServer(IPCServer):
     @synchronized("ref_count_lock")
     def get_stage_ref_count(self, stage_id: int):
         return self.ref_count[stage_id]
-
-    @synchronized("ref_count_lock")
-    def incr_stage_ref_count(self, stage_id: int, by: int = 1):
-        self.ref_count[stage_id] += by
-        return self.ref_count[stage_id]
-
-    @synchronized("ref_count_lock")
-    def decr_stage_ref_count(self, stage_id: int, by: int = 1):
-        self.ref_count[stage_id] -= by
-        rc = self.ref_count[stage_id]
-        if rc == 0:
-            self.lock_manager.release(self.stages[stage_id])
-        if rc < 0:
-            self.logger.error(
-                "Reference counter is negative.",
-                reference_count=rc,
-                stage=self.stages[stage_id],
-            )
-        return rc
 
     # STAGE: State
 
@@ -183,7 +183,7 @@ class RunContextServer(IPCServer):
 
         # Wait until transition is over
         while self.stage_state[stage_id] == transition:
-            time.sleep(0.001)
+            time.sleep(0.01)
 
         # Check if transition was successful
         with self.stage_state_lock:
@@ -275,10 +275,79 @@ class RunContextServer(IPCServer):
                     )
                     did_log = True
 
-                time.sleep(0.001)
+                time.sleep(0.01)
 
             else:
                 raise ValueError(f"Invalid state '{state}'.")
+
+    # TASK
+
+    def did_finish_task(self, task_id: int, final_state_value: int):
+        # TODO: Do something with the final state.
+        #       For example: The object returned by flow.run could have a list
+        #       of tasks and their final states.
+        final_state = FinalTaskState(final_state_value)
+        task = self.tasks[task_id]
+
+        stages_to_release = []
+
+        with self.ref_count_lock:
+            for stage in task.upstream_stages:
+                self.ref_count[stage.id] -= 1
+                rc = self.ref_count[stage.id]
+
+                if rc == 0:
+                    stages_to_release.append(stage)
+                elif rc < 0:
+                    self.logger.error(
+                        "Reference counter is negative.",
+                        reference_count=rc,
+                        stage=stage,
+                    )
+
+        for stage in stages_to_release:
+            self.lock_manager.release(stage)
+
+    def enter_task_memo(self, stage_id: int, cache_key: str) -> tuple[bool, Any]:
+        memo_key = (stage_id, cache_key)
+
+        with self.task_memo_lock:
+            memo = self.task_memo[memo_key]
+            if memo is MemoState.NONE:
+                self.task_memo[memo_key] = MemoState.WAITING
+                return False, None
+
+        while memo is MemoState.WAITING:
+            time.sleep(0.01)
+            memo = self.task_memo[memo_key]
+
+        if memo is MemoState.FAILED:
+            # Should this get handled differently?
+            raise Exception("The same task already failed earlier (memo).")
+        if isinstance(memo, MemoState):
+            raise Exception
+
+        return True, memo
+
+    @synchronized("task_memo_lock")
+    def exit_task_memo(self, stage_id: int, cache_key: str, success: bool):
+        if not success:
+            self.task_memo[(stage_id, cache_key)] = MemoState.FAILED
+            return
+
+        memo = self.task_memo[(stage_id, cache_key)]
+        if isinstance(memo, MemoState):
+            raise Exception("set_task_memo not called")
+
+    @synchronized("task_memo_lock")
+    def store_task_memo(self, stage_id: int, cache_key: str, value: Any):
+        memo_key = (stage_id, cache_key)
+        memo = self.task_memo[memo_key]
+
+        if memo is not MemoState.WAITING:
+            raise Exception("Expected memo state to be waiting")
+
+        self.task_memo[memo_key] = value
 
     # TABLE / BLOB: Names
 
@@ -317,49 +386,6 @@ class RunContextServer(IPCServer):
         for blob in blobs:
             self.blob_names[stage_id].remove(blob)
 
-    # TASK: Memo
-
-    def enter_task_memo(self, stage_id: int, cache_key: str) -> tuple[bool, Any]:
-        memo_key = (stage_id, cache_key)
-
-        with self.task_memo_lock:
-            memo = self.task_memo[memo_key]
-            if memo is MemoState.NONE:
-                self.task_memo[memo_key] = MemoState.WAITING
-                return False, None
-
-        while memo is MemoState.WAITING:
-            time.sleep(0.001)
-            memo = self.task_memo[memo_key]
-
-        if memo is MemoState.FAILED:
-            # TODO: Should this get handled differently?
-            raise Exception("Memo task failed")
-        if isinstance(memo, MemoState):
-            raise Exception
-
-        return True, memo
-
-    @synchronized("task_memo_lock")
-    def exit_task_memo(self, stage_id: int, cache_key: str, success: bool):
-        if not success:
-            self.task_memo[(stage_id, cache_key)] = MemoState.FAILED
-            return
-
-        memo = self.task_memo[(stage_id, cache_key)]
-        if isinstance(memo, MemoState):
-            raise Exception("set_task_memo not called")
-
-    @synchronized("task_memo_lock")
-    def store_task_memo(self, stage_id: int, cache_key: str, value: Any):
-        memo_key = (stage_id, cache_key)
-        memo = self.task_memo[memo_key]
-
-        if memo is not MemoState.WAITING:
-            raise Exception("Expected memo state to be waiting")
-
-        self.task_memo[memo_key] = value
-
 
 class RunContext(BaseContext):
     _context_var = ContextVar("run_context_proxy")
@@ -380,12 +406,6 @@ class RunContext(BaseContext):
 
     def get_stage_ref_count(self, stage: Stage) -> int:
         return self._request("get_stage_ref_count", stage.id)
-
-    def incr_stage_ref_count(self, stage: Stage, by: int = 1) -> int:
-        return self._request("incr_stage_ref_count", stage.id, by)
-
-    def decr_stage_ref_count(self, stage: Stage, by: int = 1) -> int:
-        return self._request("decr_stage_ref_count", stage.id, by)
 
     # STAGE: State
 
@@ -436,6 +456,26 @@ class RunContext(BaseContext):
     def validate_stage_lock(self, stage: Stage):
         self._request("validate_stage_lock", stage.id)
 
+    # TASK
+
+    def did_finish_task(self, task: Task, final_state: FinalTaskState):
+        self._request("did_finish_task", task.id, final_state.value)
+
+    @contextmanager
+    def task_memo(self, task: Task, cache_key: str):
+        success, memo = self._request("enter_task_memo", task.stage.id, cache_key)
+
+        try:
+            yield success, memo
+        except Exception as e:
+            self._request("exit_task_memo", task.stage.id, cache_key, False)
+            raise e
+        else:
+            self._request("exit_task_memo", task.stage.id, cache_key, True)
+
+    def store_task_memo(self, task: Task, cache_key: str, result: Any):
+        self._request("store_task_memo", task.stage.id, cache_key, result)
+
     # TABLE / BLOB: Names
 
     def add_names(
@@ -461,22 +501,8 @@ class RunContext(BaseContext):
             [b.name for b in blobs],
         )
 
-    # TASK: Memo
 
-    @contextmanager
-    def task_memo(self, task: Task, cache_key: str):
-        success, memo = self._request("enter_task_memo", task.stage.id, cache_key)
-
-        try:
-            yield success, memo
-        except Exception as e:
-            self._request("exit_task_memo", task.stage.id, cache_key, False)
-            raise e
-        else:
-            self._request("exit_task_memo", task.stage.id, cache_key, True)
-
-    def store_task_memo(self, task: Task, cache_key: str, result: Any):
-        self._request("store_task_memo", task.stage.id, cache_key, result)
+# States
 
 
 class StageState(Enum):
@@ -486,19 +512,26 @@ class StageState(Enum):
     COMMITTING = 3
     COMMITTED = 4
 
-    FAILED = 255
+    FAILED = 127
+
+
+class FinalTaskState(Enum):
+    UNKNOWN = 0
+
+    COMPLETED = 1
+    FAILED = 2
+    SKIPPED = 3
 
 
 class MemoState(Enum):
     NONE = 0
     WAITING = 1
 
-    FAILED = 255
+    FAILED = 127
 
 
 # msgpack hooks
 # Only used to transmit Table and Blob type metadata
-# TODO: Maybe replace pickle implementation with more efficient one
 
 
 def _msg_default(obj):

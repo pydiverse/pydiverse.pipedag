@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Callable
 import structlog
 
 from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext, TaskContext
+from pydiverse.pipedag.context.run_context import FinalTaskState
 from pydiverse.pipedag.errors import FlowError, StageError
 from pydiverse.pipedag.util import deepmutate
 
@@ -21,7 +22,6 @@ class Task:
         *,
         name: str = None,
         nout: int = None,
-        pass_task: bool = False,
     ):
         if not callable(fn):
             raise TypeError("`fn` must be callable")
@@ -32,8 +32,8 @@ class Task:
         self.fn = fn
         self.name = name
         self.nout = nout
-        self.pass_task = pass_task
 
+        self.id: int = None  # type: ignore
         self.flow: Flow = None  # type: ignore
         self.stage: Stage = None  # type: ignore
         self.upstream_stages: list[Stage] = None  # type: ignore
@@ -43,9 +43,10 @@ class Task:
         self._bound_args: inspect.BoundArguments = None  # type: ignore
 
         self.logger = structlog.get_logger()
+        self._visualize_hidden = False
 
+        # TODO: Get rid of task.value; tasks shouldn't contain state
         self.value = None
-        self.id: int = None  # type: ignore
 
     def __repr__(self):
         return f"<Task '{self.name}' {hex(id(self))}>"
@@ -128,10 +129,10 @@ class Task:
             try:
                 result = self._run()
             except Exception as e:
-                self.on_failure()
+                self.did_finish(FinalTaskState.FAILED)
                 raise e
             else:
-                self.on_success()
+                self.did_finish(FinalTaskState.COMPLETED)
                 return result
 
     def _run(self):
@@ -154,21 +155,12 @@ class Task:
 
         return result
 
-    # Run Metadata
-
-    def prepare_for_run(self):
-        for stage in self.upstream_stages:
-            RunContext.get().incr_stage_ref_count(stage)
-
-    def on_success(self):
-        self.logger.info("Task finished successfully", task=self)
-        for stage in self.upstream_stages:
-            RunContext.get().decr_stage_ref_count(stage)
-
-    def on_failure(self):
-        self.logger.warning("Task failed", task=self)
-        for stage in self.upstream_stages:
-            RunContext.get().decr_stage_ref_count(stage)
+    def did_finish(self, state: FinalTaskState):
+        if state == FinalTaskState.COMPLETED:
+            self.logger.info("Task finished successfully", task=self, state=state)
+        else:
+            self.logger.warning("Task failed", task=self, state=state)
+        RunContext.get().did_finish_task(self, state)
 
 
 class TaskGetItem:

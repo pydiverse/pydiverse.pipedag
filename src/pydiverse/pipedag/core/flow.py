@@ -95,8 +95,11 @@ class Flow:
                 subgraphs[stage.outer_stage].add_subgraph(s)
 
         for task in self.tasks:
+            if task._visualize_hidden:
+                continue
+
             node = pydot.Node(
-                id(task),
+                task.id,
                 label=task.name,
                 fillcolor="#FFFFFF",
                 style="filled",
@@ -193,16 +196,11 @@ class Flow:
 
         return explicit_graph
 
-    def prepare_for_run(self):
-        for stage in self.stages.values():
-            stage.prepare_for_run()
-
     def run(self, engine: Engine = None, **kwargs):
         with ConfigContext.from_file(), RunContextServer(self):
-            self.prepare_for_run()
-
             if engine is None:
                 engine = ConfigContext.get().get_engine()
 
-            # TODO: Wrap result object
+            # TODO: Wrap result object (Create a custom result object with a
+            #       consistent interface)
             return engine.run(flow=self, **kwargs)

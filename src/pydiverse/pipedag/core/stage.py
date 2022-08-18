@@ -79,8 +79,13 @@ class Stage:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.commit_task = CommitStageTask(self, self._ctx.flow)
+        self._ctx.flow.add_task(self.commit_task)
         self._ctx.__exit__()
         del self._ctx
+
+    def all_tasks(self):
+        yield from self.tasks
+        yield self.commit_task
 
     def is_inner(self, other: Stage):
         outer = self.outer_stage
@@ -89,19 +94,6 @@ class Stage:
                 return True
             outer = outer.outer_stage
         return False
-
-    def prepare_for_run(self):
-        # Increase reference counter
-        for task in self.tasks:
-            task.prepare_for_run()
-        self.commit_task.prepare_for_run()
-
-        # Acquire a lock on the stage
-        # We must lock all stages from the start to prevent two flows from
-        # deadlocking each other.
-        # To lock the stage only when it's needed (may cause deadlocks), the lock
-        # should get acquired in the `PipeDAGStore.init_stage` function instead.
-        RunContext.get().acquire_stage_lock(self)
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -125,6 +117,7 @@ class CommitStageTask(Task):
         self.input_tasks = {}
 
         self._bound_args = self._signature.bind()
+        self._visualize_hidden = True
 
     def fn(self):
         self.logger.info(f"Committing stage '{self.stage.name}'")
