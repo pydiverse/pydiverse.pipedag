@@ -6,12 +6,12 @@ from typing import TYPE_CHECKING
 import networkx as nx
 
 from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContextServer
-from pydiverse.pipedag.engines.prefect_one import PrefectEngine
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core.stage import CommitStageTask, Stage
     from pydiverse.pipedag.core.task import Task
+    from pydiverse.pipedag.engine import Engine
 
 
 class Flow:
@@ -197,20 +197,12 @@ class Flow:
         for stage in self.stages.values():
             stage.prepare_for_run()
 
-    def run(self):
-        # TODO: REPLACE ENTIRELY
+    def run(self, engine: Engine = None, **kwargs):
         with ConfigContext.from_file(), RunContextServer(self):
             self.prepare_for_run()
 
-            # TODO: Allow customization of backend
-            pf = PrefectEngine().construct_workflow(self)
+            if engine is None:
+                engine = ConfigContext.get().get_engine()
 
-            from prefect.executors import DaskExecutor
-
-            executor = DaskExecutor(
-                cluster_kwargs={"n_workers": 2},
-            )
-            res = pf.run(executor=executor)
-            # res = pf(return_state=True)
-
-        return res
+            # TODO: Wrap result object
+            return engine.run(flow=self, **kwargs)

@@ -17,3 +17,7 @@ base_path = "/tmp/pipedag/blobs"
 [lock_manager]
 class = "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
 hosts = "localhost:2181"
+
+# Default Engine
+[engine]
+class = "pydiverse.pipedag.engine.PrefectEngine"

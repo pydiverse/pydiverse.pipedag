@@ -68,8 +68,7 @@ class PipeDAGStore:
         to prevent unnecessary locking.
         """
 
-        # Lock the stage and then create it
-        RunContextProxy.get().acquire_stage_lock(stage)
+        RunContextProxy.get().validate_stage_lock(stage)
         self.table_store.init_stage(stage)
         self.blob_store.init_stage(stage)
 

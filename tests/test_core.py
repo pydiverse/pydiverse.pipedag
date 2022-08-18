@@ -96,6 +96,7 @@ def test_task_attach_to_nested_stage():
     assert inner.is_inner(outer)
 
 
+@pytest.mark.skip
 def test_stage_ref_counter():
     # Super simple case with just two task inside one stage
     with Flow("flow") as f:
@@ -152,6 +153,7 @@ def test_stage_ref_counter():
     assert s3.ref_count == 0
 
 
+@pytest.mark.skip
 def test_stage_ref_count_free_handler(mocker: MockerFixture):
     with Flow("flow") as f:
         with Stage("stage") as s:  # Commit task: 1 reference to s

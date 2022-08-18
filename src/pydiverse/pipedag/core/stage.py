@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import threading
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import structlog
-from attrs import frozen
 
 from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContextProxy
 from pydiverse.pipedag.context.run_context import StageState
@@ -98,6 +96,13 @@ class Stage:
             task.prepare_for_run()
         self.commit_task.prepare_for_run()
 
+        # Acquire a lock on the stage
+        # We must lock all stages from the start to prevent two flows from
+        # deadlocking each other.
+        # To lock the stage only when it's needed (may cause deadlocks), the lock
+        # should get acquired in the `PipeDAGStore.init_stage` function instead.
+        RunContextProxy.get().acquire_stage_lock(self)
+
     def __getstate__(self):
         state = self.__dict__.copy()
         state.pop("tasks", None)
@@ -105,11 +110,6 @@ class Stage:
         state.pop("outer_stage", None)
         state.pop("logger", None)
         return state
-
-
-@frozen
-class StageReference:
-    name: str
 
 
 class CommitStageTask(Task):
@@ -188,34 +188,3 @@ class StageX:
     the stage's `__exit__` function, decrementing happens using the provided
     `stage_ref_counter_handler`.
     """
-
-    def __init__(self, name: str):
-        self._name = None
-
-        self.name = name
-        self.transaction_name = f"{name}__tmp"
-
-        # Variables that should be accessed via a lock
-        self.__lock = threading.Lock()
-        self.__did_commit = False
-        self.__ref_count = 0
-        self.__ref_count_free_handler = None
-
-        # Tasks
-        from pydiverse.pipedag.materialise import core
-
-        self.task = StageCommitTask(self)
-        self.materialising_tasks: list[materialise.MaterialisingTask] = []
-
-    @property
-    def current_name(self) -> str:
-        """The name of the stage where the data currently lives
-
-        Before a swap this is the transaction name, after the swap it is
-        the base name.
-        """
-
-        if self.did_commit:
-            return self.name
-        else:
-            return self.transaction_name

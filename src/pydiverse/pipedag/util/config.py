@@ -1,24 +1,22 @@
 from __future__ import annotations
 
-import importlib
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 try:
     import tomllib
 except ModuleNotFoundError:
     import tomli as tomllib
 
-from pydiverse.pipedag.context import ConfigContext
+from pydiverse.pipedag.util.import_ import import_object
 
-
-def auto_load_config():
-    config_path = find_config()
-    print(f"Using config file at: {config_path}")
-    return load_config(config_path)
+if TYPE_CHECKING:
+    from pydiverse.pipedag.context import ConfigContext
 
 
 def find_config(name="pipedag.toml"):
+    # TODO: Allow specifying config using environment variable
     dirs_to_check = [
         Path("."),
         *Path(".").resolve().parents,
@@ -34,6 +32,8 @@ def find_config(name="pipedag.toml"):
 
 
 def load_config(path: str) -> ConfigContext:
+    from pydiverse.pipedag.context import ConfigContext
+
     path = os.path.expanduser(path)
     path = os.path.normpath(path)
 
@@ -44,8 +44,8 @@ def load_config(path: str) -> ConfigContext:
 
     name = config_dict.get("name", None)
 
-    auto_table = tuple(map(load_class, config_dict.get("auto_table", ())))
-    auto_blob = tuple(map(load_class, config_dict.get("auto_blob", ())))
+    auto_table = tuple(map(import_object, config_dict.get("auto_table", ())))
+    auto_blob = tuple(map(import_object, config_dict.get("auto_blob", ())))
 
     return ConfigContext(
         config_dict=config_dict.copy(),
@@ -53,21 +53,6 @@ def load_config(path: str) -> ConfigContext:
         auto_table=auto_table,
         auto_blob=auto_blob,
     )
-
-
-def load_class(import_path: str):
-    """Loads a class given an import path
-
-    >>> # An import statement like this
-    >>> from pandas import DataFrame
-    >>> # can be expressed as follows:
-    >>> load_class("pandas.DataFrame")
-
-    """
-    *module, class_name = import_path.split(".")
-    module = ".".join(module)
-    mod = importlib.import_module(module)
-    return getattr(mod, class_name)
 
 
 def load_instance(config_dict: dict):
@@ -88,7 +73,7 @@ def load_instance(config_dict: dict):
     """
 
     config_dict = config_dict.copy()
-    cls = load_class(config_dict.pop("class"))
+    cls = import_object(config_dict.pop("class"))
 
     try:
         init_conf = getattr(cls, "_init_conf_")

@@ -11,6 +11,8 @@ import msgpack
 import pynng
 import structlog
 
+from pydiverse.pipedag.errors import IPCError
+
 
 class IPCServer:
     def __init__(self, msg_default=None, msg_ext_hook=None):
@@ -62,7 +64,11 @@ class IPCServer:
                 unpacker.feed(data)
 
                 # Expected: (NONCE, PAYLOAD)
-                assert unpacker.read_array_header() == 2
+                if unpacker.read_array_header() != 2:
+                    raise IPCError(
+                        "Expected request to contain exactly two fields:"
+                        " nonce and payload."
+                    )
                 nonce = unpacker.unpack()
                 nonce_hex = nonce.hex()
 

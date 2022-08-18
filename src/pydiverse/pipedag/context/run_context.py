@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 import msgpack
 
 from pydiverse.pipedag.context.context import BaseContext, ConfigContext
-from pydiverse.pipedag.errors import LockError, StageError
+from pydiverse.pipedag.errors import LockError, RemoteProcessError, StageError
 from pydiverse.pipedag.util.ipc import IPCServer
 
 if TYPE_CHECKING:
@@ -83,6 +83,8 @@ class RunContextServer(IPCServer):
         self.lock_manager.add_lock_state_listener(self._lock_state_listener)
 
         # TODO: Initialize backend metadata stuff
+        # TODO: Initialize the reference counter here and also lock all stages here
+        # TODO: Provide a way to decrease reference counters in bulk
 
     def __enter__(self):
         super().__enter__()
@@ -96,16 +98,14 @@ class RunContextServer(IPCServer):
         super().__exit__(exc_type, exc_val, exc_tb)
 
     def handle_request(self, request):
-        op_name, args = request
-
         try:
+            op_name, args = request
             op = getattr(self, op_name)
             if not callable(op):
                 raise TypeError(f"OP '{op_name}' is not callable")
 
             result = op(*args)
             return [None, result]
-
         except Exception as e:
             pickled_exception = pickle.dumps(e)
             return [pickled_exception, None]
@@ -382,7 +382,7 @@ class RunContextProxy(BaseContext):
         error, result = self.client.request([op, args])
 
         if error is not None:
-            raise pickle.loads(error)
+            raise RemoteProcessError("Request failed") from pickle.loads(error)
         return result
 
     # STAGE: Reference Counting

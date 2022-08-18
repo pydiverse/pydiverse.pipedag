@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import copy
 import functools
 import inspect
-from collections import defaultdict
 from functools import partial
-from threading import Condition
-from typing import TYPE_CHECKING, Any, Callable
+from typing import Callable
 
 from pydiverse.pipedag._typing import CallableT
 from pydiverse.pipedag.context import ConfigContext, RunContextProxy, TaskContext
@@ -14,9 +11,6 @@ from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialise.container import Blob, Table
 from pydiverse.pipedag.util import deepmutate
-
-if TYPE_CHECKING:
-    from pydiverse.pipedag import Stage
 
 
 def materialise(
@@ -111,7 +105,6 @@ class MaterialisingTask(Task):
     def prepare_for_run(self):
         super().prepare_for_run()
         self.cache_key = None
-        # self.fn.memo.clear()  # type: ignore
 
 
 class MaterialisationWrapper:
@@ -201,26 +194,3 @@ class MaterialisationWrapper:
             self.value = result
 
             return result
-
-    def get_memoized_result(self, task: Task, cache_key: str):
-        with self.__lock:
-            memo_result = self.memo[task.stage].get(cache_key, _nil)
-
-    def store_in_memo(self, result, task: Task, cache_key: str):
-        with self.__lock:
-            condition = self.memo[task.stage][cache_key]
-            with condition:
-                self.memo[task.stage][cache_key] = result
-                condition.notify_all()
-
-    def task_state_handler(self, task: MaterialisingTask, old_state, new_state):
-        if task.cache_key is None or task.stage is None:
-            return
-
-        if new_state.is_failed():
-            with self.__lock:
-                memo_result = self.memo[task.stage].get(task.cache_key, _nil)
-                if isinstance(memo_result, Condition):
-                    with memo_result:
-                        memo_result.notify_all()
-                        self.memo[task.stage][task.cache_key] = _nil

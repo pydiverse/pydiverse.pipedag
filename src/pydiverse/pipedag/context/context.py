@@ -5,12 +5,19 @@ from functools import cached_property
 from threading import Lock
 from typing import TYPE_CHECKING, ClassVar
 
+import structlog
 from attrs import frozen
+
+from pydiverse.pipedag.util.config import load_instance
 
 if TYPE_CHECKING:
     from pydiverse.pipedag._typing import T
     from pydiverse.pipedag.backend import BaseLockManager, PipeDAGStore
     from pydiverse.pipedag.core import Flow, Stage, Task
+    from pydiverse.pipedag.engine.base import Engine
+
+
+logger = structlog.get_logger()
 
 
 class BaseContext:
@@ -86,7 +93,6 @@ class ConfigContext(BaseAttrsContext):
     @cached_property
     def store(self) -> PipeDAGStore:
         from pydiverse.pipedag.backend import PipeDAGStore
-        from pydiverse.pipedag.util.config import load_instance
 
         table_store = load_instance(self.config_dict["table_store"])
         blob_store = load_instance(self.config_dict["blob_store"])
@@ -97,17 +103,23 @@ class ConfigContext(BaseAttrsContext):
         )
 
     def get_lock_manager(self) -> BaseLockManager:
-        from pydiverse.pipedag.util.config import load_instance
-
         return load_instance(self.config_dict["lock_manager"])
+
+    def get_engine(self) -> Engine:
+        return load_instance(self.config_dict["engine"])
 
     @classmethod
     def from_file(cls, path: str = None):
         from pydiverse.pipedag.util import config
 
         if path is None:
-            return config.auto_load_config()
-        return config.load_config(path)
+            path = config.find_config()
+            logger.info(f"Using config file at: {path}")
+
+        try:
+            return config.load_config(path)
+        except (ImportError, AttributeError) as e:
+            raise Exception("Pipedag config is invalid") from e
 
     def __getstate__(self):
         state = super().__getstate__()
