@@ -11,8 +11,8 @@ To install the package locally in development mode, you first have to install
 After that, install pydiverse pipedag like this:
 
 ```bash
-git clone https://github.com/Quantco/pdpipedag.git
-cd pdpipedag
+git clone https://github.com/pydiverse/pydiverse.pipedag
+cd pydiverse.pipedag
 
 # Create the environment, activate it and install the pre-commit hooks
 poetry install
