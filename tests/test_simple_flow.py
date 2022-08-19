@@ -5,9 +5,6 @@ import sqlalchemy as sa
 
 from pydiverse.pipedag import Blob, Flow, Stage, Table, materialise
 
-# noinspection PyUnresolvedReferences
-# from .util import setup_pipedag
-
 
 def test_simple_flow():
     @materialise(nout=2, version="1")
@@ -66,7 +63,6 @@ def test_simple_flow():
             v = blob_task(v, v)
 
     result = flow.run()
-    print(result)
     assert not result.is_failed()
     # assert result.is_successful()
 
