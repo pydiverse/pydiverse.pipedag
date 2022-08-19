@@ -114,7 +114,7 @@ def test_stage_ref_counter():
             # One reference from the m_assert and commit
             m_check_rc(s, 2)([task_1, task_2])
 
-    assert f.run().is_successful()
+    assert f.run().successful
 
     # Multiple tasks with interdependency inside one stage
     with Flow("flow") as f:
@@ -128,7 +128,7 @@ def test_stage_ref_counter():
             # One reference from assert and commit
             m_check_rc(s, 2)(task_tuple)
 
-    assert f.run().is_successful()
+    assert f.run().successful
 
     # Multiple tasks spread over multiple stages
     with Flow("flow") as f:
@@ -152,7 +152,7 @@ def test_stage_ref_counter():
             x = m_check_rc(s2, 0)(x)
             m_check_rc(s3, 2)(x)
 
-    assert f.run().is_successful()
+    assert f.run().successful
 
 
 def test_materialize_memo():
@@ -174,7 +174,7 @@ def test_materialize_memo():
         with Stage("stage3"):
             t_map = m_noop([t_1, t_2, t_3, t_4, t_5, t_6, t_7, t_8])
 
-    assert f.run().is_successful()
+    assert f.run().successful
 
 
 def test_materialize_memo_with_failures():
@@ -194,7 +194,7 @@ def test_materialize_memo_with_failures():
         with Stage("stage3"):
             t_map = m_noop([t_1, t_2, t_3, t_4, t_5, t_6, t_7, t_8])
 
-    assert f.run().is_failed()
+    assert not f.run().successful
 
 
 if __name__ == "__main__":

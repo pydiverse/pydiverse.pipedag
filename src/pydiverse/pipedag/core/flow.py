@@ -9,8 +9,8 @@ from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContextServe
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag.core.stage import CommitStageTask, Stage
-    from pydiverse.pipedag.core.task import Task
+    from pydiverse.pipedag.core import Result, Stage, Task
+    from pydiverse.pipedag.core.stage import CommitStageTask
     from pydiverse.pipedag.engine import Engine
 
 
@@ -75,6 +75,8 @@ class Flow:
         self.graph.add_edge(from_, to)
 
     def visualize(self):
+        # TODO: Also allow visualizing the run result
+        #       Successful tasks in green, failed in red, skipped orange
         import pydot
 
         dot = pydot.Dot()
@@ -196,7 +198,7 @@ class Flow:
 
         return explicit_graph
 
-    def run(self, engine: Engine = None, **kwargs):
+    def run(self, engine: Engine = None, **kwargs) -> Result:
         """Execute a flow
 
         You can provide an engine to execute the flow with using the `engine`
@@ -211,7 +213,4 @@ class Flow:
         with ConfigContext.from_file(), RunContextServer(self):
             if engine is None:
                 engine = ConfigContext.get().get_engine()
-
-            # TODO: Wrap result object (Create a custom result object with a
-            #       consistent interface)
             return engine.run(flow=self, **kwargs)

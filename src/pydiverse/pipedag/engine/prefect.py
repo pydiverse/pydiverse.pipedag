@@ -7,6 +7,7 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
 from pydiverse.pipedag.context import ConfigContext, RunContext
+from pydiverse.pipedag.core.result import Result
 from pydiverse.pipedag.engine.base import Engine
 from pydiverse.pipedag.util import requires
 
@@ -71,7 +72,12 @@ class PrefectOneEngine(Engine):
 
     def run(self, flow: Flow, **run_kwargs):
         prefect_flow = self.construct_prefect_flow(flow)
-        return prefect_flow.run(**run_kwargs)
+        result = prefect_flow.run(**run_kwargs)
+
+        return Result(
+            underlying=result,
+            successful=result.is_successful(),
+        )
 
 
 @requires(prefect, ImportError("Module 'prefect' not installed"))
@@ -124,7 +130,12 @@ class PrefectTwoEngine(Engine):
         if kwargs:
             raise TypeError(f"{type(self).__name__}.run doesn't take kwargs.")
         prefect_flow = self.construct_prefect_flow(flow)
-        return prefect_flow()
+        result = prefect_flow(return_state=True)
+
+        return Result(
+            underlying=result,
+            successful=result.is_completed(),
+        )
 
 
 # Automatic Prefect Version Selection

@@ -63,8 +63,7 @@ def test_simple_flow():
             v = blob_task(v, v)
 
     result = flow.run()
-    assert not result.is_failed()
-    # assert result.is_successful()
+    assert result.successful
 
 
 if __name__ == "__main__":

@@ -8,13 +8,14 @@ from typing_extensions import Self
 
 from pydiverse.pipedag._typing import StoreT, T
 from pydiverse.pipedag.errors import CacheError
+from pydiverse.pipedag.materialize.container import Table
 from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import LazyTableMetadata, TaskMetadata
 from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.util import requires
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag import Stage, Table
+    from pydiverse.pipedag import Stage
 
 
 class _TableStoreMeta(ABCMeta):
