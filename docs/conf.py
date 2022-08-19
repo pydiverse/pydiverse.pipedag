@@ -34,9 +34,9 @@ copyright = f"{datetime.date.today().year}, QuantCo, Inc"
 author = "QuantCo, Inc."
 
 extensions = [
-    "numpydoc",
+    # "numpydoc",
     "sphinx.ext.linkcode",
-    "sphinxcontrib.apidoc",
+    # "sphinxcontrib.apidoc",
 ]
 
 apidoc_module_dir = "../src/pydiverse"
