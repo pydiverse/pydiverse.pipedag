@@ -70,6 +70,7 @@ def load_config(path: str) -> ConfigContext:
     # Parse Config File
 
     name = config_dict.get("name", None)
+    interface = config_dict.get("network_interface", "127.0.0.1")
 
     auto_table = tuple(map(import_object, config_dict.get("auto_table", ())))
     auto_blob = tuple(map(import_object, config_dict.get("auto_blob", ())))
@@ -77,6 +78,7 @@ def load_config(path: str) -> ConfigContext:
     return ConfigContext(
         config_dict=config_dict.copy(),
         name=name,
+        network_interface=interface,
         auto_table=auto_table,
         auto_blob=auto_blob,
     )

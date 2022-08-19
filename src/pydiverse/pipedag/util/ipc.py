@@ -15,8 +15,20 @@ from pydiverse.pipedag.errors import IPCError
 
 
 class IPCServer:
-    def __init__(self, msg_default=None, msg_ext_hook=None):
-        self.socket = pynng.Rep0(listen="tcp://localhost:0", recv_timeout=1000)
+    """Server for inter process communication
+
+    FORMAT:
+        REQUEST: [nonce, payload]
+        RESPONSE: [payload]
+    """
+
+    def __init__(
+        self,
+        listen="tcp://127.0.0.1:0",
+        msg_default=None,
+        msg_ext_hook=None,
+    ):
+        self.socket = pynng.Rep0(listen=listen, recv_timeout=1000)
         self.main_thread = None
         self.worker_threads: dict[Any, threading.Thread] = {}
 

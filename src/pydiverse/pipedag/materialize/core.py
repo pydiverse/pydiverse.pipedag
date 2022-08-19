@@ -147,11 +147,6 @@ class MaterializationWrapper:
         cache_key = store.compute_task_cache_key(task, input_json)
         task.cache_key = cache_key
 
-        # task.logger.info(
-        #     "Task is currently being run with the same inputs."
-        #     " Waiting for the other task to finish..."
-        # )
-
         # Check if this task has already been run with the same inputs
         # If yes, return memoized result. This prevents DuplicateNameExceptions
         ctx = RunContext.get()

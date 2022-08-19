@@ -62,7 +62,7 @@ class Task:
         self.value = None
 
     def __repr__(self):
-        return f"<Task '{self.name}' {hex(id(self))}>"
+        return f"<Task '{self.name}' {hex(id(self))} (id: {self.id})>"
 
     def __hash__(self):
         return id(self)
@@ -89,6 +89,7 @@ class Task:
         new = copy.copy(self_)
         new.flow = ctx.flow
         new.stage = ctx.stage
+        new.logger = structlog.get_logger(task=new)
 
         new._bound_args = new._signature.bind(*args, **kwargs)
 

@@ -88,6 +88,7 @@ class ConfigContext(BaseAttrsContext):
     config_dict: dict
 
     name: str
+    network_interface: str
     auto_table: tuple[type, ...]
     auto_blob: tuple[type, ...]
 

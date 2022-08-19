@@ -38,15 +38,24 @@ def synchronized(lock_attr: str):
 
 
 class RunContextServer(IPCServer):
-    """
-    REQUEST: [method_name, arguments]
-    RESPONSE: [error, result]
+    """RPC Server that stores all global run state
+
+    FORMAT:
+        REQUEST: [method_name, arguments]
+        RESPONSE: [error, result]
 
     TODO: Replace busy waiting with an interrupt based mechanism (eg threading.Event)
     """
 
     def __init__(self, flow: Flow):
-        super().__init__(msg_default=_msg_default, msg_ext_hook=_msg_ext_hook)
+        config_ctx = ConfigContext.get()
+        interface = config_ctx.network_interface
+
+        super().__init__(
+            listen=f"tcp://{interface}:0",
+            msg_default=_msg_default,
+            msg_ext_hook=_msg_ext_hook,
+        )
 
         self.flow = flow
         self.run_id = uuid.uuid4().hex[:20]
@@ -57,7 +66,6 @@ class RunContextServer(IPCServer):
         self.tasks.sort(key=lambda t: t.id)
 
         num_stages = len(self.stages)
-        config_ctx = ConfigContext.get()
 
         # STATE
         self.ref_count = [0] * num_stages
@@ -308,8 +316,9 @@ class RunContextServer(IPCServer):
         for stage in stages_to_release:
             self.lock_manager.release(stage)
 
-    def enter_task_memo(self, stage_id: int, cache_key: str) -> tuple[bool, Any]:
-        memo_key = (stage_id, cache_key)
+    def enter_task_memo(self, task_id: int, cache_key: str) -> tuple[bool, Any]:
+        task = self.tasks[task_id]
+        memo_key = (task.stage.id, cache_key)
 
         with self.task_memo_lock:
             memo = self.task_memo[memo_key]
@@ -317,6 +326,12 @@ class RunContextServer(IPCServer):
                 self.task_memo[memo_key] = MemoState.WAITING
                 return False, None
 
+        if memo is MemoState.WAITING:
+            self.logger.info(
+                "Task is currently being run with the same inputs."
+                " Waiting for the other task to finish...",
+                task=task,
+            )
         while memo is MemoState.WAITING:
             time.sleep(0.01)
             memo = self.task_memo[memo_key]
@@ -330,18 +345,22 @@ class RunContextServer(IPCServer):
         return True, memo
 
     @synchronized("task_memo_lock")
-    def exit_task_memo(self, stage_id: int, cache_key: str, success: bool):
+    def exit_task_memo(self, task_id: int, cache_key: str, success: bool):
+        task = self.tasks[task_id]
+        memo_key = (task.stage.id, cache_key)
+
         if not success:
-            self.task_memo[(stage_id, cache_key)] = MemoState.FAILED
+            self.task_memo[memo_key] = MemoState.FAILED
             return
 
-        memo = self.task_memo[(stage_id, cache_key)]
+        memo = self.task_memo[memo_key]
         if isinstance(memo, MemoState):
             raise Exception("set_task_memo not called")
 
     @synchronized("task_memo_lock")
-    def store_task_memo(self, stage_id: int, cache_key: str, value: Any):
-        memo_key = (stage_id, cache_key)
+    def store_task_memo(self, task_id: int, cache_key: str, value: Any):
+        task = self.tasks[task_id]
+        memo_key = (task.stage.id, cache_key)
         memo = self.task_memo[memo_key]
 
         if memo is not MemoState.WAITING:
@@ -463,18 +482,18 @@ class RunContext(BaseContext):
 
     @contextmanager
     def task_memo(self, task: Task, cache_key: str):
-        success, memo = self._request("enter_task_memo", task.stage.id, cache_key)
+        success, memo = self._request("enter_task_memo", task.id, cache_key)
 
         try:
             yield success, memo
         except Exception as e:
-            self._request("exit_task_memo", task.stage.id, cache_key, False)
+            self._request("exit_task_memo", task.id, cache_key, False)
             raise e
         else:
-            self._request("exit_task_memo", task.stage.id, cache_key, True)
+            self._request("exit_task_memo", task.id, cache_key, True)
 
     def store_task_memo(self, task: Task, cache_key: str, result: Any):
-        self._request("store_task_memo", task.stage.id, cache_key, result)
+        self._request("store_task_memo", task.id, cache_key, result)
 
     # TABLE / BLOB: Names
 

@@ -1,4 +1,5 @@
 name = "pipedag_tests"
+network_interface = "127.0.0.1"
 auto_table = [
     "pandas.DataFrame",
 ]
