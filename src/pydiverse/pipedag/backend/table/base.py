@@ -50,7 +50,6 @@ class BaseTableStore(metaclass=_TableStoreMeta):
     `version` and `cache_key` act as the primary keys (those values are
     stored both in the task object and the metadata object).
 
-
     To implement the stage transaction and commit mechanism, a technique
     called schema swapping is used:
 
@@ -72,8 +71,8 @@ class BaseTableStore(metaclass=_TableStoreMeta):
     def setup(self):
         """Setup function
 
-        This function gets called by the PipeDAGStore when it gets
-        initialised. Unlike the __init__ method, a lock is acquired before
+        This function gets called at the beginning of a flow run.
+        Unlike the __init__ method, a lock is acquired before
         the setup method gets called to prevent race conditions.
         """
 
@@ -287,10 +286,7 @@ class BaseTableStore(metaclass=_TableStoreMeta):
 
     @abstractmethod
     def copy_task_metadata_to_transaction(self, task: MaterialisingTask):
-        """Copy a task's metadata from the cache to the transaction
-
-        The stage of a task can be accessed using `task.stage`.
-        """
+        """Copy a task's metadata from the cache to the transaction"""
 
     @abstractmethod
     def retrieve_task_metadata(self, task: MaterialisingTask) -> TaskMetadata:

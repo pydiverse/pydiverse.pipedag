@@ -16,6 +16,19 @@ if TYPE_CHECKING:
 
 
 class Task:
+    """Main building block of flows
+
+    Tasks are just fancy functions that can be used inside a flow. As a user
+    of pipedag you most likely never interact with the Task class directly,
+    but use the @materialise decorator to create a MaterialisingTask instead.
+
+    :param fn: The function that gets executed by this task.
+    :param name: The name of the task. If no name is specified, the name of
+        `fn` is used instead.
+    :param nout: The number out outputs that this task has. This is only used
+        for unpacking the outputs of a task.
+    """
+
     def __init__(
         self,
         fn: Callable,

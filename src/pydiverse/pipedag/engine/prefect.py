@@ -30,6 +30,8 @@ except ImportError as e:
     ImportWarning(f"Requires prefect version 1.x (found {prefect_version})"),
 )
 class PrefectOneEngine(Engine):
+    """Flow execution engine using prefect version 1.x"""
+
     def __init__(self, flow_kwargs: dict[str, Any] = None):
         self.flow_kwargs = flow_kwargs or {}
 
@@ -78,6 +80,8 @@ class PrefectOneEngine(Engine):
     ImportWarning(f"Requires prefect version 1.x (found {prefect_version})"),
 )
 class PrefectTwoEngine(Engine):
+    """Flow execution engine using prefect version 2.x"""
+
     def __init__(self, flow_kwargs: dict[str, Any] = None):
         self.flow_kwargs = flow_kwargs or {}
 

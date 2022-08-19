@@ -8,6 +8,14 @@ if TYPE_CHECKING:
 
 
 class Engine(ABC):
+    """Flow execution engine base class"""
+
     @abstractmethod
     def run(self, flow: Flow, **kwargs):
-        ...
+        """Execute a flow
+
+        :param flow: the pipedag flow to execute
+        :param kwargs: Optional keyword arguments. How they get used is
+            engine specific.
+        :return: TODO - Create uniform result type
+        """

@@ -197,6 +197,17 @@ class Flow:
         return explicit_graph
 
     def run(self, engine: Engine = None, **kwargs):
+        """Execute a flow
+
+        You can provide an engine to execute the flow with using the `engine`
+        keyword. If no engine is provided, the engine specified in the condig
+        file is used.
+
+        :param engine: The engine to use.
+        :param kwargs: Other arguments. They get passed on directly to the
+            engine's `.run` method and thus are engine dependant.
+        :return: TODO
+        """
         with ConfigContext.from_file(), RunContextServer(self):
             if engine is None:
                 engine = ConfigContext.get().get_engine()

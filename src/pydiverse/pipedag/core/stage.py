@@ -14,6 +14,46 @@ if TYPE_CHECKING:
 
 
 class Stage:
+    """The Stage class is used to group a collection of related tasks
+
+    The main purpose of a Stage is to allow for a transactionality mechanism.
+    Only if all tasks inside a stage finish successfully does the stage
+    get committed.
+
+    All task that get defined inside the stage's context will automatically
+    get added to the stage.
+
+    An example of how to use a Stage:
+    ::
+
+        @materialise()
+        def my_materialising_task():
+            return Table(...)
+
+        with Flow("my_flow") as flow:
+            with Stage("stage_1") as stage_1:
+                task_1 = my_materialising_task()
+                task_2 = another_materialising_task(task_1)
+
+            with Stage("stage_2") as stage_2:
+                task_3 = yet_another_task(task_3)
+                ...
+
+        flow.run()
+
+    To ensure that all tasks get executed in the correct order, each
+    MaterialisingTask must be an upstream dependency of its stage's
+    CommitStageTask (this is done by calling the `add_task` method) and
+    for each of its upstream dependencies, the associated StageCommitTask
+    must be added as an upstream dependency.
+    This ensures that the stage commit only happens after all tasks have
+    finished writing to the transaction stage, and a task never gets executed
+    before any of its upstream stage dependencies have been committed.
+
+    :param name: The name of the stage. Two stages with the same name may
+        not be used inside the same flow.
+    """
+
     def __init__(self, name: str):
         self._name = normalise_name(name)
         self._transaction_name = f"{self._name}__tmp"
@@ -123,62 +163,3 @@ class CommitStageTask(Task):
     def fn(self):
         self.logger.info(f"Committing stage '{self.stage.name}'")
         ConfigContext.get().store.commit_stage(self.stage)
-
-
-class StageX:
-    """The Stage class is used group a collection of related tasks
-
-    The main purpose of a Stage is to allow for a transactionality mechanism.
-    Only if all tasks inside a stage finish successfully does the stage
-    get committed.
-
-    All materialising task that get defined inside the stage's context
-    will automatically get added to the stage.
-
-    An example of how to use a Stage:
-    ::
-
-        @materialise()
-        def my_materialising_task():
-            return Table(...)
-
-        with Flow("my_flow") as flow:
-            with Stage("stage_1") as stage_1:
-                task_1 = my_materialising_task()
-                task_2 = another_materialising_task(task_1)
-
-            with Stage("stage_2") as stage_2:
-                task_3 = yet_another_task(task_3)
-                ...
-
-        flow.run()
-
-    To ensure that all tasks get executed in the correct order, each
-    MaterialisingTask must be an upstream dependency of its stage's
-    StageCommitTask (this is done by calling the `add_task` method) and
-    for each of its upstream dependencies, the associated StageCommitTask
-    must be added as an upstream dependency.
-    This ensures that the stage commit only happens after all tasks have
-    finished writing to the transaction stage, and a task never gets executed
-    before any of its upstream stage dependencies have been committed.
-
-    :param name: The name of the stage. Two stages with the same name may
-        not be used inside the same flow.
-
-
-    Implementation
-    --------------
-
-    Reference Counting:
-
-    PipeDAG uses a reference counting mechanism to keep track of how many
-    tasks still depend on a specific stage for its inputs. Only once this
-    reference counter hits 0 can the stage be unlocked (the PipeDAGStore
-    object gets notified of thanks to `_set_ref_count_free_handler`.
-    To modify increase and decrease the reference counter the
-    `_incr_ref_count` and `_decr_ref_count` methods are used respectively.
-
-    For MaterialisingTasks, incrementing of the counter happens inside
-    the stage's `__exit__` function, decrementing happens using the provided
-    `stage_ref_counter_handler`.
-    """
