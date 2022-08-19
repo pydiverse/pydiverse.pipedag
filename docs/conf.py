@@ -36,7 +36,7 @@ author = "QuantCo, Inc."
 extensions = [
     # "numpydoc",
     "sphinx.ext.linkcode",
-    # "sphinxcontrib.apidoc",
+    "sphinxcontrib.apidoc",
 ]
 
 apidoc_module_dir = "../src/pydiverse"

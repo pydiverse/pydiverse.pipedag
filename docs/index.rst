@@ -7,6 +7,7 @@ Welcome to pydiverse.pipedag's documentation!
    :caption: Reference:
 
    reference/*
+   API Reference <api/modules>
 
 
 
