@@ -8,26 +8,26 @@ from typing import Callable
 import structlog
 
 from pydiverse.pipedag import Blob, Stage, Table, backend
-from pydiverse.pipedag._typing import Materialisable
+from pydiverse.pipedag._typing import Materializable
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.errors import DuplicateNameError, StageError
-from pydiverse.pipedag.materialise.core import MaterialisingTask
-from pydiverse.pipedag.materialise.metadata import TaskMetadata
-from pydiverse.pipedag.materialise.util import compute_cache_key
-from pydiverse.pipedag.materialise.util import json as json_util
+from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.metadata import TaskMetadata
+from pydiverse.pipedag.materialize.util import compute_cache_key
+from pydiverse.pipedag.materialize.util import json as json_util
 from pydiverse.pipedag.util import deepmutate
 
 
 class PipeDAGStore:
-    """Main storage interface for materialising tasks
+    """Main storage interface for materializing tasks
 
     Depending on the use case, the store can be configured using different
     backends for storing tables, blobs and managing locks.
 
     Other than initializing the global `PipeDAGStore` object, the user
     should never have to interact with it. It only serves as a coordinator
-    between the different backends, the stages and the materialising tasks.
+    between the different backends, the stages and the materializing tasks.
     """
 
     def __init__(
@@ -93,26 +93,26 @@ class PipeDAGStore:
 
     #### Materialization ####
 
-    def dematerialise_task_inputs(
+    def dematerialize_task_inputs(
         self,
-        task: MaterialisingTask,
-        args: tuple[Materialisable],
-        kwargs: dict[str, Materialisable],
+        task: MaterializingTask,
+        args: tuple[Materializable],
+        kwargs: dict[str, Materializable],
     ) -> tuple[tuple, dict]:
         """Loads the inputs for a task from the storage backends
 
         Traverses the function arguments and replaces all `Table` and
         `Blob` objects with the associated objects stored in the backend.
 
-        :param task: The task for which the arguments should be dematerialised
+        :param task: The task for which the arguments should be dematerialized
         :param args: The positional arguments
         :param kwargs: The keyword arguments
-        :return: A tuple with the dematerialised args and kwargs
+        :return: A tuple with the dematerialized args and kwargs
         """
 
         ctx = RunContext.get()
 
-        def dematerialise_mutator(x):
+        def dematerialize_mutator(x):
             if isinstance(x, Table):
                 ctx.validate_stage_lock(x.stage)
                 return self.table_store.retrieve_table_obj(x, as_type=task.input_type)
@@ -121,25 +121,25 @@ class PipeDAGStore:
                 return self.blob_store.retrieve_blob(x)
             return x
 
-        d_args = deepmutate(args, dematerialise_mutator)
-        d_kwargs = deepmutate(kwargs, dematerialise_mutator)
+        d_args = deepmutate(args, dematerialize_mutator)
+        d_kwargs = deepmutate(kwargs, dematerialize_mutator)
 
         return d_args, d_kwargs
 
-    def materialise_task(
+    def materialize_task(
         self,
-        task: MaterialisingTask,
-        value: Materialisable,
-    ) -> Materialisable:
+        task: MaterializingTask,
+        value: Materializable,
+    ) -> Materializable:
         """Stores the output of a task in the backend
 
         Traverses the output produced by a task, adds missing metadata,
-        materialises all `Table` and `Blob` objects and returns a new
-        output object with the required metadata to allow dematerialisation.
+        materializes all `Table` and `Blob` objects and returns a new
+        output object with the required metadata to allow dematerialization.
 
         :param task: The task instance which produced `value`. Must have
             the correct `cache_key` attribute set.
-        :param value: The output of the task. Must be materialisable; this
+        :param value: The output of the task. Must be materializable; this
             means it can only contain the following object types:
             `dict`, `list`, `tuple`,
             `int`, `float`, `str`, `bool`, `None`,
@@ -152,7 +152,7 @@ class PipeDAGStore:
 
         if (state := ctx.get_stage_state(stage)) != StageState.READY:
             raise StageError(
-                f"Can't materialise because stage '{stage.name}' is not ready "
+                f"Can't materialize because stage '{stage.name}' is not ready "
                 f"(state: {state})."
             )
 
@@ -161,7 +161,7 @@ class PipeDAGStore:
 
         config = ConfigContext.get()
 
-        def materialise_mutator(x, counter=itertools.count()):
+        def materialize_mutator(x, counter=itertools.count()):
             # Automatically convert an object to a table / blob if its
             # type is inside either `config.auto_table` or `.auto_blob`.
             if isinstance(x, config.auto_table):
@@ -173,7 +173,7 @@ class PipeDAGStore:
             if isinstance(x, config.auto_blob):
                 x = Blob(x)
 
-            # Do the materialisation
+            # Do the materialization
             if isinstance(x, (Table, Blob)):
                 x.stage = stage
                 x.cache_key = task.cache_key
@@ -204,7 +204,7 @@ class PipeDAGStore:
 
             return x
 
-        m_value = deepmutate(value, materialise_mutator)
+        m_value = deepmutate(value, materialize_mutator)
 
         # Metadata
         output_json = self.json_encode(m_value)
@@ -238,7 +238,7 @@ class PipeDAGStore:
         return m_value
 
     def _check_names(
-        self, task: MaterialisingTask, tables: list[Table], blobs: list[Blob]
+        self, task: MaterializingTask, tables: list[Table], blobs: list[Blob]
     ):
         if not tables and not blobs:
             # Nothing to check
@@ -276,12 +276,12 @@ class PipeDAGStore:
 
     def _store_task_transaction(
         self,
-        task: MaterialisingTask,
+        task: MaterializingTask,
         tables: list[Table],
         blobs: list[Blob],
         store_table: Callable[[Table], None],
         store_blob: Callable[[Blob], None],
-        store_metadata: Callable[[MaterialisingTask], None],
+        store_metadata: Callable[[MaterializingTask], None],
     ):
         stage = task.stage
         ctx = RunContext.get()
@@ -316,12 +316,12 @@ class PipeDAGStore:
 
     def compute_task_cache_key(
         self,
-        task: MaterialisingTask,
+        task: MaterializingTask,
         input_json: str,
     ) -> str:
         """Compute the cache key for a task
 
-        Used by materialising task to create a unique fingerprint to determine
+        Used by materializing task to create a unique fingerprint to determine
         if the same task has been executed in a previous run with the same
         inputs.
 
@@ -343,11 +343,11 @@ class PipeDAGStore:
 
     def retrieve_cached_output(
         self,
-        task: MaterialisingTask,
-    ) -> Materialisable:
+        task: MaterializingTask,
+    ) -> Materializable:
         """Try to retrieve the cached outputs for a task
 
-        :param task: The materialising task for which to retrieve
+        :param task: The materializing task for which to retrieve
             the cached output. Must have the `cache_key` attribute set.
         :raises CacheError: if no matching task exists in the cache
         """
@@ -360,8 +360,8 @@ class PipeDAGStore:
 
     def copy_cached_output_to_transaction_stage(
         self,
-        output: Materialisable,
-        task: MaterialisingTask,
+        output: Materializable,
+        task: MaterializingTask,
     ):
         """Copy the outputs from a cached task into the transaction stage
 
@@ -399,8 +399,8 @@ class PipeDAGStore:
 
     #### Utils ####
 
-    def json_encode(self, value: Materialisable) -> str:
-        """Encode a materialisable value as json
+    def json_encode(self, value: Materializable) -> str:
+        """Encode a materializable value as json
 
         In addition to the default types that python can serialise to json,
         this function can also serialise `Table` and `Blob` objects.
@@ -410,8 +410,8 @@ class PipeDAGStore:
         """
         return self.json_encoder.encode(value)
 
-    def json_decode(self, value: str) -> Materialisable:
-        """Decode a materialisable value as json
+    def json_decode(self, value: str) -> Materializable:
+        """Decode a materializable value as json
 
         Counterpart for the `json_encode` function. Can decode `Table` and
         `Blob` objects.

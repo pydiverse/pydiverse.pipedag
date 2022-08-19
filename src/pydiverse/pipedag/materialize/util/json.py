@@ -1,6 +1,6 @@
 """Utilities for JSON to support PipeDAG objects
 
-PipeDAG objects get serialised as JSON objects with a special `_pipedag_type_`
+PipeDAG objects get serialized as JSON objects with a special `_pipedag_type_`
 key to identify them when decoding. The associated value encodes the
 type of the object.
 """
@@ -8,7 +8,7 @@ type of the object.
 from __future__ import annotations
 
 from pydiverse.pipedag.context import RunContext
-from pydiverse.pipedag.materialise.container import Blob, Table
+from pydiverse.pipedag.materialize.container import Blob, Table
 
 PIPEDAG_TYPE = "_pipedag_type_"
 PIPEDAG_TYPE_TABLE = "table"

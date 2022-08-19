@@ -16,12 +16,12 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     RenameSchema,
 )
 from pydiverse.pipedag.errors import CacheError
-from pydiverse.pipedag.materialise.core import MaterialisingTask
-from pydiverse.pipedag.materialise.metadata import LazyTableMetadata, TaskMetadata
+from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.metadata import LazyTableMetadata, TaskMetadata
 
 
 class SQLTableStore(BaseTableStore):
-    """Table store that materialises tables to a SQL database
+    """Table store that materializes tables to a SQL database
 
     Uses schema swapping for transactions:
     Creates a schema for each stage and a temporary schema for each
@@ -186,7 +186,7 @@ class SQLTableStore(BaseTableStore):
                 )
             )
 
-    def copy_task_metadata_to_transaction(self, task: MaterialisingTask):
+    def copy_task_metadata_to_transaction(self, task: MaterializingTask):
         with self.engine.connect() as conn:
             metadata = (
                 conn.execute(
@@ -206,7 +206,7 @@ class SQLTableStore(BaseTableStore):
 
             conn.execute(self.tasks_table.insert().values(**metadata_copy))
 
-    def retrieve_task_metadata(self, task: MaterialisingTask) -> TaskMetadata:
+    def retrieve_task_metadata(self, task: MaterializingTask) -> TaskMetadata:
         try:
             with self.engine.connect() as conn:
                 result = (
@@ -278,7 +278,7 @@ class SQLTableStore(BaseTableStore):
 @SQLTableStore.register_table()
 class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @classmethod
-    def can_materialise(cls, type_) -> bool:
+    def can_materialize(cls, type_) -> bool:
         return issubclass(type_, sa.sql.Select)
 
     @classmethod
@@ -286,7 +286,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         return type_ == sa.Table
 
     @classmethod
-    def materialise(cls, store, table: Table[sa.sql.Select], stage_name):
+    def materialize(cls, store, table: Table[sa.sql.Select], stage_name):
         store.logger.info(f"Performing CREATE TABLE AS SELECT ({table})")
         with store.engine.connect() as conn:
             conn.execute(CreateTableAsSelect(table.name, stage_name, table.obj))
@@ -308,7 +308,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 @SQLTableStore.register_table(pd)
 class PandasTableHook(TableHook[SQLTableStore]):
     @classmethod
-    def can_materialise(cls, type_) -> bool:
+    def can_materialize(cls, type_) -> bool:
         return issubclass(type_, pd.DataFrame)
 
     @classmethod
@@ -316,7 +316,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         return type_ == pd.DataFrame
 
     @classmethod
-    def materialise(cls, store, table: Table[pd.DataFrame], stage_name):
+    def materialize(cls, store, table: Table[pd.DataFrame], stage_name):
         table.obj.to_sql(
             table.name,
             store.engine,
@@ -347,7 +347,7 @@ except ImportError as e:
 @SQLTableStore.register_table(pdt)
 class PydiverseTransformTableHook(TableHook[SQLTableStore]):
     @classmethod
-    def can_materialise(cls, type_) -> bool:
+    def can_materialize(cls, type_) -> bool:
         return issubclass(type_, pdt.Table)
 
     @classmethod
@@ -358,7 +358,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         return issubclass(type_, (PandasTableImpl, SQLTableImpl))
 
     @classmethod
-    def materialise(cls, store, table: Table[pdt.Table], stage_name):
+    def materialize(cls, store, table: Table[pdt.Table], stage_name):
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
 
@@ -367,10 +367,10 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             from pydiverse.transform.core.verbs import collect
 
             table.obj = t >> collect()
-            return PandasTableHook.materialise(store, table, stage_name)
+            return PandasTableHook.materialize(store, table, stage_name)
         if isinstance(t._impl, SQLTableImpl):
             table.obj = t._impl.build_select()
-            return SQLAlchemyTableHook.materialise(store, table, stage_name)
+            return SQLAlchemyTableHook.materialize(store, table, stage_name)
         raise NotImplementedError
 
     @classmethod

@@ -1,5 +1,5 @@
-def normalise_name(name: str) -> str:
-    """Normalises an identifier
+def normalize_name(name: str) -> str:
+    """Normalizes an identifier
 
     All names in PipeDAG are case-insensitive and can't contain any
     slashes. This helper function does exactly this conversion.
@@ -19,6 +19,6 @@ def safe_name(name: str) -> str:
     :param name: The identifier / name to make safe
     :return: The safe name
     """
-    name = normalise_name(name)
+    name = normalize_name(name)
     name = name.encode("punycode").decode("ascii")
     return name

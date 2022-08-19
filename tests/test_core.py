@@ -4,44 +4,44 @@ import time
 
 import pytest
 
-from pydiverse.pipedag import Blob, Flow, Stage, materialise
+from pydiverse.pipedag import Blob, Flow, Stage, materialize
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError, StageError
 
 
-@materialise
+@materialize
 def m_1():
     return 1
 
 
-@materialise
+@materialize
 def m_2():
     return 2
 
 
-@materialise(nout=2)
+@materialize(nout=2)
 def m_tuple(a, b):
     return a, b
 
 
-@materialise
+@materialize
 def m_noop(x):
     return x
 
 
-@materialise
+@materialize
 def m_sleep_noop(x, duration=0.05):
     time.sleep(duration)
     return x
 
 
-@materialise
+@materialize
 def m_sleep_blob_noop(x, duration=0.25):
     time.sleep(duration)
     return Blob(x)
 
 
-@materialise
+@materialize
 def m_raise(x, r: bool):
     time.sleep(0.05)
     if r:
@@ -50,7 +50,7 @@ def m_raise(x, r: bool):
 
 
 def m_assert(condition):
-    @materialise(lazy=True)
+    @materialize(lazy=True)
     def _m_assert(x):
         assert condition(x)
         return x
@@ -98,7 +98,7 @@ def test_task_attach_to_nested_stage():
 
 def test_stage_ref_counter():
     def m_check_rc(stage, expected):
-        @materialise(lazy=True)
+        @materialize(lazy=True)
         def _m_check_rc(x):
             assert RunContext.get().get_stage_ref_count(stage) == expected
             return x
@@ -155,7 +155,7 @@ def test_stage_ref_counter():
     assert f.run().is_successful()
 
 
-def test_materialise_memo():
+def test_materialize_memo():
     # A flow should be able to contain the same task with the same inputs
     # more than once and still run successfully.
     with Flow("flow") as f:
@@ -177,7 +177,7 @@ def test_materialise_memo():
     assert f.run().is_successful()
 
 
-def test_materialise_memo_with_failures():
+def test_materialize_memo_with_failures():
     with Flow("flow") as f:
         with Stage("stage1"):
             t_1 = m_raise(1, False)
@@ -198,7 +198,7 @@ def test_materialise_memo_with_failures():
 
 
 if __name__ == "__main__":
-    test_materialise_memo()
+    test_materialize_memo()
 
 
 def test_duplicate_stage_name():

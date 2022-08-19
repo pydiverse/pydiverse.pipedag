@@ -7,7 +7,7 @@ import structlog
 from pydiverse.pipedag.context import ConfigContext, DAGContext
 from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import StageError
-from pydiverse.pipedag.util import normalise_name
+from pydiverse.pipedag.util import normalize_name
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core.flow import Flow
@@ -26,14 +26,14 @@ class Stage:
     An example of how to use a Stage:
     ::
 
-        @materialise()
-        def my_materialising_task():
+        @materialize()
+        def my_materializing_task():
             return Table(...)
 
         with Flow("my_flow") as flow:
             with Stage("stage_1") as stage_1:
-                task_1 = my_materialising_task()
-                task_2 = another_materialising_task(task_1)
+                task_1 = my_materializing_task()
+                task_2 = another_materializing_task(task_1)
 
             with Stage("stage_2") as stage_2:
                 task_3 = yet_another_task(task_3)
@@ -42,7 +42,7 @@ class Stage:
         flow.run()
 
     To ensure that all tasks get executed in the correct order, each
-    MaterialisingTask must be an upstream dependency of its stage's
+    MaterializingTask must be an upstream dependency of its stage's
     CommitStageTask (this is done by calling the `add_task` method) and
     for each of its upstream dependencies, the associated StageCommitTask
     must be added as an upstream dependency.
@@ -55,7 +55,7 @@ class Stage:
     """
 
     def __init__(self, name: str):
-        self._name = normalise_name(name)
+        self._name = normalize_name(name)
         self._transaction_name = f"{self._name}__tmp"
 
         self.tasks: list[Task] = []

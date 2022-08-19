@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from pydiverse.pipedag.backend import BaseLockManager
     from pydiverse.pipedag.core import Flow, Stage, Task
     from pydiverse.pipedag.engine.base import Engine
-    from pydiverse.pipedag.materialise.store import PipeDAGStore
+    from pydiverse.pipedag.materialize.store import PipeDAGStore
 
 
 logger = structlog.get_logger()
@@ -93,7 +93,7 @@ class ConfigContext(BaseAttrsContext):
 
     @cached_property
     def store(self) -> PipeDAGStore:
-        from pydiverse.pipedag.materialise.store import PipeDAGStore
+        from pydiverse.pipedag.materialize.store import PipeDAGStore
 
         table_store = load_instance(self.config_dict["table_store"])
         blob_store = load_instance(self.config_dict["blob_store"])

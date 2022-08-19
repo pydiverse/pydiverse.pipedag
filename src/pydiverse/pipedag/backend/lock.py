@@ -14,7 +14,7 @@ import structlog
 from pydiverse.pipedag.context.context import ConfigContext
 from pydiverse.pipedag.core.stage import Stage
 from pydiverse.pipedag.errors import LockError
-from pydiverse.pipedag.util import normalise_name, requires
+from pydiverse.pipedag.util import normalize_name, requires
 
 __all__ = [
     "BaseLockManager",
@@ -166,7 +166,7 @@ class FileLockManager(BaseLockManager):
         self.base_path = os.path.abspath(base_path)
         name = ConfigContext.get().name
         if name is not None:
-            project_name = normalise_name(name)
+            project_name = normalize_name(name)
             self.base_path = os.path.join(self.base_path, project_name)
         self.locks: dict[Lockable, fl.BaseFileLock] = {}
 
@@ -241,7 +241,7 @@ class ZooKeeperLockManager(BaseLockManager):
         self.base_path = "/pipedag/locks/"
         config = ConfigContext.get()
         if config.name is not None:
-            project_name = normalise_name(config.name)
+            project_name = normalize_name(config.name)
             self.base_path += project_name + "/"
 
     @classmethod

@@ -15,15 +15,15 @@ T = TypeVar("T")
 CallableT = TypeVar("CallableT", bound=Callable)
 StoreT = TypeVar("StoreT", bound="BaseTableStore")
 
-# Materialisable
+# Materializable
 
 MPrimitives = Union[int, float, bool, str]
 MTypes = Union["Table", "Blob"]
 
-BaseMaterialisable = Union[MPrimitives, MTypes]
-Materialisable = Union[
-    BaseMaterialisable,
-    Dict[MPrimitives, "Materialisable"],
-    List["Materialisable"],
-    Tuple["Materialisable", ...],
+BaseMaterializable = Union[MPrimitives, MTypes]
+Materializable = Union[
+    BaseMaterializable,
+    Dict[MPrimitives, "Materializable"],
+    List["Materializable"],
+    Tuple["Materializable", ...],
 ]

@@ -86,7 +86,7 @@ class PrefectTwoEngine(Engine):
         self.flow_kwargs = flow_kwargs or {}
 
     def construct_prefect_flow(self, f: Flow):
-        from pydiverse.pipedag.materialise.core import MaterialisingTask
+        from pydiverse.pipedag.materialize.core import MaterializingTask
 
         g = f.explicit_graph
         run_context = RunContext.get()
@@ -104,7 +104,7 @@ class PrefectTwoEngine(Engine):
 
             for t in f.tasks:
                 task_kwargs = {"name": t.name}
-                if isinstance(t, MaterialisingTask):
+                if isinstance(t, MaterializingTask):
                     task_kwargs["version"] = t.version
 
                 task = prefect.task(**task_kwargs)(t.run)

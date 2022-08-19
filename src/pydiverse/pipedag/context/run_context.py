@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from pydiverse.pipedag._typing import T
     from pydiverse.pipedag.backend import LockState
     from pydiverse.pipedag.core import Task
-    from pydiverse.pipedag.materialise import Blob, Table
+    from pydiverse.pipedag.materialize import Blob, Table
 
 
 def synchronized(lock_attr: str):

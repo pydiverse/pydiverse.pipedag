@@ -9,11 +9,11 @@ from pydiverse.pipedag._typing import CallableT
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import CacheError
-from pydiverse.pipedag.materialise.container import Blob, Table
+from pydiverse.pipedag.materialize.container import Blob, Table
 from pydiverse.pipedag.util import deepmutate
 
 
-def materialise(
+def materialize(
     fn: CallableT = None,
     *,
     name: str = None,
@@ -21,10 +21,10 @@ def materialise(
     version: str = None,
     lazy: bool = False,
     nout: int = 1,
-) -> CallableT | MaterialisingTask:
+) -> CallableT | MaterializingTask:
     if fn is None:
         return partial(
-            materialise,
+            materialize,
             name=name,
             input_type=input_type,
             version=version,
@@ -32,7 +32,7 @@ def materialise(
             nout=nout,
         )
 
-    return MaterialisingTask(
+    return MaterializingTask(
         fn,
         name=name,
         input_type=input_type,
@@ -42,24 +42,24 @@ def materialise(
     )
 
 
-class MaterialisingTask(Task):
-    """Task whose outputs get materialised
+class MaterializingTask(Task):
+    """Task whose outputs get materialized
 
-    All the values a materialising task returns get written to the appropriate
+    All the values a materializing task returns get written to the appropriate
     storage backend. Additionally, all `Table` and `Blob` objects in the
     input will be replaced with their appropriate objects (loaded from the
     storage backend). This means that tables and blobs never move from one
     task to another directly, but go through the storage layer instead.
 
     Because of how caching is implemented, task inputs and outputs must all
-    be 'materialisable'. This means that they can only contain objects of
+    be 'materializable'. This means that they can only contain objects of
     the following types:
     `dict`, `list`, `tuple`,
     `int`, `float`, `str`, `bool`, `None`,
     and PipeDAG's `Table` and `Blob` type.
 
     Automatically adds itself to the active stage.
-    All materialising tasks MUST be defined inside a stage.
+    All materializing tasks MUST be defined inside a stage.
 
     :param fn: The run method of this task
     :key name: The name of this task
@@ -94,7 +94,7 @@ class MaterialisingTask(Task):
         #       - Cache based on input files
         #       - Invalidate based on date
         super().__init__(
-            MaterialisationWrapper(fn),
+            MaterializationWrapper(fn),
             name=name,
             nout=nout,
         )
@@ -108,8 +108,8 @@ class MaterialisingTask(Task):
         self.cache_key = None
 
 
-class MaterialisationWrapper:
-    """Function wrapper that contains all high level materialisation logic
+class MaterializationWrapper:
+    """Function wrapper that contains all high level materialization logic
 
     :param fn: The function to wrap
     """
@@ -121,10 +121,10 @@ class MaterialisationWrapper:
         self.fn_signature = inspect.signature(fn)
 
     def __call__(self, *args, **kwargs):
-        """Function wrapper / materialisation logic
+        """Function wrapper / materialization logic
 
         :param args: The arguments passed to the function
-        :param _pipedag_task_: The `MaterialisingTask` instance which called
+        :param _pipedag_task_: The `MaterializingTask` instance which called
             this wrapper.
         :param kwargs: The keyword arguments passed to the function
         :return: A copy of what the original function returns annotated
@@ -177,14 +177,14 @@ class MaterialisationWrapper:
                     pass
 
             # Not found in cache / lazy -> Evaluate Function
-            args, kwargs = store.dematerialise_task_inputs(
+            args, kwargs = store.dematerialize_task_inputs(
                 task, bound.args, bound.kwargs
             )
 
             result = self.fn(*args, **kwargs)
-            result = store.materialise_task(task, result)
+            result = store.materialize_task(task, result)
 
-            # Delete underlying objects from result (after materialising them)
+            # Delete underlying objects from result (after materializing them)
             def obj_del_mutator(x):
                 if isinstance(x, (Table, Blob)):
                     x.obj = None

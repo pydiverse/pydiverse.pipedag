@@ -20,7 +20,7 @@ class Task:
 
     Tasks are just fancy functions that can be used inside a flow. As a user
     of pipedag you most likely never interact with the Task class directly,
-    but use the @materialise decorator to create a MaterialisingTask instead.
+    but use the @materialize decorator to create a MaterializingTask instead.
 
     :param fn: The function that gets executed by this task.
     :param name: The name of the task. If no name is specified, the name of

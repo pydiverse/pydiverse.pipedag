@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING, Any
 
 from pydiverse.pipedag.context import ConfigContext
 from pydiverse.pipedag.errors import CacheError
-from pydiverse.pipedag.util import normalise_name
+from pydiverse.pipedag.util import normalize_name
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import Stage
-    from pydiverse.pipedag.materialise import Blob
+    from pydiverse.pipedag.materialize import Blob
 
 __all__ = [
     "BaseBlobStore",
@@ -91,7 +91,7 @@ class FileBlobStore(BaseBlobStore):
         self.base_path = os.path.abspath(base_path)
         config = ConfigContext.get()
         if config.name is not None:
-            project_name = normalise_name(config.name)
+            project_name = normalize_name(config.name)
             self.base_path = os.path.join(self.base_path, project_name)
 
         os.makedirs(self.base_path, exist_ok=True)

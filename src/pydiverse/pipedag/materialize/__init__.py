@@ -1,8 +1,8 @@
 from .container import Blob, Table
-from .core import materialise
+from .core import materialize
 
 __all__ = [
     "Table",
     "Blob",
-    "materialise",
+    "materialize",
 ]
