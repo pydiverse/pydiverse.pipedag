@@ -33,6 +33,9 @@ class BaseBlobStore(ABC):
     data as long as they have the same name and stage.
     """
 
+    def close(self):
+        """Clean up and close all open resources"""
+
     @abstractmethod
     def init_stage(self, stage: Stage):
         """Initialize a stage and start a transaction"""

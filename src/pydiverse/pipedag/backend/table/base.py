@@ -77,6 +77,9 @@ class BaseTableStore(metaclass=_TableStoreMeta):
         the setup method gets called to prevent race conditions.
         """
 
+    def close(self):
+        """Clean up and close all open resources"""
+
     @classmethod
     def register_table(cls, *requirements: Any):
         """Decorator to register a `TableHook`

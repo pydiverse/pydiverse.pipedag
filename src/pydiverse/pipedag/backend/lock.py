@@ -76,6 +76,9 @@ class BaseLockManager(ABC):
         self.lock_states = defaultdict(lambda: LockState.UNLOCKED)
         self.__lock_state_lock = threading.Lock()
 
+    def close(self):
+        """Clean up and close all open resources"""
+
     @abstractmethod
     def acquire(self, lock: Lockable):
         """Acquires a lock to access a given object"""
@@ -234,7 +237,7 @@ class ZooKeeperLockManager(BaseLockManager):
         self.client = client
         if not self.client.connected:
             self.client.start()
-            atexit.register(lambda: (self.client.stop(), self.client.close()))
+            atexit.register(lambda: self.close())
         self.client.add_listener(self._lock_listener)
 
         self.locks: dict[Lockable, KazooLock] = {}
@@ -248,6 +251,10 @@ class ZooKeeperLockManager(BaseLockManager):
     def _init_conf_(cls, config: dict[str, Any]):
         client = KazooClient(**config)
         return cls(client)
+
+    def close(self):
+        self.client.stop()
+        self.client.close()
 
     def acquire(self, lock: Lockable):
         zk_lock = self.client.Lock(self.lock_path(lock))

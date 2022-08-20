@@ -112,6 +112,7 @@ class RunContextServer(IPCServer):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._release_all_locks()
+        self.lock_manager.close()
         self.__context_proxy.__exit__(exc_type, exc_val, exc_tb)
         super().__exit__(exc_type, exc_val, exc_tb)
 

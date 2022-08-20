@@ -84,6 +84,9 @@ class SQLTableStore(BaseTableStore):
             conn.execute(CreateSchema(self.METADATA_SCHEMA, if_not_exists=True))
             self.sql_metadata.create_all(conn)
 
+    def close(self):
+        self.engine.dispose()
+
     def init_stage(self, stage: Stage):
         cs_base = CreateSchema(stage.name, if_not_exists=True)
         ds_trans = DropSchema(stage.transaction_name, if_exists=True, cascade=True)

@@ -48,6 +48,11 @@ class PipeDAGStore:
         )
         self.json_decoder = json.JSONDecoder(object_hook=json_util.json_object_hook)
 
+    def close(self):
+        """Clean up and close all open resources"""
+        self.table_store.close()
+        self.blob_store.close()
+
     #### Stage ####
 
     def init_stage(self, stage: Stage):

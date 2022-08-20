@@ -45,6 +45,10 @@ class BaseContext:
                     raise RuntimeError
                 self._context_var.reset(self._token)
                 object.__setattr__(self, "_token", None)
+                self.close()
+
+    def close(self):
+        """Function that gets called at __exit__"""
 
     @classmethod
     def get(cls: type[T]) -> T:
@@ -122,6 +126,12 @@ class ConfigContext(BaseAttrsContext):
             return config.load_config(path)
         except (ImportError, AttributeError) as e:
             raise Exception("Pipedag config is invalid") from e
+
+    def close(self):
+        # If the store has been initialized (and thus cached in the __dict__),
+        # close all open resources (e.g. kill all database connections)
+        if store := self.__dict__.get("store", None):
+            store.close()
 
     def __getstate__(self):
         state = super().__getstate__()
