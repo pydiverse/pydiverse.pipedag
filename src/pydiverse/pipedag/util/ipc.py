@@ -14,7 +14,7 @@ import structlog
 from pydiverse.pipedag.errors import IPCError
 
 
-class IPCServer:
+class IPCServer(threading.Thread):
     """Server for inter process communication
 
     FORMAT:
@@ -28,36 +28,23 @@ class IPCServer:
         msg_default=None,
         msg_ext_hook=None,
     ):
-        self.socket = pynng.Rep0(listen=listen, recv_timeout=1000)
-        self.main_thread = None
-        self.worker_threads: dict[Any, threading.Thread] = {}
+        super().__init__(name="IPCServer", daemon=True)
 
-        self.kill_sig = threading.Event()
+        self.socket = pynng.Rep0(listen=listen, recv_timeout=1000)
+        self.nonces = set()
+
+        self.__stop_flag = False
         self.logger = structlog.get_logger()
 
         self.msg_default = msg_default
         self.msg_ext_hook = msg_ext_hook
 
-    def start(self):
-        assert self.main_thread is None
-
+    def run(self):
         self.logger.info("Starting IPCServer", address=self.address)
-        self.main_thread = threading.Thread(
-            name="IPC Server", target=self.run_loop, daemon=True
-        )
-        self.main_thread.start()
+        self.run_loop()
 
     def stop(self):
-        assert self.main_thread is not None
-
-        self.kill_sig.set()
-        self.main_thread.join()
-
-        for thread in self.worker_threads.values():
-            thread.join()
-
-        self.kill_sig.clear()
-        self.main_thread = None
+        self.__stop_flag = True
         self.logger.info("Did stop IPCServer", address=self.address)
 
     def __enter__(self):
@@ -69,7 +56,7 @@ class IPCServer:
 
     def run_loop(self):
         socket = self.socket.new_context()
-        while not self.kill_sig.is_set():
+        while not self.__stop_flag:
             try:
                 data = socket.recv()
                 unpacker = msgpack.Unpacker(use_list=False, ext_hook=self.msg_ext_hook)
@@ -84,12 +71,12 @@ class IPCServer:
                 nonce = unpacker.unpack()
                 nonce_hex = nonce.hex()
 
-                if thread := self.worker_threads.get(nonce):
-                    if thread.is_alive():
-                        # Already processing this request
-                        self.logger.debug("Already processing request", nonce=nonce_hex)
-                        return
+                if nonce in self.nonces:
+                    # Already processing this request
+                    self.logger.debug("Already processing request", nonce=nonce_hex)
+                    return
 
+                self.nonces.add(nonce)
                 thread = threading.Thread(
                     name="IPC Worker",
                     target=self._serve,
@@ -97,11 +84,15 @@ class IPCServer:
                     daemon=True,
                 )
                 thread.start()
-                self.worker_threads[nonce] = thread
             except pynng.Timeout:
                 pass
+            except Exception as e:
+                self.logger.exception(e)
             else:
                 socket = self.socket.new_context()
+
+        socket.close()
+        self.socket.close()
 
     def _serve(self, socket, unpacker, nonce_hex):
         msg = unpacker.unpack()
@@ -110,12 +101,8 @@ class IPCServer:
         self.logger.debug("IPCServer Reply", reply=reply, nonce=nonce_hex)
         socket.send(msgpack.packb(reply, default=self.msg_default))
 
-    def handle_request(self, request: dict[str, Any]) -> dict[str, Any]:
-        reply = {
-            "status": 0,
-            "message": "SUCCESS",
-        }
-        return reply
+    def handle_request(self, request: dict[str, Any]):
+        return None
 
     @cached_property
     def address(self) -> str:
