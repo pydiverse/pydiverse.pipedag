@@ -38,6 +38,8 @@ class Task:
     ):
         if not callable(fn):
             raise TypeError("`fn` must be callable")
+        if nout is not None and (nout <= 0 or not isinstance(nout, int)):
+            raise ValueError("`nout` must be a positive integer")
 
         if name is None:
             name = getattr(fn, "__name__", type(self).__name__)
@@ -110,12 +112,14 @@ class Task:
         deepmutate(new._bound_args.kwargs, visitor)
 
         # Add upstream edges
+        new.upstream_stages = []
         upstream_stages_set = set()
         for input_task in new.input_tasks.values():
             new.flow.add_edge(input_task, new)
-            upstream_stages_set.add(input_task.stage)
 
-        new.upstream_stages = list(upstream_stages_set)
+            if input_task.stage not in upstream_stages_set:
+                upstream_stages_set.add(input_task.stage)
+                new.upstream_stages.append(input_task.stage)
 
         return new
 

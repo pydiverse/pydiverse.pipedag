@@ -1,278 +1,341 @@
 from __future__ import annotations
 
-import time
-
+import networkx as nx
 import pytest
 
-from pydiverse.pipedag import Blob, Flow, Stage, materialize
-from pydiverse.pipedag.context import RunContext
+from pydiverse.pipedag import Flow, Stage
+from pydiverse.pipedag.core import Task
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError, StageError
 
 
-@materialize
-def m_1():
-    return 1
+def t(name: str, **kwargs):
+    return Task((lambda *a: a), name=f"task-{name}", **kwargs)
 
 
-@materialize
-def m_2():
-    return 2
+def validate_dependencies(flow: Flow):
+    # Tasks outside a stage can only run if all
+    # tasks inside the stage have finished.
+
+    g = flow.graph
+    expl_g = flow.build_graph()
+
+    assert nx.is_directed_acyclic_graph(g)
+    assert nx.is_directed_acyclic_graph(expl_g)
+
+    stages = flow.stages.values()
+    tasks = flow.tasks
+
+    # Check flow.graph is correct
+    for task in tasks:
+        assert task in g
+        assert task in expl_g
+
+        parents = {edge[0] for edge in g.in_edges(task)}
+        assert set(task.input_tasks.values()) == parents
+
+    # Check inputs computed before task
+    for task in tasks:
+        for input_task in task.input_tasks.values():
+            assert nx.shortest_path(expl_g, input_task, task)
+
+    # Check each task in stage happens before commit
+    for task in tasks:
+        assert nx.shortest_path(expl_g, task, task.stage.commit_task)
+
+    # Check commit task dependencies
+    for child in tasks:
+        for parent, _ in g.in_edges(child):  # type: Task
+            if child.stage == parent.stage:
+                continue
+
+            if child.stage.is_inner(parent.stage):
+                continue
+
+            assert nx.shortest_path(expl_g, parent, parent.stage.commit_task)
+            assert nx.shortest_path(expl_g, parent.stage.commit_task, child)
+
+    # Ensure that nested stages get committed before their parents
+    for stage in stages:
+        if stage.outer_stage is None:
+            continue
+        assert nx.shortest_path(
+            expl_g, stage.commit_task, stage.outer_stage.commit_task
+        )
 
 
-@materialize(nout=2)
-def m_tuple(a, b):
-    return a, b
+class TestDAGConstruction:
+    """
+    Test that the DAG gets constructed properly, all metadata is set
+    properly and that all task dependencies are correct.
+    """
+
+    def test_one_task(self):
+        with Flow("f") as f:
+            with Stage("s") as s:
+                t0 = t("0")(0)
+
+        assert f.stages == {"s": s}
+        assert f.tasks == [t0, s.commit_task]
+
+        assert s.tasks == [t0]
+        assert s.outer_stage is None
+
+        assert t0.upstream_stages == []
+
+        validate_dependencies(f)
+
+    def test_two_independent_tasks(self):
+        with Flow("f") as f:
+            with Stage("s") as s:
+                t0 = t("0")(0)
+                t1 = t("1")(1)
+
+        assert f.stages == {"s": s}
+        assert f.tasks == [t0, t1, s.commit_task]
+
+        assert s.tasks == [t0, t1]
+        assert s.outer_stage is None
+
+        assert t0.upstream_stages == []
+        assert t1.upstream_stages == []
+
+        validate_dependencies(f)
+
+    def test_two_connected_tasks(self):
+        with Flow("f") as f:
+            with Stage("s") as s:
+                t0 = t("0")(0)
+                t1 = t("1")(t0)
+
+        assert f.stages == {"s": s}
+        assert f.tasks == [t0, t1, s.commit_task]
+
+        assert s.tasks == [t0, t1]
+        assert s.outer_stage is None
+
+        assert t0.upstream_stages == []
+        assert t1.upstream_stages == [s]
+
+        validate_dependencies(f)
+
+    def test_two_stages(self):
+        with Flow("f") as f:
+            with Stage("stage 0") as s0:
+                t00 = t("00")(0)
+                t01 = t("01")(t00)
+
+            with Stage("stage 1") as s1:
+                t10 = t("10")(t00)
+                t11 = t("11")(t10, t00)
+                t12 = t("12")(t00)
+
+        assert f.stages == {"stage 0": s0, "stage 1": s1}
+        assert f.tasks == [t00, t01, s0.commit_task, t10, t11, t12, s1.commit_task]
+
+        assert s0.tasks == [t00, t01]
+        assert s0.outer_stage is None
+
+        assert s1.tasks == [t10, t11, t12]
+        assert s1.outer_stage is None
+
+        assert t00.upstream_stages == []
+        assert t01.upstream_stages == [s0]
+        assert t10.upstream_stages == [s0]
+        assert t11.upstream_stages == [s1, s0]
+        assert t12.upstream_stages == [s0]
+
+        validate_dependencies(f)
+
+    def test_nested(self):
+        with Flow("f") as f:
+            with Stage("stage 0") as s0:
+                t00 = t("00")(0)
+                t01 = t("01")(t00)
+
+            with Stage("stage 1") as s1:
+                t10 = t("10")(t00)
+                t11 = t("11")(t10, t00)
+                t12 = t("12")(t00)
+
+                with Stage("stage 2") as s2:
+                    t20 = t("20")(t11)
+
+            with Stage("stage 3") as s3:
+                t30 = t("30")(t12, t20)
+                t31 = t("31")(t00, t10, t20, t30)
+
+        assert f.stages == {"stage 0": s0, "stage 1": s1, "stage 2": s2, "stage 3": s3}
+        assert f.tasks == [
+            t00,
+            t01,
+            s0.commit_task,
+            t10,
+            t11,
+            t12,
+            t20,
+            s2.commit_task,
+            s1.commit_task,
+            t30,
+            t31,
+            s3.commit_task,
+        ]
+
+        assert s0.tasks == [t00, t01]
+        assert s0.outer_stage is None
+
+        assert s1.tasks == [t10, t11, t12]
+        assert s1.outer_stage is None
+
+        assert s2.tasks == [t20]
+        assert s2.outer_stage is s1
+        assert s2.is_inner(s1)
+
+        assert s3.tasks == [t30, t31]
+        assert s3.outer_stage is None
+
+        assert t00.upstream_stages == []
+        assert t01.upstream_stages == [s0]
+        assert t10.upstream_stages == [s0]
+        assert t11.upstream_stages == [s1, s0]
+        assert t12.upstream_stages == [s0]
+        assert t20.upstream_stages == [s1]
+        assert t30.upstream_stages == [s1, s2]
+        assert t31.upstream_stages == [s0, s1, s2, s3]
+
+        validate_dependencies(f)
+
+    def test_ids(self):
+        with Flow("f"):
+            with Stage("stage 0") as s0:
+                t00 = t("00")(0)
+                t01 = t("01")(t00)
+
+            with Stage("stage 1") as s1:
+                t10 = t("10")(t00)
+                t11 = t("11")(t10, t00)
+                t12 = t("12")(t00)
+
+                with Stage("stage 2") as s2:
+                    t20 = t("20")(t11)
+
+            with Stage("stage 3") as s3:
+                t30 = t("30")(t12, t20)
+                t31 = t("31")(t00, t10, t20, t30)
+
+        assert [stage.id for stage in [s0, s1, s2, s3]] == [0, 1, 2, 3]
+        assert [
+            task.id
+            for task in [
+                t00,
+                t01,
+                s0.commit_task,
+                t10,
+                t11,
+                t12,
+                t20,
+                s2.commit_task,
+                s1.commit_task,
+                t30,
+                t31,
+                s3.commit_task,
+            ]
+        ] == list(range(12))
 
 
-@materialize
-def m_noop(x):
-    return x
+class TestDAGConstructionExceptions:
+    def test_duplicate_stage_name(self):
+        with Flow("flow 1"):
+            with Stage("stage"):
+                # Nested
+                with pytest.raises(DuplicateNameError):
+                    with Stage("stage"):
+                        ...
 
-
-@materialize
-def m_sleep_noop(x, duration=0.05):
-    time.sleep(duration)
-    return x
-
-
-@materialize
-def m_sleep_blob_noop(x, duration=0.25):
-    time.sleep(duration)
-    return Blob(x)
-
-
-@materialize
-def m_raise(x, r: bool):
-    time.sleep(0.05)
-    if r:
-        raise Exception
-    return x
-
-
-def m_assert(condition):
-    @materialize(lazy=True)
-    def _m_assert(x):
-        assert condition(x)
-        return x
-
-    return _m_assert
-
-
-def test_task_attach_to_stage():
-    with Flow("flow"):
-        with Stage("stage") as s:
-            task_1 = m_1()
-            task_2 = m_2()
-
-    assert s.tasks == [task_1, task_2]
-    assert task_1.stage is s
-    assert task_2.stage is s
-    assert task_1.upstream_stages == []
-    assert task_2.upstream_stages == []
-
-
-def test_task_attach_to_nested_stage():
-    with Flow("flow"):
-        with Stage("outer") as outer:
-            task_1_outer = m_1()
-            with Stage("inner") as inner:
-                task_1_inner = m_1()
-                task_2_inner = m_2()
-            task_2_outer = m_2()
-
-    assert outer.tasks == [task_1_outer, task_2_outer]
-    assert task_1_outer.stage is outer
-    assert task_2_outer.stage is outer
-    assert task_1_inner.upstream_stages == []
-    assert task_2_inner.upstream_stages == []
-
-    assert inner.tasks == [task_1_inner, task_2_inner]
-    assert task_1_inner.stage is inner
-    assert task_2_inner.stage is inner
-    assert task_1_inner.upstream_stages == []
-    assert task_2_inner.upstream_stages == []
-
-    assert inner.outer_stage is outer
-    assert inner.is_inner(outer)
-
-
-def test_stage_ref_counter():
-    def m_check_rc(stage, expected):
-        @materialize(lazy=True)
-        def _m_check_rc(x):
-            assert RunContext.get().get_stage_ref_count(stage) == expected
-            return x
-
-        return _m_check_rc
-
-    # Super simple case with just two task inside one stage
-    with Flow("flow") as f:
-        with Stage("stage") as s:
-            task_1 = m_1()
-            task_2 = m_2()
-
-            # One reference from the m_assert and commit
-            m_check_rc(s, 2)([task_1, task_2])
-
-    assert f.run().successful
-
-    # Multiple tasks with interdependency inside one stage
-    with Flow("flow") as f:
-        with Stage("stage") as s:
-            task_1 = m_1()
-            task_2 = m_2()
-            task_tuple = m_tuple(task_1, task_2)
-            # One reference from assert, noop, assert and commit
-            task_tuple = m_check_rc(s, 4)(task_tuple)
-            task_tuple = m_noop(task_tuple)
-            # One reference from assert and commit
-            m_check_rc(s, 2)(task_tuple)
-
-    assert f.run().successful
-
-    # Multiple tasks spread over multiple stages
-    with Flow("flow") as f:
-        with Stage("stage 1") as s1:
-            task_1 = m_1()
-            # One reference from assert, noop, assert, commit and downstream
-            task_1 = m_check_rc(s1, 5)(task_1)
-            task_1 = m_noop(task_1)
-            # One reference from assert, commit and downstream
-            m_check_rc(s1, 3)(task_1)
-
-        with Stage("stage 2") as s2:
-            task_2 = m_2()
-            task_2 = m_noop([task_2])
-            m_check_rc(s2, 3)(task_2)
-
-        with Stage("stage 3") as s3:
-            task_tuple = m_tuple(task_1, task_2)
-            # Check that s1 and s2 have been freed
-            x = m_check_rc(s1, 0)(task_tuple)
-            x = m_check_rc(s2, 0)(x)
-            m_check_rc(s3, 2)(x)
-
-    assert f.run().successful
-
-
-def test_materialize_memo():
-    # A flow should be able to contain the same task with the same inputs
-    # more than once and still run successfully.
-    with Flow("flow") as f:
-        with Stage("stage1"):
-            t_1 = m_sleep_blob_noop(1)
-            t_2 = m_sleep_blob_noop(1)
-            t_3 = m_sleep_blob_noop(1)
-            t_4 = m_sleep_blob_noop(1)
-
-        with Stage("stage2"):
-            t_5 = m_sleep_blob_noop(1)
-            t_6 = m_sleep_blob_noop(t_5)
-            t_7 = m_sleep_blob_noop(t_6)
-            t_8 = m_sleep_blob_noop(t_7)
-
-        with Stage("stage3"):
-            t_map = m_noop([t_1, t_2, t_3, t_4, t_5, t_6, t_7, t_8])
-
-    assert f.run().successful
-
-
-def test_materialize_memo_with_failures():
-    with Flow("flow") as f:
-        with Stage("stage1"):
-            t_1 = m_raise(1, False)
-            t_2 = m_raise(1, True)
-            t_3 = m_raise(1, True)
-            t_4 = m_raise(t_2, True)
-
-        with Stage("stage2"):
-            t_5 = m_raise(1, False)
-            t_6 = m_raise(t_5, False)
-            t_7 = m_raise(t_6, True)
-            t_8 = m_raise(1, True)
-
-        with Stage("stage3"):
-            t_map = m_noop([t_1, t_2, t_3, t_4, t_5, t_6, t_7, t_8])
-
-    assert not f.run().successful
-
-
-if __name__ == "__main__":
-    test_materialize_memo()
-
-
-def test_duplicate_stage_name():
-    with Flow("flow 1"):
-        with Stage("stage"):
-            # Nested
+            # Consecutive
             with pytest.raises(DuplicateNameError):
                 with Stage("stage"):
                     ...
 
-        # Consecutive
-        with pytest.raises(DuplicateNameError):
+            # Different capitalization
+            with pytest.raises(DuplicateNameError):
+                with Stage("Stage"):
+                    ...
+
+        # Should be able to reuse name in different flow
+        with Flow("flow 2"):
             with Stage("stage"):
                 ...
 
-    # Should be able to reuse name in different flow
-    with Flow("flow 2"):
-        with Stage("stage"):
-            ...
+    def test_reuse_stage(self):
+        with Flow("flow 1"):
+            with Stage("stage") as s:
+                # Nested
+                with pytest.raises(StageError):
+                    with s:
+                        ...
 
-
-def test_reuse_stage():
-    with Flow("flow 1"):
-        with Stage("stage") as s:
-            # Nested
+            # Consecutive
             with pytest.raises(StageError):
                 with s:
                     ...
 
-        # Consecutive
+        with Flow("flow 2"):
+            # Different flow
+            with pytest.raises(StageError):
+                with s:
+                    ...
+
+    def test_stage_outside_flow(self):
         with pytest.raises(StageError):
-            with s:
+            with Stage("stage"):
                 ...
 
-    with Flow("flow 2"):
-        # Different flow
-        with pytest.raises(StageError):
-            with s:
-                ...
+    def test_task_outside_flow(self):
+        with pytest.raises(FlowError):
+            t("task")()
+
+    def test_task_outside_stage(self):
+        with Flow("flow"):
+            with pytest.raises(StageError):
+                t("task")()
+
+    def test_task_in_wrong_flow(self):
+        with Flow("flow 1"):
+            with Stage("stage"):
+                task = t("task")()
+
+        with Flow("flow 2"):
+            with Stage("stage"):
+                with pytest.raises(FlowError):
+                    # Can't use task from different flow as argument
+                    t("bad task")(task)
 
 
-def test_task_outside_flow():
-    with pytest.raises(FlowError):
-        task = m_1()
-
-
-def test_task_outside_stage():
+def test_task_nout():
     with Flow("flow"):
-        with pytest.raises(StageError):
-            task = m_1()
-
-
-def test_reference_task_in_wrong_flow():
-    with Flow("flow 1"):
         with Stage("stage"):
-            task = m_1()
+            _ = t("task")
+            _ = t("task", nout=1)
 
-    with Flow("flow 2"):
-        with Stage("stage"):
-            with pytest.raises(FlowError):
-                bad_task = m_noop(task)
+            _, _ = t("task", nout=2)
+            _, _, _ = t("task", nout=3)
+            _, _, *_ = t("task", nout=10)
+
+            with pytest.raises(ValueError):
+                _, _ = t("task")
+
+            with pytest.raises(ValueError):
+                t("task", nout=0)
+            with pytest.raises(ValueError):
+                t("task", nout=1.5)
 
 
-def test_stage_id():
+def test_task_getitem():
     with Flow("flow"):
-        with Stage("stage 1") as s1:
-            ...
-        with Stage("stage 2") as s2:
-            with Stage("stage 3") as s3:
-                ...
-        with Stage("stage 4") as s4:
-            ...
+        with Stage("stage"):
+            task = t("task")()
 
-    assert s1.id == 0
-    assert s2.id == 1
-    assert s3.id == 2
-    assert s4.id == 3
+            _ = task[0]
+            _ = task[1]
+            _ = task[0][0]
+            _ = task["something"][0:8]

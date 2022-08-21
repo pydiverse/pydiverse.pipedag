@@ -105,9 +105,12 @@ class Stage:
             )
         self._did_enter = True
 
-        outer_ctx = DAGContext.get()
-        outer_ctx.flow.add_stage(self)
+        try:
+            outer_ctx = DAGContext.get()
+        except LookupError as e:
+            raise StageError(f"Stage can't be defined outside of a flow") from e
 
+        outer_ctx.flow.add_stage(self)
         if outer_ctx.stage is not None:
             self.outer_stage = outer_ctx.stage
 

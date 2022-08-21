@@ -23,7 +23,7 @@ MTypes = Union["Table", "Blob"]
 BaseMaterializable = Union[MPrimitives, MTypes]
 Materializable = Union[
     BaseMaterializable,
-    Dict[MPrimitives, "Materializable"],
+    Dict[str, "Materializable"],
     List["Materializable"],
     Tuple["Materializable", ...],
 ]
