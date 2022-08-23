@@ -86,23 +86,23 @@ class RunContextServer(IPCServer):
         self.lock_manager = config_ctx.get_lock_manager()
         self.lock_manager.add_lock_state_listener(self._lock_state_listener)
 
-        # INITIALIZE STORE
-        self.lock_manager.acquire("_pipedag_setup_")
-        config_ctx.store.table_store.setup()
-        self.lock_manager.release("_pipedag_setup_")
+        # INITIALIZE EVERYTHING
+        with self.lock_manager("_pipedag_setup_"):
+            config_ctx.store.table_store.setup()
 
-        # INITIALIZE REFERENCE COUNTERS & LOCKS
+            # Acquire a lock on all stages
+            # We must lock all stages from the start to prevent two flows from
+            # deadlocking each other (lock order inversion). To lock the stage
+            # only when it's needed (may result in deadlocks), the lock should
+            # get acquired in the `PipeDAGStore.init_stage` function instead.
+            for stage in self.stages:
+                self.lock_manager.acquire(stage)
+
+        # INITIALIZE REFERENCE COUNTERS
         for stage in self.stages:
             for task in stage.all_tasks():
                 for s in task.upstream_stages:
                     self.ref_count[s.id] += 1
-
-            # Acquire a lock on the stage
-            # We must lock all stages from the start to prevent two flows from
-            # deadlocking each other. To lock the stage only when it's needed
-            # (may result in deadlocks), the lock should get acquired in the
-            # `PipeDAGStore.init_stage` function instead.
-            self.acquire_stage_lock(stage.id)
 
     def __enter__(self):
         super().__enter__()

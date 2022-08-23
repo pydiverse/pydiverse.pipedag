@@ -6,6 +6,7 @@ import threading
 import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from contextlib import contextmanager
 from enum import Enum
 from typing import Any, Callable, Union
 
@@ -75,6 +76,14 @@ class BaseLockManager(ABC):
         self.state_listeners = set()
         self.lock_states = defaultdict(lambda: LockState.UNLOCKED)
         self.__lock_state_lock = threading.Lock()
+
+    @contextmanager
+    def __call__(self, lock: Lockable):
+        self.acquire(lock)
+        try:
+            yield
+        finally:
+            self.release(lock)
 
     def close(self):
         """Clean up and close all open resources"""
