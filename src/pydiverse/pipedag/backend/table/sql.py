@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import warnings
+from typing import Union
 
 import pandas as pd
 import sqlalchemy as sa
+import sqlalchemy.sql.elements
 
 from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
@@ -282,14 +284,19 @@ class SQLTableStore(BaseTableStore):
 class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @classmethod
     def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, sa.sql.Select)
+        return issubclass(type_, (sa.sql.Select, sa.sql.elements.TextClause))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
         return type_ == sa.Table
 
     @classmethod
-    def materialize(cls, store, table: Table[sa.sql.Select], stage_name):
+    def materialize(
+        cls,
+        store,
+        table: Table[sa.sql.elements.TextClause | sa.Text],
+        schema_name,
+    ):
         store.logger.info(f"Performing CREATE TABLE AS SELECT ({table})")
         with store.engine.connect() as conn:
             conn.execute(CreateTableAsSelect(table.name, stage_name, table.obj))
