@@ -1,0 +1,2 @@
+SELECT COLTAB1 + 12 AS COLTAB2
+FROM {{dependent}}

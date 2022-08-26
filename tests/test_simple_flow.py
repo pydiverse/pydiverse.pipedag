@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os.path
+import time
+from pathlib import Path
+
 import pandas as pd
 import sqlalchemy as sa
 
@@ -68,3 +72,30 @@ def test_simple_flow():
 
 if __name__ == "__main__":
     test_simple_flow()
+
+
+def test_sql_node():
+    @materialise(input_type=sa.Table, lazy=True)
+    def table_1(script_path: str):
+        sql = Path(script_path).read_text()
+        return Table(sa.text(sql), name="table_1")
+
+    @materialise(input_type=sa.Table, lazy=True)
+    def table_2(script_path: str, dependent_table: Table):
+        sql = (
+            Path(script_path).read_text().replace("{{dependent}}", str(dependent_table))
+        )
+        return Table(sa.text(sql), name="test_table2")
+
+    @materialise(input_type=pd.DataFrame, lazy=True)
+    def assert_result(df: pd.DataFrame):
+        pd.testing.assert_frame_equal(df, pd.DataFrame({"coltab2": [24]}))
+
+    with Flow("FLOW") as flow:
+        with Schema("schema1"):
+            tab1 = table_1(str(Path(__file__).parent / "script1.sql"))
+            tab2 = table_2(str(Path(__file__).parent / "script2.sql"), tab1)
+            assert_result(tab2)
+
+    flow_result = flow.run()
+    assert flow_result.is_successful()
