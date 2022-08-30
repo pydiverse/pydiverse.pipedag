@@ -18,6 +18,12 @@ conda install -n poetry -c poetry conda-forge compilers cmake make psycopg2
 conda activate poetry  # only needed for poetry install
 ```
 
+On OSX, a way to install pg_config (needed for source building psycopg2 by `poetry install`) is
+
+```bash
+brew install postgresql
+```
+
 ## Installation
 
 > Currently, development on pipedag is not possible with Windows. The current setup of installing prefect and running
