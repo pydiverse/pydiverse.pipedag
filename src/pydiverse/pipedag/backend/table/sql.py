@@ -38,6 +38,8 @@ class SQLTableStore(BaseTableStore):
 
         self.engine = engine
 
+        schema_suffix = ".dbo" if engine.dialect.name == "mssql" else ""
+
         # Set up metadata tables and schema
         from sqlalchemy import BigInteger, Boolean, Column, DateTime, String
 
@@ -54,7 +56,7 @@ class SQLTableStore(BaseTableStore):
             Column("cache_key", String(20)),  # TODO: Replace with appropriate type
             Column("output_json", String),
             Column("in_transaction_schema", Boolean),
-            schema=self.METADATA_SCHEMA,
+            schema=self.METADATA_SCHEMA + schema_suffix,
         )
 
         self.lazy_cache_table = sa.Table(
@@ -65,7 +67,7 @@ class SQLTableStore(BaseTableStore):
             Column("stage", String),
             Column("cache_key", String(20)),
             Column("in_transaction_schema", Boolean),
-            schema=self.METADATA_SCHEMA,
+            schema=self.METADATA_SCHEMA + schema_suffix,
         )
 
     @classmethod
@@ -77,6 +79,10 @@ class SQLTableStore(BaseTableStore):
         engine_url = engine_config.pop("url")
         engine_config["_coerce_config"] = True
         engine = sa.create_engine(engine_url)
+        if engine.dialect.name == "mssql":
+            engine.dispose()
+            # this is needed to allow for CREATE DATABASE statements (we don't rely on database transactions anyways)
+            engine = sa.create_engine(engine_url, connect_args={"autocommit": True})
 
         return cls(engine=engine, **config)
 
@@ -84,6 +90,7 @@ class SQLTableStore(BaseTableStore):
         super().setup()
         with self.engine.connect() as conn:
             conn.execute(CreateSchema(self.METADATA_SCHEMA, if_not_exists=True))
+        with self.engine.connect() as conn:
             self.sql_metadata.create_all(conn)
 
     def close(self):

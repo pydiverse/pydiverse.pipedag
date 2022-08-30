@@ -64,3 +64,15 @@ tab.
 You can inspect the contents of the PipeDAT Postgres database at `postgresql://postgres:pipedag@127.0.0.1/pipedag`.
 To reset the state of the docker containers you can run `docker compose down`.
 This might be necessary if the database cache gets corrupted.
+
+## Troubleshooting
+
+### Installing mssql odbc driver for linux
+
+Installing with
+instructions [here](https://docs.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server?view=sql-server-ver16#suse18)
+worked.
+But `odbcinst -j` revealed that it installed the configuration in `/etc/unixODBC/*`. But conda installed pyodbc brings
+its own `odbcinst` executable and that shows odbc config files are expected in `/etc/*`. Symlinks were enough to fix the
+problem. Try `python -c 'import pyodbc;print(pyodbc.drivers())'` and see whether you get more than an empty list.
+Furthermore, make sure you use 127.0.0.1 instead of localhost. It seems that /etc/hosts is ignored.
