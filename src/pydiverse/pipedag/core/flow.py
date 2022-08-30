@@ -36,7 +36,8 @@ class Flow:
         else:
             raise RuntimeError("DAG Context already exists. Flows can't be nested.")
 
-        # Initialize context
+        # Initialize context (both Flow and Stage use DAGContext to transport information to @materialize annotations
+        #   within the flow and to support nesting of stages)
         self._ctx = DAGContext(flow=self, stage=None)
         self._ctx.__enter__()
         return self
