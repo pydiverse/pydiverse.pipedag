@@ -4,16 +4,28 @@
 
 A pipeline orchestration layer built on top of prefect for caching and cache invalidation to SQL and blob store targets.
 
-## Installation
+## Preparing installation
 
 To install the package locally in development mode, you first have to install
 [Poetry](https://python-poetry.org/docs/#installation).
-After that, install pydiverse pipedag like this:
+
+When installing poetry using conda(I know this sounds odd), it is recommended to install 
+also compilers, so source packages can be built on `poetry install`. Since we use psycopg2, 
+it also helps to install psycopg2 in conda to have pg_config available:
+
+```bash
+conda install -n poetry -c poetry conda-forge compilers cmake make psycopg2
+conda activate poetry  # only needed for poetry install
+```
+
+## Installation
 
 > Currently, development on pipedag is not possible with Windows. The current setup of installing prefect and running
 > tests with docker (to spin up Postgres and Zookeeper) fail in poetry dependency resolution. It would be a nice
 > contribution to find drop-in replacements for both that run as simple python dependency without docker and moving
 > docker based tests to github actions (multi-DB target tests will be moved to cloud anyways).
+
+After that, install pydiverse pipedag like this:
 
 ```bash
 git clone https://github.com/pydiverse/pydiverse.pipedag.git
