@@ -105,6 +105,7 @@ class Stage:
             )
         self._did_enter = True
 
+        # Capture information from surrounding Flow or Stage block and link this stage with it
         try:
             outer_ctx = DAGContext.get()
         except LookupError as e:
@@ -114,6 +115,8 @@ class Stage:
         if outer_ctx.stage is not None:
             self.outer_stage = outer_ctx.stage
 
+        # Initialize new context (both Flow and Stage use DAGContext to transport information to @materialize
+        #   annotations within the flow and to support nesting of stages)
         self._ctx = DAGContext(
             flow=outer_ctx.flow,
             stage=self,
