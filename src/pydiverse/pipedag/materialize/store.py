@@ -16,7 +16,7 @@ from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import TaskMetadata
 from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.materialize.util import json as json_util
-from pydiverse.pipedag.util import deepmutate
+from pydiverse.pipedag.util import deep_map
 
 
 class PipeDAGStore:
@@ -117,7 +117,7 @@ class PipeDAGStore:
 
         ctx = RunContext.get()
 
-        def dematerialize_mutator(x):
+        def dematerialize_visitor(x):
             if isinstance(x, Table):
                 ctx.validate_stage_lock(x.stage)
                 return self.table_store.retrieve_table_obj(x, as_type=task.input_type)
@@ -126,8 +126,8 @@ class PipeDAGStore:
                 return self.blob_store.retrieve_blob(x)
             return x
 
-        d_args = deepmutate(args, dematerialize_mutator)
-        d_kwargs = deepmutate(kwargs, dematerialize_mutator)
+        d_args = deep_map(args, dematerialize_visitor)
+        d_kwargs = deep_map(kwargs, dematerialize_visitor)
 
         return d_args, d_kwargs
 
@@ -209,7 +209,7 @@ class PipeDAGStore:
 
             return x
 
-        m_value = deepmutate(value, materialize_mutator)
+        m_value = deep_map(value, materialize_mutator)
 
         # Metadata
         output_json = self.json_encode(m_value)
@@ -389,7 +389,7 @@ class PipeDAGStore:
                 blobs.append(x)
             return x
 
-        deepmutate(output, visitor)
+        deep_map(output, visitor)
 
         # Materialize
         self._check_names(task, tables, blobs)

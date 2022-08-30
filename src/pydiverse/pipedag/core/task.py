@@ -9,7 +9,7 @@ import structlog
 from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext, TaskContext
 from pydiverse.pipedag.context.run_context import FinalTaskState
 from pydiverse.pipedag.errors import FlowError, StageError
-from pydiverse.pipedag.util import deepmutate
+from pydiverse.pipedag.util import deep_map
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import Flow, Stage
@@ -108,8 +108,8 @@ class Task:
                 new.input_tasks[x.task.id] = x.task
             return x
 
-        deepmutate(new._bound_args.args, visitor)
-        deepmutate(new._bound_args.kwargs, visitor)
+        deep_map(new._bound_args.args, visitor)
+        deep_map(new._bound_args.kwargs, visitor)
 
         # Add upstream edges
         new.upstream_stages = []
@@ -157,15 +157,15 @@ class Task:
         args = self._bound_args.args
         kwargs = self._bound_args.kwargs
 
-        def task_result_mutator(x):
+        def task_result_visitor(x):
             if isinstance(x, Task):
                 return x.value
             elif isinstance(x, TaskGetItem):
                 return x.value
             return x
 
-        args = deepmutate(args, task_result_mutator)
-        kwargs = deepmutate(kwargs, task_result_mutator)
+        args = deep_map(args, task_result_visitor)
+        kwargs = deep_map(kwargs, task_result_visitor)
 
         with TaskContext(task=self):
             result = self.fn(*args, **kwargs)

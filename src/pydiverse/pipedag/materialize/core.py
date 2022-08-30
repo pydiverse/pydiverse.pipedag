@@ -10,7 +10,7 @@ from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.container import Blob, Table
-from pydiverse.pipedag.util import deepmutate
+from pydiverse.pipedag.util import deep_map
 
 
 def materialize(
@@ -185,7 +185,7 @@ class MaterializationWrapper:
                     x.obj = None
                 return x
 
-            result = deepmutate(result, obj_del_mutator)
+            result = deep_map(result, obj_del_mutator)
             ctx.store_task_memo(task, cache_key, result)
             self.value = result
 
