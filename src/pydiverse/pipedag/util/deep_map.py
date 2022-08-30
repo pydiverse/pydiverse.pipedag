@@ -1,4 +1,4 @@
-"""Generic deep mutation operations.
+"""Generic deep map or mutation operations.
 
 Heavily inspired by the builtin copy module of python:
 https://github.com/python/cpython/blob/main/Lib/copy.py
@@ -10,7 +10,7 @@ from typing import Callable
 _nil = []
 
 
-def deepmutate(x, mutator: Callable, memo=None):
+def deep_map(x, callable: Callable, memo=None):
     if memo is None:
         memo = {}
 
@@ -22,13 +22,13 @@ def deepmutate(x, mutator: Callable, memo=None):
     cls = type(x)
 
     if cls == list:
-        y = _deepmutate_list(x, mutator, memo)
+        y = _deep_map_list(x, callable, memo)
     elif cls == tuple:
-        y = _deepmutate_tuple(x, mutator, memo)
+        y = _deep_map_tuple(x, callable, memo)
     elif cls == dict:
-        y = _deepmutate_dict(x, mutator, memo)
+        y = _deep_map_dict(x, callable, memo)
     else:
-        y = mutator(x)
+        y = callable(x)
 
     # If is its own copy, don't memoize.
     if y is not x:
@@ -38,16 +38,16 @@ def deepmutate(x, mutator: Callable, memo=None):
     return y
 
 
-def _deepmutate_list(x, mutator, memo):
+def _deep_map_list(x, callable, memo):
     y = []
     append = y.append
     for a in x:
-        append(deepmutate(a, mutator, memo))
-    return mutator(y)
+        append(deep_map(a, callable, memo))
+    return callable(y)
 
 
-def _deepmutate_tuple(x, mutator, memo):
-    y = [deepmutate(a, mutator, memo) for a in x]
+def _deep_map_tuple(x, callable, memo):
+    y = [deep_map(a, callable, memo) for a in x]
     # We're not going to put the tuple in the memo, but it's still important we
     # check for it, in case the tuple contains recursive mutable structures.
     try:
@@ -60,15 +60,15 @@ def _deepmutate_tuple(x, mutator, memo):
             break
     else:
         y = x
-    return mutator(y)
+    return callable(y)
 
 
-def _deepmutate_dict(x, mutator, memo):
+def _deep_map_dict(x, callable, memo):
     y = {}
     memo[id(x)] = y
     for key, value in x.items():
-        y[deepmutate(key, mutator, memo)] = deepmutate(value, mutator, memo)
-    return mutator(y)
+        y[deep_map(key, callable, memo)] = deep_map(value, callable, memo)
+    return callable(y)
 
 
 def _keep_alive(x, memo):
