@@ -7,7 +7,8 @@ auto_table = [
 # Table Store
 [table_store]
 class = "pydiverse.pipedag.backend.table.SQLTableStore"
-engine = "postgresql://postgres:pipedag@127.0.0.1/pipedag"
+engine = "mssql+pyodbc://sa:pipedag8@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
+#engine = "postgresql://postgres:pipedag@127.0.0.1/pipedag"
 
 # Blob Store
 [blob_store]

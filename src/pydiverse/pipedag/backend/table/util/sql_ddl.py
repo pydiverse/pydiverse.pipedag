@@ -59,6 +59,12 @@ class DropTable(DDLElement):
 @compiles(CreateSchema)
 def visit_create_schema(create: CreateSchema, compiler, **kw):
     schema = compiler.preparer.format_schema(create.name)
+    if compiler.dialect.name == "mssql":
+        # in SQL Server we use databases as schemas since this works best with sqlalchemy (schema=database.dbo)
+        return (
+            f"""IF NOT EXISTS ( SELECT * FROM sys.databases WHERE name = N'{schema}') """
+            f"""BEGIN CREATE DATABASE [{schema}] END"""
+        )
     text = ["CREATE SCHEMA"]
     if create.if_not_exists:
         text.append("IF NOT EXISTS")
@@ -69,11 +75,15 @@ def visit_create_schema(create: CreateSchema, compiler, **kw):
 @compiles(DropSchema)
 def visit_drop_schema(drop: DropSchema, compiler, **kw):
     schema = compiler.preparer.format_schema(drop.name)
-    text = ["DROP SCHEMA"]
+    if compiler.dialect.name == "mssql":
+        # in SQL Server we use databases as schemas since this works best with sqlalchemy (schema=database.dbo)
+        text = ["DROP DATABASE"]
+    else:
+        text = ["DROP SCHEMA"]
     if drop.if_exists:
         text.append("IF EXISTS")
     text.append(schema)
-    if drop.cascade:
+    if drop.cascade and compiler.dialect.name != "mssql":
         text.append("CASCADE")
     return " ".join(text)
 
