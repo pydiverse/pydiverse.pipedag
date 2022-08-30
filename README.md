@@ -9,8 +9,8 @@ A pipeline orchestration layer built on top of prefect for caching and cache inv
 To install the package locally in development mode, you first have to install
 [Poetry](https://python-poetry.org/docs/#installation).
 
-When installing poetry using conda(I know this sounds odd), it is recommended to install 
-also compilers, so source packages can be built on `poetry install`. Since we use psycopg2, 
+When installing poetry using conda(I know this sounds odd), it is recommended to install
+also compilers, so source packages can be built on `poetry install`. Since we use psycopg2,
 it also helps to install psycopg2 in conda to have pg_config available:
 
 ```bash
@@ -34,6 +34,18 @@ cd pydiverse.pipedag
 # Create the environment, activate it and install the pre-commit hooks
 poetry install
 poetry shell
+pre-commit install
+```
+
+## Pre-commit install with conda and python 3.8
+
+We currently have some pre-commit hooks bound to python=3.8. So pre-commit install may fail when running with
+python=3.10 python environment. However, the pre-commit environment does not need to be the same as the environment
+used for testing pipedag code. When using conda, you may try:
+
+```bash
+conda install -n python38 -c python=3.8 pre_commit
+conda activate python38
 pre-commit install
 ```
 
