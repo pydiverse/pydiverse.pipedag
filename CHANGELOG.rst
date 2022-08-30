@@ -7,7 +7,19 @@
 Changelog
 =========
 
-1.0.0 (2022-MM-DD)
+0.1.1 (2022-MM-DD)
+------------------
+
+- renaming and documentation cleanups
+
+0.1.0 (2022-08-19)
 ------------------
 
 Initial release.
+
+- @materialize annotations
+- flow definition with nestable stages
+- zookeeper synchronization
+- postgres database backend
+- Prefect 1.x and 2.x support
+- multi-processing/multi-node support for state exchange between @materialize tasks
