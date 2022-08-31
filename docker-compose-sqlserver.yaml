@@ -4,7 +4,7 @@ services:
     image: mcr.microsoft.com/mssql/server:2019-latest
     environment:
       ACCEPT_EULA: Y
-      SA_PASSWORD: pipedag8
+      SA_PASSWORD: Pipedag8
     ports:
       - 1433:1433
 
