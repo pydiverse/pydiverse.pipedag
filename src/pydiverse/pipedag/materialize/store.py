@@ -117,7 +117,7 @@ class PipeDAGStore:
 
         ctx = RunContext.get()
 
-        def dematerialize_visitor(x):
+        def dematerialize_mapper(x):
             if isinstance(x, Table):
                 ctx.validate_stage_lock(x.stage)
                 return self.table_store.retrieve_table_obj(x, as_type=task.input_type)
@@ -126,8 +126,8 @@ class PipeDAGStore:
                 return self.blob_store.retrieve_blob(x)
             return x
 
-        d_args = deep_map(args, dematerialize_visitor)
-        d_kwargs = deep_map(kwargs, dematerialize_visitor)
+        d_args = deep_map(args, dematerialize_mapper)
+        d_kwargs = deep_map(kwargs, dematerialize_mapper)
 
         return d_args, d_kwargs
 
