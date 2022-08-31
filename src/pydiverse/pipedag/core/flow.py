@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import networkx as nx
 
@@ -204,7 +204,9 @@ class Flow:
 
         return explicit_graph
 
-    def run(self, engine: Engine = None, **kwargs) -> Result:
+    def run(
+        self, engine: Engine = None, fail_fast: bool | None = None, **kwargs
+    ) -> Result:
         """Execute a flow
 
         You can provide an engine to execute the flow with using the `engine`
@@ -220,8 +222,14 @@ class Flow:
             if engine is None:
                 engine = ConfigContext.get().get_engine()
             res = engine.run(flow=self, **kwargs)
-            fail_fast = ConfigContext.get().fail_fast
-        if fail_fast and not res.successful and isinstance(res.underlying, Exception):
+            actual_fail_fast = (
+                ConfigContext.get().fail_fast if fail_fast is None else fail_fast
+            )
+        if (
+            actual_fail_fast
+            and not res.successful
+            and isinstance(res.underlying, Exception)
+        ):
             # make sure proper stack trace is printed
             raise res.underlying
         return res
