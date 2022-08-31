@@ -74,6 +74,7 @@ def load_config(path: str) -> ConfigContext:
 
     auto_table = tuple(map(import_object, config_dict.get("auto_table", ())))
     auto_blob = tuple(map(import_object, config_dict.get("auto_blob", ())))
+    fail_fast = config_dict.get("fail_fast", False)
 
     return ConfigContext(
         config_dict=config_dict.copy(),
@@ -81,6 +82,7 @@ def load_config(path: str) -> ConfigContext:
         network_interface=interface,
         auto_table=auto_table,
         auto_blob=auto_blob,
+        fail_fast=fail_fast,
     )
 
 
