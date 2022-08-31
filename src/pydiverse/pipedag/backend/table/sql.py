@@ -127,41 +127,66 @@ class SQLTableStore(BaseTableStore):
             self.get_schema(stage.transaction_name), if_not_exists=False
         )
 
-        with self.engine.connect() as conn:
-            conn.execute(cs_base)
-            conn.execute(ds_trans)
-
-        with self.engine.connect() as conn:
-            # some databases need a bit of time between drop and create schema/database (i.e. SQL Server)
-            conn.execute(cs_trans)
-
-            conn.execute(
-                self.tasks_table.delete()
-                .where(self.tasks_table.c.stage == stage.name)
-                .where(self.tasks_table.c.in_transaction_schema.in_([True]))
+        if self.engine.dialect.name == "mssql" and "." in self.schema_suffix:
+            # TODO: detect whether tmp_schema exists and rename it as base or transaction schema if one is missing
+            # tmp_schema = self.get_schema(stage.name + "__swap")
+            cs_trans_initial = CreateSchema(
+                self.get_schema(stage.transaction_name), if_not_exists=True
             )
+            full_name = self.get_schema(stage.transaction_name).get()
+            database, schema = full_name.split(".")
+
+            # don't drop/create databases, just replace the schema underneath (files will keep name on renaming)
+            with self.engine.connect() as conn:
+                conn.execute(cs_base)
+                conn.execute(cs_trans_initial)
+                conn.execute(f"USE [{database}]")
+                # clear tables in schema
+                sql = f"""
+                    EXEC sp_MSforeachtable
+                      @command1 = 'DROP TABLE ?'
+                    , @whereand = 'AND SCHEMA_NAME(schema_id) = ''{schema}'' '
+                """
+                conn.execute(sql)
+
+                conn.execute(
+                    self.tasks_table.delete()
+                    .where(self.tasks_table.c.stage == stage.name)
+                    .where(self.tasks_table.c.in_transaction_schema.in_([True]))
+                )
+        else:
+            with self.engine.connect() as conn:
+                conn.execute(cs_base)
+                conn.execute(ds_trans)
+                conn.execute(cs_trans)
+
+                conn.execute(
+                    self.tasks_table.delete()
+                    .where(self.tasks_table.c.stage == stage.name)
+                    .where(self.tasks_table.c.in_transaction_schema.in_([True]))
+                )
 
     def commit_stage(self, stage: Stage):
         tmp_schema = self.get_schema(stage.name + "__swap")
         with self.engine.connect() as conn:
             with conn.begin():
-                conn.execute(
-                    RenameSchema(self.get_schema(stage.transaction_name), tmp_schema)
-                )
+                conn.execute(DropSchema(tmp_schema, if_exists=True, cascade=True))
+                # TODO: in case "." is in self.schema_prefix, we need to implement schema renaming by
+                #  creating the new schema and moving table objects over
                 conn.execute(
                     RenameSchema(
                         self.get_schema(stage.name),
-                        self.get_schema(stage.transaction_name),
+                        tmp_schema,
                     )
                 )
-                conn.execute(RenameSchema(tmp_schema, self.get_schema(stage.name)))
-                conn.execute(DropSchema(tmp_schema, if_exists=True, cascade=True))
                 conn.execute(
-                    DropSchema(
+                    RenameSchema(
                         self.get_schema(stage.transaction_name),
-                        if_exists=True,
-                        cascade=True,
+                        self.get_schema(stage.name),
                     )
+                )
+                conn.execute(
+                    RenameSchema(tmp_schema, self.get_schema(stage.transaction_name))
                 )
 
                 for table in [self.tasks_table, self.lazy_cache_table]:
