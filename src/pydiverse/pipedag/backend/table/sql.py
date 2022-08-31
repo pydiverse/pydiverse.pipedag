@@ -381,9 +381,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         store.logger.info(f"Performing CREATE TABLE AS SELECT ({table})")
         with store.engine.connect() as conn:
             conn.execute(
-                CreateTableAsSelect(
-                    table.name, store.get_schema(stage_name).get(), table.obj
-                )
+                CreateTableAsSelect(table.name, store.get_schema(stage_name), table.obj)
             )
 
     @classmethod

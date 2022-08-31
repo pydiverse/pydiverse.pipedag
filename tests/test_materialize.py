@@ -89,14 +89,14 @@ def test_failure():
         with Stage("failure stage"):
             m.exception(0, True)
 
-    assert not f.run().successful
+    assert not f.run(fail_fast=False).successful
 
     with Flow("flow") as f:
         with Stage("failure stage"):
             x = m.exception(0, True)
             m.noop(x)
 
-    assert not f.run().successful
+    assert not f.run(fail_fast=False).successful
 
 
 def test_materialize_memo_literal():
@@ -165,7 +165,7 @@ def test_materialize_memo_with_failure():
             t_3 = m.exception(one, True)
             t_4 = m.exception(t_3, False)
 
-    assert not f.run().successful
+    assert not f.run(fail_fast=False).successful
 
 
 def test_stage_ref_counter():
