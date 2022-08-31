@@ -167,7 +167,7 @@ def visit_rename_schema(rename: RenameSchema, compiler, **kw):
             f"We currently do not support varying schema prefixes for mssql database"
         )
     from_full_name = rename.from_.get()
-    to_full_name = rename.from_.get()
+    to_full_name = rename.to.get()
     # it was already checked that there is exactly one dot in schema prefix + suffix
     from_database_name, from_schema_name = from_full_name.split(".")
     to_database_name, to_schema_name = to_full_name.split(".")

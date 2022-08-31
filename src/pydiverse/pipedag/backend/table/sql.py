@@ -124,12 +124,15 @@ class SQLTableStore(BaseTableStore):
             self.get_schema(stage.transaction_name), if_exists=True, cascade=True
         )
         cs_trans = CreateSchema(
-            self.get_schema(stage.transaction_name), if_not_exists=True
+            self.get_schema(stage.transaction_name), if_not_exists=False
         )
 
         with self.engine.connect() as conn:
             conn.execute(cs_base)
             conn.execute(ds_trans)
+
+        with self.engine.connect() as conn:
+            # some databases need a bit of time between drop and create schema/database (i.e. SQL Server)
             conn.execute(cs_trans)
 
             conn.execute(
