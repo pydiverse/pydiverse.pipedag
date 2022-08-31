@@ -10,7 +10,7 @@ Changelog
 0.1.1 (2022-MM-DD)
 ------------------
 
-- renaming and documentation cleanups
+- SQLTableStore: support for Microsoft SQL Server database connection strings
 
 0.1.0 (2022-09-01)
 ------------------
