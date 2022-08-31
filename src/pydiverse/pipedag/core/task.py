@@ -157,15 +157,15 @@ class Task:
         args = self._bound_args.args
         kwargs = self._bound_args.kwargs
 
-        def task_result_visitor(x):
+        def task_result_mapper(x):
             if isinstance(x, Task):
                 return x.value
             elif isinstance(x, TaskGetItem):
                 return x.value
             return x
 
-        args = deep_map(args, task_result_visitor)
-        kwargs = deep_map(kwargs, task_result_visitor)
+        args = deep_map(args, task_result_mapper)
+        kwargs = deep_map(kwargs, task_result_mapper)
 
         with TaskContext(task=self):
             result = self.fn(*args, **kwargs)
