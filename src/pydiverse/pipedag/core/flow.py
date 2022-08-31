@@ -75,6 +75,7 @@ class Flow:
 
         self.graph.add_edge(from_, to)
 
+    # noinspection PyPackageRequirements
     def visualize(self):
         # TODO: Also allow visualizing the run result
         #       Successful tasks in green, failed in red, skipped orange
@@ -98,6 +99,7 @@ class Flow:
                 subgraphs[stage.outer_stage].add_subgraph(s)
 
         for task in self.tasks:
+            # noinspection PyProtectedMember
             if task._visualize_hidden:
                 continue
 
@@ -118,7 +120,10 @@ class Flow:
         # Either as svg in ipython
         # Or as PDF in default pdf viewer
         try:
+            # noinspection PyUnresolvedReferences
             from IPython import get_ipython
+
+            # noinspection PyUnresolvedReferences
             from IPython.display import SVG, display
 
             ipython = get_ipython()
@@ -214,4 +219,9 @@ class Flow:
         with ConfigContext.from_file(), RunContextServer(self):
             if engine is None:
                 engine = ConfigContext.get().get_engine()
-            return engine.run(flow=self, **kwargs)
+            res = engine.run(flow=self, **kwargs)
+            fail_fast = ConfigContext.get().fail_fast
+        if fail_fast and not res.successful and isinstance(res.underlying, Exception):
+            # make sure proper stack trace is printed
+            raise res.underlying
+        return res

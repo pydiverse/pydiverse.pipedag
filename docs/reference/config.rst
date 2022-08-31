@@ -53,6 +53,14 @@ auto_blob
 The same as `auto_table` just for blobs. **Optional**
 
 
+fail_fast
+---------
+
+default: true
+
+When true, will provide nicer stack traces for debugging but will make it harder to monitor an execution graph where occasional errors are expected.
+
+
 table_store
 -----------
 
@@ -61,12 +69,19 @@ This section describes the table store to use. **Required**
 The `class` key/value is used to define which class to use as a the table store.
 Any other key/value pairs in this section are backend specific and either get passed to the classes `__init__` or `_init_conf_` method.
 
+Fields `schema_prefix` and `schema_suffix` are optional. They are particularly useful for use with SQL Server database.
+SQL Server can query multiple databases within one query. So the database becomes effectively a part of the schema
+(also in the view of sqlalchemy). If `schema_prefix` includes a dot (i.e. ``"flow_db."``), we always prefix a
+specific database as part of the schema. If `schema_suffix` includes a dot, we use databases instead of schemas.
+``schema_suffix=".dbo"`` is the most common usecase for this. Never put a dot in both `schema_prefix` and `schema_suffix`.
+
 .. code-block:: toml
 
     [table_store]
     class = "pydiverse.pipedag.backend.table.SQLTableStore"
     engine = "postgresql://postgres:pipedag@127.0.0.1/pipedag"
-
+    # schema_prefix = "myflow_"
+    # schema_suffix = "_flow01"
 
 blob_store
 ----------

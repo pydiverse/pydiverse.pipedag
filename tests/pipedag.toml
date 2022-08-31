@@ -3,12 +3,15 @@ network_interface = "127.0.0.1"
 auto_table = [
     "pandas.DataFrame",
 ]
+fail_fast = true
 
 # Table Store
 [table_store]
 class = "pydiverse.pipedag.backend.table.SQLTableStore"
 engine = "mssql+pyodbc://sa:pipedag8@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
 #engine = "postgresql://postgres:pipedag@127.0.0.1/pipedag"
+# schema_prefix = "master."  # SQL Server needs database.schema (uncomment only on of prefix and suffix)
+schema_suffix = ".dbo"   # Alternatively SQL Server databases can be used as schemas with .dbo default schema
 
 # Blob Store
 [blob_store]

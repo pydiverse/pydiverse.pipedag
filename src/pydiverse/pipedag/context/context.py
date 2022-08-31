@@ -95,6 +95,7 @@ class ConfigContext(BaseAttrsContext):
     network_interface: str
     auto_table: tuple[type, ...]
     auto_blob: tuple[type, ...]
+    fail_fast: bool
 
     @cached_property
     def store(self) -> PipeDAGStore:
