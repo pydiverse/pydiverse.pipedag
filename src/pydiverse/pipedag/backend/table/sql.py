@@ -295,7 +295,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         cls,
         store,
         table: Table[sa.sql.elements.TextClause | sa.Text],
-        schema_name,
+        stage_name,
     ):
         store.logger.info(f"Performing CREATE TABLE AS SELECT ({table})")
         with store.engine.connect() as conn:
