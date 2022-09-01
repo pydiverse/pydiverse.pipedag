@@ -12,7 +12,7 @@ Changelog
 
 - renaming and documentation cleanups
 
-0.1.0 (2022-08-19)
+0.1.0 (2022-09-01)
 ------------------
 
 Initial release.
@@ -23,3 +23,4 @@ Initial release.
 - postgres database backend
 - Prefect 1.x and 2.x support
 - multi-processing/multi-node support for state exchange between @materialize tasks
+- support materialization for: pandas, sqlalchemy, raw sql text, pydiverse.transform
