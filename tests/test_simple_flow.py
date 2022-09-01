@@ -50,7 +50,7 @@ def test_simple_flow():
         return Blob(x), Blob(y)
 
     with Flow("FLOW") as flow:
-        with Stage("stage1"):
+        with Stage("stage 1"):
             a, b = inputs()
             a2 = double_values(a)
             b2 = double_values(b)
@@ -58,7 +58,7 @@ def test_simple_flow():
             b4 = double_values(b4)
             x = list_arg([a2, b, b4])
 
-        with Stage("stage2"):
+        with Stage("stage 2"):
             xj = join_on_a(a2, b4)
             a = double_values(xj)
 
