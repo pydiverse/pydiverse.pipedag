@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "pydiverse.pipedag"
+name = "pydiverse-pipedag"
 version = "0.1.0"
 description = "A pipeline orchestration layer built on top of prefect for caching and cache invalidation to SQL and blob store targets."
 authors = [
