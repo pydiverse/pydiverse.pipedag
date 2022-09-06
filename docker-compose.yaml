@@ -5,8 +5,9 @@ services:
     environment:
       POSTGRES_USER: sa
       POSTGRES_PASSWORD: Pydiverse23
+      POSTGRES_PORT: 6543
     ports:
-      - 5432:5432
+      - 6543:5432
   mssql:
     image: mcr.microsoft.com/mssql/server:2019-latest
     environment:
