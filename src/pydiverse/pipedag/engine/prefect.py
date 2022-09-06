@@ -3,6 +3,7 @@ from __future__ import annotations
 import warnings
 from typing import TYPE_CHECKING, Any
 
+import structlog
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
@@ -35,6 +36,7 @@ class PrefectOneEngine(Engine):
 
     def __init__(self, flow_kwargs: dict[str, Any] = None):
         self.flow_kwargs = flow_kwargs or {}
+        self.logger = structlog.get_logger(stage=self)
 
     def construct_prefect_flow(self, f: Flow):
         g = f.explicit_graph
@@ -67,6 +69,11 @@ class PrefectOneEngine(Engine):
 
         for u, v in g.edges:
             flow.add_edge(tasks[u], tasks[v])
+
+        try:
+            flow.register(project_name=config_context.name)
+        except ValueError as _e:
+            self.logger.warning(f"Please make sure project {config_context.name} exists: {_e}")
 
         return flow
 
