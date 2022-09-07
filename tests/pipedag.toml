@@ -21,4 +21,5 @@ hosts = "localhost:2181"
 
 # Default Engine
 [engine]
-class = "pydiverse.pipedag.engine.SequentialEngine"
+class = "pydiverse.pipedag.engine.PrefectEngine"
+# class = "pydiverse.pipedag.engine.SequentialEngine"

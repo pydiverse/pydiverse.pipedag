@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
+from prefect.filesystems import LocalFileSystem
 
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.core.result import Result
@@ -90,6 +91,8 @@ class PrefectTwoEngine(Engine):
 
     def __init__(self, flow_kwargs: dict[str, Any] = None):
         self.flow_kwargs = flow_kwargs or {}
+        # TODO: make storage blocks configurable
+        self.local_file_system_block = LocalFileSystem.load("test01")
 
     def construct_prefect_flow(self, f: Flow):
         from pydiverse.pipedag.materialize.core import MaterializingTask
