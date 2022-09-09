@@ -209,9 +209,10 @@ def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(create.query, **kw)
 
-    into = f"INTO {database}.{schema}.{name} FROM"
+    into = f"INTO {database}.{schema}.{name}"
     # Attention: this code assumes no subqueries in columns before FROM (can be fixed by counting FROMs)
-    return select.replace("FROM", into, 1)
+    # TODO: fix this code for more queries without FROM and make it case insensitive
+    return select.replace("FROM", into + " FROM", 1) if "FROM" in select else select + " " + into
 
 
 # noinspection SqlDialectInspection
