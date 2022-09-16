@@ -10,7 +10,7 @@ fail_fast = true
 class = "pydiverse.pipedag.backend.table.SQLTableStore"
 # Postgres: this can be used after running `docker-compose up`
 engine = "postgresql://sa:Pydiverse23@127.0.0.1/postgres"
-# SQL Server: this can be used after running `docker-compose up`
+## SQL Server: this can be used after running `docker-compose up`
 #engine = "mssql+pyodbc://sa:PidyQuant27@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
 ## schema_prefix = "master."  # SQL Server needs database.schema (uncomment only on of prefix and suffix)
 #schema_suffix = ".dbo"   # Alternatively SQL Server databases can be used as schemas with .dbo default schema
