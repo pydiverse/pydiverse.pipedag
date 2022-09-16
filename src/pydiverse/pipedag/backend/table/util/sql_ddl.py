@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import sqlalchemy as sa
 from attr import frozen
 from sqlalchemy.ext.compiler import compiles
@@ -209,13 +211,36 @@ def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(create.query, **kw)
 
-    into = f"INTO {database}.{schema}.{name}"
-    # Attention: this code assumes no subqueries in columns before FROM (can be fixed by counting FROMs)
-    # TODO: fix this code for more queries without FROM and make it case insensitive
+    return insert_into_in_query(select, database, schema, name)
+
+
+def insert_into_in_query(select_sql, database, schema, table):
+    into = f"INTO {database}.{schema}.{table}"
+    into_point = None
+    # insert INTO before first FROM, WHERE, GROUP BY, WINDOW, HAVING, ORDER BY, UNION, EXCEPT, INTERSECT
+    for marker in [
+        "FROM",
+        "WHERE",
+        r"GROUP\s*BY",
+        "WINDOW",
+        "HAVING",
+        r"ORDER\s*BY",
+        "UNION",
+        "EXCEPT",
+        "INTERSECT",
+    ]:
+        regex = re.compile(marker, re.IGNORECASE)
+        for match in regex.finditer(select_sql):
+            match_start = match.span()[0]
+            prev = select_sql[0:match_start]
+            # ignore marker in subqueries in select columns
+            if prev.count("(") == prev.count(")"):
+                into_point = match_start
+                break
     return (
-        select.replace("FROM", into + " FROM", 1)
-        if "FROM" in select
-        else select + " " + into
+        select_sql[0:into_point] + into + " " + select_sql[into_point:]
+        if into_point is not None
+        else select_sql + " " + into
     )
 
 
