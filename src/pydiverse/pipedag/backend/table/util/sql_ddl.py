@@ -18,6 +18,8 @@ __all__ = [
     "DropTable",
 ]
 
+from sqlalchemy.sql.elements import TextClause
+
 
 @frozen
 class Schema:
@@ -49,7 +51,7 @@ class RenameSchema(DDLElement):
 
 
 class CreateTableAsSelect(DDLElement):
-    def __init__(self, name: str, schema: Schema, query: Select):
+    def __init__(self, name: str, schema: Schema, query: Select | TextClause | sa.Text):
         self.name = name
         self.schema = schema
         self.query = query

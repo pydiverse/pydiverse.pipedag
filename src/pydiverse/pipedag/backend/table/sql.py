@@ -35,13 +35,34 @@ class SQLTableStore(BaseTableStore):
     METADATA_SCHEMA = "pipedag_metadata"
 
     def __init__(
-        self, engine: sa.engine.Engine, schema_prefix: str = "", schema_suffix: str = ""
+        self,
+        engine: sa.engine.Engine,
+        schema_prefix: str = "",
+        schema_suffix: str = "",
+        print_materialize: bool | None = None,
+        print_sql: bool | None = None,
+        no_db_locking: bool | None = None,
     ):
+        """
+        Construct table store.
+
+        :param engine: SQLAlchemy engine
+        :param schema_prefix: prefix string for schemas (dot's are interpreted as database.schema)
+        :param schema_suffix: suffix string for schemas (dot's are interpreted as database.schema)
+        :param print_materialize: whether to print select statements before materialization
+        :param print_sql: whether to print final SQL statements (except for metadata)
+        :param no_db_locking: speed up database by telling it we will not rely on it's locking mechanisms
+        """
         super().__init__()
 
         self.engine = engine
         self.schema_prefix = schema_prefix
         self.schema_suffix = schema_suffix
+        self.print_materialize = (
+            print_materialize if print_materialize is not None else False
+        )
+        self.print_sql = print_sql if print_sql is not None else False
+        self.no_db_locking = no_db_locking if no_db_locking is not None else True
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
 
         if engine.dialect.name == "mssql":
@@ -108,10 +129,26 @@ class SQLTableStore(BaseTableStore):
     def get_schema(self, name):
         return Schema(name, self.schema_prefix, self.schema_suffix)
 
+    def execute(self, query, *, conn=None):
+        if conn is not None:
+            if self.print_sql:
+                query_str = (
+                    query
+                    if isinstance(query, str)
+                    else SQLAlchemyTableHook.lazy_query_str(self, query)
+                )
+                self.logger.info(f"Executing sql:\n{query_str}")
+            conn.execute(query)
+        else:
+            # TODO: also replace engine.connect() with own context manager that can be used in other places
+            with self.engine.connect() as conn:
+                if self.engine.dialect == "mssql" and self.no_db_locking:
+                    conn.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
+                self.execute(query, conn=conn)
+
     def setup(self):
         super().setup()
-        with self.engine.connect() as conn:
-            conn.execute(CreateSchema(self.metadata_schema, if_not_exists=True))
+        self.execute(CreateSchema(self.metadata_schema, if_not_exists=True))
         with self.engine.connect() as conn:
             self.sql_metadata.create_all(conn)
 
@@ -138,16 +175,16 @@ class SQLTableStore(BaseTableStore):
 
             # don't drop/create databases, just replace the schema underneath (files will keep name on renaming)
             with self.engine.connect() as conn:
-                conn.execute(cs_base)
-                conn.execute(cs_trans_initial)
-                conn.execute(f"USE [{database}]")
+                self.execute(cs_base, conn=conn)
+                self.execute(cs_trans_initial, conn=conn)
+                self.execute(f"USE [{database}]", conn=conn)
                 # clear tables in schema
                 sql = f"""
                     EXEC sp_MSforeachtable
                       @command1 = 'DROP TABLE ?'
                     , @whereand = 'AND SCHEMA_NAME(schema_id) = ''{schema}'' '
                 """
-                conn.execute(sql)
+                self.execute(sql, conn=conn)
 
                 conn.execute(
                     self.tasks_table.delete()
@@ -156,9 +193,9 @@ class SQLTableStore(BaseTableStore):
                 )
         else:
             with self.engine.connect() as conn:
-                conn.execute(cs_base)
-                conn.execute(ds_trans)
-                conn.execute(cs_trans)
+                self.execute(cs_base, conn=conn)
+                self.execute(ds_trans, conn=conn)
+                self.execute(cs_trans, conn=conn)
 
                 conn.execute(
                     self.tasks_table.delete()
@@ -170,23 +207,28 @@ class SQLTableStore(BaseTableStore):
         tmp_schema = self.get_schema(stage.name + "__swap")
         with self.engine.connect() as conn:
             with conn.begin():
-                conn.execute(DropSchema(tmp_schema, if_exists=True, cascade=True))
+                self.execute(
+                    DropSchema(tmp_schema, if_exists=True, cascade=True), conn=conn
+                )
                 # TODO: in case "." is in self.schema_prefix, we need to implement schema renaming by
                 #  creating the new schema and moving table objects over
-                conn.execute(
+                self.execute(
                     RenameSchema(
                         self.get_schema(stage.name),
                         tmp_schema,
-                    )
+                    ),
+                    conn=conn,
                 )
-                conn.execute(
+                self.execute(
                     RenameSchema(
                         self.get_schema(stage.transaction_name),
                         self.get_schema(stage.name),
-                    )
+                    ),
+                    conn=conn,
                 )
-                conn.execute(
-                    RenameSchema(tmp_schema, self.get_schema(stage.transaction_name))
+                self.execute(
+                    RenameSchema(tmp_schema, self.get_schema(stage.transaction_name)),
+                    conn=conn,
                 )
 
                 for table in [self.tasks_table, self.lazy_cache_table]:
@@ -211,15 +253,14 @@ class SQLTableStore(BaseTableStore):
                 " to transaction because no such table exists."
             )
 
-        with self.engine.connect() as conn:
-            conn.execute(
-                CopyTable(
-                    table.name,
-                    self.get_schema(stage.name),
-                    table.name,
-                    self.get_schema(stage.transaction_name),
-                )
+        self.execute(
+            CopyTable(
+                table.name,
+                self.get_schema(stage.name),
+                table.name,
+                self.get_schema(stage.transaction_name),
             )
+        )
 
     def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
         if not sa.inspect(self.engine).has_table(
@@ -231,25 +272,23 @@ class SQLTableStore(BaseTableStore):
                 " exists."
             )
 
-        with self.engine.connect() as conn:
-            conn.execute(
-                CopyTable(
-                    metadata.name,
-                    self.get_schema(metadata.stage),
-                    table.name,
-                    self.get_schema(table.stage.transaction_name),
-                )
+        self.execute(
+            CopyTable(
+                metadata.name,
+                self.get_schema(metadata.stage),
+                table.name,
+                self.get_schema(table.stage.transaction_name),
             )
+        )
 
     def delete_table_from_transaction(self, table: Table):
-        with self.engine.connect() as conn:
-            conn.execute(
-                DropTable(
-                    table.name,
-                    self.get_schema(table.stage.transaction_name),
-                    if_exists=True,
-                )
+        self.execute(
+            DropTable(
+                table.name,
+                self.get_schema(table.stage.transaction_name),
+                if_exists=True,
             )
+        )
 
     def store_task_metadata(self, metadata: TaskMetadata, stage: Stage):
         with self.engine.connect() as conn:
@@ -378,11 +417,16 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         table: Table[sa.sql.elements.TextClause | sa.Text],
         stage_name,
     ):
-        store.logger.info(f"Performing CREATE TABLE AS SELECT ({table})")
-        with store.engine.connect() as conn:
-            conn.execute(
-                CreateTableAsSelect(table.name, store.get_schema(stage_name), table.obj)
+        if store.print_materialize:
+            query_str = cls.lazy_query_str(store, table.obj)
+            store.logger.info(
+                f"Executing CREATE TABLE AS SELECT ({table}):\n{query_str}"
             )
+        else:
+            store.logger.info(f"Executing CREATE TABLE AS SELECT ({table})")
+        store.execute(
+            CreateTableAsSelect(table.name, store.get_schema(stage_name), table.obj)
+        )
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
@@ -410,10 +454,13 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def materialize(cls, store, table: Table[pd.DataFrame], stage_name):
+        schema = store.get_schema(stage_name).get()
+        if store.print_materialize:
+            store.logger.info(f"Writing table '{schema}.{table.name}':\n{table.obj}")
         table.obj.to_sql(
             table.name,
             store.engine,
-            schema=store.get_schema(stage_name).get(),
+            schema=schema,
             index=False,
         )
 

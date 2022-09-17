@@ -168,7 +168,9 @@ class MaterializationWrapper:
                     task.logger.info(f"Found task in cache. Using cached result.")
                     return cached_output
                 except CacheError as e:
-                    task.logger.info(f"Failed to retrieve task from cache. {e}")
+                    task.logger.info(
+                        f"There is no cached output for this task, yet. {e}"
+                    )
                     pass
 
             # Not found in cache / lazy -> Evaluate Function
