@@ -92,8 +92,8 @@ class DictTableStore(BaseTableStore):
             return self.metadata[task.stage][task.cache_key]
         except KeyError:
             raise CacheError(
-                "Failed to retrieve metadata for task "
-                f"'{task.name}' with cache key '{task.cache_key}'"
+                "There is no metadata for task "
+                f"'{task.name}' with cache key '{task.cache_key}', yet"
             )
 
     def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
