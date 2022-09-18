@@ -21,6 +21,7 @@ class Table(Generic[T]):
         add '%%' at the end of the name to enable automatic name mangling.
     :param primary_key: Optional name of the primary key that should be
         used when materializing this table
+    :param cache_key: Optional key used for cache invalidation (manual use is discouraged)
     """
 
     def __init__(
@@ -42,6 +43,45 @@ class Table(Generic[T]):
 
     def __str__(self):
         return f"<Table: {self.name} ({self.stage.name})>"
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, value):
+        if value is not None and not isinstance(value, str):
+            raise TypeError(f"Table name must be of instance 'str' not {type(value)}.")
+        self._name = normalize_name(value)
+
+
+class RawSql:
+    """Container for raw sql strings
+
+    This allows wrapping legacy sql code with pipedag before it is converted to proper tasks that allow tracing tables.
+
+    :param sql: The table object to wrap
+    :param cache_key: Optional key used for cache invalidation (manual use is discouraged)
+    """
+
+    def __init__(
+        self,
+        sql: str = None,
+        name: str = None,
+        stage: Stage = None,
+        cache_key: str = None,
+    ):
+        self._name = None
+
+        self.sql = sql
+        self.name = name
+        self.stage = stage
+
+        self.cache_key = cache_key
+
+    def __str__(self):
+        sql_short = self.sql.strip()[0:40].replace("\n", "").strip()
+        return f"<Raw SQL: {self.name}/{self.stage}:{sql_short}>"
 
     @property
     def name(self):

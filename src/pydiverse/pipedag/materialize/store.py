@@ -12,6 +12,7 @@ from pydiverse.pipedag._typing import Materializable
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.errors import DuplicateNameError, StageError
+from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import TaskMetadata
 from pydiverse.pipedag.materialize.util import compute_cache_key
@@ -162,6 +163,7 @@ class PipeDAGStore:
             )
 
         tables = []
+        raw_sqls = []
         blobs = []
 
         config = ConfigContext.get()
@@ -179,24 +181,29 @@ class PipeDAGStore:
                 x = Blob(x)
 
             # Do the materialization
-            if isinstance(x, (Table, Blob)):
-                x.stage = stage
+            if isinstance(x, (Table, RawSql, Blob)):
                 x.cache_key = task.cache_key
 
-                # Update name:
-                # - If no name has been provided, generate on automatically
-                # - If the provided name ends with %%, perform name mangling
-                auto_suffix = f"{task.cache_key}_{next(counter):04d}"
-                if x.name is None:
-                    x.name = task.name + "_" + auto_suffix
-                elif x.name.endswith("%%"):
-                    x.name = x.name[:-2] + auto_suffix
+                if isinstance(x, (Table, Blob)):
+                    x.stage = stage
+                    # Update name:
+                    # - If no name has been provided, generate on automatically
+                    # - If the provided name ends with %%, perform name mangling
+                    auto_suffix = f"{task.cache_key}_{next(counter):04d}"
+                    if x.name is None:
+                        x.name = task.name + "_" + auto_suffix
+                    elif x.name.endswith("%%"):
+                        x.name = x.name[:-2] + auto_suffix
 
                 ctx.validate_stage_lock(stage)
                 if isinstance(x, Table):
                     if x.obj is None:
                         raise TypeError("Underlying table object can't be None")
                     tables.append(x)
+                elif isinstance(x, RawSql):
+                    if x.sql is None:
+                        raise TypeError("Underlying raw sql string can't be None")
+                    raw_sqls.append(x)
                 elif isinstance(x, Blob):
                     if task.lazy:
                         raise NotImplementedError(
@@ -230,12 +237,17 @@ class PipeDAGStore:
             else:
                 self.table_store.store_table(table)
 
+        def store_raw_sql(raw_sql: RawSql):
+            self.table_store.store_raw_sql(raw_sql)
+
         self._check_names(task, tables, blobs)
         self._store_task_transaction(
             task,
             tables,
+            raw_sqls,
             blobs,
             store_table,
+            store_raw_sql,
             lambda blob: self.blob_store.store_blob(blob),
             lambda _: self.table_store.store_task_metadata(metadata, stage),
         )
@@ -283,8 +295,10 @@ class PipeDAGStore:
         self,
         task: MaterializingTask,
         tables: list[Table],
+        raw_sqls: list[RawSql],
         blobs: list[Blob],
         store_table: Callable[[Table], None],
+        store_raw_sql: Callable[[RawSql], None],
         store_blob: Callable[[Blob], None],
         store_metadata: Callable[[MaterializingTask], None],
     ):
@@ -303,6 +317,9 @@ class PipeDAGStore:
                 ctx.validate_stage_lock(stage)
                 store_blob(blob)
                 stored_blobs.append(blob)
+            for raw_sql in raw_sqls:
+                ctx.validate_stage_lock(stage)
+                store_raw_sql(raw_sql)
 
             ctx.validate_stage_lock(task.stage)
             store_metadata(task)
@@ -408,7 +425,7 @@ class PipeDAGStore:
         """Encode a materializable value as json
 
         In addition to the default types that python can serialise to json,
-        this function can also serialise `Table` and `Blob` objects.
+        this function can also serialise `Table`, `RawSql`, and `Blob` objects.
         The only caveat is, that python's json module doesn't differentiate
         between lists and tuples, which means it is impossible to
         differentiate the two.

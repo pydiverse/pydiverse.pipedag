@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import re
 import warnings
-from typing import Union
 
 import pandas as pd
+import pytsql
 import sqlalchemy as sa
 import sqlalchemy.sql.elements
 
@@ -20,7 +21,11 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
 )
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.core import MaterializingTask
-from pydiverse.pipedag.materialize.metadata import LazyTableMetadata, TaskMetadata
+from pydiverse.pipedag.materialize.metadata import (
+    LazyTableMetadata,
+    RawSqlMetadata,
+    TaskMetadata,
+)
 
 
 class SQLTableStore(BaseTableStore):
@@ -110,6 +115,18 @@ class SQLTableStore(BaseTableStore):
             schema=self.metadata_schema.get(),
         )
 
+        self.raw_sql_cache_table = sa.Table(
+            "raw_sql_tables",
+            self.sql_metadata,
+            Column("id", BigInteger, primary_key=True, autoincrement=True),
+            Column("prev_tables", String),  # ToDo: consider using Array column
+            Column("tables", String),
+            Column("stage", String),
+            Column("cache_key", String(64)),
+            Column("in_transaction_schema", Boolean),
+            schema=self.metadata_schema.get(),
+        )
+
     @classmethod
     def _init_conf_(cls, config: dict):
         engine_config = config.pop("engine")
@@ -138,13 +155,35 @@ class SQLTableStore(BaseTableStore):
                     else SQLAlchemyTableHook.lazy_query_str(self, query)
                 )
                 self.logger.info(f"Executing sql:\n{query_str}")
-            conn.execute(query)
+            return conn.execute(query)
         else:
             # TODO: also replace engine.connect() with own context manager that can be used in other places
             with self.engine.connect() as conn:
                 if self.engine.dialect == "mssql" and self.no_db_locking:
                     conn.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
-                self.execute(query, conn=conn)
+                return self.execute(query, conn=conn)
+
+    def do_execute_raw_sql(self, sql: str, stage_name: str):
+        if self.engine.name == "mssql":
+            # if self.print_sql:
+            #     max_len = 50000  # consider making an option in ConfigContext
+            #     opt_end = '\n...' if len(sql) > max_len else ''
+            #     self.logger.info(f"Executing raw sql:\n{sql[0:max_len]}{opt_end}")
+            # # use pytsql for executing T-SQL scripts containing many GO statements
+            # pytsql.executes(sql, self.engine)
+
+            # workaround: pytsql failed the scripts in this repo (DROP FUNCTION)
+            last_use = None
+            for stmt in re.split(r"\bGO\b", sql, flags=re.IGNORECASE):
+                if re.match(r"\bUSE\b", stmt.strip()):
+                    last_use = stmt
+                with self.engine.connect() as conn:
+                    if last_use is not None:
+                        self.execute(last_use, conn=conn)
+                    self.execute(stmt, conn=conn)
+        else:
+            for stmt in sql.split(";"):
+                self.execute(stmt)
 
     def setup(self):
         super().setup()
@@ -207,6 +246,7 @@ class SQLTableStore(BaseTableStore):
         tmp_schema = self.get_schema(stage.name + "__swap")
         with self.engine.connect() as conn:
             with conn.begin():
+                # TODO: for mssql try to find schema does not exist and then move the forgotten tmp schema there
                 self.execute(
                     DropSchema(tmp_schema, if_exists=True, cascade=True), conn=conn
                 )
@@ -231,7 +271,11 @@ class SQLTableStore(BaseTableStore):
                     conn=conn,
                 )
 
-                for table in [self.tasks_table, self.lazy_cache_table]:
+                for table in [
+                    self.tasks_table,
+                    self.lazy_cache_table,
+                    self.raw_sql_cache_table,
+                ]:
                     conn.execute(
                         table.delete()
                         .where(table.c.stage == stage.name)
@@ -280,6 +324,73 @@ class SQLTableStore(BaseTableStore):
                 self.get_schema(table.stage.transaction_name),
             )
         )
+
+    def get_view_names(self, schema, *, include_everything=False):
+        inspector = sa.inspect(self.engine)
+        if include_everything and self.engine.dialect == "mssql":
+            # include stored procedures in view names because they can also be recreated
+            # based on sys.sql_modules.description
+            sql = (
+                "select obj.name from sys.sql_modules as mod "
+                "left join sys.objects as obj on mod.object_id=obj.object_id"
+            )
+            rows = self.execute(sql).fetchall()
+            return [row[0] for row in rows]
+        else:
+            return inspector.get_view_names(schema)
+
+    # noinspection SqlDialectInspection
+    def copy_raw_sql_tables_to_transaction(
+        self, metadata: RawSqlMetadata, target_stage: Stage
+    ):
+        src_schema = self.get_schema(metadata.stage)
+        dest_schema = self.get_schema(target_stage.transaction_name)
+        views = set(self.get_view_names(src_schema.get()))
+        for table_name in set(metadata.tables) - set(metadata.prev_tables):
+            if table_name in views:
+                if self.engine.dialect.name == "mssql":
+                    src_database, src_schema_only = src_schema.get().split(".")
+                    dest_database, dest_schema_only = dest_schema.get().split(".")
+                    with self.engine.connect() as conn:
+                        self.execute(f"USE {src_database}", conn=conn)
+                        sql = f"""
+                            SELECT definition
+                            FROM sys.sql_modules
+                            WHERE [object_id] = OBJECT_ID('[{src_schema_only}].[{table_name}]');
+                        """
+                        view_sql = self.execute(sql, conn=conn).fetchone()
+                        assert view_sql is not None
+                        view_sql = view_sql[0]
+                        if src_schema != dest_schema:
+                            for schema_brackets in [True, False]:
+                                for table_brackets in [True, False]:
+                                    schema = (
+                                        f"[{src_schema_only}]"
+                                        if schema_brackets
+                                        else src_schema_only
+                                    )
+                                    table = (
+                                        f"[{table_name}]"
+                                        if table_brackets
+                                        else table_name
+                                    )
+                                    view_sql = view_sql.replace(
+                                        f"{schema}.{table}",
+                                        f"[{dest_schema}].[{table_name}]",
+                                    )
+                        self.execute(f"USE {dest_database}", conn=conn)
+                        self.execute(view_sql, conn=conn)
+                else:
+                    raise NotImplementedError("Not yet implemented")
+            else:
+                self.execute(
+                    CopyTable(
+                        table_name,
+                        src_schema,
+                        table_name,
+                        dest_schema,
+                    )
+                )
 
     def delete_table_from_transaction(self, table: Table):
         self.execute(
@@ -372,7 +483,7 @@ class SQLTableStore(BaseTableStore):
     def retrieve_lazy_table_metadata(
         self, cache_key: str, stage: Stage
     ) -> LazyTableMetadata:
-        # noinspection PyUnresolvedReferences
+        # noinspection PyUnresolvedReferences,DuplicatedCode
         try:
             with self.engine.connect() as conn:
                 result = (
@@ -395,6 +506,50 @@ class SQLTableStore(BaseTableStore):
 
         return LazyTableMetadata(
             name=result.name,
+            stage=result.stage,
+            cache_key=result.cache_key,
+        )
+
+    def store_raw_sql_metadata(self, metadata: RawSqlMetadata):
+        with self.engine.connect() as conn:
+            conn.execute(
+                self.raw_sql_cache_table.insert().values(
+                    # ToDo: consider quoting or array column
+                    prev_tables=";".join(metadata.prev_tables),
+                    tables=";".join(metadata.tables),
+                    stage=metadata.stage,
+                    cache_key=metadata.cache_key,
+                    in_transaction_schema=True,
+                )
+            )
+
+    def retrieve_raw_sql_metadata(self, cache_key: str, stage: Stage) -> RawSqlMetadata:
+        # noinspection PyUnresolvedReferences,DuplicatedCode
+        try:
+            with self.engine.connect() as conn:
+                result = (
+                    conn.execute(
+                        self.raw_sql_cache_table.select()
+                        .where(self.raw_sql_cache_table.c.stage == stage.name)
+                        .where(self.raw_sql_cache_table.c.cache_key == cache_key)
+                        .where(
+                            self.raw_sql_cache_table.c.in_transaction_schema.in_(
+                                [False]
+                            )
+                        )
+                    )
+                    .mappings()
+                    .one_or_none()
+                )
+        except sa.exc.MultipleResultsFound:
+            raise CacheError("Multiple results found for lazy table cache key")
+
+        if result is None:
+            raise CacheError("No result found for lazy table cache key")
+
+        return RawSqlMetadata(
+            prev_tables=result.prev_tables.split(";"),
+            tables=result.tables.split(";"),
             stage=result.stage,
             cache_key=result.cache_key,
         )
@@ -429,6 +584,15 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         )
 
     @classmethod
+    def execute_raw_sql(
+        cls,
+        store,
+        sql: str,
+        stage_name: str,
+    ):
+        store.do_execute_raw_sql(sql, stage_name)
+
+    @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
         return sa.Table(
             table.name,
@@ -440,6 +604,12 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @classmethod
     def lazy_query_str(cls, store, obj) -> str:
         return str(obj.compile(store.engine, compile_kwargs={"literal_binds": True}))
+
+    @classmethod
+    def list_tables(cls, store, stage_name):
+        inspector = sa.inspect(store.engine)
+        schema = store.get_schema(stage_name).get()
+        return inspector.get_table_names(schema) + inspector.get_view_names(schema)
 
 
 @SQLTableStore.register_table(pd)
@@ -465,6 +635,15 @@ class PandasTableHook(TableHook[SQLTableStore]):
         )
 
     @classmethod
+    def execute_raw_sql(
+        cls,
+        store,
+        sql: str,
+        stage_name: str,
+    ):
+        SQLAlchemyTableHook.execute_raw_sql(store, sql, stage_name)
+
+    @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
         with store.engine.connect() as conn:
             df = pd.read_sql_table(
@@ -477,6 +656,10 @@ class PandasTableHook(TableHook[SQLTableStore]):
         if name := obj.attrs.get("name"):
             return Table(obj, name)
         return super().auto_table(obj)
+
+    @classmethod
+    def list_tables(cls, store, stage_name):
+        return SQLAlchemyTableHook.list_tables(store, stage_name)
 
 
 try:
@@ -510,11 +693,22 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             from pydiverse.transform.core.verbs import collect
 
             table.obj = t >> collect()
+            # noinspection PyTypeChecker
             return PandasTableHook.materialize(store, table, stage_name)
         if isinstance(t._impl, SQLTableImpl):
             table.obj = t._impl.build_select()
+            # noinspection PyTypeChecker
             return SQLAlchemyTableHook.materialize(store, table, stage_name)
         raise NotImplementedError
+
+    @classmethod
+    def execute_raw_sql(
+        cls,
+        store,
+        sql: str,
+        stage_name: str,
+    ):
+        SQLAlchemyTableHook.execute_raw_sql(store, sql, stage_name)
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
@@ -542,3 +736,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         if query is not None:
             return str(query)
         return super().lazy_query_str(store, obj)
+
+    @classmethod
+    def list_tables(cls, store, stage_name):
+        return SQLAlchemyTableHook.list_tables(store, stage_name)

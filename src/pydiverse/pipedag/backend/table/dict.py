@@ -8,7 +8,11 @@ from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
 from pydiverse.pipedag.errors import CacheError, StageError
 from pydiverse.pipedag.materialize.core import MaterializingTask
-from pydiverse.pipedag.materialize.metadata import LazyTableMetadata, TaskMetadata
+from pydiverse.pipedag.materialize.metadata import (
+    LazyTableMetadata,
+    RawSqlMetadata,
+    TaskMetadata,
+)
 
 
 class DictTableStore(BaseTableStore):
@@ -27,6 +31,9 @@ class DictTableStore(BaseTableStore):
         self.lazy_table_metadata = dict()
         self.t_lazy_table_metadata = dict()
 
+        self.raw_sql_metadata = dict()
+        self.t_raw_sql_metadata = dict()
+
     def init_stage(self, stage: Stage):
         self.store.setdefault(stage.name, {})
         self.store[stage.transaction_name] = {}
@@ -37,11 +44,15 @@ class DictTableStore(BaseTableStore):
         self.lazy_table_metadata.setdefault(stage, {})
         self.t_lazy_table_metadata[stage] = {}
 
+        self.raw_sql_metadata.setdefault(stage, {})
+        self.t_raw_sql_metadata[stage] = {}
+
     def commit_stage(self, stage: Stage):
         self.store[stage.name] = self.store[stage.transaction_name]
         del self.store[stage.transaction_name]
         self.metadata[stage] = self.t_metadata[stage]
         self.lazy_table_metadata[stage] = self.t_lazy_table_metadata[stage]
+        self.raw_sql_metadata[stage] = self.t_raw_sql_metadata[stage]
 
     def copy_table_to_transaction(self, table: Table):
         stage = table.stage
@@ -73,6 +84,13 @@ class DictTableStore(BaseTableStore):
         self.store[table.stage.transaction_name][table.name] = self.store[
             metadata.stage
         ][metadata.name]
+
+    def copy_raw_sql_tables_to_transaction(
+        self, metadata: RawSqlMetadata, target_stage: Stage
+    ):
+        raise NotImplementedError(
+            "The DictTableStore does not support raw SQL statements"
+        )
 
     def delete_table_from_transaction(self, table: Table):
         try:
@@ -107,6 +125,15 @@ class DictTableStore(BaseTableStore):
         except (TypeError, KeyError):
             raise CacheError
 
+    def store_raw_sql_metadata(self, metadata: RawSqlMetadata):
+        self.t_raw_sql_metadata[metadata.stage][metadata.cache_key] = metadata
+
+    def retrieve_raw_sql_metadata(self, cache_key: str, stage: Stage) -> RawSqlMetadata:
+        try:
+            return self.raw_sql_metadata[stage.name][cache_key]
+        except (TypeError, KeyError):
+            raise CacheError
+
 
 @DictTableStore.register_table(pd)
 class PandasTableHook(TableHook[DictTableStore]):
@@ -125,6 +152,17 @@ class PandasTableHook(TableHook[DictTableStore]):
         store.store[stage_name][table.name] = table.obj
 
     @classmethod
+    def execute_raw_sql(
+        cls,
+        store,
+        sql: str,
+        stage_name: str,
+    ):
+        raise NotImplementedError(
+            "This table store does not support executing raw sql statements"
+        )
+
+    @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
         return store.store[stage_name][table.name].copy()
 
@@ -133,6 +171,10 @@ class PandasTableHook(TableHook[DictTableStore]):
         if name := obj.attrs.get("name"):
             return Table(obj, name)
         return super().auto_table(obj)
+
+    @classmethod
+    def list_tables(cls, store, stage_name):
+        return store.store[stage_name].keys()
 
 
 try:
@@ -159,7 +201,19 @@ class PydiverseTransformTableHook(TableHook[DictTableStore]):
         from pydiverse.transform.core.verbs import collect
 
         table.obj = table.obj >> collect()
+        # noinspection PyTypeChecker
         return PandasTableHook.materialize(store, table, stage_name)
+
+    @classmethod
+    def execute_raw_sql(
+        cls,
+        store,
+        sql: str,
+        stage_name: str,
+    ):
+        raise NotImplementedError(
+            "This table store does not support executing raw sql statements"
+        )
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
@@ -170,4 +224,9 @@ class PydiverseTransformTableHook(TableHook[DictTableStore]):
 
     @classmethod
     def auto_table(cls, obj: pdt.Table):
+        # noinspection PyProtectedMember
         return Table(obj, obj._impl.name)
+
+    @classmethod
+    def list_tables(cls, store, stage_name):
+        return PandasTableHook.list_tables(store, stage_name)
