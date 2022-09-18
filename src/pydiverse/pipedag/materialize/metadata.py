@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass
+from typing import List
 
 
 @dataclass
@@ -39,5 +40,23 @@ class LazyTableMetadata:
     """
 
     name: str
+    stage: str
+    cache_key: str
+
+
+@dataclass
+class RawSqlMetadata:
+    """Metadata associated with raw sql statements
+
+    The `cache_key` should incorporate the `cache_key` value of the
+    producing task (this ensures that there will be no match if the inputs
+    to the task change) and the query that produces the table.
+
+    The `tables` and `stage` values are used to retrieve the appropriate
+    tables from the cache.
+    """
+
+    prev_tables: list[str]
+    tables: list[str]
     stage: str
     cache_key: str

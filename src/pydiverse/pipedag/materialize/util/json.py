@@ -7,22 +7,37 @@ type of the object.
 
 from __future__ import annotations
 
+from pydiverse.pipedag import Stage
 from pydiverse.pipedag.context import RunContext
-from pydiverse.pipedag.materialize.container import Blob, Table
+from pydiverse.pipedag.materialize.container import Blob, RawSql, Table
 
 PIPEDAG_TYPE = "_pipedag_type_"
 PIPEDAG_TYPE_TABLE = "table"
+PIPEDAG_TYPE_RAWSQL = "raw_sql"
 PIPEDAG_TYPE_BLOB = "blob"
+PIPEDAG_TYPE_STAGE = "stage"
 
 
 def json_default(o):
-    """Encode `Table` and `Blob` objects"""
+    """Encode `Table`, `RawSql`, 'Stage', and `Blob` objects"""
     if isinstance(o, Table):
         return {
             PIPEDAG_TYPE: PIPEDAG_TYPE_TABLE,
             "stage": o.stage.name,
             "name": o.name,
             "cache_key": o.cache_key,
+        }
+    if isinstance(o, RawSql):
+        return {
+            PIPEDAG_TYPE: PIPEDAG_TYPE_RAWSQL,
+            "stage": o.stage.name,
+            "name": o.name,
+            "cache_key": o.cache_key,
+        }
+    if isinstance(o, Stage):
+        return {
+            PIPEDAG_TYPE: PIPEDAG_TYPE_STAGE,
+            "name": o.name,
         }
     if isinstance(o, Blob):
         return {
@@ -48,12 +63,20 @@ def json_object_hook(d: dict):
                 stage=stages[d["stage"]],
                 cache_key=d["cache_key"],
             )
+        elif pipedag_type == PIPEDAG_TYPE_RAWSQL:
+            return RawSql(
+                name=d["name"],
+                stage=stages[d["stage"]],
+                cache_key=d["cache_key"],
+            )
         elif pipedag_type == PIPEDAG_TYPE_BLOB:
             return Blob(
                 name=d["name"],
                 stage=stages[d["stage"]],
                 cache_key=d["cache_key"],
             )
+        elif pipedag_type == PIPEDAG_TYPE_STAGE:
+            return stages[d["name"]]
         else:
             raise ValueError(
                 f"Invalid value for '{PIPEDAG_TYPE}' key: {repr(pipedag_type)}"
