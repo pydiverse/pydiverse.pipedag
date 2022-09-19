@@ -201,7 +201,9 @@ class BaseTableStore(metaclass=_TableStoreMeta):
     def list_tables(self, stage: Stage, *, include_everything=False) -> list[str]:
         # take any registered table hook since we only care about the materialization target
         hook = self._REGISTERED_TABLES[0]
-        return hook.list_tables(self, stage.transaction_name, include_everything=include_everything)
+        return hook.list_tables(
+            self, stage.transaction_name, include_everything=include_everything
+        )
 
     def store_table_lazy(self, table: Table):
         """Lazily sores a table in the associated commit stage

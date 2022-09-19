@@ -343,7 +343,9 @@ def visit_drop_table(drop: DropProcedure, compiler, **kw):
     return _visit_drop_anything_mssql(drop, "FUNCTION", compiler, **kw)
 
 
-def _visit_drop_anything(drop: DropTable | DropView | DropProcedure | DropFunction, _type, compiler, **kw):
+def _visit_drop_anything(
+    drop: DropTable | DropView | DropProcedure | DropFunction, _type, compiler, **kw
+):
     table = compiler.preparer.quote_identifier(drop.name)
     schema = compiler.preparer.format_schema(drop.schema.get())
     text = [f"DROP {_type}"]
@@ -353,7 +355,9 @@ def _visit_drop_anything(drop: DropTable | DropView | DropProcedure | DropFuncti
     return " ".join(text)
 
 
-def _visit_drop_anything_mssql(drop: DropTable | DropView | DropProcedure | DropFunction, _type, compiler, **kw):
+def _visit_drop_anything_mssql(
+    drop: DropTable | DropView | DropProcedure | DropFunction, _type, compiler, **kw
+):
     table = compiler.preparer.quote_identifier(drop.name)
     full_name = drop.schema.get()
     # it was already checked that there is exactly one dot in schema prefix + suffix
