@@ -175,6 +175,9 @@ class SQLTableStore(BaseTableStore):
             # workaround: pytsql failed the scripts in this repo (DROP FUNCTION)
             last_use = None
             for stmt in re.split(r"\bGO\b", sql, flags=re.IGNORECASE):
+                if stmt.strip() == "":
+                    # allow GO at end of script
+                    continue
                 if re.match(r"\bUSE\b", stmt.strip()):
                     last_use = stmt
                 with self.engine.connect() as conn:
