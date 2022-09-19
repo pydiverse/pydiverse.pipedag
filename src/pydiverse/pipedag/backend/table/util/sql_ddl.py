@@ -80,8 +80,33 @@ class DropTable(DDLElement):
         self.if_exists = if_exists
 
 
+class DropView(DDLElement):
+    def __init__(self, name, schema: Schema, if_exists=False):
+        # attention: for mssql, this statement must be prefixed with a 'USE <database>' statement
+        self.name = name
+        self.schema = schema
+        self.if_exists = if_exists
+
+
+class DropProcedure(DDLElement):
+    def __init__(self, name, schema: Schema, if_exists=False):
+        # attention: for mssql, this statement must be prefixed with a 'USE <database>' statement
+        self.name = name
+        self.schema = schema
+        self.if_exists = if_exists
+
+
+class DropFunction(DDLElement):
+    def __init__(self, name, schema: Schema, if_exists=False):
+        # attention: for mssql, this statement must be prefixed with a 'USE <database>' statement
+        self.name = name
+        self.schema = schema
+        self.if_exists = if_exists
+
+
 @compiles(CreateSchema)
 def visit_create_schema(create: CreateSchema, compiler, **kw):
+    _ = kw
     schema = compiler.preparer.format_schema(create.schema.get())
     text = ["CREATE SCHEMA"]
     if create.if_not_exists:
@@ -90,10 +115,12 @@ def visit_create_schema(create: CreateSchema, compiler, **kw):
     return " ".join(text)
 
 
+# noinspection SqlDialectInspection
 @compiles(CreateSchema, "mssql")
 def visit_create_schema(create: CreateSchema, compiler, **kw):
     """For SQL Server we support two modes: using databases as schemas or schemas as schemas.
     """
+    _ = kw
     if "." in create.schema.name:
         raise AttributeError(
             f"We currently do not support dots in schema names when working with mssql"
@@ -127,6 +154,7 @@ def visit_create_schema(create: CreateSchema, compiler, **kw):
 
 @compiles(DropSchema)
 def visit_drop_schema(drop: DropSchema, compiler, **kw):
+    _ = kw
     schema = compiler.preparer.format_schema(drop.schema.get())
     text = ["DROP SCHEMA"]
     if drop.if_exists:
@@ -139,6 +167,7 @@ def visit_drop_schema(drop: DropSchema, compiler, **kw):
 
 @compiles(DropSchema, "mssql")
 def visit_drop_schema(drop: DropSchema, compiler, **kw):
+    _ = kw
     full_name = drop.schema.get()
     # it was already checked that there is exactly one dot in schema prefix + suffix
     database_name, schema_name = full_name.split(".")
@@ -159,6 +188,7 @@ def visit_drop_schema(drop: DropSchema, compiler, **kw):
 
 @compiles(RenameSchema)
 def visit_rename_schema(rename: RenameSchema, compiler, **kw):
+    _ = kw
     from_ = compiler.preparer.format_schema(rename.from_.get())
     to = compiler.preparer.format_schema(rename.to.get())
     return "ALTER SCHEMA " + from_ + " RENAME TO " + to
@@ -166,6 +196,7 @@ def visit_rename_schema(rename: RenameSchema, compiler, **kw):
 
 @compiles(RenameSchema, "mssql")
 def visit_rename_schema(rename: RenameSchema, compiler, **kw):
+    _ = kw
     if rename.from_.prefix != rename.to.prefix:
         raise AttributeError(
             f"We currently do not support varying schema prefixes for mssql database"
@@ -274,25 +305,67 @@ def visit_copy_table(copy: CopyTable, compiler, **kw):
 
 @compiles(DropTable)
 def visit_drop_table(drop: DropTable, compiler, **kw):
+    return _visit_drop_anything(drop, "TABLE", compiler, **kw)
+
+
+@compiles(DropTable, "mssql")
+def visit_drop_table(drop: DropTable, compiler, **kw):
+    return _visit_drop_anything_mssql(drop, "TABLE", compiler, **kw)
+
+
+@compiles(DropView)
+def visit_drop_table(drop: DropView, compiler, **kw):
+    return _visit_drop_anything(drop, "VIEW", compiler, **kw)
+
+
+@compiles(DropView, "mssql")
+def visit_drop_table(drop: DropView, compiler, **kw):
+    return _visit_drop_anything_mssql(drop, "VIEW", compiler, **kw)
+
+
+@compiles(DropProcedure)
+def visit_drop_table(drop: DropProcedure, compiler, **kw):
+    return _visit_drop_anything(drop, "PROCEDURE", compiler, **kw)
+
+
+@compiles(DropProcedure, "mssql")
+def visit_drop_table(drop: DropProcedure, compiler, **kw):
+    return _visit_drop_anything_mssql(drop, "PROCEDURE", compiler, **kw)
+
+
+@compiles(DropFunction)
+def visit_drop_table(drop: DropFunction, compiler, **kw):
+    return _visit_drop_anything(drop, "FUNCTION", compiler, **kw)
+
+
+@compiles(DropFunction, "mssql")
+def visit_drop_table(drop: DropProcedure, compiler, **kw):
+    return _visit_drop_anything_mssql(drop, "FUNCTION", compiler, **kw)
+
+
+def _visit_drop_anything(drop: DropTable | DropView | DropProcedure | DropFunction, _type, compiler, **kw):
     table = compiler.preparer.quote_identifier(drop.name)
     schema = compiler.preparer.format_schema(drop.schema.get())
-    text = ["DROP TABLE"]
+    text = [f"DROP {_type}"]
     if drop.if_exists:
         text.append("IF EXISTS")
     text.append(f"{schema}.{table}")
     return " ".join(text)
 
 
-@compiles(DropTable, "mssql")
-def visit_drop_table(drop: DropTable, compiler, **kw):
+def _visit_drop_anything_mssql(drop: DropTable | DropView | DropProcedure | DropFunction, _type, compiler, **kw):
     table = compiler.preparer.quote_identifier(drop.name)
     full_name = drop.schema.get()
     # it was already checked that there is exactly one dot in schema prefix + suffix
     database_name, schema_name = full_name.split(".")
     database = compiler.preparer.format_schema(database_name)
     schema = compiler.preparer.format_schema(schema_name)
-    text = ["DROP TABLE"]
+    text = [f"DROP {_type}"]
     if drop.if_exists:
         text.append("IF EXISTS")
-    text.append(f"{database}.{schema}.{table}")
+    if isinstance(drop, (DropView, DropProcedure, DropFunction)):
+        # attention: this statement must be prefixed with a 'USE <database>' statement
+        text.append(f"{schema}.{table}")
+    else:
+        text.append(f"{database}.{schema}.{table}")
     return " ".join(text)
