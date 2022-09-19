@@ -14,10 +14,13 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     CopyTable,
     CreateSchema,
     CreateTableAsSelect,
+    DropFunction,
+    DropProcedure,
     DropSchema,
     DropTable,
+    DropView,
     RenameSchema,
-    Schema, DropProcedure, DropView, DropFunction,
+    Schema,
 )
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.core import MaterializingTask
@@ -231,17 +234,25 @@ class SQLTableStore(BaseTableStore):
                 # clear views and stored procedures
                 views = self.get_view_names(full_name)
                 other = self.get_mssql_sql_modules(full_name)
-                procedures = [name for name, _type in other.items() if _type.strip() == "P"]
-                functions = [name for name, _type in other.items() if _type.strip() == "FN"]
+                procedures = [
+                    name for name, _type in other.items() if _type.strip() == "P"
+                ]
+                functions = [
+                    name for name, _type in other.items() if _type.strip() == "FN"
+                ]
                 for view in views:
                     # the 'USE [{database}]' statement is important for this call
                     self.execute(DropView(view, schema, if_exists=True), conn=conn)
                 for procedure in procedures:
                     # the 'USE [{database}]' statement is important for this call
-                    self.execute(DropProcedure(procedure, schema, if_exists=True), conn=conn)
+                    self.execute(
+                        DropProcedure(procedure, schema, if_exists=True), conn=conn
+                    )
                 for function in functions:
                     # the 'USE [{database}]' statement is important for this call
-                    self.execute(DropFunction(function, schema, if_exists=True), conn=conn)
+                    self.execute(
+                        DropFunction(function, schema, if_exists=True), conn=conn
+                    )
 
                 conn.execute(
                     self.tasks_table.delete()
@@ -365,7 +376,7 @@ class SQLTableStore(BaseTableStore):
                 f"where schem.name='{schema_only}'"
             )
             rows = self.execute(sql, conn=conn).fetchall()
-        return {row[0]:row[1] for row in rows}
+        return {row[0]: row[1] for row in rows}
 
     # noinspection SqlDialectInspection
     def copy_raw_sql_tables_to_transaction(
@@ -383,7 +394,9 @@ class SQLTableStore(BaseTableStore):
                     dest_schema,
                 )
             )
-        for table_name in (set(metadata.tables) - set(metadata.prev_tables)).intersection(views):
+        for table_name in (
+            set(metadata.tables) - set(metadata.prev_tables)
+        ).intersection(views):
             if self.engine.dialect.name == "mssql":
                 src_database, src_schema_only = src_schema.get().split(".")
                 dest_database, dest_schema_only = dest_schema.get().split(".")
@@ -406,9 +419,7 @@ class SQLTableStore(BaseTableStore):
                                     else src_schema_only
                                 )
                                 table = (
-                                    f"[{table_name}]"
-                                    if table_brackets
-                                    else table_name
+                                    f"[{table_name}]" if table_brackets else table_name
                                 )
                                 view_sql = view_sql.replace(
                                     f"{schema}.{table}",
@@ -636,7 +647,9 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     def list_tables(cls, store, stage_name, *, include_everything=False):
         inspector = sa.inspect(store.engine)
         schema = store.get_schema(stage_name).get()
-        return inspector.get_table_names(schema) + store.get_view_names(schema, include_everything=include_everything)
+        return inspector.get_table_names(schema) + store.get_view_names(
+            schema, include_everything=include_everything
+        )
 
 
 @SQLTableStore.register_table(pd)
