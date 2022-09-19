@@ -198,10 +198,10 @@ class BaseTableStore(metaclass=_TableStoreMeta):
         hook = self._REGISTERED_TABLES[0]
         hook.execute_raw_sql(self, raw_sql.sql, raw_sql.stage.transaction_name)
 
-    def list_tables(self, stage: Stage) -> list[str]:
+    def list_tables(self, stage: Stage, *, include_everything=False) -> list[str]:
         # take any registered table hook since we only care about the materialization target
         hook = self._REGISTERED_TABLES[0]
-        return hook.list_tables(self, stage.transaction_name)
+        return hook.list_tables(self, stage.transaction_name, include_everything=include_everything)
 
     def store_table_lazy(self, table: Table):
         """Lazily sores a table in the associated commit stage
@@ -260,7 +260,7 @@ class BaseTableStore(metaclass=_TableStoreMeta):
         # task get invalidated in case the query changed.
         raw_sql.cache_key = raw_sql_cache_key
 
-        prev_tables = self.list_tables(raw_sql.stage)
+        prev_tables = self.list_tables(raw_sql.stage, include_everything=True)
         # Store table
         try:
             # Try retrieving the table from the cache and then copying it
@@ -279,7 +279,7 @@ class BaseTableStore(metaclass=_TableStoreMeta):
         self.store_raw_sql_metadata(
             RawSqlMetadata(
                 prev_tables=prev_tables,
-                tables=self.list_tables(raw_sql.stage),
+                tables=self.list_tables(raw_sql.stage, include_everything=True),
                 stage=raw_sql.stage.name,
                 cache_key=raw_sql_cache_key,
             )

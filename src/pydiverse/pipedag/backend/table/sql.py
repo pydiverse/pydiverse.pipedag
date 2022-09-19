@@ -17,7 +17,7 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     DropSchema,
     DropTable,
     RenameSchema,
-    Schema,
+    Schema, DropProcedure, DropView, DropFunction,
 )
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.core import MaterializingTask
@@ -159,8 +159,8 @@ class SQLTableStore(BaseTableStore):
         else:
             # TODO: also replace engine.connect() with own context manager that can be used in other places
             with self.engine.connect() as conn:
-                if self.engine.dialect == "mssql" and self.no_db_locking:
-                    conn.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
+                # if self.engine.dialect.name == "mssql" and self.no_db_locking:
+                #     conn.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
                 return self.execute(query, conn=conn)
 
     def do_execute_raw_sql(self, sql: str, stage_name: str):
@@ -209,8 +209,9 @@ class SQLTableStore(BaseTableStore):
             cs_trans_initial = CreateSchema(
                 self.get_schema(stage.transaction_name), if_not_exists=True
             )
-            full_name = self.get_schema(stage.transaction_name).get()
-            database, schema = full_name.split(".")
+            schema = self.get_schema(stage.transaction_name)
+            full_name = schema.get()
+            database, schema_only = full_name.split(".")
 
             # don't drop/create databases, just replace the schema underneath (files will keep name on renaming)
             with self.engine.connect() as conn:
@@ -221,9 +222,23 @@ class SQLTableStore(BaseTableStore):
                 sql = f"""
                     EXEC sp_MSforeachtable
                       @command1 = 'DROP TABLE ?'
-                    , @whereand = 'AND SCHEMA_NAME(schema_id) = ''{schema}'' '
+                    , @whereand = 'AND SCHEMA_NAME(schema_id) = ''{schema_only}'' '
                 """
                 self.execute(sql, conn=conn)
+                # clear views and stored procedures
+                views = self.get_view_names(full_name)
+                other = self.get_mssql_sql_modules(full_name)
+                procedures = [name for name, _type in other.items() if _type.strip() == "P"]
+                functions = [name for name, _type in other.items() if _type.strip() == "FN"]
+                for view in views:
+                    # the 'USE [{database}]' statement is important for this call
+                    self.execute(DropView(view, schema, if_exists=True), conn=conn)
+                for procedure in procedures:
+                    # the 'USE [{database}]' statement is important for this call
+                    self.execute(DropProcedure(procedure, schema, if_exists=True), conn=conn)
+                for function in functions:
+                    # the 'USE [{database}]' statement is important for this call
+                    self.execute(DropFunction(function, schema, if_exists=True), conn=conn)
 
                 conn.execute(
                     self.tasks_table.delete()
@@ -244,6 +259,8 @@ class SQLTableStore(BaseTableStore):
 
     def commit_stage(self, stage: Stage):
         tmp_schema = self.get_schema(stage.name + "__swap")
+        # potentially this disposal must be optional since it does not allow for multi-threaded stage execution
+        self.engine.dispose()  # dispose open connections which may prevent schema swapping
         with self.engine.connect() as conn:
             with conn.begin():
                 # TODO: for mssql try to find schema does not exist and then move the forgotten tmp schema there
@@ -325,19 +342,27 @@ class SQLTableStore(BaseTableStore):
             )
         )
 
-    def get_view_names(self, schema, *, include_everything=False):
+    def get_view_names(self, schema: str, *, include_everything=False) -> list[str]:
         inspector = sa.inspect(self.engine)
-        if include_everything and self.engine.dialect == "mssql":
+        if include_everything and self.engine.dialect.name == "mssql":
+            return list(self.get_mssql_sql_modules(schema).keys())
+        else:
+            return inspector.get_view_names(schema)
+
+    def get_mssql_sql_modules(self, schema: str):
+        with self.engine.connect() as conn:
+            database, schema_only = schema.split(".")
+            self.execute(f"USE {database}", conn=conn)
             # include stored procedures in view names because they can also be recreated
             # based on sys.sql_modules.description
             sql = (
-                "select obj.name from sys.sql_modules as mod "
-                "left join sys.objects as obj on mod.object_id=obj.object_id"
+                "select obj.name, obj.type from sys.sql_modules as mod "
+                "left join sys.objects as obj on mod.object_id=obj.object_id "
+                "left join sys.schemas as schem on schem.schema_id=obj.schema_id "
+                f"where schem.name='{schema_only}'"
             )
-            rows = self.execute(sql).fetchall()
-            return [row[0] for row in rows]
-        else:
-            return inspector.get_view_names(schema)
+            rows = self.execute(sql, conn=conn).fetchall()
+        return {row[0]:row[1] for row in rows}
 
     # noinspection SqlDialectInspection
     def copy_raw_sql_tables_to_transaction(
@@ -345,52 +370,51 @@ class SQLTableStore(BaseTableStore):
     ):
         src_schema = self.get_schema(metadata.stage)
         dest_schema = self.get_schema(target_stage.transaction_name)
-        views = set(self.get_view_names(src_schema.get()))
-        for table_name in set(metadata.tables) - set(metadata.prev_tables):
-            if table_name in views:
-                if self.engine.dialect.name == "mssql":
-                    src_database, src_schema_only = src_schema.get().split(".")
-                    dest_database, dest_schema_only = dest_schema.get().split(".")
-                    with self.engine.connect() as conn:
-                        self.execute(f"USE {src_database}", conn=conn)
-                        sql = f"""
-                            SELECT definition
-                            FROM sys.sql_modules
-                            WHERE [object_id] = OBJECT_ID('[{src_schema_only}].[{table_name}]');
-                        """
-                        view_sql = self.execute(sql, conn=conn).fetchone()
-                        assert view_sql is not None
-                        view_sql = view_sql[0]
-                        if src_schema != dest_schema:
-                            for schema_brackets in [True, False]:
-                                for table_brackets in [True, False]:
-                                    schema = (
-                                        f"[{src_schema_only}]"
-                                        if schema_brackets
-                                        else src_schema_only
-                                    )
-                                    table = (
-                                        f"[{table_name}]"
-                                        if table_brackets
-                                        else table_name
-                                    )
-                                    view_sql = view_sql.replace(
-                                        f"{schema}.{table}",
-                                        f"[{dest_schema}].[{table_name}]",
-                                    )
-                        self.execute(f"USE {dest_database}", conn=conn)
-                        self.execute(view_sql, conn=conn)
-                else:
-                    raise NotImplementedError("Not yet implemented")
-            else:
-                self.execute(
-                    CopyTable(
-                        table_name,
-                        src_schema,
-                        table_name,
-                        dest_schema,
-                    )
+        views = set(self.get_view_names(src_schema.get(), include_everything=True))
+        for table_name in set(metadata.tables) - set(metadata.prev_tables) - set(views):
+            self.execute(
+                CopyTable(
+                    table_name,
+                    src_schema,
+                    table_name,
+                    dest_schema,
                 )
+            )
+        for table_name in (set(metadata.tables) - set(metadata.prev_tables)).intersection(views):
+            if self.engine.dialect.name == "mssql":
+                src_database, src_schema_only = src_schema.get().split(".")
+                dest_database, dest_schema_only = dest_schema.get().split(".")
+                with self.engine.connect() as conn:
+                    self.execute(f"USE {src_database}", conn=conn)
+                    sql = f"""
+                        SELECT definition
+                        FROM sys.sql_modules
+                        WHERE [object_id] = OBJECT_ID('[{src_schema_only}].[{table_name}]');
+                    """
+                    view_sql = self.execute(sql, conn=conn).fetchone()
+                    assert view_sql is not None
+                    view_sql = view_sql[0]
+                    if src_schema_only != dest_schema_only:
+                        for schema_brackets in [True, False]:
+                            for table_brackets in [True, False]:
+                                schema = (
+                                    f"[{src_schema_only}]"
+                                    if schema_brackets
+                                    else src_schema_only
+                                )
+                                table = (
+                                    f"[{table_name}]"
+                                    if table_brackets
+                                    else table_name
+                                )
+                                view_sql = view_sql.replace(
+                                    f"{schema}.{table}",
+                                    f"[{dest_schema_only}].[{table_name}]",
+                                )
+                    self.execute(f"USE {dest_database}", conn=conn)
+                    self.execute(view_sql, conn=conn)
+            else:
+                raise NotImplementedError("Not yet implemented")
 
     def delete_table_from_transaction(self, table: Table):
         self.execute(
@@ -606,10 +630,10 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         return str(obj.compile(store.engine, compile_kwargs={"literal_binds": True}))
 
     @classmethod
-    def list_tables(cls, store, stage_name):
+    def list_tables(cls, store, stage_name, *, include_everything=False):
         inspector = sa.inspect(store.engine)
         schema = store.get_schema(stage_name).get()
-        return inspector.get_table_names(schema) + inspector.get_view_names(schema)
+        return inspector.get_table_names(schema) + store.get_view_names(schema, include_everything=include_everything)
 
 
 @SQLTableStore.register_table(pd)
