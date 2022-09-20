@@ -73,7 +73,9 @@ class PrefectOneEngine(Engine):
         try:
             flow.register(project_name=config_context.name)
         except ValueError as _e:
-            self.logger.warning(f"Please make sure project {config_context.name} exists: {_e}")
+            self.logger.warning(
+                f"Please make sure project {config_context.name} exists: {_e}"
+            )
 
         return flow
 
