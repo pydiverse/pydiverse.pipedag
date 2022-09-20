@@ -385,7 +385,7 @@ class PipeDAGStore:
         output: Materializable,
         task: MaterializingTask,
     ):
-        """Copy the outputs from a cached task into the transaction stage
+        """Copy the (non-lazy) outputs from a cached task into the transaction stage
 
         If the outputs of a task were successfully retrieved from the cache
         using `retrieve_cached_output`, they and the associated metadata
@@ -398,10 +398,13 @@ class PipeDAGStore:
         # Get Tables and Blobs from output
         tables = []
         blobs = []
+        raw_sqls = []
 
         def visitor(x):
             if isinstance(x, Table):
                 tables.append(x)
+            elif isinstance(x, RawSql):
+                raw_sqls.append(x)
             elif isinstance(x, Blob):
                 blobs.append(x)
             return x
@@ -413,8 +416,10 @@ class PipeDAGStore:
         self._store_task_transaction(
             task,
             tables,
+            raw_sqls,
             blobs,
             lambda table: self.table_store.copy_table_to_transaction(table),
+            lambda raw_sql: None,  # raw sql scripts cannot be part of a non-lazy task
             lambda blob: self.blob_store.copy_blob_to_transaction(blob),
             lambda task: self.table_store.copy_task_metadata_to_transaction(task),
         )
