@@ -11,6 +11,10 @@ Changelog
 ------------------
 
 - SQLTableStore: support for Microsoft SQL Server database connection strings
+- RawSql: support additional return type for @materialize tasks which allows to emit raw SQL string including multiple
+   create statements (currently, views/functions/procedures are only supported for dialect mssql). This feature should
+   only be used for getting legacy code running in pipedag before converting it to programatically generated or manual
+   SELECT statements.
 
 0.1.0 (2022-09-01)
 ------------------
