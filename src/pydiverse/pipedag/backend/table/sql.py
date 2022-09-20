@@ -4,7 +4,6 @@ import re
 import warnings
 
 import pandas as pd
-import pytsql
 import sqlalchemy as sa
 import sqlalchemy.sql.elements
 
