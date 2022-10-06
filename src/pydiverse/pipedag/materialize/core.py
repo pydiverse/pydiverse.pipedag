@@ -19,6 +19,7 @@ def materialize(
     name: str = None,
     input_type: type = None,
     version: str = None,
+    cache: Callable = None,
     lazy: bool = False,
     nout: int = 1,
 ) -> CallableT | MaterializingTask:
@@ -28,6 +29,7 @@ def materialize(
             name=name,
             input_type=input_type,
             version=version,
+            cache=cache,
             lazy=lazy,
             nout=nout,
         )
@@ -37,6 +39,7 @@ def materialize(
         name=name,
         input_type=input_type,
         version=version,
+        cache=cache,
         lazy=lazy,
         nout=nout,
     )
@@ -69,6 +72,10 @@ class MaterializingTask(Task):
         always have to bump / change the version number to ensure that
         the new implementation gets used. Else a cached result might be used
         instead.
+    :key cache: An explicit function for validating cache validity. If the output
+        of this function changes while the source parameters are the same (e.g.
+        the source is a filepath and `cache` loads data from this file), then the
+        cache will be deemed invalid and is not used.
     :key lazy: Boolean indicating if this task should be lazy. A lazy task is
         a task that always gets executed, and if it produces a lazy table
         (e.g. a SQL query), the backend can compare the generated output
@@ -86,13 +93,10 @@ class MaterializingTask(Task):
         name: str = None,
         input_type: type = None,
         version: str = None,
+        cache: Callable = None,
         lazy: bool = False,
         nout: int = 1,
     ):
-        # TODO: Provide a way to specify a custom cache function. This would enable:
-        #       - Don't cache at all
-        #       - Cache based on input files
-        #       - Invalidate based on date
         super().__init__(
             MaterializationWrapper(fn),
             name=name,
@@ -101,6 +105,7 @@ class MaterializingTask(Task):
 
         self.input_type = input_type
         self.version = version
+        self.cache = cache
         self.lazy = lazy
 
         # TODO: Remove cache key from instance
@@ -144,6 +149,8 @@ class MaterializationWrapper:
 
         # Compute the cache key for the task inputs
         input_json = store.json_encode(bound.arguments)
+        if task.cache is not None:
+            input_json += json.dumps(self.cache(*args, **kwargs))
         cache_key = store.compute_task_cache_key(task, input_json)
         task.cache_key = cache_key
 
