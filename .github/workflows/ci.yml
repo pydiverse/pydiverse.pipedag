@@ -85,7 +85,7 @@ jobs:
         shell: bash
         run: poetry install -vvv
 
-      - uses: isbang/compose-action@v1.2.0
+      - uses: isbang/compose-action@v1.3.2
         with:
           compose-file: ./docker-compose.yaml
 
