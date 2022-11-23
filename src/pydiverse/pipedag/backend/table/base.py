@@ -234,7 +234,7 @@ class BaseTableStore(metaclass=_TableStoreMeta):
             self.copy_lazy_table_to_transaction(metadata, table)
             self.logger.info(f"Lazy cache of table '{table.name}' found")
         except CacheError as e:
-            self.logger.warn(e)
+            self.logger.warning("cache miss: %s", str(e))
 
             # Either not found in cache, or copying failed -> fallback
             self.store_table(table)
@@ -271,7 +271,7 @@ class BaseTableStore(metaclass=_TableStoreMeta):
             self.copy_raw_sql_tables_to_transaction(metadata, raw_sql.stage)
             self.logger.info(f"Lazy cache of stage '{raw_sql.stage}' found")
         except CacheError as e:
-            self.logger.warn(e)
+            self.logger.warning("cache miss: %s", str(e))
 
             # Either not found in cache, or copying failed -> fallback
             self.execute_raw_sql(raw_sql)
