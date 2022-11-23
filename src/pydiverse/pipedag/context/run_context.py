@@ -44,7 +44,13 @@ class RunContextServer(IPCServer):
         REQUEST: [method_name, arguments]
         RESPONSE: [error, result]
 
-    TODO: Replace busy waiting with an interrupt based mechanism (eg threading.Event)
+    Currently, we interrupt socket listening every 200ms for seeing stop() instruction from other thread.
+    Alternative: Replace busy waiting with an interrupt based mechanism (eg threading.Event)
+
+    RunContextServer spawns a thread in __enter__(). The actual context is managed in RunContext class. The constructor
+    of RunContext() spawns the thread by calling RunContextServer.get_client(). The returned IPCClient object
+    supports __getstate__() / __setstate__() methods, so they support serialization and deserialization in case of
+    multi-node execution of tasks in pipedag graph.
     """
 
     def __init__(self, flow: Flow):
