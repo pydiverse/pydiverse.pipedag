@@ -239,6 +239,8 @@ def insert_into_in_query(select_sql, database, schema, table):
             if prev.count("(") == prev.count(")"):
                 into_point = match_start
                 break
+        if into_point is not None:
+            break
     return (
         select_sql[0:into_point] + into + " " + select_sql[into_point:]
         if into_point is not None
