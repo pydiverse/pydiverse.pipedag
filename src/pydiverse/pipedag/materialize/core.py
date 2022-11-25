@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import inspect
+import json
 from functools import partial
 from typing import Callable
 
@@ -150,7 +151,7 @@ class MaterializationWrapper:
         # Compute the cache key for the task inputs
         input_json = store.json_encode(bound.arguments)
         if task.cache is not None:
-            input_json += json.dumps(self.cache(*args, **kwargs))
+            input_json += json.dumps(task.cache(*args, **kwargs))
         cache_key = store.compute_task_cache_key(task, input_json)
         task.cache_key = cache_key
 
