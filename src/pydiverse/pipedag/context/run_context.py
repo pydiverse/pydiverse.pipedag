@@ -53,7 +53,7 @@ class RunContextServer(IPCServer):
     multi-node execution of tasks in pipedag graph.
     """
 
-    def __init__(self, flow: Flow):
+    def __init__(self, flow: Flow, *, all_stages_committed=False):
         config_ctx = ConfigContext.get()
         interface = config_ctx.network_interface
 
@@ -64,6 +64,7 @@ class RunContextServer(IPCServer):
         )
 
         self.flow = flow
+        self.all_stages_committed = all_stages_committed
         self.run_id = uuid.uuid4().hex[:20]
 
         self.stages = list(self.flow.stages.values())
@@ -145,6 +146,9 @@ class RunContextServer(IPCServer):
 
     @synchronized("stage_state_lock")
     def get_stage_state(self, stage_id: int):
+        if self.all_stages_committed:
+            # for debugging after flow.run() completed
+            return StageState.COMMITTED
         return self.stage_state[stage_id].value
 
     def enter_init_stage(self, stage_id: int):

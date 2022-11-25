@@ -5,7 +5,12 @@ from typing import TYPE_CHECKING, Optional
 
 import networkx as nx
 
-from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContextServer
+from pydiverse.pipedag.context import (
+    ConfigContext,
+    DAGContext,
+    RunContext,
+    RunContextServer,
+)
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 
 if TYPE_CHECKING:
@@ -234,3 +239,15 @@ class Flow:
             # make sure proper stack trace is printed
             raise res.underlying
         return res
+
+    def debug_collect(self, *args):
+        with ConfigContext.from_file(), RunContextServer(
+            self, all_stages_committed=True
+        ):
+            store = ConfigContext.get().store
+            ctx = RunContext.get()
+            return (
+                [store.dematerialize_task_item(v, v.value, ctx) for v in args]
+                if len(args) != 1
+                else store.dematerialize_task_item(args[0], args[0].value, ctx)
+            )

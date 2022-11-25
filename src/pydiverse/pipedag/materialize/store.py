@@ -99,6 +99,18 @@ class PipeDAGStore:
 
     #### Materialization ####
 
+    def dematerialize_task_item(self, task, x, ctx=None):
+        if ctx is None:
+            ctx = RunContext.get()
+
+        if isinstance(x, Table):
+            ctx.validate_stage_lock(x.stage)
+            return self.table_store.retrieve_table_obj(x, as_type=task.input_type)
+        elif isinstance(x, Blob):
+            ctx.validate_stage_lock(x.stage)
+            return self.blob_store.retrieve_blob(x)
+        return x
+
     def dematerialize_task_inputs(
         self,
         task: MaterializingTask,
@@ -119,13 +131,7 @@ class PipeDAGStore:
         ctx = RunContext.get()
 
         def dematerialize_mapper(x):
-            if isinstance(x, Table):
-                ctx.validate_stage_lock(x.stage)
-                return self.table_store.retrieve_table_obj(x, as_type=task.input_type)
-            elif isinstance(x, Blob):
-                ctx.validate_stage_lock(x.stage)
-                return self.blob_store.retrieve_blob(x)
-            return x
+            return self.dematerialize_task_item(task, x, ctx)
 
         d_args = deep_map(args, dematerialize_mapper)
         d_kwargs = deep_map(kwargs, dematerialize_mapper)
