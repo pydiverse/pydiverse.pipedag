@@ -169,7 +169,8 @@ class MaterializationWrapper:
                     return cached_output
                 except CacheError as e:
                     task.logger.info(
-                        f"There is no cached output for this task, yet. {e}"
+                        "There is no cached output for this task, yet.",
+                        exception=str(e),
                     )
                     pass
 
