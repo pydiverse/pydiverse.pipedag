@@ -71,12 +71,12 @@ def test_materialize_table_twice():
 
 def test_materialize_blob():
     with Flow("flow") as f:
-        with Stage("stage 0"):
+        with Stage("stage_0"):
             x = m.object_blob({"a": 12, "b": 24})
             y = m.as_blob(x)
             m.assert_blob_equal(x, y)
 
-        with Stage("stage 1"):
+        with Stage("stage_1"):
             one = m.one()
             one_blob = m.as_blob(m.one())
             m.assert_equal(one, one_blob)
@@ -104,7 +104,7 @@ def test_materialize_memo_literal():
     # more than once and still run successfully.
 
     with Flow("flow") as f:
-        with Stage("stage 0"):
+        with Stage("stage_0"):
             t_0 = m.noop(1)
             t_1 = m.noop(1)
 
@@ -112,13 +112,13 @@ def test_materialize_memo_literal():
             t_2 = m.noop(one)
             t_3 = m.noop(one)
 
-        with Stage("stage 1"):
+        with Stage("stage_1"):
             t_4 = m.noop(1)
             t_5 = m.noop(t_4)
             t_6 = m.noop(t_5)
             t_7 = m.noop(t_0)
 
-        with Stage("stage 2"):
+        with Stage("stage_2"):
             m.assert_equal(t_0, t_4)
             m.assert_equal(t_1, t_5)
             m.assert_equal(t_2, t_6)
@@ -129,7 +129,7 @@ def test_materialize_memo_literal():
 
 def test_materialize_memo_table():
     with Flow("flow") as f:
-        with Stage("stage 0"):
+        with Stage("stage_0"):
             t_0 = m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
             t_1 = m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
             t_2 = m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
@@ -139,13 +139,13 @@ def test_materialize_memo_table():
             m.assert_table_equal(t_1, t_2)
             m.assert_table_equal(t_2, t_3)
 
-        with Stage("stage 1"):
+        with Stage("stage_1"):
             t_4 = m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
             t_5 = m.noop(t_4)
             t_6 = m.noop(t_5)
             t_7 = m.noop(t_0)
 
-        with Stage("stage 2"):
+        with Stage("stage_2"):
             m.assert_table_equal(t_0, t_4)
             m.assert_table_equal(t_1, t_5)
             m.assert_table_equal(t_2, t_6)
@@ -204,7 +204,7 @@ def test_stage_ref_counter():
 
     # Multiple tasks spread over multiple stages
     with Flow("flow") as f:
-        with Stage("stage 1") as s1:
+        with Stage("stage_1") as s1:
             task_1 = m.one()
             # One reference from assert, noop, assert, commit and downstream
             task_1 = check_rc(s1, 5)(task_1)
@@ -212,12 +212,12 @@ def test_stage_ref_counter():
             # One reference from assert, commit and downstream
             check_rc(s1, 3)(task_1)
 
-        with Stage("stage 2") as s2:
+        with Stage("stage_2") as s2:
             task_2 = m.two()
             task_2 = m.noop([task_2])
             check_rc(s2, 3)(task_2)
 
-        with Stage("stage 3") as s3:
+        with Stage("stage_3") as s3:
             task_tuple = m.noop((task_1, task_2))
             # Check that s1 and s2 have been freed
             x = check_rc(s1, 0)(task_tuple)
@@ -229,14 +229,14 @@ def test_stage_ref_counter():
 
 def test_nout_and_getitem():
     with Flow("flow") as f:
-        with Stage("stage 0"):
+        with Stage("stage_0"):
             x = m.noop((0, 1))
             zero, one = m.create_tuple(x[0], x[1])
 
             m.assert_equal(zero, 0)
             m.assert_equal(one, m.one())
 
-        with Stage("stage 1"):
+        with Stage("stage_1"):
             d = m.noop({"a": [0, 1, 2, 3], "b": [3, 2, 1, 0]})
 
             a = d["a"]

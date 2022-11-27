@@ -120,16 +120,16 @@ class TestDAGConstruction:
 
     def test_two_stages(self):
         with Flow("f") as f:
-            with Stage("stage 0") as s0:
+            with Stage("stage_0") as s0:
                 t00 = t("00")(0)
                 t01 = t("01")(t00)
 
-            with Stage("stage 1") as s1:
+            with Stage("stage_1") as s1:
                 t10 = t("10")(t00)
                 t11 = t("11")(t10, t00)
                 t12 = t("12")(t00)
 
-        assert f.stages == {"stage 0": s0, "stage 1": s1}
+        assert f.stages == {"stage_0": s0, "stage_1": s1}
         assert f.tasks == [t00, t01, s0.commit_task, t10, t11, t12, s1.commit_task]
 
         assert s0.tasks == [t00, t01]
@@ -148,23 +148,23 @@ class TestDAGConstruction:
 
     def test_nested(self):
         with Flow("f") as f:
-            with Stage("stage 0") as s0:
+            with Stage("stage_0") as s0:
                 t00 = t("00")(0)
                 t01 = t("01")(t00)
 
-            with Stage("stage 1") as s1:
+            with Stage("stage_1") as s1:
                 t10 = t("10")(t00)
                 t11 = t("11")(t10, t00)
                 t12 = t("12")(t00)
 
-                with Stage("stage 2") as s2:
+                with Stage("stage_2") as s2:
                     t20 = t("20")(t11)
 
-            with Stage("stage 3") as s3:
+            with Stage("stage_3") as s3:
                 t30 = t("30")(t12, t20)
                 t31 = t("31")(t00, t10, t20, t30)
 
-        assert f.stages == {"stage 0": s0, "stage 1": s1, "stage 2": s2, "stage 3": s3}
+        assert f.stages == {"stage_0": s0, "stage_1": s1, "stage_2": s2, "stage_3": s3}
         assert f.tasks == [
             t00,
             t01,
@@ -206,19 +206,19 @@ class TestDAGConstruction:
 
     def test_ids(self):
         with Flow("f"):
-            with Stage("stage 0") as s0:
+            with Stage("stage_0") as s0:
                 t00 = t("00")(0)
                 t01 = t("01")(t00)
 
-            with Stage("stage 1") as s1:
+            with Stage("stage_1") as s1:
                 t10 = t("10")(t00)
                 t11 = t("11")(t10, t00)
                 t12 = t("12")(t00)
 
-                with Stage("stage 2") as s2:
+                with Stage("stage_2") as s2:
                     t20 = t("20")(t11)
 
-            with Stage("stage 3") as s3:
+            with Stage("stage_3") as s3:
                 t30 = t("30")(t12, t20)
                 t31 = t("31")(t00, t10, t20, t30)
 
