@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 from contextvars import ContextVar, Token
-from functools import cached_property
 from threading import Lock
 from typing import TYPE_CHECKING, ClassVar
 
 import structlog
 from attrs import frozen
-
-from pydiverse.pipedag.util.config import load_instance
 
 if TYPE_CHECKING:
     from pydiverse.pipedag._typing import T
@@ -97,41 +94,16 @@ class ConfigContext(BaseAttrsContext):
     auto_blob: tuple[type, ...]
     fail_fast: bool
 
-    @cached_property
-    def store(self) -> PipeDAGStore:
-        from pydiverse.pipedag.materialize.store import PipeDAGStore
-
-        table_store = load_instance(self.config_dict["table_store"])
-        blob_store = load_instance(self.config_dict["blob_store"])
-
-        return PipeDAGStore(
-            table=table_store,
-            blob=blob_store,
-        )
-
-    def get_lock_manager(self) -> BaseLockManager:
-        return load_instance(self.config_dict["lock_manager"])
+    store: PipeDAGStore
+    lock_manager: BaseLockManager
+    engine: Engine
 
     def get_engine(self) -> Engine:
-        return load_instance(self.config_dict["engine"])
-
-    @classmethod
-    def from_file(cls, path: str = None):
-        from pydiverse.pipedag.util import config
-
-        if path is None:
-            path = config.find_config()
-            logger.info(f"Using config file at: {path}")
-
-        try:
-            return config.load_config(path)
-        except (ImportError, AttributeError) as e:
-            raise Exception("Pipedag config is invalid") from e
+        return self.engine
 
     def close(self):
-        # If the store has been initialized (and thus cached in the __dict__),
         # close all open resources (e.g. kill all database connections)
-        if store := self.__dict__.get("store", None):
+        if store := self.store:
             store.close()
 
     def __getstate__(self):

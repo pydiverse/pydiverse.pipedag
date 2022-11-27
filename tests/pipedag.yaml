@@ -27,6 +27,7 @@ instances:
       # Postgres: this can be used after running `docker-compose up`
       database_connection: postgres
       database: pipedag_default
+      create_database_if_not_exists: True
 
       ## SQL Server: this can be used after running `docker-compose up`
       #database: mssql
@@ -59,7 +60,7 @@ instances:
     table_store:
       database: pipedag_full
     # Run this instance under @pytest.mark.slow5
-    tag: pytest_mark_slow5
+    tags: pytest_mark_slow5
 
   midi:
     # Full dataset is using default database connection and schemas
@@ -71,7 +72,7 @@ instances:
       copy_source: pipedag_full
       sample_cnt: 2  # this is just dummy input where we sample 2 rows
     # Run this instance under @pytest.mark.slow4
-    tag: pytest_mark_slow4
+    tags: pytest_mark_slow4
     # Run only stage_2 under @pytest.mark.slow3
     stage_tags:
       pytest_mark_slow3:
@@ -86,7 +87,7 @@ instances:
       copy_source: pipedag_full
       sample_cnt: 1  # this is just dummy input where we sample 1 row
     # Run this instance under @pytest.mark.slow2
-    tag: pytest_mark_slow2
+    tags: pytest_mark_slow2
     # Run only stage_2 under @pytest.mark.slow1
     stage_tags:
       pytest_mark_slow1:

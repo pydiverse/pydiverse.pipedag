@@ -89,7 +89,7 @@ class RunContextServer(IPCServer):
         self.task_memo_lock = Lock()
 
         # LOCKING
-        self.lock_manager = config_ctx.get_lock_manager()
+        self.lock_manager = config_ctx.lock_manager
         self.lock_manager.add_lock_state_listener(self._lock_state_listener)
 
         # INITIALIZE EVERYTHING
@@ -118,7 +118,8 @@ class RunContextServer(IPCServer):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._release_all_locks()
-        self.lock_manager.close()
+        # For now, the lock manager lives with config. Probably starting and stopping during run might be good.
+        # self.lock_manager.close()
         self.__context_proxy.__exit__(exc_type, exc_val, exc_tb)
         super().__exit__(exc_type, exc_val, exc_tb)
 

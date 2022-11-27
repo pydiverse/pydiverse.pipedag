@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from contextlib import contextmanager
 from enum import Enum
-from typing import Any, Callable, Union
+from typing import Any, Callable, Optional, Union
 
 import structlog
 
@@ -24,6 +24,8 @@ __all__ = [
     "FileLockManager",
     "ZooKeeperLockManager",
 ]
+
+from pydiverse.pipedag.util.config import InstanceConfig
 
 
 class LockState(Enum):
@@ -240,7 +242,12 @@ class ZooKeeperLockManager(BaseLockManager):
     .. [1] https://zookeeper.apache.org/doc/r3.1.2/recipes.html#sc_recipes_Locks
     """
 
-    def __init__(self, client: KazooClient):
+    @classmethod
+    def _init_conf_(cls, config: dict, instance_config: InstanceConfig):
+        client = KazooClient(**config)
+        return cls(client, flow_name=instance_config.get_flow_name())
+
+    def __init__(self, client: KazooClient, flow_name: str | None):
         super().__init__()
 
         self.client = client
@@ -251,15 +258,9 @@ class ZooKeeperLockManager(BaseLockManager):
 
         self.locks: dict[Lockable, KazooLock] = {}
         self.base_path = "/pipedag/locks/"
-        config = ConfigContext.get()
-        if config.name is not None:
-            project_name = normalize_name(config.name)
+        if flow_name is not None:
+            project_name = normalize_name(flow_name)
             self.base_path += project_name + "/"
-
-    @classmethod
-    def _init_conf_(cls, config: dict[str, Any]):
-        client = KazooClient(**config)
-        return cls(client)
 
     def close(self):
         self.client.stop()
