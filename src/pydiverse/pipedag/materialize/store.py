@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import itertools
 import json
-from typing import Callable
+from typing import Any, Callable
 
 import structlog
 
@@ -99,17 +99,19 @@ class PipeDAGStore:
 
     #### Materialization ####
 
-    def dematerialize_task_item(self, task, x, ctx=None):
+    def dematerialize_item(
+        self, item: Table | Blob | Any, as_type: type, ctx: RunContext = None
+    ):
         if ctx is None:
             ctx = RunContext.get()
 
-        if isinstance(x, Table):
-            ctx.validate_stage_lock(x.stage)
-            return self.table_store.retrieve_table_obj(x, as_type=task.input_type)
-        elif isinstance(x, Blob):
-            ctx.validate_stage_lock(x.stage)
-            return self.blob_store.retrieve_blob(x)
-        return x
+        if isinstance(item, Table):
+            ctx.validate_stage_lock(item.stage)
+            return self.table_store.retrieve_table_obj(item, as_type=as_type)
+        elif isinstance(item, Blob):
+            ctx.validate_stage_lock(item.stage)
+            return self.blob_store.retrieve_blob(item)
+        return item
 
     def dematerialize_task_inputs(
         self,
@@ -131,7 +133,7 @@ class PipeDAGStore:
         ctx = RunContext.get()
 
         def dematerialize_mapper(x):
-            return self.dematerialize_task_item(task, x, ctx)
+            return self.dematerialize_item(x, as_type=task.input_type, ctx=ctx)
 
         d_args = deep_map(args, dematerialize_mapper)
         d_kwargs = deep_map(kwargs, dematerialize_mapper)
