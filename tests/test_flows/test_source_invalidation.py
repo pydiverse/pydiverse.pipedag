@@ -66,7 +66,7 @@ def test_source_invalidation():
 
     result = flow.run()
     assert result.successful
-    v_out1, v_out2 = flow.debug_collect(out1, out2)
+    v_out1, v_out2 = result.get(out1), result.get(out2)
     pd.testing.assert_frame_equal(dfA_source * 2, v_out1)
     pd.testing.assert_frame_equal(dfA_source * 4, v_out2)
 
@@ -77,7 +77,7 @@ def test_source_invalidation():
     result = flow.run()
     assert result.successful
 
-    v_out1, v_out2 = flow.debug_collect(out1, out2)
+    v_out1, v_out2 = result.get(out1), result.get(out2)
     pd.testing.assert_frame_equal(dfA_source * 2, v_out1)
     pd.testing.assert_frame_equal(dfA_source * 4, v_out2)
 
@@ -86,7 +86,7 @@ def test_source_invalidation():
 
     result = flow.run()
     assert result.successful
-    v_out1, v_out2 = flow.debug_collect(out1, out2)
+    v_out1, v_out2 = result.get(out1), result.get(out2)
     pd.testing.assert_frame_equal(
         (dfA_source.values + pd.DataFrame(dict(a=[10, 10, 10, 10], b=0))) * 2, v_out1
     )

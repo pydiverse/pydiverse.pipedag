@@ -53,7 +53,7 @@ class RunContextServer(IPCServer):
     multi-node execution of tasks in pipedag graph.
     """
 
-    def __init__(self, flow: Flow, *, all_stages_committed=False):
+    def __init__(self, flow: Flow):
         config_ctx = ConfigContext.get()
         interface = config_ctx.network_interface
 
@@ -64,7 +64,6 @@ class RunContextServer(IPCServer):
         )
 
         self.flow = flow
-        self.all_stages_committed = all_stages_committed
         self.run_id = uuid.uuid4().hex[:20]
 
         self.stages = list(self.flow.stages.values())
@@ -146,9 +145,6 @@ class RunContextServer(IPCServer):
 
     @synchronized("stage_state_lock")
     def get_stage_state(self, stage_id: int):
-        if self.all_stages_committed:
-            # for debugging after flow.run() completed
-            return StageState.COMMITTED
         return self.stage_state[stage_id].value
 
     def enter_init_stage(self, stage_id: int):
@@ -530,6 +526,24 @@ class RunContext(BaseContext):
             [t.name for t in tables],
             [b.name for b in blobs],
         )
+
+
+class DematerializeRunContext(BaseContext):
+    """Dummy RunContext that returns `COMMITTED` as the stage state for all stages
+
+    To dematerialize an object we must know it the associates state has been committed or not.
+    This context replaces the RunContext created by RunContextServer during the execution of
+    a flow with one that only sets the state of each state to `COMMITTED`. This allows us
+    to dematerialize the objects that have been stored after a flow has finished running.
+    """
+
+    _context_var = RunContext._context_var
+
+    def get_stage_state(self, stage: Stage) -> StageState:
+        return StageState.COMMITTED
+
+    def validate_stage_lock(self, stage: Stage):
+        pass
 
 
 # States
