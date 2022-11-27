@@ -11,6 +11,7 @@ from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
 from pydiverse.pipedag.backend.table.util.sql_ddl import (
     CopyTable,
+    CreateDatabase,
     CreateSchema,
     CreateTableAsSelect,
     DropFunction,
@@ -44,6 +45,10 @@ class SQLTableStore(BaseTableStore):
     def __init__(
         self,
         engine: sa.engine.Engine,
+        engine_url: str,
+        create_database_if_not_exists: bool = False,
+        database: str = "",
+        database_connection: str = "",
         schema_prefix: str = "",
         schema_suffix: str = "",
         print_materialize: bool | None = None,
@@ -54,8 +59,11 @@ class SQLTableStore(BaseTableStore):
         Construct table store.
 
         :param engine: SQLAlchemy engine
-        :param schema_prefix: prefix string for schemas (dot's are interpreted as database.schema)
-        :param schema_suffix: suffix string for schemas (dot's are interpreted as database.schema)
+        :param create_database_if_not_exists: whether to create database if it does not exist
+        :param database: database which might potentially be created
+        :param database_connection: database connection name from config for logging purposes
+        :param schema_prefix: prefix string for schemas (dot is interpreted as database.schema)
+        :param schema_suffix: suffix string for schemas (dot is interpreted as database.schema)
         :param print_materialize: whether to print select statements before materialization
         :param print_sql: whether to print final SQL statements (except for metadata)
         :param no_db_locking: speed up database by telling it we will not rely on it's locking mechanisms
@@ -63,6 +71,8 @@ class SQLTableStore(BaseTableStore):
         super().__init__()
 
         self.engine = engine
+        self.database = database
+        self.database_connection = database_connection
         self.schema_prefix = schema_prefix
         self.schema_suffix = schema_suffix
         self.print_materialize = (
@@ -129,8 +139,33 @@ class SQLTableStore(BaseTableStore):
             schema=self.metadata_schema.get(),
         )
 
+        if (
+            create_database_if_not_exists
+            and database != ""
+            and engine.dialect.name != "mssql"
+        ):
+            # hacky way to reverse engineer database URL without database
+            if engine.dialect.name == "postgresql":
+                try:
+                    # try whether connection with database in connect string works
+                    self.execute("SELECT 1")
+                except Exception:
+                    tmp_engine = sa.create_engine(
+                        engine_url.replace(database, "postgres")
+                    )
+                    with tmp_engine.connect() as conn:
+                        conn.execute("COMMIT")
+                        conn.execute(CreateDatabase(database))
+            else:
+                raise NotImplementedError(
+                    "create_database_if_not_exists is only implemented for"
+                    " postgres, yet"
+                )
+
     @classmethod
-    def _init_conf_(cls, config: dict):
+    def _init_conf_(cls, config: dict, instance_config):
+        _ = instance_config
+        config = config.copy()
         engine_config = config.pop("engine")
         if isinstance(engine_config, str):
             engine_config = {"url": engine_config}
@@ -143,7 +178,7 @@ class SQLTableStore(BaseTableStore):
             # this is needed to allow for CREATE DATABASE statements (we don't rely on database transactions anyways)
             engine = sa.create_engine(engine_url, connect_args={"autocommit": True})
 
-        return cls(engine=engine, **config)
+        return cls(engine, engine_url, **config)
 
     def get_schema(self, name):
         return Schema(name, self.schema_prefix, self.schema_suffix)

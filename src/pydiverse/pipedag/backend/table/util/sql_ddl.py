@@ -50,6 +50,19 @@ class RenameSchema(DDLElement):
         self.to = to
 
 
+class CreateDatabase(DDLElement):
+    def __init__(self, database: str, if_not_exists=False):
+        self.database = database
+        self.if_not_exists = if_not_exists
+
+
+class DropDatabase(DDLElement):
+    def __init__(self, database: str, if_exists=False, cascade=False):
+        self.database = database
+        self.if_exists = if_exists
+        self.cascade = cascade
+
+
 class CreateTableAsSelect(DDLElement):
     def __init__(self, name: str, schema: Schema, query: Select | TextClause | sa.Text):
         self.name = name
@@ -217,6 +230,32 @@ def visit_rename_schema(rename: RenameSchema, compiler, **kw):
         from_name = compiler.preparer.format_schema(from_database_name)
         to_name = compiler.preparer.format_schema(to_database_name)
         return f"ALTER DATABASE {from_name} MODIFY NAME = {to_name}"
+
+
+@compiles(CreateDatabase)
+def visit_create_database(create: CreateDatabase, compiler, **kw):
+    _ = kw
+    database = compiler.preparer.format_schema(create.database)
+    text = ["CREATE DATABASE"]
+    if create.if_not_exists:
+        text.append("IF NOT EXISTS")
+    text.append(database)
+    return " ".join(text)
+
+
+@compiles(DropDatabase)
+def visit_drop_database(drop: DropDatabase, compiler, **kw):
+    _ = kw
+    schema = compiler.preparer.format_schema(drop.database)
+    text = ["DROP DATABASE"]
+    if drop.if_exists:
+        text.append("IF EXISTS")
+    text.append(schema)
+    if drop.cascade:
+        text.append("CASCADE")
+    ret = " ".join(text)
+    assert False, f"Disable for now for safety reasons (not yet needed): {ret}"
+    # return ret
 
 
 @compiles(CreateTableAsSelect)

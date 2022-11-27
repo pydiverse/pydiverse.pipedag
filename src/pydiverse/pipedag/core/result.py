@@ -7,6 +7,7 @@ from attrs import frozen
 from pydiverse.pipedag.context import ConfigContext
 from pydiverse.pipedag.context.run_context import DematerializeRunContext
 from pydiverse.pipedag.core.task import Task, TaskGetItem
+from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.util import deep_map
 
 if TYPE_CHECKING:
@@ -26,15 +27,18 @@ class Result:
             If no type is specified, the input type of the task is used.
         :return: The results of the task.
         """
+        if isinstance(task, Task):
+            root_task = task
+        else:
+            root_task = task.task
+
         if as_type is None:
-            if isinstance(task, Task):
-                as_type = task.input_type
-            else:
-                as_type = task.task.input_type
+            assert isinstance(root_task, MaterializingTask)
+            as_type = root_task.input_type
 
         # TODO: Check that the results loaded from the database correspond
         #       to the run_id of this result object.
-        with ConfigContext.from_file() as config_ctx, DematerializeRunContext() as run_ctx:
+        with root_task.flow.config_context as config_ctx, DematerializeRunContext() as run_ctx:
 
             def dematerialize_mapper(item):
                 return config_ctx.store.dematerialize_item(

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from pydiverse.pipedag.context import ConfigContext
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.util import normalize_name
+from pydiverse.pipedag.util.config import InstanceConfig
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import Stage
@@ -90,11 +91,14 @@ class FileBlobStore(BaseBlobStore):
     the appropriate folders.
     """
 
-    def __init__(self, base_path: str):
+    @classmethod
+    def _init_conf_(cls, config: dict, instance_config: InstanceConfig):
+        return cls(**config, **dict(flow_name=instance_config.get_flow_name()))
+
+    def __init__(self, base_path: str, flow_name: str):
         self.base_path = os.path.abspath(base_path)
-        config = ConfigContext.get()
-        if config.name is not None:
-            project_name = normalize_name(config.name)
+        if flow_name is not None:
+            project_name = normalize_name(flow_name)
             self.base_path = os.path.join(self.base_path, project_name)
 
         os.makedirs(self.base_path, exist_ok=True)

@@ -12,6 +12,7 @@ from pydiverse.pipedag.context import (
     RunContextServer,
 )
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
+from pydiverse.pipedag.util import config
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import Result, Stage, Task
@@ -23,8 +24,12 @@ class Flow:
     def __init__(
         self,
         name: str,
+        config_context: ConfigContext = None,
     ):
+        if config_context is None:
+            config_context = config.get_config().get()
         self.name = name
+        self.config_context = config_context
 
         self.stages: dict[str, Stage] = {}
         self.tasks: list[Task] = []
@@ -222,11 +227,12 @@ class Flow:
         :param fail_fast: True means that errors should be raised as exceptions out of this function
         :param kwargs: Other arguments. They get passed on directly to the
             engine's `.run` method and thus are engine dependant.
-        :return: TODO
+        :return:
+            Result object that gives information whether run was successful
         """
-        with ConfigContext.from_file(), RunContextServer(self):
+        with self.config_context, RunContextServer(self):
             if engine is None:
-                engine = ConfigContext.get().get_engine()
+                engine = ConfigContext.get().engine
             res = engine.run(flow=self, **kwargs)
             actual_fail_fast = (
                 ConfigContext.get().fail_fast if fail_fast is None else fail_fast
