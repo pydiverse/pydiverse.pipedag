@@ -31,7 +31,7 @@ def deep_map(x, callable: Callable, memo=None):
     else:
         y = callable(x)
 
-    # If is its own copy, don't memorize.
+    # If is its own copy, don't memoize.
     if y is not x:
         memo[d] = y
         _keep_alive(x, memo)  # Make sure x lives at least as long as d
