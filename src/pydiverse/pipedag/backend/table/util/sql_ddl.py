@@ -16,6 +16,10 @@ __all__ = [
     "CreateTableAsSelect",
     "CopyTable",
     "DropTable",
+    "CreateDatabase",
+    "DropFunction",
+    "DropProcedure",
+    "DropView",
 ]
 
 from sqlalchemy.sql.elements import TextClause
@@ -385,6 +389,7 @@ def visit_drop_table(drop: DropProcedure, compiler, **kw):
 def _visit_drop_anything(
     drop: DropTable | DropView | DropProcedure | DropFunction, _type, compiler, **kw
 ):
+    _ = kw
     table = compiler.preparer.quote_identifier(drop.name)
     schema = compiler.preparer.format_schema(drop.schema.get())
     text = [f"DROP {_type}"]
@@ -397,6 +402,7 @@ def _visit_drop_anything(
 def _visit_drop_anything_mssql(
     drop: DropTable | DropView | DropProcedure | DropFunction, _type, compiler, **kw
 ):
+    _ = kw
     table = compiler.preparer.quote_identifier(drop.name)
     full_name = drop.schema.get()
     # it was already checked that there is exactly one dot in schema prefix + suffix

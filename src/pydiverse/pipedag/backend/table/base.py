@@ -81,6 +81,9 @@ class BaseTableStore(metaclass=_TableStoreMeta):
         the setup method gets called to prevent race conditions.
         """
 
+    def open(self):
+        """Open all non-serializable resources"""
+
     def close(self):
         """Clean up and close all open resources"""
 

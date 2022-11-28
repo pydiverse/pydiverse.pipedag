@@ -49,6 +49,11 @@ class PipeDAGStore:
         )
         self.json_decoder = json.JSONDecoder(object_hook=json_util.json_object_hook)
 
+    def open(self):
+        """Open all non-serializable resources"""
+        self.table_store.open()
+        self.blob_store.open()
+
     def close(self):
         """Clean up and close all open resources"""
         self.table_store.close()

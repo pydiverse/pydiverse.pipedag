@@ -87,6 +87,9 @@ class BaseLockManager(ABC):
         finally:
             self.release(lock)
 
+    def open(self):
+        """Open non-serializable resources"""
+
     def close(self):
         """Clean up and close all open resources"""
 
@@ -245,16 +248,14 @@ class ZooKeeperLockManager(BaseLockManager):
     @classmethod
     def _init_conf_(cls, config: dict, instance_config: InstanceConfig):
         client = KazooClient(**config)
-        return cls(client, flow_name=instance_config.get_flow_name())
+        client.close()
+        return cls(config, flow_name=instance_config.get_flow_name())
 
-    def __init__(self, client: KazooClient, flow_name: str | None):
+    def __init__(self, client_config: dict[str, Any], flow_name: str | None):
         super().__init__()
 
-        self.client = client
-        if not self.client.connected:
-            self.client.start()
-            atexit.register(lambda: self.close())
-        self.client.add_listener(self._lock_listener)
+        self.client = None
+        self.client_config = client_config
 
         self.locks: dict[Lockable, KazooLock] = {}
         self.base_path = "/pipedag/locks/"
@@ -262,9 +263,22 @@ class ZooKeeperLockManager(BaseLockManager):
             project_name = normalize_name(flow_name)
             self.base_path += project_name + "/"
 
+    def open(self):
+        assert self.client is None, (
+            "close() call missing since close() and open() must be called in"
+            " alternating sequence"
+        )
+        self.client = KazooClient(**self.client_config)
+        if not self.client.connected:
+            self.client.start()
+            atexit.register(lambda: self.close())
+        self.client.add_listener(self._lock_listener)
+
     def close(self):
-        self.client.stop()
-        self.client.close()
+        if self.client is not None:
+            self.client.stop()
+            self.client.close()
+        self.client = None
 
     def acquire(self, lock: Lockable):
         zk_lock = self.client.Lock(self.lock_path(lock))

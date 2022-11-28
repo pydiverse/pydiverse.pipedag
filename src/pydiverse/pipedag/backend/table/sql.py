@@ -44,7 +44,6 @@ class SQLTableStore(BaseTableStore):
 
     def __init__(
         self,
-        engine: sa.engine.Engine,
         engine_url: str,
         create_database_if_not_exists: bool = False,
         database: str = "",
@@ -58,7 +57,7 @@ class SQLTableStore(BaseTableStore):
         """
         Construct table store.
 
-        :param engine: SQLAlchemy engine
+        :param engine_url: URL for SQLAlchemy engine
         :param create_database_if_not_exists: whether to create database if it does not exist
         :param database: database which might potentially be created
         :param database_connection: database connection name from config for logging purposes
@@ -70,7 +69,8 @@ class SQLTableStore(BaseTableStore):
         """
         super().__init__()
 
-        self.engine = engine
+        self.engine_url = engine_url
+        self.engine = None
         self.database = database
         self.database_connection = database_connection
         self.schema_prefix = schema_prefix
@@ -81,21 +81,6 @@ class SQLTableStore(BaseTableStore):
         self.print_sql = print_sql if print_sql is not None else False
         self.no_db_locking = no_db_locking if no_db_locking is not None else True
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
-
-        if engine.dialect.name == "mssql":
-            if "." in schema_prefix and "." in schema_suffix:
-                raise AttributeError(
-                    "Config Error: It is not allowed to have a dot in both"
-                    " schema_prefix and schema_suffix for SQL Server / mssql database:"
-                    f' schema_prefix="{schema_prefix}", schema_suffix="{schema_suffix}"'
-                )
-
-            if (schema_prefix + schema_suffix).count(".") != 1:
-                raise AttributeError(
-                    "Config Error: There must be exactly dot in both schema_prefix and"
-                    " schema_suffix together for SQL Server / mssql database:"
-                    f' schema_prefix="{schema_prefix}", schema_suffix="{schema_suffix}"'
-                )
 
         # Set up metadata tables and schema
         from sqlalchemy import BigInteger, Boolean, Column, DateTime, String
@@ -139,16 +124,19 @@ class SQLTableStore(BaseTableStore):
             schema=self.metadata_schema.get(),
         )
 
+        try_engine = sa.create_engine(engine_url)
         if (
             create_database_if_not_exists
             and database != ""
-            and engine.dialect.name != "mssql"
+            and try_engine.dialect.name != "mssql"
         ):
             # hacky way to reverse engineer database URL without database
-            if engine.dialect.name == "postgresql":
+            if try_engine.dialect.name == "postgresql":
+                # noinspection PyBroadException
                 try:
-                    # try whether connection with database in connect string works
-                    self.execute("SELECT 1")
+                    with try_engine.connect() as conn:
+                        # try whether connection with database in connect string works
+                        conn.execute("SELECT 1")
                 except Exception:
                     tmp_engine = sa.create_engine(
                         engine_url.replace(database, "postgres")
@@ -161,6 +149,31 @@ class SQLTableStore(BaseTableStore):
                     "create_database_if_not_exists is only implemented for"
                     " postgres, yet"
                 )
+        try_engine.dispose()
+
+    @staticmethod
+    def _connect(engine_url, schema_prefix, schema_suffix):
+        engine = sa.create_engine(engine_url)
+        if engine.dialect.name == "mssql":
+            engine.dispose()
+            # this is needed to allow for CREATE DATABASE statements (we don't rely on database transactions anyways)
+            engine = sa.create_engine(engine_url, connect_args={"autocommit": True})
+
+        if engine.dialect.name == "mssql":
+            if "." in schema_prefix and "." in schema_suffix:
+                raise AttributeError(
+                    "Config Error: It is not allowed to have a dot in both"
+                    " schema_prefix and schema_suffix for SQL Server / mssql database:"
+                    f' schema_prefix="{schema_prefix}", schema_suffix="{schema_suffix}"'
+                )
+
+            if (schema_prefix + schema_suffix).count(".") != 1:
+                raise AttributeError(
+                    "Config Error: There must be exactly dot in both schema_prefix and"
+                    " schema_suffix together for SQL Server / mssql database:"
+                    f' schema_prefix="{schema_prefix}", schema_suffix="{schema_suffix}"'
+                )
+        return engine
 
     @classmethod
     def _init_conf_(cls, config: dict, instance_config):
@@ -172,13 +185,8 @@ class SQLTableStore(BaseTableStore):
 
         engine_url = engine_config.pop("url")
         engine_config["_coerce_config"] = True
-        engine = sa.create_engine(engine_url)
-        if engine.dialect.name == "mssql":
-            engine.dispose()
-            # this is needed to allow for CREATE DATABASE statements (we don't rely on database transactions anyways)
-            engine = sa.create_engine(engine_url, connect_args={"autocommit": True})
 
-        return cls(engine, engine_url, **config)
+        return cls(engine_url, **config)
 
     def get_schema(self, name):
         return Schema(name, self.schema_prefix, self.schema_suffix)
@@ -231,8 +239,19 @@ class SQLTableStore(BaseTableStore):
         with self.engine.connect() as conn:
             self.sql_metadata.create_all(conn)
 
+    def open(self):
+        assert self.engine is None, (
+            "close() call missing since close() and open() must be called in"
+            " alternating sequence"
+        )
+        self.engine = self._connect(
+            self.engine_url, self.schema_prefix, self.schema_suffix
+        )
+
     def close(self):
-        self.engine.dispose()
+        if self.engine is not None:
+            self.engine.dispose()
+        self.engine = None
 
     def init_stage(self, stage: Stage):
         cs_base = CreateSchema(self.get_schema(stage.name), if_not_exists=True)
@@ -397,6 +416,7 @@ class SQLTableStore(BaseTableStore):
         else:
             return inspector.get_view_names(schema)
 
+    # noinspection SqlDialectInspection
     def get_mssql_sql_modules(self, schema: str):
         with self.engine.connect() as conn:
             database, schema_only = schema.split(".")

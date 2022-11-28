@@ -92,8 +92,12 @@ class RunContextServer(IPCServer):
         self.lock_manager = config_ctx.lock_manager
         self.lock_manager.add_lock_state_listener(self._lock_state_listener)
 
+    def __enter__(self):
+        super().__enter__()
+
         # INITIALIZE EVERYTHING
         with self.lock_manager("_pipedag_setup_"):
+            config_ctx = ConfigContext.get()
             config_ctx.store.table_store.setup()
 
             # Acquire a lock on all stages
@@ -110,16 +114,12 @@ class RunContextServer(IPCServer):
                 for s in task.upstream_stages:
                     self.ref_count[s.id] += 1
 
-    def __enter__(self):
-        super().__enter__()
         self.__context_proxy = RunContext(self)
         self.__context_proxy.__enter__()
         return self.__context_proxy
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._release_all_locks()
-        # For now, the lock manager lives with config. Probably starting and stopping during run might be good.
-        # self.lock_manager.close()
         self.__context_proxy.__exit__(exc_type, exc_val, exc_tb)
         super().__exit__(exc_type, exc_val, exc_tb)
 

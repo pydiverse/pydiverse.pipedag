@@ -19,3 +19,9 @@ class Engine(ABC):
             engine specific.
         :return: A result instance wrapping the flow execution result.
         """
+
+    def open(self):
+        """Open non-serializable resources"""
+
+    def close(self):
+        """Clean up and close all open resources"""
