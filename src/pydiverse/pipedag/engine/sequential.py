@@ -35,10 +35,12 @@ class SequentialEngine(Engine):
             return Result(
                 underlying=results,
                 successful=True,
+                config_context=ConfigContext.get(),
             )
 
         except Exception as e:
             return Result(
                 underlying=e,
                 successful=False,
+                config_context=None,
             )

@@ -5,6 +5,7 @@ import sqlalchemy as sa
 from pandas.testing import assert_frame_equal
 
 from pydiverse.pipedag import Blob, Flow, Stage, Table, materialize
+from pydiverse.pipedag.util import config
 
 dfA = pd.DataFrame(
     {
@@ -51,9 +52,16 @@ def blob_task(x, y):
 
 
 def test_simple_flow():
+    # at this point, an instance is chosen from multi-pipedag-instance configuration file
+    cfg = config.get_config().get(instance="default")
+    flow_attributes = cfg.flow_attributes
+
     with Flow("FLOW") as flow:
         with Stage("simple_flow_stage1"):
-            inp = inputs()
+            if not flow_attributes["copy_filtered_input"]:
+                inp = inputs()
+            else:
+                inp = None  # copy_filtered_inputs(flow_attributes)
             a, b = inp
 
             a2 = double_values(a)
@@ -72,7 +80,7 @@ def test_simple_flow():
 
             blob_tuple = blob_task(1, 2)
 
-    result = flow.run()
+    result = flow.run(cfg)
     assert result.successful
 
     # Check result.get works

@@ -132,12 +132,13 @@ class InstanceConfig:
         )
 
         # Parse Config
-        name = config_dict.get("name", None)
+        name = self.instance_config_dict.get("name", None)
         interface = config_dict.get("network_interface", "127.0.0.1")
 
         auto_table = tuple(map(import_object, config_dict.get("auto_table", ())))
         auto_blob = tuple(map(import_object, config_dict.get("auto_blob", ())))
         fail_fast = config_dict.get("fail_fast", False)
+        flow_attributes = config_dict.get("flow_attributes", {})
 
         table_store = load_object(config_dict["table_store"], self)
         blob_store = load_object(config_dict["blob_store"], self)
@@ -159,6 +160,7 @@ class InstanceConfig:
             auto_table=auto_table,
             auto_blob=auto_blob,
             fail_fast=fail_fast,
+            flow_attributes=flow_attributes,
             store=store,
             lock_manager=lock_manager,
             engine=engine,

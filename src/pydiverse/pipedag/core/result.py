@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
+import structlog
 from attrs import frozen
 
 from pydiverse.pipedag.context import ConfigContext
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
 class Result:
     underlying: Any
     successful: bool
+    config_context: ConfigContext | None
 
     def get(self, task: Task | TaskGetItem, as_type: type = None) -> Materializable:
         """Load the results of a task from the database.
@@ -27,6 +29,12 @@ class Result:
             If no type is specified, the input type of the task is used.
         :return: The results of the task.
         """
+        if not self.successful:
+            logger = structlog.getLogger()
+            logger.warning(
+                "Attention: getting tables from unsuccessful run is unreliable!"
+            )
+
         if isinstance(task, Task):
             root_task = task
         else:
@@ -38,7 +46,7 @@ class Result:
 
         # TODO: Check that the results loaded from the database correspond
         #       to the run_id of this result object.
-        with root_task.flow.config_context as config_ctx, DematerializeRunContext() as run_ctx:
+        with self.config_context as config_ctx, DematerializeRunContext() as run_ctx:
 
             def dematerialize_mapper(item):
                 return config_ctx.store.dematerialize_item(

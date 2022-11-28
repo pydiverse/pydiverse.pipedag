@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar, Token
 from threading import Lock
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import structlog
 from attrs import frozen
@@ -98,6 +98,7 @@ class ConfigContext(BaseAttrsContext):
     auto_table: tuple[type, ...]
     auto_blob: tuple[type, ...]
     fail_fast: bool
+    flow_attributes: dict[str, Any]
 
     store: PipeDAGStore
     lock_manager: BaseLockManager
