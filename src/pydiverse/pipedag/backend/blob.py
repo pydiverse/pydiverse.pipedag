@@ -6,7 +6,6 @@ import shutil
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
-from pydiverse.pipedag.context import ConfigContext
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.util import normalize_name
 from pydiverse.pipedag.util.config import InstanceConfig
@@ -33,6 +32,9 @@ class BaseBlobStore(ABC):
     two different `Blob` objects can be used to store and retrieve the same
     data as long as they have the same name and stage.
     """
+
+    def open(self):
+        """Open all non-serializable resources"""
 
     def close(self):
         """Clean up and close all open resources"""

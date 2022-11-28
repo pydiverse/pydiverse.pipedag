@@ -230,13 +230,14 @@ class Flow:
         :return:
             Result object that gives information whether run was successful
         """
-        with self.config_context, RunContextServer(self):
-            if engine is None:
-                engine = ConfigContext.get().engine
-            res = engine.run(flow=self, **kwargs)
-            actual_fail_fast = (
-                ConfigContext.get().fail_fast if fail_fast is None else fail_fast
-            )
+        with self.config_context:
+            with RunContextServer(self):
+                if engine is None:
+                    engine = ConfigContext.get().engine
+                res = engine.run(flow=self, **kwargs)
+                actual_fail_fast = (
+                    ConfigContext.get().fail_fast if fail_fast is None else fail_fast
+                )
         if (
             actual_fail_fast
             and not res.successful
