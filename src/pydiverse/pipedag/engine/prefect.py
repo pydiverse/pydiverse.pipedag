@@ -86,6 +86,7 @@ class PrefectOneEngine(Engine):
         return Result(
             underlying=result,
             successful=result.is_successful(),
+            config_context=ConfigContext.get(),
         )
 
 
@@ -144,6 +145,7 @@ class PrefectTwoEngine(Engine):
         return Result(
             underlying=result,
             successful=result.is_completed(),
+            config_context=ConfigContext.get(),
         )
 
 

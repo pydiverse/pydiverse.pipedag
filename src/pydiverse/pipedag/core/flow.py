@@ -24,12 +24,8 @@ class Flow:
     def __init__(
         self,
         name: str,
-        config_context: ConfigContext = None,
     ):
-        if config_context is None:
-            config_context = config.get_config().get()
         self.name = name
-        self.config_context = config_context
 
         self.stages: dict[str, Stage] = {}
         self.tasks: list[Task] = []
@@ -215,7 +211,11 @@ class Flow:
         return explicit_graph
 
     def run(
-        self, engine: Engine = None, fail_fast: bool | None = None, **kwargs
+        self,
+        config_context: ConfigContext = None,
+        engine: Engine = None,
+        fail_fast: bool | None = None,
+        **kwargs,
     ) -> Result:
         """Execute a flow
 
@@ -223,6 +223,7 @@ class Flow:
         keyword. If no engine is provided, the engine specified in the condig
         file is used.
 
+        :param config_context: A configuration context with information about the pipe-DAG instance
         :param engine: The engine to use.
         :param fail_fast: True means that errors should be raised as exceptions out of this function
         :param kwargs: Other arguments. They get passed on directly to the
@@ -230,7 +231,14 @@ class Flow:
         :return:
             Result object that gives information whether run was successful
         """
-        with self.config_context:
+        if config_context is None:
+            # fall back to an active config context if not given explicitly
+            try:
+                config_context = ConfigContext.get()
+            except LookupError:
+                # fall back further to read configuration from file
+                config_context = config.get_config().get()
+        with config_context:
             with RunContextServer(self):
                 if engine is None:
                     engine = ConfigContext.get().engine
