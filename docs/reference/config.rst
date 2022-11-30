@@ -400,7 +400,7 @@ This section describes the default orchestration engine that should be used to e
 Once again, this section is structured the same way as the `table_store` section.
 If you don't specify this section, you must pass an Engine object to the `flow.run()` method.
 
-.. code-block:: toml
+.. code-block:: yaml
 
     orchestration:
         class = "pydiverse.pipedag.engine.PrefectEngine"
