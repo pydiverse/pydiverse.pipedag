@@ -9,7 +9,7 @@ authors = [
 license = "BSD-3-Clause"
 readme = "README.md"
 packages = [
-	{ include = "pydiverse", from = "src" }
+	{ include = "pydiverse", from = "src" },
 ]
 classifiers = [
   "Development Status :: 3 - Alpha",

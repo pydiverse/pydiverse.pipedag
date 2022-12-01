@@ -3,7 +3,8 @@ from __future__ import annotations
 import pandas as pd
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
-from pydiverse.pipedag.context import ConfigContext, RunContextServer
+from pydiverse.pipedag.util import config
+from pydiverse.pipedag.util.config import PipedagConfig
 
 dfA_source = pd.DataFrame(
     {
@@ -31,6 +32,7 @@ def has_new_input(dummy_arg):
     return input_hash
 
 
+# noinspection DuplicatedCode
 @materialize(nout=2, cache=has_new_input, version="1.0")
 def input_task(dummy_arg):
     global dfA
@@ -43,6 +45,7 @@ def double_values(df: pd.DataFrame):
     return Table(df.transform(lambda x: x * 2))
 
 
+# noinspection PyTypeChecker
 def get_flow():
     with Flow("FLOW") as flow:
         with Stage("stage_1"):
@@ -73,7 +76,7 @@ def test_source_invalidation():
     # modify input without updating input hash => cached version is used
     dfA["a"] = 10 + dfA_source["a"]
 
-    # this run should work from caches and` not chang outputs
+    # this run should work from caches and not change outputs
     result = flow.run()
     assert result.successful
 
@@ -83,6 +86,15 @@ def test_source_invalidation():
 
     # update input hash trigger reload of new input data
     input_hash = hash(str(dfA))
+
+    with PipedagConfig.load().get():
+        # this run should ignore fresh input at source nodes and not change outputs
+        result = flow.run(ignore_fresh_input=True)
+        assert result.successful
+
+        v_out1, v_out2 = result.get(out1), result.get(out2)
+        pd.testing.assert_frame_equal(dfA_source * 2, v_out1)
+        pd.testing.assert_frame_equal(dfA_source * 4, v_out2)
 
     result = flow.run()
     assert result.successful

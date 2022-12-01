@@ -139,7 +139,11 @@ Between each of those overwrite steps, meta-attributes like `technical_setup`_, 
 instance_id
 -----------
 
-An ID for identifying a particular pipedag instance. Its purpose is to be used in table_store and blob_store
+default: name of flow (defaults to `name`_ if not provided when generating Flow object)
+
+An ID for identifying a particular pipedag instance. **Optional**
+
+Its purpose is to be used in table_store and blob_store
 configurations for ensuring that different pipedag instances don't overwrite each other's tables, schemas, files
 or folders. Please note that PipedagConfig.get(per_user=True) will modify instance_id such that it is unique for every
 user ID as taken from environment variables.
@@ -149,6 +153,20 @@ different runs on the same instance_id will not mess with identically named sche
 instances can be run from IDE, Continuous Integration, and the Orchestration Engine UI without collisions, automatically
 ensuring cache validity the running code commit in the moment of transactionally committing a stage result.
 
+per_user_template
+-----------------
+
+default: {id}_{username}
+
+In case a run config is generated with `PipedagConfig.get(per_user=True)`, the user name is injected
+into instance_id before it is used for lookups in table_store or blob_store configurations.
+
+With `per_user_template`_ it is possible to control whether username will be used as prefix or suffix.
+Therefore, it must include both placeholders `{id}` and `{username}`:
+
+.. code-block:: yaml
+
+    per_user_template: "{username}__{id}"
 
 network_interface
 -----------------
@@ -206,7 +224,7 @@ specific database as part of the schema. If `schema_suffix` includes a dot, we u
     table_store:
         class: "pydiverse.pipedag.backend.table.SQLTableStore"
         url: "postgresql://{username}:{password}@127.0.0.1/{instance_id}"
-        url_attrs: "~/.pipedag/{name}_{instance_id}.yaml"
+        url_attrs_file: "~/.pipedag/{name}_{instance_id}.yaml"
         # schema_prefix: "myflow_"
         # schema_suffix: "_flow01"
 
@@ -236,7 +254,7 @@ url
 """
 
 Sqlalchemy engine URL for referencing a database connection including user name and password. Placeholders like
-{name} and {instance_id} may be used. Further placeholders can be defined in a yaml file referenced by `url_attrs`_
+{name} and {instance_id} may be used. Further placeholders can be defined in a yaml file referenced by `url_attrs_file`_
 (i.e. {username}, {password}, {host}, {port}).
 
 Attention: `PipedagConfig.get(per_user=true)` modifies `instance_id`_ before it is used here.
@@ -253,8 +271,8 @@ The URL may also reference environment variables:
 
 Environment variables may include non-environment variable placeholders.
 
-url_attrs
-"""""""""
+url_attrs_file
+""""""""""""""
 
 Filename of a yaml file which is read shortly before rendering the final sqlalchemy engine URL and which is used to
 replace custom placeholders in `url`_. The filename itself may include placeholders like {name} and {instance_id}.
@@ -263,13 +281,13 @@ Attention: `PipedagConfig.get(per_user=true)` modifies `instance_id`_ before it 
 
 .. code-block:: yaml
 
-        url_attrs: "~/.pipedag/{name}_{instance_id}.yaml"
+        url_attrs_file: "~/.pipedag/{name}_{instance_id}.yaml"
 
 The filename may also reference environment variables:
 
 .. code-block:: yaml
 
-        url_attrs: "{$PIPEDAG_PASSWORD_FILE}"
+        url_attrs_file: "{$PIPEDAG_PASSWORD_FILE}"
 
 Environment variables may include non-environment variable placeholders.
 
@@ -335,7 +353,7 @@ Store blobs as files on the filesystem (might be mounted network drive)
 base_name
 """""""""
 
-The directory under which blobs are stored. Directories are created based on pipedag `name`_ and `instance_id`_.
+The directory under which blobs are stored. Directories are created based on `instance_id`_.
 
 Attention: `PipedagConfig.get(per_user=true)` modifies `instance_id`_ before it is used here.
 
@@ -354,6 +372,21 @@ in which case you set `class = "pydiverse.pipedag.backend.lock.NoLockManager"`.
     lock_manager:
         class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
         hosts: "localhost:2181"
+
+class: FileLockManager
+^^^^^^^^^^^^^^^^^^^^^^
+
+Use lock files on the filesystem.
+
+Attention: sometimes mounted network drives have unreliable locking
+
+base_name
+"""""""""
+
+The directory under which lock files are stored. Directories are created based on `instance_id`_.
+
+Attention: `PipedagConfig.get(per_user=true)` modifies `instance_id`_ before it is used here.
+
 
 class: pydiverse.pipedag.backend.lock.ZooKeeperLockManager
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -440,11 +473,11 @@ example configuration
     table_store_connections:
       postgres:
         url: "postgresql://{username}:{password}@127.0.0.1:6543/{instance_id}"
-        url_attrs: "~/.pipedag/{name}_{instance_id}.yaml"
+        url_attrs_file: "~/.pipedag/{name}_{instance_id}.yaml"
 
       mssql:
         url: "mssql+pyodbc://{username}:{password}@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
-        url_attrs: "~/.pipedag/mssql.yaml"
+        url_attrs_file: "~/.pipedag/mssql.yaml"
         schema_prefix: "{instance_id}_"  # SQL Server needs database.schema (uncomment only on of prefix and suffix)
         schema_suffix: ".dbo"   # Alternatively SQL Server databases can be used as schemas with .dbo default schema
 
@@ -559,11 +592,11 @@ which then can be later referenced
     _table_store_connections:
       postgres: &db_postgres
         url: "postgresql://{username}:{password}@127.0.0.1:6543/{instance_id}"
-        url_attrs: "~/.pipedag/{name}_{instance_id}.yaml"
+        url_attrs_file: "~/.pipedag/{name}_{instance_id}.yaml"
 
       mssql: &db_mssql
         url: "mssql+pyodbc://{username}:{password}@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
-        url_attrs: "~/.pipedag/mssql.yaml"
+        url_attrs_file: "~/.pipedag/mssql.yaml"
         schema_prefix: "{instance_id}_"  # SQL Server needs database.schema (uncomment only on of prefix and suffix)
         schema_suffix: ".dbo"   # Alternatively SQL Server databases can be used as schemas with .dbo default schema
 

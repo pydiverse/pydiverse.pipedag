@@ -1,18 +1,18 @@
 name: pipedag_tests
-database_connections:
+table_store_connections:
   postgres:
     # Postgres: this can be used after running `docker-compose up`
-    engine: "postgresql://sa:Pydiverse23@127.0.0.1:6543/{database}"
+    url: "postgresql://{$POSTGRES_USERNAME}:{$POSTGRES_PASSWORD}@127.0.0.1:6543/{instance_id}"
 
   mssql:
     # SQL Server: this can be used after running `docker-compose up`
-    engine: "mssql+pyodbc://sa:PidyQuant27@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
+    url: "mssql+pyodbc://{$MSSQL_USERNAME}:{$MSSQL_PASSWORD}@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
     # schema_prefix: "master."  # SQL Server needs database.schema (uncomment only on of prefix and suffix)
-    schema_prefix: "{database}_"  # SQL Server needs database.schema (uncomment only on of prefix and suffix)
+    schema_prefix: "{instance_id}_"  # SQL Server needs database.schema (uncomment only on of prefix and suffix)
     schema_suffix: ".dbo"   # Alternatively SQL Server databases can be used as schemas with .dbo default schema
 
 instances:
-  default:
+  __any__:
     # listen-interface for pipedag context server which synchronizes some task state during DAG execution
     network_interface: "127.0.0.1"
     # classes to be materialized to table store even without pipedag Table wrapper (we have loose coupling between
@@ -21,16 +21,16 @@ instances:
     # abort as fast a possible on task failure and print most readable stack trace
     fail_fast: true
 
+    instance_id: pipedag_default
     table_store:
       class: "pydiverse.pipedag.backend.table.SQLTableStore"
 
       # Postgres: this can be used after running `docker-compose up`
-      database_connection: postgres
-      database: pipedag_default
+      table_store_connection: postgres
       create_database_if_not_exists: True
 
       ## SQL Server: this can be used after running `docker-compose up`
-      #database: mssql
+      #table_store_connection: mssql
 
       # print select statements before being encapsualted in materialize expressions and tables before writing to
       # database
@@ -46,54 +46,7 @@ instances:
       class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
       hosts: "localhost:2181"
 
-    engine:
+    orchestration:
       class: "pydiverse.pipedag.engine.SequentialEngine"
       ## Activate this class to work either with prefect 1.3.0 or prefect 2.0
       # class: "pydiverse.pipedag.engine.PrefectEngine"
-    # Flow attributes are handed over to the flow implementation (pipedag does not care)
-    flow_attributes:
-      # by default we load source data and not a sampled version of a loaded database
-      copy_filtered_input: false
-
-  full:
-    # Full dataset is using default database connection and schemas
-    table_store:
-      database: pipedag_full
-    # Run this instance under @pytest.mark.slow5
-    tags: pytest_mark_slow5
-
-  midi:
-    # Full dataset is using default database connection and schemas
-    table_store:
-      database: pipedag_midi
-    flow_attributes:
-      # copy filtered input from full instance
-      copy_filtered_input: true
-      copy_source: pipedag_full
-      sample_cnt: 2  # this is just dummy input where we sample 2 rows
-    # Run this instance under @pytest.mark.slow4
-    tags: pytest_mark_slow4
-    # Run only stage_2 under @pytest.mark.slow3
-    stage_tags:
-      pytest_mark_slow3:
-        - simple_flow_stage2
-
-  mini:
-    # Full dataset is using default database connection and schemas
-    table_store:
-      database: pipedag_mini
-    flow_attributes:
-      copy_filtered_input: true
-      copy_source: pipedag_full
-      sample_cnt: 1  # this is just dummy input where we sample 1 row
-    # Run this instance under @pytest.mark.slow2
-    tags: pytest_mark_slow2
-    # Run only stage_2 under @pytest.mark.slow1
-    stage_tags:
-      pytest_mark_slow1:
-        - simple_flow_stage2
-
-  mssql:
-    # Full dataset is using default database connection and schemas
-    table_store:
-      database_connection: mssql

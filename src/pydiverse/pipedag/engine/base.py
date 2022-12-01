@@ -7,8 +7,8 @@ if TYPE_CHECKING:
     from pydiverse.pipedag.core import Flow, Result
 
 
-class Engine(ABC):
-    """Flow execution engine base class"""
+class OrchestrationEngine(ABC):
+    """Flow orchestration engine base class"""
 
     @abstractmethod
     def run(self, flow: Flow, **kwargs) -> Result:

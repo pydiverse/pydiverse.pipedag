@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from contextlib import contextmanager
 from enum import Enum
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Union
 
 import structlog
 
@@ -25,7 +25,7 @@ __all__ = [
     "ZooKeeperLockManager",
 ]
 
-from pydiverse.pipedag.util.config import InstanceConfig
+from pydiverse.pipedag.util.config import PipedagConfig
 
 
 class LockState(Enum):
@@ -181,13 +181,17 @@ class FileLockManager(BaseLockManager):
     def __init__(self, base_path: str):
         super().__init__()
         self.base_path = os.path.abspath(base_path)
-        name = ConfigContext.get().name
-        if name is not None:
-            project_name = normalize_name(name)
-            self.base_path = os.path.join(self.base_path, project_name)
+        self.instance_id = None  # this should fail when used before open()
         self.locks: dict[Lockable, fl.BaseFileLock] = {}
 
         os.makedirs(self.base_path, exist_ok=True)
+
+    def open(self):
+        config_ctx = ConfigContext.get()
+        self.instance_id = config_ctx.instance_id
+
+    def close(self):
+        self.instance_id = None  # this should fail when used before open() again
 
     def acquire(self, lock: Lockable):
         if lock not in self.locks:
@@ -215,9 +219,9 @@ class FileLockManager(BaseLockManager):
 
     def lock_path(self, lock: Lockable):
         if isinstance(lock, Stage):
-            return os.path.join(self.base_path, lock.name + ".lock")
+            return os.path.join(self.base_path, self.instance_id, lock.name + ".lock")
         elif isinstance(lock, str):
-            return os.path.join(self.base_path, lock + ".lock")
+            return os.path.join(self.base_path, self.instance_id, lock + ".lock")
         else:
             raise NotImplementedError(
                 f"Can't lock object of type '{type(lock).__name__}'"
@@ -246,22 +250,23 @@ class ZooKeeperLockManager(BaseLockManager):
     """
 
     @classmethod
-    def _init_conf_(cls, config: dict, instance_config: InstanceConfig):
-        client = KazooClient(**config)
-        client.close()
-        return cls(config, flow_name=instance_config.get_flow_name())
+    def _init_conf_(cls, config: dict, pipedag_config: PipedagConfig):
+        # keep kwargs as config dictionary
+        return cls(config)
 
-    def __init__(self, client_config: dict[str, Any], flow_name: str | None):
+    def __init__(self, client_config: dict[str, Any]):
         super().__init__()
+
+        # test that config can be used to start KazooClient
+        client = KazooClient(**client_config)
+        client.close()
 
         self.client = None
         self.client_config = client_config
 
         self.locks: dict[Lockable, KazooLock] = {}
         self.base_path = "/pipedag/locks/"
-        if flow_name is not None:
-            project_name = normalize_name(flow_name)
-            self.base_path += project_name + "/"
+        self.instance_id = None  # this should fail when used before open()
 
     def open(self):
         assert self.client is None, (
@@ -274,11 +279,15 @@ class ZooKeeperLockManager(BaseLockManager):
             atexit.register(lambda: self.close())
         self.client.add_listener(self._lock_listener)
 
+        config_ctx = ConfigContext.get()
+        self.instance_id = config_ctx.instance_id
+
     def close(self):
         if self.client is not None:
             self.client.stop()
             self.client.close()
         self.client = None
+        self.instance_id = None
 
     def acquire(self, lock: Lockable):
         zk_lock = self.client.Lock(self.lock_path(lock))
@@ -299,9 +308,9 @@ class ZooKeeperLockManager(BaseLockManager):
 
     def lock_path(self, lock: Lockable):
         if isinstance(lock, Stage):
-            return self.base_path + lock.name
+            return self.base_path + self.instance_id + lock.name
         elif isinstance(lock, str):
-            return self.base_path + lock
+            return self.base_path + self.instance_id + lock
         else:
             raise NotImplementedError(
                 f"Can't lock object of type '{type(lock).__name__}'"

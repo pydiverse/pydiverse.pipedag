@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import re
 import warnings
+from pathlib import Path
 
 import pandas as pd
 import sqlalchemy as sa
 import sqlalchemy.sql.elements
+import yaml
 
 from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
@@ -22,6 +24,7 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     RenameSchema,
     Schema,
 )
+from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import (
@@ -29,6 +32,7 @@ from pydiverse.pipedag.materialize.metadata import (
     RawSqlMetadata,
     TaskMetadata,
 )
+from pydiverse.pipedag.util.config import replace_environment_variables
 
 
 class SQLTableStore(BaseTableStore):
@@ -46,8 +50,7 @@ class SQLTableStore(BaseTableStore):
         self,
         engine_url: str,
         create_database_if_not_exists: bool = False,
-        database: str = "",
-        database_connection: str = "",
+        table_store_connection: str = "",
         schema_prefix: str = "",
         schema_suffix: str = "",
         print_materialize: bool | None = None,
@@ -60,7 +63,7 @@ class SQLTableStore(BaseTableStore):
         :param engine_url: URL for SQLAlchemy engine
         :param create_database_if_not_exists: whether to create database if it does not exist
         :param database: database which might potentially be created
-        :param database_connection: database connection name from config for logging purposes
+        :param table_store_connection: database connection name from config for logging purposes
         :param schema_prefix: prefix string for schemas (dot is interpreted as database.schema)
         :param schema_suffix: suffix string for schemas (dot is interpreted as database.schema)
         :param print_materialize: whether to print select statements before materialization
@@ -70,9 +73,10 @@ class SQLTableStore(BaseTableStore):
         super().__init__()
 
         self.engine_url = engine_url
+        self.create_database_if_not_exists = create_database_if_not_exists
         self.engine = None
-        self.database = database
-        self.database_connection = database_connection
+        self.instance_id = None
+        self.table_store_connection = table_store_connection
         self.schema_prefix = schema_prefix
         self.schema_suffix = schema_suffix
         self.print_materialize = (
@@ -81,7 +85,6 @@ class SQLTableStore(BaseTableStore):
         self.print_sql = print_sql if print_sql is not None else False
         self.no_db_locking = no_db_locking if no_db_locking is not None else True
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
-
         # Set up metadata tables and schema
         from sqlalchemy import BigInteger, Boolean, Column, DateTime, String
 
@@ -124,10 +127,16 @@ class SQLTableStore(BaseTableStore):
             schema=self.metadata_schema.get(),
         )
 
+    @staticmethod
+    def _init_database(
+        engine_url: str, instance_id: str, create_database_if_not_exists: bool
+    ):
+        # TODO: this is a really hacky way to create a generic engine for creating a database before one can open a
+        #  connection to self.engine_url which references a database and will fail if the database does not exist
         try_engine = sa.create_engine(engine_url)
         if (
             create_database_if_not_exists
-            and database != ""
+            and instance_id != ""
             and try_engine.dialect.name != "mssql"
         ):
             # hacky way to reverse engineer database URL without database
@@ -139,11 +148,11 @@ class SQLTableStore(BaseTableStore):
                         conn.execute("SELECT 1")
                 except Exception:
                     tmp_engine = sa.create_engine(
-                        engine_url.replace(database, "postgres")
+                        engine_url.replace(instance_id, "postgres")
                     )
                     with tmp_engine.connect() as conn:
                         conn.execute("COMMIT")
-                        conn.execute(CreateDatabase(database))
+                        conn.execute(CreateDatabase(instance_id))
             else:
                 raise NotImplementedError(
                     "create_database_if_not_exists is only implemented for"
@@ -176,15 +185,43 @@ class SQLTableStore(BaseTableStore):
         return engine
 
     @classmethod
-    def _init_conf_(cls, config: dict, instance_config):
-        _ = instance_config
+    def _init_conf_(cls, config: dict, pipedag_config):
+        _ = pipedag_config
         config = config.copy()
-        engine_config = config.pop("engine")
-        if isinstance(engine_config, str):
-            engine_config = {"url": engine_config}
-
-        engine_url = engine_config.pop("url")
-        engine_config["_coerce_config"] = True
+        engine_url = config.pop("url")
+        engine_url = replace_environment_variables(engine_url)
+        if "url_attrs_file" in config:
+            attrs_file = config.pop("url_attrs_file")
+            attrs_file = replace_environment_variables(attrs_file)
+            if not Path(attrs_file).is_file():
+                raise AttributeError(
+                    f"Failed opening file referenced in 'url_attrs_file': {attrs_file}"
+                )
+            with open(attrs_file, encoding="utf-8") as fh:
+                attrs = yaml.safe_load(fh)
+            # TODO: use nicer schema verification code
+            if not isinstance(attrs, dict):
+                raise AttributeError(
+                    "Expected dictionary in yaml format in file referenced by"
+                    f" 'url_attrs_file': {attrs_file}"
+                )
+            for key, value in attrs:
+                if not isinstance(key, str):
+                    raise AttributeError(
+                        "Expected keys as type string in yaml file referenced by"
+                        f" 'url_attrs_file': {attrs_file}; Found {key}"
+                    )
+                if not isinstance(value, str):
+                    raise AttributeError(
+                        f"Expected '{key}' type string in yaml file referenced by"
+                        f" 'url_attrs_file': {attrs_file}; Found {value}"
+                    )
+                assert "{" not in key, "just to avoid messy lookups"
+                assert "}" not in key, "just to avoid messy lookups"
+                assert "{" not in value, "prevent recursive lookups"
+                assert "}" not in value, "prevent recursive lookups"
+            format_attrs = {"{" + key + "}": value for key, value in attrs}
+            engine_url = engine_url.format(**format_attrs)
 
         return cls(engine_url, **config)
 
@@ -244,9 +281,15 @@ class SQLTableStore(BaseTableStore):
             "close() call missing since close() and open() must be called in"
             " alternating sequence"
         )
-        self.engine = self._connect(
-            self.engine_url, self.schema_prefix, self.schema_suffix
+        config_ctx = ConfigContext.get()
+        self.instance_id = config_ctx.instance_id
+        engine_url = self.engine_url.replace("{name}", config_ctx.pipedag_name).replace(
+            "{instance_id}", config_ctx.instance_id
         )
+        self._init_database(
+            engine_url, self.instance_id, self.create_database_if_not_exists
+        )
+        self.engine = self._connect(engine_url, self.schema_prefix, self.schema_suffix)
 
     def close(self):
         if self.engine is not None:
