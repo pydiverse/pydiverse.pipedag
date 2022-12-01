@@ -50,7 +50,7 @@ class SQLTableStore(BaseTableStore):
         self,
         engine_url: str,
         create_database_if_not_exists: bool = False,
-        table_store_connection: str = "",
+        table_store_connection: str | None = None,
         schema_prefix: str = "",
         schema_suffix: str = "",
         print_materialize: bool | None = None,
@@ -70,7 +70,7 @@ class SQLTableStore(BaseTableStore):
         :param print_sql: whether to print final SQL statements (except for metadata)
         :param no_db_locking: speed up database by telling it we will not rely on it's locking mechanisms
         """
-        super().__init__()
+        super().__init__(table_store_connection)
 
         self.engine_url = engine_url
         self.create_database_if_not_exists = create_database_if_not_exists
@@ -205,23 +205,35 @@ class SQLTableStore(BaseTableStore):
                     "Expected dictionary in yaml format in file referenced by"
                     f" 'url_attrs_file': {attrs_file}"
                 )
-            for key, value in attrs:
+            for key, value in attrs.items():
                 if not isinstance(key, str):
-                    raise AttributeError(
-                        "Expected keys as type string in yaml file referenced by"
-                        f" 'url_attrs_file': {attrs_file}; Found {key}"
-                    )
+                    key = str(key)
+                    if "{" in key or "[" in key or "(" in key or "," in key:
+                        raise AttributeError(
+                            "Expected keys as type string in yaml file referenced by"
+                            f" 'url_attrs_file': {attrs_file}; Found {key}"
+                        )
                 if not isinstance(value, str):
-                    raise AttributeError(
-                        f"Expected '{key}' type string in yaml file referenced by"
-                        f" 'url_attrs_file': {attrs_file}; Found {value}"
-                    )
+                    value = str(value)
+                    if "{" in value or "[" in value or "(" in value or "," in value:
+                        raise AttributeError(
+                            f"Expected '{key}' type string in yaml file referenced by"
+                            f" 'url_attrs_file': {attrs_file}; Found {value}"
+                        )
                 assert "{" not in key, "just to avoid messy lookups"
                 assert "}" not in key, "just to avoid messy lookups"
                 assert "{" not in value, "prevent recursive lookups"
                 assert "}" not in value, "prevent recursive lookups"
-            format_attrs = {"{" + key + "}": value for key, value in attrs}
-            engine_url = engine_url.format(**format_attrs)
+            # keep the two identifiers "instance_id" and "name" for later
+            assert (
+                "instance_id" not in attrs
+            ), f"please remove 'instance_id' attribute from: {attrs_file}"
+            assert (
+                "name" not in attrs
+            ), f"please remove 'name' attribute from: {attrs_file}"
+            attrs["instance_id"] = "{instance_id}"
+            attrs["name"] = "{name}"
+            engine_url = engine_url.format(**attrs)
 
         return cls(engine_url, **config)
 
@@ -283,9 +295,10 @@ class SQLTableStore(BaseTableStore):
         )
         config_ctx = ConfigContext.get()
         self.instance_id = config_ctx.instance_id
-        engine_url = self.engine_url.replace("{name}", config_ctx.pipedag_name).replace(
-            "{instance_id}", config_ctx.instance_id
+        format_dict = dict(
+            name=config_ctx.pipedag_name, instance_id=config_ctx.instance_id
         )
+        engine_url = self.engine_url.format(**format_dict)
         self._init_database(
             engine_url, self.instance_id, self.create_database_if_not_exists
         )
@@ -694,7 +707,7 @@ class SQLTableStore(BaseTableStore):
 class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @classmethod
     def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, (sa.sql.Select, sa.sql.elements.TextClause))
+        return issubclass(type_, (sa.Table, sa.sql.Select, sa.sql.elements.TextClause))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -707,15 +720,18 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         table: Table[sa.sql.elements.TextClause | sa.Text],
         stage_name,
     ):
+        obj = table.obj
+        if isinstance(table.obj, sa.Table):
+            obj = sa.select(table.obj)
         if store.print_materialize:
-            query_str = cls.lazy_query_str(store, table.obj)
+            query_str = cls.lazy_query_str(store, obj)
             store.logger.info(
                 f"Executing CREATE TABLE AS SELECT ({table}):\n{query_str}"
             )
         else:
             store.logger.info(f"Executing CREATE TABLE AS SELECT ({table})")
         store.execute(
-            CreateTableAsSelect(table.name, store.get_schema(stage_name), table.obj)
+            CreateTableAsSelect(table.name, store.get_schema(stage_name), obj)
         )
 
     @classmethod

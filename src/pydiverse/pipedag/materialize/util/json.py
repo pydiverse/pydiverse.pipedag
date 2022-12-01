@@ -10,12 +10,14 @@ from __future__ import annotations
 from pydiverse.pipedag import Stage
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.materialize.container import Blob, RawSql, Table
+from pydiverse.pipedag.util.config import PipedagConfig
 
 PIPEDAG_TYPE = "_pipedag_type_"
 PIPEDAG_TYPE_TABLE = "table"
 PIPEDAG_TYPE_RAWSQL = "raw_sql"
 PIPEDAG_TYPE_BLOB = "blob"
 PIPEDAG_TYPE_STAGE = "stage"
+PIPEDAG_TYPE_PIPEDAG_CONFIG = "pipedag_config"
 
 
 def json_default(o):
@@ -45,6 +47,12 @@ def json_default(o):
             "stage": o.stage.name,
             "name": o.name,
             "cache_key": o.cache_key,
+        }
+    if isinstance(o, PipedagConfig):
+        return {
+            PIPEDAG_TYPE: PIPEDAG_TYPE_PIPEDAG_CONFIG,
+            "pipedag_config_dict": o.pipedag_config_dict,
+            "config_file": str(o.config_file),
         }
 
     raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
@@ -77,6 +85,8 @@ def json_object_hook(d: dict):
             )
         elif pipedag_type == PIPEDAG_TYPE_STAGE:
             return stages[d["name"]]
+        elif pipedag_type == PIPEDAG_TYPE_PIPEDAG_CONFIG:
+            return PipedagConfig(d["pipedag_config_dict"], d["config_file"])
         else:
             raise ValueError(
                 f"Invalid value for '{PIPEDAG_TYPE}' key: {repr(pipedag_type)}"

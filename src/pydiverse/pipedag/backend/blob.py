@@ -94,8 +94,9 @@ class FileBlobStore(BaseBlobStore):
     the appropriate folders.
     """
 
-    def __init__(self, base_path: str):
+    def __init__(self, base_path: str, blob_store_connection: str | None = None):
         self.base_path = os.path.abspath(base_path)
+        self.blob_store_connection = blob_store_connection  # for debug output
         self.instance_id = None  # this should fail when used before open()
 
         os.makedirs(self.base_path, exist_ok=True)

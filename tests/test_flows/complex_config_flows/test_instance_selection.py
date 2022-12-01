@@ -40,35 +40,43 @@ def input_task():
     return Table(dfA, "dfA"), Table(dfA, "dfB")
 
 
-def has_copy_source_fresh_input(attrs: dict[str, Any], pipedag_config: PipedagConfig):
+def has_copy_source_fresh_input(
+    stage: Stage, attrs: dict[str, Any], pipedag_config: PipedagConfig
+):
     source = attrs["copy_source"]
     per_user = attrs["copy_per_user"]
-    source_cfg = pipedag_config.get(instance=source, per_user=per_user)
-    source_stage = DAGContext.get().stage
-    flow = DAGContext.get().flow
-    return flow.get_cache_hash(source_cfg, source_stage)
+    # TODO: don't load full data, but get hash from cache status of all tables in stage for source pipedag instance
+    tbls = _get_source_tbls(source, per_user, stage, pipedag_config)
+    return hash(name + str(tbl) for name, tbl in tbls.items())
 
 
 @materialize(input_type=pd.DataFrame, cache=has_copy_source_fresh_input, version="1.0")
-def copy_filtered_inputs(attrs: dict[str, Any], pipedag_config: PipedagConfig):
+def copy_filtered_inputs(
+    stage: Stage, attrs: dict[str, Any], pipedag_config: PipedagConfig
+):
     source = attrs["copy_source"]
     per_user = attrs["copy_per_user"]
     filter_cnt = attrs["copy_filter_cnt"]
+    tbls = _get_source_tbls(source, per_user, stage, pipedag_config)
+    ret = [Table(tbl.head(filter_cnt), name) for name, tbl in tbls.items()]
+    return ret
+
+
+def _get_source_tbls(source, per_user, stage, pipedag_config):
     source_cfg = pipedag_config.get(instance=source, per_user=per_user)
-    source_stage = DAGContext.get().stage
     with source_cfg:
         # This is just quick hack code to copy data from one pipeline instance to another in a filtered way.
         # It justifies actually a complete pydiverse package called pydiverse.testdata. We want to achieve
         # loose coupling by pipedag transporting uninterpreted attrs with user code feeding the
         # attributes in testdata functionality
-        engine = source_cfg.store.table_store.orchestration_engine
-        schema = source_cfg.store.table_store.get_schema(source_stage.name)
+        engine = source_cfg.store.table_store.engine
+        schema = source_cfg.store.table_store.get_schema(stage.name)
         meta = sa.MetaData()
-        meta.reflect(bind=engine, schema=schema)
-        tbls = [
-            pd.read_sql_table(tbl, con=engine, schema=schema) for tbl in meta.tables
-        ]
-        tbls = [tbl.head(filter_cnt) for tbl in tbls]
+        meta.reflect(bind=engine, schema=schema.name)
+        tbls = {
+            tbl.name: pd.read_sql_table(tbl.name, con=engine, schema=schema.name)
+            for tbl in meta.tables.values()
+        }
     return tbls
 
 
@@ -79,19 +87,19 @@ def double_values(df: pd.DataFrame):
 
 @materialize(nout=2, input_type=sa.Table, lazy=True)
 def extract_a_b(tbls: list[sa.Table]):
-    a = [tbl for tbl in tbls if tbl.name == "dfA"][0]
-    b = [tbl for tbl in tbls if tbl.name == "dfB"][0]
+    a = [tbl for tbl in tbls if tbl.name == "dfa"][0]
+    b = [tbl for tbl in tbls if tbl.name == "dfb"][0]
     return a, b
 
 
 # noinspection PyTypeChecker
 def get_flow(attrs: dict[str, Any], pipedag_config):
     with Flow("test_instance_selection") as flow:
-        with Stage("stage_1"):
+        with Stage("stage_1") as stage:
             if not attrs["copy_filtered_input"]:
                 a, b = input_task()
             else:
-                tbls = copy_filtered_inputs(attrs, pipedag_config)
+                tbls = copy_filtered_inputs(stage, attrs, pipedag_config)
                 a, b = extract_a_b(tbls)
             a2 = double_values(a)
 
@@ -110,14 +118,6 @@ def test_instance_selection(cfg_file_base_name):
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
 
     result = flow.run(cfg)
-    _check_result(result, out1, out2)
-
-    pipedag_config = PipedagConfig.load()
-    cfg = pipedag_config.get(instance="full")
-
-    flow, out1, out2 = get_flow(cfg)
-
-    result = flow.run()
     _check_result(result, out1, out2)
 
     cfg = pipedag_config.get(instance="midi")
