@@ -26,11 +26,11 @@ class Table(Generic[T]):
 
     def __init__(
         self,
-        obj: T = None,
-        name: str = None,
-        stage: Stage = None,
-        primary_key: str = None,
-        cache_key: str = None,
+        obj: T | None = None,
+        name: str | None = None,
+        stage: Stage | None = None,
+        primary_key: str | None = None,
+        cache_key: str | None = None,
     ):
         self._name = None
 
@@ -66,10 +66,10 @@ class RawSql:
 
     def __init__(
         self,
-        sql: str = None,
-        name: str = None,
-        stage: Stage = None,
-        cache_key: str = None,
+        sql: str | None = None,
+        name: str | None = None,
+        stage: Stage | None = None,
+        cache_key: str | None = None,
     ):
         self._name = None
 
@@ -108,10 +108,10 @@ class Blob(Generic[T]):
 
     def __init__(
         self,
-        obj: T = None,
-        name: str = None,
-        stage: Stage = None,
-        cache_key: str = None,
+        obj: T | None = None,
+        name: str | None = None,
+        stage: Stage | None = None,
+        cache_key: str | None = None,
     ):
         self._name = None
 

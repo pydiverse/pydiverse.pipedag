@@ -6,9 +6,10 @@ import shutil
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
+from pydiverse.pipedag.context import ConfigContext
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.util import normalize_name
-from pydiverse.pipedag.util.config import InstanceConfig
+from pydiverse.pipedag.util.config import PipedagConfig
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import Stage
@@ -93,17 +94,20 @@ class FileBlobStore(BaseBlobStore):
     the appropriate folders.
     """
 
-    @classmethod
-    def _init_conf_(cls, config: dict, instance_config: InstanceConfig):
-        return cls(**config, **dict(flow_name=instance_config.get_flow_name()))
-
-    def __init__(self, base_path: str, flow_name: str):
+    def __init__(self, base_path: str):
         self.base_path = os.path.abspath(base_path)
-        if flow_name is not None:
-            project_name = normalize_name(flow_name)
-            self.base_path = os.path.join(self.base_path, project_name)
+        self.instance_id = None  # this should fail when used before open()
 
         os.makedirs(self.base_path, exist_ok=True)
+
+    def open(self):
+        config_ctx = ConfigContext.get()
+        self.instance_id = config_ctx.instance_id
+
+        os.makedirs(os.path.join(self.base_path, self.instance_id), exist_ok=True)
+
+    def close(self):
+        self.instance_id = None  # this should fail when used before open() again
 
     def init_stage(self, stage: Stage):
         stage_path = self.get_stage_path(stage.name)
@@ -161,7 +165,9 @@ class FileBlobStore(BaseBlobStore):
             return pickle.load(f)
 
     def get_stage_path(self, stage_name: str):
-        return os.path.join(self.base_path, stage_name)
+        return os.path.join(self.base_path, self.instance_id, stage_name)
 
     def get_blob_path(self, stage_name: str, blob_name: str):
-        return os.path.join(self.base_path, stage_name, blob_name + ".pkl")
+        return os.path.join(
+            self.base_path, self.instance_id, stage_name, blob_name + ".pkl"
+        )

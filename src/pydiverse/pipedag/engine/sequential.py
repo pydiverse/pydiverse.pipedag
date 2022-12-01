@@ -4,13 +4,13 @@ from typing import TYPE_CHECKING
 
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.core.result import Result
-from pydiverse.pipedag.engine.base import Engine
+from pydiverse.pipedag.engine.base import OrchestrationEngine
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import Flow
 
 
-class SequentialEngine(Engine):
+class SequentialEngine(OrchestrationEngine):
     """Execute flow sequentially
 
     This engine executes all tasks in a flow sequentially in the order

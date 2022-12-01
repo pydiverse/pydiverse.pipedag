@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import networkx as nx
+import structlog
 
 from pydiverse.pipedag.context import (
     ConfigContext,
@@ -13,20 +14,22 @@ from pydiverse.pipedag.context import (
 )
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 from pydiverse.pipedag.util import config
+from pydiverse.pipedag.util.config import PipedagConfig
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import Result, Stage, Task
     from pydiverse.pipedag.core.stage import CommitStageTask
-    from pydiverse.pipedag.engine import Engine
+    from pydiverse.pipedag.engine import OrchestrationEngine
 
 
 class Flow:
     def __init__(
         self,
-        name: str,
+        name: str = "default",
     ):
         self.name = name
 
+        self.logger = structlog.getLogger(module=__name__, cls=self.__class__.__name__)
         self.stages: dict[str, Stage] = {}
         self.tasks: list[Task] = []
 
@@ -213,8 +216,9 @@ class Flow:
     def run(
         self,
         config_context: ConfigContext = None,
-        engine: Engine = None,
+        orchestration_engine: OrchestrationEngine = None,
         fail_fast: bool | None = None,
+        ignore_fresh_input: bool = False,
         **kwargs,
     ) -> Result:
         """Execute a flow
@@ -224,9 +228,10 @@ class Flow:
         file is used.
 
         :param config_context: A configuration context with information about the pipe-DAG instance
-        :param engine: The engine to use.
+        :param orchestration_engine: The orchestration engine to use.
         :param fail_fast: True means that errors should be raised as exceptions out of this function
-        :param kwargs: Other arguments. They get passed on directly to the
+        :param ignore_fresh_input: whether cache functions should be disabled that check for fresh input into pipe-DAG
+        :param kwargs: Other keyword arguments. They get passed on directly to the orchestration
             engine's `.run` method and thus are engine dependant.
         :return:
             Result object that gives information whether run was successful
@@ -236,13 +241,15 @@ class Flow:
             try:
                 config_context = ConfigContext.get()
             except LookupError:
-                # fall back further to read configuration from file
-                config_context = config.get_config().get()
+                self.logger.debug("no ConfigContext is active")
+        if config_context is None:
+            # fall back further to read configuration from file in default locations
+            config_context = PipedagConfig.load().get()
         with config_context:
             with RunContextServer(self):
-                if engine is None:
-                    engine = ConfigContext.get().engine
-                res = engine.run(flow=self, **kwargs)
+                if orchestration_engine is None:
+                    orchestration_engine = ConfigContext.get().orchestration_engine
+                res = orchestration_engine.run(flow=self, **kwargs)
                 actual_fail_fast = (
                     ConfigContext.get().fail_fast if fail_fast is None else fail_fast
                 )

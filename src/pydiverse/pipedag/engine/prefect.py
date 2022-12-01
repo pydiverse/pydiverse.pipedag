@@ -9,7 +9,7 @@ from packaging.version import Version
 
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.core.result import Result
-from pydiverse.pipedag.engine.base import Engine
+from pydiverse.pipedag.engine.base import OrchestrationEngine
 from pydiverse.pipedag.util import requires
 
 if TYPE_CHECKING:
@@ -31,7 +31,7 @@ except ImportError as e:
     prefect_version in SpecifierSet("~=1.0"),
     ImportWarning(f"Requires prefect version 1.x (found {prefect_version})"),
 )
-class PrefectOneEngine(Engine):
+class PrefectOneEngine(OrchestrationEngine):
     """Flow execution engine using prefect version 1.x"""
 
     def __init__(self, flow_kwargs: dict[str, Any] = None):
@@ -95,7 +95,7 @@ class PrefectOneEngine(Engine):
     prefect_version in SpecifierSet("~=2.0"),
     ImportWarning(f"Requires prefect version 1.x (found {prefect_version})"),
 )
-class PrefectTwoEngine(Engine):
+class PrefectTwoEngine(OrchestrationEngine):
     """Flow execution engine using prefect version 2.x"""
 
     def __init__(self, flow_kwargs: dict[str, Any] = None):
@@ -161,5 +161,5 @@ else:
 
     @requires(prefect, ImportWarning("Module 'prefect' not installed"))
     @requires(False, ImportWarning(f"Incompatible prefect version {prefect_version}"))
-    class PrefectEngine(Engine, ABC):
+    class PrefectEngine(OrchestrationEngine, ABC):
         pass
