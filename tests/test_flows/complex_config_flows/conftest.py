@@ -14,5 +14,5 @@ os.environ["POSTGRES_PASSWORD_CFG"] = str(
 
 
 @fixture(scope="session", params=["pipedag_complex", "pipedag_anchor"])
-def cfg_file_base_name(base_name):
-    return cfg_file_base_name
+def cfg_file_base_name(request):
+    return request.param

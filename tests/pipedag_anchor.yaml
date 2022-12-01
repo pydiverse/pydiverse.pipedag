@@ -16,7 +16,7 @@ _table_store_connections:
     schema_prefix: "{instance_id}_"  # SQL Server needs database.schema (uncomment only on of prefix and suffix)
     schema_suffix: ".dbo"   # Alternatively SQL Server databases can be used as schemas with .dbo default schema
 
-_blob_connections:
+_blob_store_connections:
   file: &blob_file
     base_path: "/tmp/pipedag/blobs"
 
@@ -26,7 +26,7 @@ _technical_setups:
     network_interface: "127.0.0.1"
     # classes to be materialized to table store even without pipedag Table wrapper (we have loose coupling between
     # pipedag and pydiverse.transform, so consider adding 'pydiverse.transform.Table' in your config)
-    auto_table: ["pandas.DataFrame", ]
+    auto_table: ["pandas.DataFrame", "sqlalchemy.Table"]
     # abort as fast a possible on task failure and print most readable stack trace
     fail_fast: true
 
@@ -84,7 +84,7 @@ _instances: &instances
       copy_filtered_input: true
       copy_source: full
       copy_per_user: false
-      sample_cnt: 2  # this is just dummy input where we sample 2 rows
+      copy_filter_cnt: 2  # this is just dummy input where we sample 2 rows
 
     # Run this instance under @pytest.mark.slow4
     tags: pytest_mark_slow4
@@ -100,7 +100,7 @@ _instances: &instances
       copy_filtered_input: true
       copy_source: full
       copy_per_user: false
-      sample_cnt: 1  # this is just dummy input where we sample 1 row
+      copy_filter_cnt: 1  # this is just dummy input where we sample 1 row
 
     # Run this instance under @pytest.mark.slow2
     tags: pytest_mark_slow2

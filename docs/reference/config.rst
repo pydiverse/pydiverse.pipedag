@@ -13,6 +13,12 @@ When executing a flow, pipedag searches for the config file in the following dir
 - Any parent directories of the working directory
 - The user folder
 
+**Attention: pipedag config files may be used for code execution under different user ID.**
+Pipedag may be instructed to read yaml files with key-value pairs and sending content to arbitrary
+hosts. It can also be instructed to send content of environment variables (i.e. security tokens).
+Furthermore it can be instructed to load python classes in the python environment and the constructor
+be fed with arbitrary keyword arguments.
+
 Alternatively you can also specify a config file path using the `PIPEDAG_CONFIG` environment variable.
 
 One of the main goals of pipedag is to make it easy to keep multiple instances of a data processing DAG up and running
@@ -63,7 +69,7 @@ simple example configuration
 
     instances:
       __any__:
-        auto_table: ["pandas.DataFrame", ]
+        auto_table: ["pandas.DataFrame", "sqlalchemy.Table"]
 
         instance_id: pipedag_default
         table_store:
@@ -134,7 +140,7 @@ Instance or flow level attributes can be placed in the following positions and w
             attribute: value
 
 Between each of those overwrite steps, meta-attributes like `technical_setup`_, `table_store_connection`_ and
-`blob_connection`_ are resolved before the attributes from the same section are applied.
+`blob_store_connection`_ are resolved before the attributes from the same section are applied.
 
 instance_id
 -----------
@@ -187,7 +193,7 @@ For example, if you want to store all pandas dataframes and pydiverse transform 
 
 .. code-block:: yaml
 
-    auto_table: ["pandas.DataFrame", "pydiverse.transform.Table",]
+    auto_table: ["pandas.DataFrame", "sqlalchemy.Table", "pydiverse.transform.Table",]
 
 
 auto_blob
@@ -329,21 +335,21 @@ It is structured the same way as the `table_store` section.
         class: "pydiverse.pipedag.backend.blob.FileBlobStore"
         base_path: "/tmp/pipedag/blobs"
 
-blob_connection
+blob_store_connection
 ^^^^^^^^^^^^^^^
 
 This is an attribute within `blob_store`_ section which allows referencing a block of attributes from
-`blob_connections`_ section:
+`blob_store_connections`_ section:
 
 .. code-block:: yaml
 
-    blob_connections:
+    blob_store_connections:
         tmp:
             base_path: "/tmp/pipedag/blobs"
 
     table_store:
         class: "pydiverse.pipedag.backend.table.SQLTableStore"
-        blob_connection: tmp
+        blob_store_connection: tmp
 
 class: pydiverse.pipedag.backend.blob.FileBlobStore
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -481,14 +487,14 @@ example configuration
         schema_prefix: "{instance_id}_"  # SQL Server needs database.schema (uncomment only on of prefix and suffix)
         schema_suffix: ".dbo"   # Alternatively SQL Server databases can be used as schemas with .dbo default schema
 
-    blob_connections:
+    blob_store_connections:
       file:
         base_path: "/tmp/pipedag/blobs"
 
     technical_setups:
       default:
         network_interface: "127.0.0.1"
-        auto_table: ["pandas.DataFrame", ]
+        auto_table: ["pandas.DataFrame", "sqlalchemy.Table"]
         fail_fast: true
 
         instance_id: pipedag_default
@@ -503,7 +509,7 @@ example configuration
 
         blob_store:
           class: "pydiverse.pipedag.backend.blob.FileBlobStore"
-          blob_connections: file
+          blob_store_connection: file
 
         lock_manager:
           class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
@@ -600,14 +606,14 @@ which then can be later referenced
         schema_prefix: "{instance_id}_"  # SQL Server needs database.schema (uncomment only on of prefix and suffix)
         schema_suffix: ".dbo"   # Alternatively SQL Server databases can be used as schemas with .dbo default schema
 
-    _blob_connections:
+    _blob_store_connections:
       file: &blob_file
         base_path: "/tmp/pipedag/blobs"
 
     _technical_setups:
       default: &technical_setup_default
         network_interface: "127.0.0.1"
-        auto_table: ["pandas.DataFrame", ]
+        auto_table: ["pandas.DataFrame", "sqlalchemy.Table"]
         fail_fast: true
 
         instance_id: pipedag_default

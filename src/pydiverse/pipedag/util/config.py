@@ -126,9 +126,9 @@ def load_object(config_dict: dict, pipedag_config: PipedagConfig):
 
     try:
         init_conf = getattr(cls, "_init_conf_")
-        return init_conf(config_dict, pipedag_config=pipedag_config)
     except AttributeError:
         return cls(**config_dict)
+    return init_conf(config_dict, pipedag_config=pipedag_config)
 
 
 def get_section(config_dict: dict[str, Any], section_path: list[str]):
@@ -161,13 +161,14 @@ def update_resolved_attributes(
     resolve_sections = [
         ([], "technical_setups"),
         (["table_store"], "table_store_connections"),
-        (["table_store"], "table_store_connections"),
+        (["blob_store"], "blob_store_connections"),
     ]
     for section_path, resolve_section_name in resolve_sections:
-        resolve_attribute = resolve_section_name[
-            0:-1
-        ]  # remove 's' at end of resolve section
+        # remove 's' at end of resolve section
+        resolve_attribute = resolve_section_name[0:-1]
         section = get_section(config_dict, section_path)
+        if section is None:
+            continue
         if resolve_attribute in section:
             reference = section[resolve_attribute]
             if resolve_section_name not in pipedag_config_dict:
@@ -196,14 +197,16 @@ def update_resolved_attributes(
         # All attributes in resolve sections may be overridden by config_dict attributes
         for key in resolved_attributes1.get(resolve_section_name, {}):
             if key in section:
-                resolved_attributes1[resolve_section_name] = section[key]
+                resolved_attributes1[resolve_section_name][key] = deep_merge(
+                    resolved_attributes1[resolve_section_name][key], section[key]
+                )
 
     # lookup also resolved attributes in technical_setup section
     resolved_attributes2 = {}
-    if "technical_setup" in resolved_attributes1:
+    if "technical_setups" in resolved_attributes1:
         resolved_attributes2 = update_resolved_attributes(
-            resolved_attributes1["technical_setup"], pipedag_config_dict, ({}, {})
-        )
+            resolved_attributes1["technical_setups"], pipedag_config_dict, ({}, {})
+        )[0]
 
     return resolved_attributes1, resolved_attributes2
 
@@ -293,7 +296,7 @@ class PipedagConfig:
     ) -> PipedagConfig:
         store_default = False
         if path is None:
-            if cls._default_config is not None:
+            if cls._default_config is not None and base_name is None:
                 return cls._default_config
             else:
                 path = find_config(name=base_name)
@@ -320,7 +323,7 @@ class PipedagConfig:
             cfg = self.parse_pipedag_config(
                 self.pipedag_config_dict, instance, per_user, flow_name
             )
-        except AttributeError as e:
+        except (AttributeError, TypeError) as e:
             self.logger.exception(
                 "Error parsing pipedag config",
                 name=self.get_pipedag_name(),

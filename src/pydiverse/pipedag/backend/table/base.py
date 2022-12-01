@@ -70,8 +70,9 @@ class BaseTableStore(metaclass=_TableStoreMeta):
     _M_TABLE_CACHE: dict[type, TableHook]
     _R_TABLE_CACHE: dict[type, TableHook]
 
-    def __init__(self):
+    def __init__(self, table_store_connection: str):
         self.logger = structlog.get_logger(type(self).__name__)
+        self.table_store_connection = table_store_connection
 
     def setup(self):
         """Setup function
