@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import pipedag_test.tasks_library as m
-
 from pydiverse.pipedag import Flow, Stage, materialize
 from pydiverse.pipedag.context import RunContext
+
+from .pipedag_test import tasks_library as m
 
 
 def test_materialize_literals():
