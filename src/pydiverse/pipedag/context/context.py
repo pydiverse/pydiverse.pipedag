@@ -115,7 +115,7 @@ class ConfigContext(BaseAttrsContext):
 
     def open(self):
         """Open all non-serializable resources (i.e. database connections)."""
-        for opener in [self.lock_manager, self.store, self.orchestration_engine]:
+        for opener in [self.store, self.lock_manager, self.orchestration_engine]:
             if opener is not None:
                 opener.open()
 
