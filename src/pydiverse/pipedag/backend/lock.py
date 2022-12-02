@@ -3,6 +3,7 @@ from __future__ import annotations
 import atexit
 import os
 import threading
+import traceback
 import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -292,6 +293,11 @@ class ZooKeeperLockManager(BaseLockManager):
         self.instance_id = None
 
     def acquire(self, lock: Lockable):
+        if self.client is None:
+            self.logger.error(
+                "This method may only be called between open() and close()",
+                stack="\n" + "".join(traceback.format_stack()),
+            )
         assert (
             self.client is not None
         ), "This method may only be called between open() and close()"
