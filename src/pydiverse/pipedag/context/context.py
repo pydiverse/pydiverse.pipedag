@@ -125,9 +125,10 @@ class ConfigContext(BaseAttrsContext):
             if closer is not None:
                 closer.close()
 
-    def __getstate__(self):
-        state = super().__getstate__()
-        state.pop("store", None)
-        return state
+    # # this should not be needed any more since store is opened/closed just like lock_manager and orchestration_engine
+    # def __getstate__(self):
+    #     state = super().__getstate__()
+    #     state.pop("store", None)
+    #     return state
 
     _context_var = ContextVar("config_context")

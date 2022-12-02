@@ -5,10 +5,11 @@ from pathlib import Path
 
 import structlog
 
+_log_level = logging.INFO
 logging.basicConfig(
     stream=sys.stderr,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    level=logging.DEBUG,
+    level=_log_level,
 )
 structlog.configure(
     processors=[
@@ -19,7 +20,7 @@ structlog.configure(
         structlog.processors.TimeStamper(),
         structlog.dev.ConsoleRenderer(),
     ],
-    wrapper_class=structlog.make_filtering_bound_logger(logging.DEBUG),
+    wrapper_class=structlog.make_filtering_bound_logger(_log_level),
     context_class=dict,
     logger_factory=structlog.PrintLoggerFactory(sys.stderr),
     cache_logger_on_first_use=True,

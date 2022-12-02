@@ -281,7 +281,7 @@ class ZooKeeperLockManager(BaseLockManager):
 
         config_ctx = ConfigContext.get()
         self.instance_id = config_ctx.instance_id
-        self.logger.debug("open lock manager", instance_id=self.instance_id)
+        self.logger.debug("opened lock manager", instance_id=self.instance_id)
 
     def close(self):
         self.logger.debug("close lock manager", instance_id=self.instance_id)
