@@ -94,6 +94,7 @@ class RunContextServer(IPCServer):
         self.lock_manager.add_lock_state_listener(self._lock_state_listener)
 
     def __enter__(self):
+        self.logger.debug("enter context")
         super().__enter__()
 
         # INITIALIZE EVERYTHING
@@ -117,12 +118,15 @@ class RunContextServer(IPCServer):
 
         self.__context_proxy = RunContext(self)
         self.__context_proxy.__enter__()
+        self.logger.debug("entered context")
         return self.__context_proxy
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        self.logger.debug("exit context")
         self._release_all_locks()
         self.__context_proxy.__exit__(exc_type, exc_val, exc_tb)
         super().__exit__(exc_type, exc_val, exc_tb)
+        self.logger.debug("exited context")
 
     def handle_request(self, request):
         try:
