@@ -3,7 +3,6 @@ from __future__ import annotations
 import pandas as pd
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
-from pydiverse.pipedag.util import config
 from pydiverse.pipedag.util.config import PipedagConfig
 
 dfA_source = pd.DataFrame(

@@ -109,9 +109,9 @@ class MaterializingTask(Task):
         self.cache = cache
         self.lazy = lazy
 
-        # TODO: Remove cache key from instance
+        # TODO: Remove cache keys from instance
         #       Inside a task instance there should be *no* state
-        self.cache_key = None
+        self.cache_keys = {}
 
 
 class MaterializationWrapper:
@@ -149,16 +149,24 @@ class MaterializationWrapper:
         store.ensure_stage_is_ready(task.stage)
 
         # Compute the cache key for the task inputs
-        input_json = store.json_encode(bound.arguments)
+        input_json_tasks_only = store.json_encode(bound.arguments)
+        input_json = input_json_tasks_only
         if task.cache is not None:
             input_json += store.json_encode(task.cache(*args, **kwargs))
-        cache_key = store.compute_task_cache_key(task, input_json)
-        task.cache_key = cache_key
+        input_jsons = {name: input_json for name in RunContext.get_cache_key_types()}
+        assert "tasks_only" in input_jsons
+        if task.cache is not None:
+            input_jsons["tasks_only"] = input_json_tasks_only
+        # task-cache_key is currently independent of RunContext.get_cache_key_type(), but this might change
+        task.cache_keys = {
+            name: store.compute_task_cache_key(task, input_json)
+            for name, input_json in input_jsons.items()
+        }
 
         # Check if this task has already been run with the same inputs
         # If yes, return memoized result. This prevents DuplicateNameExceptions
         ctx = RunContext.get()
-        with ctx.task_memo(task, cache_key) as (success, memo):
+        with ctx.task_memo(task, task.cache_keys) as (success, memo):
             if success:
                 task.logger.info(
                     "Task has already been run with the same inputs."
@@ -172,7 +180,7 @@ class MaterializationWrapper:
                 try:
                     cached_output = store.retrieve_cached_output(task)
                     store.copy_cached_output_to_transaction_stage(cached_output, task)
-                    ctx.store_task_memo(task, cache_key, cached_output)
+                    ctx.store_task_memo(task, task.cache_keys, cached_output)
                     task.logger.info(f"Found task in cache. Using cached result.")
                     return cached_output
                 except CacheError as e:
@@ -197,7 +205,7 @@ class MaterializationWrapper:
                 return x
 
             result = deep_map(result, obj_del_mutator)
-            ctx.store_task_memo(task, cache_key, result)
+            ctx.store_task_memo(task, task.cache_keys, result)
             self.value = result
 
             return result
