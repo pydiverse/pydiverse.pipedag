@@ -92,4 +92,5 @@ jobs:
       - name: Test
         shell: bash
         run: |
-          poetry run pytest -q tests
+          # poetry run pytest -q tests
+          poetry run pytest -s tests  # interactive log output
