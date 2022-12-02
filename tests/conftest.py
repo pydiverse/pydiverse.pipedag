@@ -5,8 +5,24 @@ from pathlib import Path
 
 import structlog
 
+logging.basicConfig(
+    stream=sys.stderr,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    level=logging.DEBUG,
+)
 structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.processors.add_log_level,
+        structlog.processors.StackInfoRenderer(),
+        structlog.dev.set_exc_info,
+        structlog.processors.TimeStamper(),
+        structlog.dev.ConsoleRenderer(),
+    ],
     wrapper_class=structlog.make_filtering_bound_logger(logging.DEBUG),
+    context_class=dict,
+    logger_factory=structlog.PrintLoggerFactory(sys.stderr),
+    cache_logger_on_first_use=True,
 )
 os.environ["PIPEDAG_CONFIG"] = str(Path(__file__).parent)
 os.environ["POSTGRES_USERNAME"] = "sa"
