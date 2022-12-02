@@ -27,26 +27,26 @@ def json_default(o):
             PIPEDAG_TYPE: PIPEDAG_TYPE_TABLE,
             "stage": o.stage.name,
             "name": o.name,
-            "cache_key": o.cache_key,
+            "cache_keys": o.cache_keys,
         }
     if isinstance(o, RawSql):
         return {
             PIPEDAG_TYPE: PIPEDAG_TYPE_RAWSQL,
             "stage": o.stage.name,
             "name": o.name,
-            "cache_key": o.cache_key,
-        }
-    if isinstance(o, Stage):
-        return {
-            PIPEDAG_TYPE: PIPEDAG_TYPE_STAGE,
-            "name": o.name,
+            "cache_keys": o.cache_keys,
         }
     if isinstance(o, Blob):
         return {
             PIPEDAG_TYPE: PIPEDAG_TYPE_BLOB,
             "stage": o.stage.name,
             "name": o.name,
-            "cache_key": o.cache_key,
+            "cache_keys": o.cache_keys,
+        }
+    if isinstance(o, Stage):
+        return {
+            PIPEDAG_TYPE: PIPEDAG_TYPE_STAGE,
+            "name": o.name,
         }
     if isinstance(o, PipedagConfig):
         return {
@@ -69,19 +69,19 @@ def json_object_hook(d: dict):
             return Table(
                 name=d["name"],
                 stage=stages[d["stage"]],
-                cache_key=d["cache_key"],
+                cache_keys=d["cache_keys"],
             )
         elif pipedag_type == PIPEDAG_TYPE_RAWSQL:
             return RawSql(
                 name=d["name"],
                 stage=stages[d["stage"]],
-                cache_key=d["cache_key"],
+                cache_keys=d["cache_keys"],
             )
         elif pipedag_type == PIPEDAG_TYPE_BLOB:
             return Blob(
                 name=d["name"],
                 stage=stages[d["stage"]],
-                cache_key=d["cache_key"],
+                cache_keys=d["cache_keys"],
             )
         elif pipedag_type == PIPEDAG_TYPE_STAGE:
             return stages[d["name"]]

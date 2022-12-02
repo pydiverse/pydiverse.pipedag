@@ -118,8 +118,8 @@ def test_instance_selection(cfg_file_base_name):
 
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
 
-    # result = flow.run(cfg)
-    # _check_result(result, out1, out2)
+    result = flow.run(cfg)
+    _check_result(result, out1, out2)
 
     cfg = pipedag_config.get(instance="midi")
 
