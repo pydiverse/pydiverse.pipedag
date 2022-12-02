@@ -93,7 +93,7 @@ class RunContextServer(IPCServer):
         self.lock_manager = None
 
     def __enter__(self):
-        self.logger.debug("enter context")
+        self.logger.info("enter context")
         super().__enter__()
 
         # LOCKING
