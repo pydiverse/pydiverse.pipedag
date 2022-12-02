@@ -32,6 +32,7 @@ from pydiverse.pipedag.materialize.metadata import (
     RawSqlMetadata,
     TaskMetadata,
 )
+from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.util.config import replace_environment_variables
 
 
@@ -89,6 +90,8 @@ class SQLTableStore(BaseTableStore):
         from sqlalchemy import BigInteger, Boolean, Column, DateTime, String
 
         self.sql_metadata = sa.MetaData()
+
+        # Task Table is unique for stage * in_transaction_schema
         self.tasks_table = sa.Table(
             "tasks",
             self.sql_metadata,
@@ -104,6 +107,7 @@ class SQLTableStore(BaseTableStore):
             schema=self.metadata_schema.get(),
         )
 
+        # Lazy Cache Table is unique for stage * in_transaction_schema
         self.lazy_cache_table = sa.Table(
             "lazy_tables",
             self.sql_metadata,
@@ -115,6 +119,7 @@ class SQLTableStore(BaseTableStore):
             schema=self.metadata_schema.get(),
         )
 
+        # Sql Cache Table is unique for stage * in_transaction_schema
         self.raw_sql_cache_table = sa.Table(
             "raw_sql_tables",
             self.sql_metadata,
@@ -700,6 +705,22 @@ class SQLTableStore(BaseTableStore):
             tables=result.tables.split(";"),
             stage=result.stage,
             cache_key=result.cache_key,
+        )
+
+    def get_stage_hash(self, stage: Stage):
+        query = (
+            sa.select(self.tasks_table.c.output_json)
+            .where(
+                (self.tasks_table.c.stage == stage.name)
+                & ~self.tasks_table.c.in_transaction_schema
+            )
+            .order_by(self.tasks_table.c.output_json)
+        )
+        return compute_cache_key(
+            *[
+                output_json
+                for output_json in pd.read_sql(query, con=self.engine).iloc[0]
+            ]
         )
 
 
