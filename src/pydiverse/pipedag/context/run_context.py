@@ -90,16 +90,13 @@ class RunContextServer(IPCServer):
         self.task_memo_lock = Lock()
 
         # LOCKING
-        self.lock_manager = None
+        config_ctx = ConfigContext.get()
+        self.lock_manager = config_ctx.lock_manager
+        self.lock_manager.add_lock_state_listener(self._lock_state_listener)
 
     def __enter__(self):
         self.logger.debug("enter context")
         super().__enter__()
-
-        # LOCKING
-        config_ctx = ConfigContext.get()
-        self.lock_manager = config_ctx.lock_manager
-        self.lock_manager.add_lock_state_listener(self._lock_state_listener)
 
         # INITIALIZE EVERYTHING
         with self.lock_manager("_pipedag_setup_"):
