@@ -64,7 +64,6 @@ class SQLTableStore(BaseTableStore):
 
         :param engine_url: URL for SQLAlchemy engine
         :param create_database_if_not_exists: whether to create database if it does not exist
-        :param database: database which might potentially be created
         :param table_store_connection: database connection name from config for logging purposes
         :param schema_prefix: prefix string for schemas (dot is interpreted as database.schema)
         :param schema_suffix: suffix string for schemas (dot is interpreted as database.schema)
