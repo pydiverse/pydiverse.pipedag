@@ -115,13 +115,13 @@ class ConfigContext(BaseAttrsContext):
 
     def open(self):
         """Open all non-serializable resources (i.e. database connections)."""
-        for opener in [self.store, self.lock_manager, self.orchestration_engine]:
+        for opener in [self.lock_manager, self.store, self.orchestration_engine]:
             if opener is not None:
                 opener.open()
 
     def close(self):
         """Close all open resources (i.e. kill all database connections)."""
-        for closer in [self.store, self.lock_manager, self.orchestration_engine]:
+        for closer in [self.orchestration_engine, self.store, self.lock_manager]:
             if closer is not None:
                 closer.close()
 
