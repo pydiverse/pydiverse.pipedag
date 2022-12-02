@@ -282,10 +282,10 @@ class ZooKeeperLockManager(BaseLockManager):
 
         config_ctx = ConfigContext.get()
         self.instance_id = config_ctx.instance_id
-        self.logger.debug("opened lock manager", instance_id=self.instance_id)
+        self.logger.info("opened lock manager", instance_id=self.instance_id)
 
     def close(self):
-        self.logger.debug("close lock manager", instance_id=self.instance_id)
+        self.logger.info("close lock manager", instance_id=self.instance_id)
         if self.client is not None:
             self.client.stop()
             self.client.close()
