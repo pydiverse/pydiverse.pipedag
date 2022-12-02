@@ -90,12 +90,16 @@ class RunContextServer(IPCServer):
         self.task_memo_lock = Lock()
 
         # LOCKING
-        self.lock_manager = config_ctx.lock_manager
-        self.lock_manager.add_lock_state_listener(self._lock_state_listener)
+        self.lock_manager = None
 
     def __enter__(self):
         self.logger.debug("enter context")
         super().__enter__()
+
+        # LOCKING
+        config_ctx = ConfigContext.get()
+        self.lock_manager = config_ctx.lock_manager
+        self.lock_manager.add_lock_state_listener(self._lock_state_listener)
 
         # INITIALIZE EVERYTHING
         with self.lock_manager("_pipedag_setup_"):
@@ -126,6 +130,7 @@ class RunContextServer(IPCServer):
         self._release_all_locks()
         self.__context_proxy.__exit__(exc_type, exc_val, exc_tb)
         super().__exit__(exc_type, exc_val, exc_tb)
+        self.lock_manager = None  # don't use lock_manager any more
         self.logger.debug("exited context")
 
     def handle_request(self, request):
@@ -262,19 +267,31 @@ class RunContextServer(IPCServer):
             self.logger.error(f"Lock for stage '{stage.name}' has become INVALID.")
 
     def _release_all_locks(self):
+        assert (
+            self.lock_manager is not None
+        ), "this method may only be called between __enter__() and __exit__()"
         locks = list(self.lock_manager.lock_states.items())
         for lock, state in locks:
             self.lock_manager.release(lock)
 
     def acquire_stage_lock(self, stage_id: int):
+        assert (
+            self.lock_manager is not None
+        ), "this method may only be called between __enter__() and __exit__()"
         stage = self.stages[stage_id]
         self.lock_manager.acquire(stage)
 
     def release_stage_lock(self, stage_id: int):
+        assert (
+            self.lock_manager is not None
+        ), "this method may only be called between __enter__() and __exit__()"
         stage = self.stages[stage_id]
         self.lock_manager.release(stage)
 
     def validate_stage_lock(self, stage_id: int):
+        assert (
+            self.lock_manager is not None
+        ), "this method may only be called between __enter__() and __exit__()"
         from pydiverse.pipedag.backend.lock import LockState
 
         stage = self.stages[stage_id]
@@ -304,6 +321,10 @@ class RunContextServer(IPCServer):
     # TASK
 
     def did_finish_task(self, task_id: int, final_state_value: int):
+        assert (
+            self.lock_manager is not None
+        ), "this method may only be called between __enter__() and __exit__()"
+
         # TODO: Do something with the final state.
         #       For example: The object returned by flow.run could have a list
         #       of tasks and their final states.
