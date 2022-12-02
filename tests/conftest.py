@@ -6,7 +6,7 @@ from pathlib import Path
 import structlog
 
 structlog.configure(
-    wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+    wrapper_class=structlog.make_filtering_bound_logger(logging.DEBUG),
 )
 os.environ["PIPEDAG_CONFIG"] = str(Path(__file__).parent)
 os.environ["POSTGRES_USERNAME"] = "sa"

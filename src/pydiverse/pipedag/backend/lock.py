@@ -281,8 +281,10 @@ class ZooKeeperLockManager(BaseLockManager):
 
         config_ctx = ConfigContext.get()
         self.instance_id = config_ctx.instance_id
+        self.logger.debug("open lock manager", instance_id=self.instance_id)
 
     def close(self):
+        self.logger.debug("close lock manager", instance_id=self.instance_id)
         if self.client is not None:
             self.client.stop()
             self.client.close()
@@ -290,6 +292,9 @@ class ZooKeeperLockManager(BaseLockManager):
         self.instance_id = None
 
     def acquire(self, lock: Lockable):
+        assert (
+            self.client is not None
+        ), "This method may only be called between open() and close()"
         zk_lock = self.client.Lock(self.lock_path(lock))
         self.logger.info(f"Locking '{lock}'")
         if not zk_lock.acquire():

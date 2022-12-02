@@ -40,7 +40,7 @@ class IPCServer(threading.Thread):
 
         self.__stop_flag = False
         self.__thread = None
-        self.logger = structlog.get_logger()
+        self.logger = structlog.get_logger(cls=type(self).__name__)
 
         self.msg_default = msg_default
         self.msg_ext_hook = msg_ext_hook
