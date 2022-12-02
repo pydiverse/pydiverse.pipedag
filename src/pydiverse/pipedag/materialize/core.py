@@ -152,7 +152,7 @@ class MaterializationWrapper:
         input_json_tasks_only = store.json_encode(bound.arguments)
         input_json = input_json_tasks_only
         if task.cache is not None:
-            input_json += store.json_encode(task.cache(*args, **kwargs))
+            input_json += json.dumps(task.cache(*args, **kwargs))
         input_jsons = {name: input_json for name in RunContext.get_cache_key_types()}
         assert "tasks_only" in input_jsons
         if task.cache is not None:
