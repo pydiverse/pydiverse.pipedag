@@ -8,6 +8,7 @@ from typing import Any
 
 import pandas as pd
 import sqlalchemy as sa
+import sqlalchemy.exc
 import sqlalchemy.sql.elements
 import yaml
 
@@ -220,13 +221,19 @@ class SQLTableStore(BaseTableStore):
                     with try_engine.connect() as conn:
                         # try whether connection with database in connect string works
                         conn.execute("SELECT 1")
-                except Exception:
-                    tmp_engine = sa.create_engine(
-                        engine_url.replace(instance_id, "postgres")
-                    )
-                    with tmp_engine.connect() as conn:
-                        conn.execute("COMMIT")
-                        conn.execute(CreateDatabase(instance_id))
+                except sa.exc.DBAPIError:
+                    postgres_db_url = engine_url.replace(instance_id, "postgres")
+                    tmp_engine = sa.create_engine(postgres_db_url)
+                    try:
+                        with tmp_engine.connect() as conn:
+                            conn.execute("COMMIT")
+                            conn.execute(CreateDatabase(instance_id))
+                    except sa.exc.IntegrityError:
+                        # This happens if multiple instances try to create the database
+                        # at the same time.
+                        with try_engine.connect() as conn:
+                            # Verify database actually exists
+                            conn.execute("SELECT 1")
             else:
                 raise NotImplementedError(
                     "create_database_if_not_exists is only implemented for"
