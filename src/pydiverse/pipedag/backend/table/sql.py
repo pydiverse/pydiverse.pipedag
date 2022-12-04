@@ -115,9 +115,9 @@ class SQLTableStore(BaseTableStore):
         table_store_connection: str | None = None,
         schema_prefix: str = "",
         schema_suffix: str = "",
-        print_materialize: bool | None = None,
-        print_sql: bool | None = None,
-        no_db_locking: bool | None = None,
+        print_materialize: bool = False,
+        print_sql: bool = False,
+        no_db_locking: bool = True,
     ):
         """
         Construct table store.
@@ -140,12 +140,11 @@ class SQLTableStore(BaseTableStore):
         self.table_store_connection = table_store_connection
         self.schema_prefix = schema_prefix
         self.schema_suffix = schema_suffix
-        self.print_materialize = (
-            print_materialize if print_materialize is not None else False
-        )
-        self.print_sql = print_sql if print_sql is not None else False
-        self.no_db_locking = no_db_locking if no_db_locking is not None else True
+        self.print_materialize = print_materialize
+        self.print_sql = print_sql
+        self.no_db_locking = no_db_locking
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
+
         # Set up metadata tables and schema
         from sqlalchemy import BigInteger, Boolean, Column, DateTime, String
 
