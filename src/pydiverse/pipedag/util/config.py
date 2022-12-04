@@ -376,7 +376,7 @@ class PipedagConfig:
         )
 
         # make sure @cached_property store is already setup and loaded (this will throw config parsing errors earlier)
-        _ = cfg.store
+        _ = cfg.store, cfg.auto_table, cfg.auto_blob
         # also try creating orchestration engine and locking_manager
         cfg.create_orchestration_engine().dispose()
         cfg.create_lock_manager().dispose()
