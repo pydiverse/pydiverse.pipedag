@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -113,7 +114,9 @@ def get_flow(attrs: dict[str, Any], pipedag_config):
 
 def test_instance_selection(cfg_file_base_name):
     # at this point, an instance is chosen from multi-pipedag-instance configuration file
-    pipedag_config = PipedagConfig.load(base_name=cfg_file_base_name)
+    pipedag_config = PipedagConfig.load(
+        path=Path(__file__).parent, base_name=cfg_file_base_name
+    )
     cfg = pipedag_config.get(instance="full")
 
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
