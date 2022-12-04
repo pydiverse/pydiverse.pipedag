@@ -113,5 +113,5 @@ jobs:
       - name: Test
         shell: bash
         run: |
-          poetry run pytest -q tests -m 'not mssql'
+          poetry run pytest -q tests -m 'not mssql'  # mssql driver installation is not automated, yet
           # poetry run pytest -s tests  # interactive log output
