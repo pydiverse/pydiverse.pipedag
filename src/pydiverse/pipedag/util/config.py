@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 import copy
-import functools
 import os
-from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Iterable
 
 import structlog
 import yaml
 
+from pydiverse.pipedag.context import ConfigContext
 from pydiverse.pipedag.util.deep_merge import deep_merge
-from pydiverse.pipedag.util.import_ import import_object
 
 
 def find_config(
@@ -102,33 +100,6 @@ def load_config(path: str | Path) -> PipedagConfig:
         "instances" in pipedag_config_dict or "flows" in pipedag_config_dict
     ), f"Config file needs top level attribute 'instances:' or 'flows:' {path}"
     return PipedagConfig(pipedag_config_dict, path)
-
-
-def load_object(config_dict: dict, pipedag_config: PipedagConfig):
-    """Instantiates an instance of an object given
-
-    The import path (module.Class) should be specified as the "class" value
-    of the dict. The rest of the dict get used as the instance config.
-
-    If the class defines a `_init_conf_` function, it gets called using the
-    config valuesdef , otherwise they just get passed to the class initializer.
-
-    >>> # module.Class(argument="value")
-    >>> load_object({
-    >>>     "class": "module.Class",
-    >>>     "argument": "value",
-    >>> })
-
-    """
-
-    config_dict = config_dict.copy()
-    cls = import_object(config_dict.pop("class"))
-
-    try:
-        init_conf = getattr(cls, "_init_conf_")
-    except AttributeError:
-        return cls(**config_dict)
-    return init_conf(config_dict, pipedag_config=pipedag_config)
 
 
 def get_section(config_dict: dict[str, Any], section_path: list[str]):
@@ -270,8 +241,8 @@ def get_username():
     )
 
 
-def apply_per_user_id_change(per_user_template: str, id: str):
-    replacements = dict(id=id, username=get_username())
+def apply_per_user_id_change(per_user_template: str, _id: str):
+    replacements = dict(id=_id, username=get_username())
     for placeholder in replacements:
         if placeholder not in per_user_template:
             raise AttributeError(
@@ -333,8 +304,8 @@ class PipedagConfig:
             raise AttributeError(str(e) + f": pipedag config file: {self.config_file}")
         return cfg
 
+    @staticmethod
     def parse_pipedag_config(
-        self,
         pipedag_config_dict: dict[str, Any],
         instance: str,
         per_user: bool,
@@ -386,39 +357,28 @@ class PipedagConfig:
         # Apply defaults
         pipedag_name = pipedag_config_dict.get("name", None)
         interface = config_dict.get("network_interface", "127.0.0.1")
-        auto_table = tuple(map(import_object, config_dict.get("auto_table", ())))
-        auto_blob = tuple(map(import_object, config_dict.get("auto_blob", ())))
         fail_fast = config_dict.get("fail_fast", False)
         attrs = config_dict.get("attrs", {})
         instance_id = config_dict.get("instance_id", flow_name)
         per_user_template = config_dict.get("per_user_template", "{id}_{username}")
         if per_user:
             instance_id = apply_per_user_id_change(per_user_template, instance_id)
-        # Load objects referenced in config
-        table_store = load_object(config_dict["table_store"], self)
-        blob_store = load_object(config_dict["blob_store"], self)
-        lock_manager = load_object(config_dict["lock_manager"], self)
-        orchestration_engine = load_object(config_dict["orchestration"], self)
-        from pydiverse.pipedag.context import ConfigContext
-        from pydiverse.pipedag.materialize.store import PipeDAGStore
 
-        store = PipeDAGStore(
-            table=table_store,
-            blob=blob_store,
-        )
         cfg = ConfigContext(
             pipedag_name=pipedag_name,
             flow_name=flow_name,
             instance_name=instance,
             instance_id=instance_id,
             config_dict=config_dict.copy(),
-            auto_table=auto_table,
-            auto_blob=auto_blob,
             fail_fast=fail_fast,
             network_interface=interface,
             attrs=attrs,
-            store=store,
-            lock_manager=lock_manager,
-            orchestration_engine=orchestration_engine,
         )
+
+        # make sure @cached_property store is already setup and loaded (this will throw config parsing errors earlier)
+        _ = cfg.store
+        # also try creating orchestration engine and locking_manager
+        cfg.create_orchestration_engine().dispose()
+        cfg.create_lock_manager().dispose()
+
         return cfg

@@ -88,12 +88,6 @@ class BaseLockManager(ABC):
         finally:
             self.release(lock)
 
-    def open(self):
-        """Open non-serializable resources"""
-
-    def close(self):
-        """Clean up and close all open resources"""
-
     @abstractmethod
     def acquire(self, lock: Lockable):
         """Acquires a lock to access a given object"""
@@ -142,6 +136,9 @@ class BaseLockManager(ABC):
         with self.__lock_state_lock:
             return self.lock_states[lock]
 
+    def dispose(self):
+        """Close all resources (i.e. connections) and render object unusable."""
+
 
 class NoLockManager(BaseLockManager):
     """Non locking lock manager (oxymoron)
@@ -179,20 +176,22 @@ class FileLockManager(BaseLockManager):
         https://py-filelock.readthedocs.io/en/latest/index.html
     """
 
-    def __init__(self, base_path: str):
+    @classmethod
+    def _init_conf_(cls, config: dict[str, Any], cfg: ConfigContext):
+        return cls(cfg, **config)
+
+    def __init__(self, cfg: ConfigContext, base_path: str):
         super().__init__()
         self.base_path = os.path.abspath(base_path)
-        self.instance_id = None  # this should fail when used before open()
+        self.instance_id = cfg.instance_id
         self.locks: dict[Lockable, fl.BaseFileLock] = {}
 
         os.makedirs(self.base_path, exist_ok=True)
 
-    def open(self):
-        config_ctx = ConfigContext.get()
-        self.instance_id = config_ctx.instance_id
-
-    def close(self):
-        self.instance_id = None  # this should fail when used before open() again
+    def dispose(self):
+        self.instance_id = (
+            None  # this should fail it object is used after dispose() call
+        )
 
     def acquire(self, lock: Lockable):
         if lock not in self.locks:
@@ -251,44 +250,33 @@ class ZooKeeperLockManager(BaseLockManager):
     """
 
     @classmethod
-    def _init_conf_(cls, config: dict, pipedag_config: PipedagConfig):
+    def _init_conf_(cls, config: dict[str, Any], cfg: ConfigContext):
         # keep kwargs as config dictionary
-        return cls(config)
+        return cls(config, cfg)
 
-    def __init__(self, client_config: dict[str, Any]):
+    def __init__(self, client_config: dict[str, Any], cfg: ConfigContext):
         super().__init__()
 
-        # test that config can be used to start KazooClient
-        client = KazooClient(**client_config)
-        client.close()
-
-        self.client = None
         self.client_config = client_config
 
         self.locks: dict[Lockable, KazooLock] = {}
         self.base_path = "/pipedag/locks/"
-        self.instance_id = None  # this should fail when used before open()
 
-    def open(self):
-        assert self.client is None, (
-            "close() call missing since close() and open() must be called in"
-            " alternating sequence"
-        )
+        self.instance_id = cfg.instance_id
         self.client = KazooClient(**self.client_config)
         if not self.client.connected:
             self.client.start()
             atexit.register(lambda: self.close())
         self.client.add_listener(self._lock_listener)
 
-        config_ctx = ConfigContext.get()
-        self.instance_id = config_ctx.instance_id
         self.logger.debug("opened lock manager", instance_id=self.instance_id)
 
-    def close(self):
-        self.logger.debug("close lock manager", instance_id=self.instance_id)
+    def dispose(self):
+        self.logger.debug("dispose lock manager", instance_id=self.instance_id)
         if self.client is not None:
             self.client.stop()
             self.client.close()
+        # render this object unusable (disposed)
         self.client = None
         self.instance_id = None
 

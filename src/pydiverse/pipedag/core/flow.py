@@ -6,14 +6,8 @@ from typing import TYPE_CHECKING
 import networkx as nx
 import structlog
 
-from pydiverse.pipedag.context import (
-    ConfigContext,
-    DAGContext,
-    RunContext,
-    RunContextServer,
-)
+from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContextServer
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
-from pydiverse.pipedag.util import config
 from pydiverse.pipedag.util.config import PipedagConfig
 
 if TYPE_CHECKING:
@@ -248,11 +242,9 @@ class Flow:
         with config_context:
             with RunContextServer(self, ignore_fresh_input):
                 if orchestration_engine is None:
-                    orchestration_engine = ConfigContext.get().orchestration_engine
+                    orchestration_engine = config_context.create_orchestration_engine()
                 res = orchestration_engine.run(flow=self, **kwargs)
-                actual_fail_fast = (
-                    ConfigContext.get().fail_fast if fail_fast is None else fail_fast
-                )
+        actual_fail_fast = config_context.fail_fast if fail_fast is None else fail_fast
         if (
             actual_fail_fast
             and not res.successful
