@@ -266,7 +266,7 @@ class ZooKeeperLockManager(BaseLockManager):
         self.client = KazooClient(**self.client_config)
         if not self.client.connected:
             self.client.start()
-            atexit.register(lambda: self.close())
+            atexit.register(lambda: self.dispose())
         self.client.add_listener(self._lock_listener)
 
         self.logger.debug("opened lock manager", instance_id=self.instance_id)
