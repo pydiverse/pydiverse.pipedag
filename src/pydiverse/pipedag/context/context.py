@@ -1,19 +1,20 @@
 from __future__ import annotations
 
+import builtins
+import importlib
 from contextvars import ContextVar, Token
+from functools import cached_property
 from threading import Lock
 from typing import TYPE_CHECKING, Any, ClassVar
-
-import structlog
-from attrs import frozen
 
 if TYPE_CHECKING:
     from pydiverse.pipedag._typing import T
     from pydiverse.pipedag.backend import BaseLockManager
-    from pydiverse.pipedag.core import Flow, Stage, Task
     from pydiverse.pipedag.engine.base import OrchestrationEngine
-    from pydiverse.pipedag.materialize.store import PipeDAGStore
+    from pydiverse.pipedag.core import Flow, Stage, Task
 
+import structlog
+from attrs import frozen
 
 logger = structlog.get_logger()
 
@@ -33,9 +34,6 @@ class BaseContext:
 
             token = self._context_var.set(self)
             object.__setattr__(self, "_token", token)
-
-            if self._enter_counter == 1:
-                self.open()
         return self
 
     def __exit__(self, *_):
@@ -44,16 +42,10 @@ class BaseContext:
             if self._enter_counter == 0:
                 if not self._token:
                     raise RuntimeError
-                self.close()
                 self._context_var.reset(self._token)
                 object.__setattr__(self, "_token", None)
 
-    def open(self):
-        """Function that gets called at __enter__"""
-
-    def close(self):
-        """Function that gets called at __exit__"""
-
+    # noinspection PyUnresolvedReferences
     @classmethod
     def get(cls: type[T]) -> T:
         return cls._context_var.get()
@@ -91,44 +83,120 @@ class TaskContext(BaseAttrsContext):
 
 @frozen(slots=False)
 class ConfigContext(BaseAttrsContext):
-    """Configuration context"""
+    """
+    Configuration context for running a particular pipedag instance.
+
+    For the most part it holds serializable attributes. But it also offers access to blob_store and table_store as
+    well as lock manager and orchestration engine. Lock manager and orchestration engine are managed full cycle by
+    exactly one caller (ServerRunContext / Flow.run()). So this class just offers a way to create a disposable object.
+    Blob_store and table_store on the other hand might be accessed by multi-threaded / multi-processed / multi-node
+    way of orchestrating functions in the pipedag. Since they don't keep real state, they can be thrown away while
+    pickling and will be reloaded on first access of the @cached_property store. Calling ConfigContext.dispose() will
+    close all connections and render this object unusable afterwards.
+    """
 
     config_dict: dict
 
     pipedag_name: str
     flow_name: str
     instance_name: str
-    instance_id: str  # may be used as database name for example
-    auto_table: tuple[type, ...]
-    auto_blob: tuple[type, ...]
     fail_fast: bool
     # per instance attributes
+    instance_id: str  # may be used as database name or locking ID
     network_interface: str
     attrs: dict[str, Any]
 
-    store: PipeDAGStore
-    lock_manager: BaseLockManager
-    orchestration_engine: OrchestrationEngine
+    @staticmethod
+    def import_object(import_path: str):
+        """Loads a class given an import path
 
-    def get_orchestration_engine(self) -> OrchestrationEngine:
-        return self.orchestration_engine
+        >>> # An import statement like this
+        >>> from pandas import DataFrame
+        >>> # can be expressed as follows:
+        >>> ConfigContext.import_object("pandas.DataFrame")
+        """
 
-    def open(self):
-        """Open all non-serializable resources (i.e. database connections)."""
-        for opener in [self.store, self.lock_manager, self.orchestration_engine]:
-            if opener is not None:
-                opener.open()
+        parts = [part for part in import_path.split(".") if part]
+        module, n = None, 0
 
-    def close(self):
-        """Close all open resources (i.e. kill all database connections)."""
-        for closer in [self.orchestration_engine, self.store, self.lock_manager]:
-            if closer is not None:
-                closer.close()
+        while n < len(parts):
+            try:
+                module = importlib.import_module(".".join(parts[: n + 1]))
+                n = n + 1
+            except ImportError:
+                break
 
-    # # this should not be needed any more since store is opened/closed just like lock_manager and orchestration_engine
-    # def __getstate__(self):
-    #     state = super().__getstate__()
-    #     state.pop("store", None)
-    #     return state
+        obj = module or builtins
+        for part in parts[n:]:
+            obj = getattr(obj, part)
+
+        return obj
+
+    @staticmethod
+    def load_object(config_dict: dict, config_context: ConfigContext):
+        """Instantiates an instance of an object given
+
+        The import path (module.Class) should be specified as the "class" value
+        of the dict. The rest of the dict get used as the instance config.
+
+        If the class defines a `_init_conf_` function, it gets called using the
+        config valuesdef , otherwise they just get passed to the class initializer.
+
+        >>> # module.Class(argument="value")
+        >>> ConfigContext.load_object({
+        >>>     "class": "module.Class",
+        >>>     "argument": "value",
+        >>> })
+
+        """
+
+        config_dict = config_dict.copy()
+        cls = ConfigContext.import_object(config_dict.pop("class"))
+
+        try:
+            init_conf = getattr(cls, "_init_conf_")
+        except AttributeError:
+            return cls(**config_dict)
+        return init_conf(config_dict, cfg=config_context)
+
+    @cached_property
+    def auto_table(self) -> tuple[type, ...]:
+        return tuple(map(self.import_object, self.config_dict.get("auto_table", ())))
+
+    @cached_property
+    def auto_blob(self) -> tuple[type, ...]:
+        return tuple(map(self.import_object, self.config_dict.get("auto_blob", ())))
+
+    @cached_property
+    def store(self):
+        # Load objects referenced in config
+        table_store = self.load_object(self.config_dict["table_store"], self)
+        blob_store = self.load_object(self.config_dict["blob_store"], self)
+        from pydiverse.pipedag.materialize.store import PipeDAGStore
+
+        return PipeDAGStore(
+            table=table_store,
+            blob=blob_store,
+        )
+
+    def create_lock_manager(self) -> BaseLockManager:
+        return self.load_object(self.config_dict["lock_manager"], self)
+
+    def create_orchestration_engine(self) -> OrchestrationEngine:
+        return self.load_object(self.config_dict["orchestration"], self)
+
+    def dispose(self):
+        self.store.dispose()
+        # this should reset the @cached_property such that it will not automatically load any more
+        del __dict__["store"]
+        __dict__["store"] = None
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        # store is not serializable. But @cached_property will reload it from config_dict
+        state.pop("store", None)
+        state.pop("auto_table", None)
+        state.pop("auto_blob", None)
+        return state
 
     _context_var = ContextVar("config_context")

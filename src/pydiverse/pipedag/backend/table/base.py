@@ -83,12 +83,6 @@ class BaseTableStore(metaclass=_TableStoreMeta):
         the setup method gets called to prevent race conditions.
         """
 
-    def open(self):
-        """Open all non-serializable resources"""
-
-    def close(self):
-        """Clean up and close all open resources"""
-
     @classmethod
     def register_table(cls, *requirements: Any):
         """Decorator to register a `TableHook`
@@ -460,6 +454,9 @@ class BaseTableStore(metaclass=_TableStoreMeta):
         :raises CacheError: if not metadata that matches the provided cache_key
             and stage was found
         """
+
+    def dispose(self):
+        """Close all resources (i.e. connections) and render object unusable."""
 
 
 class TableHook(Generic[StoreT], ABC):

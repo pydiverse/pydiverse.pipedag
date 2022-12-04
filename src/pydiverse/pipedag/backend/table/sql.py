@@ -4,6 +4,7 @@ import json
 import re
 import warnings
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import sqlalchemy as sa
@@ -48,8 +49,66 @@ class SQLTableStore(BaseTableStore):
 
     METADATA_SCHEMA = "pipedag_metadata"
 
+    @classmethod
+    def _init_conf_(cls, config: dict[str, Any], cfg: ConfigContext):
+        config = config.copy()
+        engine_url = config.pop("url")
+        engine_url = replace_environment_variables(engine_url)
+        if "url_attrs_file" in config:
+            attrs_file = config.pop("url_attrs_file")
+            attrs_file = replace_environment_variables(attrs_file)
+            if not Path(attrs_file).is_file():
+                raise AttributeError(
+                    f"Failed opening file referenced in 'url_attrs_file': {attrs_file}"
+                )
+            with open(attrs_file, encoding="utf-8") as fh:
+                attrs = yaml.safe_load(fh)
+            # TODO: use nicer schema verification code
+            if not isinstance(attrs, dict):
+                raise AttributeError(
+                    "Expected dictionary in yaml format in file referenced by"
+                    f" 'url_attrs_file': {attrs_file}"
+                )
+            for key, value in attrs.items():
+                if not isinstance(key, str):
+                    key = str(key)
+                    if "{" in key or "[" in key or "(" in key or "," in key:
+                        raise AttributeError(
+                            "Expected keys as type string in yaml file referenced by"
+                            f" 'url_attrs_file': {attrs_file}; Found {key}"
+                        )
+                if not isinstance(value, str):
+                    value = str(value)
+                    if "{" in value or "[" in value or "(" in value or "," in value:
+                        raise AttributeError(
+                            f"Expected '{key}' type string in yaml file referenced by"
+                            f" 'url_attrs_file': {attrs_file}; Found {value}"
+                        )
+                assert "{" not in key, "just to avoid messy lookups"
+                assert "}" not in key, "just to avoid messy lookups"
+                assert "{" not in value, "prevent recursive lookups"
+                assert "}" not in value, "prevent recursive lookups"
+            # keep the two identifiers "instance_id" and "name" for later
+            assert (
+                "instance_id" not in attrs
+            ), f"please remove 'instance_id' attribute from: {attrs_file}"
+            assert (
+                "name" not in attrs
+            ), f"please remove 'name' attribute from: {attrs_file}"
+        else:
+            # Alternative: we could make cfg.attrs available for engine_url replacements. However, this makes it much
+            # harder to analyze what information a config sends out to a remote server
+            attrs = {}
+        attrs["instance_id"] = cfg.instance_id
+        # TODO: consider renaming {name} to {pipedag_name} and top level name: attribute of pipedag config as well
+        attrs["name"] = cfg.pipedag_name
+        engine_url = engine_url.format(**attrs)
+
+        return cls(cfg, engine_url, **config)
+
     def __init__(
         self,
+        cfg: ConfigContext,
         engine_url: str,
         create_database_if_not_exists: bool = False,
         table_store_connection: str | None = None,
@@ -134,12 +193,19 @@ class SQLTableStore(BaseTableStore):
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
         )
+        self.instance_id = cfg.instance_id
+        format_dict = dict(name=cfg.pipedag_name, instance_id=cfg.instance_id)
+        engine_url = self.engine_url.format(**format_dict)
+        self._init_database(
+            engine_url, self.instance_id, self.create_database_if_not_exists
+        )
+        self.engine = self._connect(engine_url, self.schema_prefix, self.schema_suffix)
 
     @staticmethod
     def _init_database(
         engine_url: str, instance_id: str, create_database_if_not_exists: bool
     ):
-        # TODO: this is a really hacky way to create a generic engine for creating a database before one can open a
+        # Attention: this is a really hacky way to create a generic engine for creating a database before one can open a
         #  connection to self.engine_url which references a database and will fail if the database does not exist
         try_engine = sa.create_engine(engine_url)
         if (
@@ -192,59 +258,6 @@ class SQLTableStore(BaseTableStore):
                 )
         return engine
 
-    @classmethod
-    def _init_conf_(cls, config: dict, pipedag_config):
-        _ = pipedag_config
-        config = config.copy()
-        engine_url = config.pop("url")
-        engine_url = replace_environment_variables(engine_url)
-        if "url_attrs_file" in config:
-            attrs_file = config.pop("url_attrs_file")
-            attrs_file = replace_environment_variables(attrs_file)
-            if not Path(attrs_file).is_file():
-                raise AttributeError(
-                    f"Failed opening file referenced in 'url_attrs_file': {attrs_file}"
-                )
-            with open(attrs_file, encoding="utf-8") as fh:
-                attrs = yaml.safe_load(fh)
-            # TODO: use nicer schema verification code
-            if not isinstance(attrs, dict):
-                raise AttributeError(
-                    "Expected dictionary in yaml format in file referenced by"
-                    f" 'url_attrs_file': {attrs_file}"
-                )
-            for key, value in attrs.items():
-                if not isinstance(key, str):
-                    key = str(key)
-                    if "{" in key or "[" in key or "(" in key or "," in key:
-                        raise AttributeError(
-                            "Expected keys as type string in yaml file referenced by"
-                            f" 'url_attrs_file': {attrs_file}; Found {key}"
-                        )
-                if not isinstance(value, str):
-                    value = str(value)
-                    if "{" in value or "[" in value or "(" in value or "," in value:
-                        raise AttributeError(
-                            f"Expected '{key}' type string in yaml file referenced by"
-                            f" 'url_attrs_file': {attrs_file}; Found {value}"
-                        )
-                assert "{" not in key, "just to avoid messy lookups"
-                assert "}" not in key, "just to avoid messy lookups"
-                assert "{" not in value, "prevent recursive lookups"
-                assert "}" not in value, "prevent recursive lookups"
-            # keep the two identifiers "instance_id" and "name" for later
-            assert (
-                "instance_id" not in attrs
-            ), f"please remove 'instance_id' attribute from: {attrs_file}"
-            assert (
-                "name" not in attrs
-            ), f"please remove 'name' attribute from: {attrs_file}"
-            attrs["instance_id"] = "{instance_id}"
-            attrs["name"] = "{name}"
-            engine_url = engine_url.format(**attrs)
-
-        return cls(engine_url, **config)
-
     def get_schema(self, name):
         return Schema(name, self.schema_prefix, self.schema_suffix)
 
@@ -296,23 +309,7 @@ class SQLTableStore(BaseTableStore):
         with self.engine.connect() as conn:
             self.sql_metadata.create_all(conn)
 
-    def open(self):
-        assert self.engine is None, (
-            "close() call missing since close() and open() must be called in"
-            " alternating sequence"
-        )
-        config_ctx = ConfigContext.get()
-        self.instance_id = config_ctx.instance_id
-        format_dict = dict(
-            name=config_ctx.pipedag_name, instance_id=config_ctx.instance_id
-        )
-        engine_url = self.engine_url.format(**format_dict)
-        self._init_database(
-            engine_url, self.instance_id, self.create_database_if_not_exists
-        )
-        self.engine = self._connect(engine_url, self.schema_prefix, self.schema_suffix)
-
-    def close(self):
+    def dispose(self):
         if self.engine is not None:
             self.engine.dispose()
         self.engine = None

@@ -20,8 +20,5 @@ class OrchestrationEngine(ABC):
         :return: A result instance wrapping the flow execution result.
         """
 
-    def open(self):
-        """Open non-serializable resources"""
-
-    def close(self):
-        """Clean up and close all open resources"""
+    def dispose(self):
+        """Close all resources (i.e. connections) and render object unusable."""

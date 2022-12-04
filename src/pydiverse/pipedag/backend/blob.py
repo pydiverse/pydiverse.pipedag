@@ -34,12 +34,6 @@ class BaseBlobStore(ABC):
     data as long as they have the same name and stage.
     """
 
-    def open(self):
-        """Open all non-serializable resources"""
-
-    def close(self):
-        """Clean up and close all open resources"""
-
     @abstractmethod
     def init_stage(self, stage: Stage):
         """Initialize a stage and start a transaction"""
@@ -80,6 +74,9 @@ class BaseBlobStore(ABC):
         stage.
         """
 
+    def dispose(self):
+        """Close all resources (i.e. connections) and render object unusable."""
+
 
 class FileBlobStore(BaseBlobStore):
     """File based blob store
@@ -94,21 +91,25 @@ class FileBlobStore(BaseBlobStore):
     the appropriate folders.
     """
 
-    def __init__(self, base_path: str, blob_store_connection: str | None = None):
+    @classmethod
+    def _init_conf_(cls, config: dict[str, Any], cfg: ConfigContext):
+        return cls(cfg, **config)
+
+    def __init__(
+        self,
+        cfg: ConfigContext,
+        base_path: str,
+        blob_store_connection: str | None = None,
+    ):
         self.base_path = os.path.abspath(base_path)
         self.blob_store_connection = blob_store_connection  # for debug output
-        self.instance_id = None  # this should fail when used before open()
-
-        os.makedirs(self.base_path, exist_ok=True)
-
-    def open(self):
-        config_ctx = ConfigContext.get()
-        self.instance_id = config_ctx.instance_id
-
+        self.instance_id = cfg.instance_id
         os.makedirs(os.path.join(self.base_path, self.instance_id), exist_ok=True)
 
-    def close(self):
-        self.instance_id = None  # this should fail when used before open() again
+    def dispose(self):
+        self.instance_id = (
+            None  # this should fail any accesses after dispose() was called
+        )
 
     def init_stage(self, stage: Stage):
         stage_path = self.get_stage_path(stage.name)
@@ -166,9 +167,15 @@ class FileBlobStore(BaseBlobStore):
             return pickle.load(f)
 
     def get_stage_path(self, stage_name: str):
+        assert (
+            self.instance_id is not None
+        ), "Don't call this method after dispose() call"
         return os.path.join(self.base_path, self.instance_id, stage_name)
 
     def get_blob_path(self, stage_name: str, blob_name: str):
+        assert (
+            self.instance_id is not None
+        ), "Don't call this method after dispose() call"
         return os.path.join(
             self.base_path, self.instance_id, stage_name, blob_name + ".pkl"
         )

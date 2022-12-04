@@ -91,7 +91,7 @@ class RunContextServer(IPCServer):
 
         # LOCKING
         config_ctx = ConfigContext.get()
-        self.lock_manager = config_ctx.lock_manager
+        self.lock_manager = config_ctx.create_lock_manager()
         self.lock_manager.add_lock_state_listener(self._lock_state_listener)
 
     def __enter__(self):

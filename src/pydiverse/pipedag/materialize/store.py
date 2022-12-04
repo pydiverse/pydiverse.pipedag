@@ -49,19 +49,16 @@ class PipeDAGStore:
         )
         self.json_decoder = json.JSONDecoder(object_hook=json_util.json_object_hook)
 
-    def open(self):
-        """Open all non-serializable resources"""
-        self.table_store.open()
-        self.blob_store.open()
-        cfg = ConfigContext.get()
-        self.logger.debug("opened store", instance_id=cfg.instance_id)
+    def dispose(self):
+        """
+        Clean up and close all open resources.
 
-    def close(self):
-        """Clean up and close all open resources"""
-        cfg = ConfigContext.get()
-        self.logger.debug("close store", instance_id=cfg.instance_id)
-        self.table_store.close()
-        self.blob_store.close()
+        Don't use the store object any more after disposal!
+        """
+        self.table_store.dispose()
+        self.blob_store.dispose()
+        self.table_store = None
+        self.blob_store = None
 
     #### Stage ####
 
