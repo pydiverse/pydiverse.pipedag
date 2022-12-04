@@ -250,6 +250,13 @@ class ZooKeeperLockManager(BaseLockManager):
     .. [1] https://zookeeper.apache.org/doc/r3.1.2/recipes.html#sc_recipes_Locks
     """
 
+    @classmethod
+    def _init_conf_(cls, config: dict[str, Any]):
+        client = KazooClient(**config)
+        instance_id = normalize_name(ConfigContext.get().instance_id)
+        base_path = f"/pipedag/locks/{instance_id}/"
+        return cls(client, base_path)
+
     def __init__(self, client: KazooClient, base_path: str):
         super().__init__()
 
@@ -261,13 +268,6 @@ class ZooKeeperLockManager(BaseLockManager):
         self.client.add_listener(self._lock_listener)
 
         self.locks: dict[Lockable, KazooLock] = {}
-
-    @classmethod
-    def _init_conf_(cls, config: dict[str, Any]):
-        client = KazooClient(**config)
-        instance_id = normalize_name(ConfigContext.get().instance_id)
-        base_path = f"/pipedag/locks/{instance_id}/"
-        return cls(client, base_path)
 
     def __atexit(self):
         try:

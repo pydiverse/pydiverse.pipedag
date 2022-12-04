@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import builtins
+import importlib
 from contextvars import ContextVar, Token
 from functools import cached_property
 from threading import Lock

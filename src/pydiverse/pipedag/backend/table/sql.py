@@ -50,6 +50,7 @@ class SQLTableStore(BaseTableStore):
 
     def __init__(
         self,
+        cfg: ConfigContext,
         engine_url: str,
         create_database_if_not_exists: bool = False,
         schema_prefix: str = "",
@@ -130,6 +131,13 @@ class SQLTableStore(BaseTableStore):
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
         )
+        self.instance_id = cfg.instance_id
+        format_dict = dict(name=cfg.pipedag_name, instance_id=cfg.instance_id)
+        engine_url = self.engine_url.format(**format_dict)
+        self._init_database(
+            engine_url, self.instance_id, self.create_database_if_not_exists
+        )
+        self.engine = self._connect(engine_url, self.schema_prefix, self.schema_suffix)
 
     @classmethod
     def _init_conf_(cls, config: dict[str, Any]):
