@@ -250,18 +250,14 @@ class ZooKeeperLockManager(BaseLockManager):
     def __init__(self, client_config: dict[str, Any], cfg: ConfigContext):
         super().__init__()
 
-        self.client_config = client_config
-
-        self.locks: dict[Lockable, KazooLock] = {}
-        self.base_path = "/pipedag/locks/"
-
-        self.instance_id = cfg.instance_id
-        self.client = KazooClient(**self.client_config)
+        self.client = KazooClient(**client_config)
         if not self.client.connected:
             self.client.start()
             atexit.register(self.__atexit)
         self.client.add_listener(self._lock_listener)
-        self.logger.debug("opened lock manager", instance_id=self.instance_id)
+
+        self.locks: dict[Lockable, KazooLock] = {}
+        self.base_path = f"/pipedag/locks/{cfg.instance_id}/"
 
     def __atexit(self):
         try:
@@ -270,7 +266,6 @@ class ZooKeeperLockManager(BaseLockManager):
             pass
 
     def dispose(self):
-        self.logger.debug("dispose lock manager", instance_id=self.instance_id)
         self.client.stop()
         self.client.close()
         super().dispose()
@@ -294,9 +289,9 @@ class ZooKeeperLockManager(BaseLockManager):
 
     def lock_path(self, lock: Lockable):
         if isinstance(lock, Stage):
-            return self.base_path + self.instance_id + lock.name
+            return self.base_path + lock.name
         elif isinstance(lock, str):
-            return self.base_path + self.instance_id + lock
+            return self.base_path + lock
         else:
             raise NotImplementedError(
                 f"Can't lock object of type '{type(lock).__name__}'"
