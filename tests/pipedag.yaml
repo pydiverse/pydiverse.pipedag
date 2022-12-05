@@ -55,9 +55,11 @@ instances:
       ## Activate this class to work either with prefect 1.3.0 or prefect 2.0
       # class: "pydiverse.pipedag.engine.PrefectEngine"
   mssql:
+    # Full dataset is using default database connection and schemas
     table_store:
       table_store_connection: mssql
   ibm_db2:
+    # Full dataset is using default database connection and schemas
     stage_commit_technique: READ_VIEWS
     table_store:
       table_store_connection: ibm_db2
