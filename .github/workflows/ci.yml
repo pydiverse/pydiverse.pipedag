@@ -85,9 +85,14 @@ jobs:
         shell: bash
         run: poetry install -vvv
 
-      - uses: isbang/compose-action@v1.4.1
+      - name: Start Docker Compose
+        uses: isbang/compose-action@v1.4.1
         with:
           compose-file: ./docker-compose.yaml
+
+      - name: Wait for Docker Servers
+        shell: bash
+        run: sleep 2
 
       - name: Test
         shell: bash
