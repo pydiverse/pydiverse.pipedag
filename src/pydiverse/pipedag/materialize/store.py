@@ -18,9 +18,10 @@ from pydiverse.pipedag.materialize.metadata import TaskMetadata
 from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.materialize.util import json as json_util
 from pydiverse.pipedag.util import deep_map
+from pydiverse.pipedag.util.disposable import Disposable
 
 
-class PipeDAGStore:
+class PipeDAGStore(Disposable):
     """Main storage interface for materializing tasks
 
     Depending on the use case, the store can be configured using different
@@ -57,8 +58,7 @@ class PipeDAGStore:
         """
         self.table_store.dispose()
         self.blob_store.dispose()
-        self.table_store = None
-        self.blob_store = None
+        super().dispose()
 
     #### Stage ####
 

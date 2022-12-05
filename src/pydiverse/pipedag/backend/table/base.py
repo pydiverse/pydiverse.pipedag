@@ -18,6 +18,7 @@ from pydiverse.pipedag.materialize.metadata import (
 )
 from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.util import requires
+from pydiverse.pipedag.util.disposable import Disposable
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Stage
@@ -40,7 +41,7 @@ class _TableStoreMeta(ABCMeta):
         return cls
 
 
-class BaseTableStore(metaclass=_TableStoreMeta):
+class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
     """Table store base class
 
     The table store is responsible for storing and retrieving various types
@@ -454,9 +455,6 @@ class BaseTableStore(metaclass=_TableStoreMeta):
         :raises CacheError: if not metadata that matches the provided cache_key
             and stage was found
         """
-
-    def dispose(self):
-        """Close all resources (i.e. connections) and render object unusable."""
 
 
 class TableHook(Generic[StoreT], ABC):

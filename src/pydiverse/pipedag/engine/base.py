@@ -3,11 +3,13 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+from pydiverse.pipedag.util.disposable import Disposable
+
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import Flow, Result
 
 
-class OrchestrationEngine(ABC):
+class OrchestrationEngine(Disposable, ABC):
     """Flow orchestration engine base class"""
 
     @abstractmethod
@@ -19,6 +21,3 @@ class OrchestrationEngine(ABC):
             engine specific.
         :return: A result instance wrapping the flow execution result.
         """
-
-    def dispose(self):
-        """Close all resources (i.e. connections) and render object unusable."""

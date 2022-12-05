@@ -16,7 +16,7 @@ import structlog
 
 from pydiverse.pipedag.context.context import ConfigContext
 from pydiverse.pipedag.core.stage import Stage
-from pydiverse.pipedag.errors import LockError
+from pydiverse.pipedag.errors import DisposedError, LockError
 from pydiverse.pipedag.util import normalize_name, requires
 
 __all__ = [
@@ -28,6 +28,7 @@ __all__ = [
 ]
 
 from pydiverse.pipedag.util.config import PipedagConfig
+from pydiverse.pipedag.util.disposable import Disposable
 
 
 class LockState(Enum):
@@ -66,7 +67,7 @@ Lockable = Union[Stage, str]
 LockStateListener = Callable[[Lockable, LockState, LockState], None]
 
 
-class BaseLockManager(ABC):
+class BaseLockManager(Disposable, ABC):
     """Lock Manager base class
 
     A lock manager is responsible for acquiring and releasing locks on
@@ -137,9 +138,6 @@ class BaseLockManager(ABC):
         with self.__lock_state_lock:
             return self.lock_states[lock]
 
-    def dispose(self):
-        """Close all resources (i.e. connections) and render object unusable."""
-
 
 class NoLockManager(BaseLockManager):
     """Non locking lock manager (oxymoron)
@@ -188,11 +186,6 @@ class FileLockManager(BaseLockManager):
         self.locks: dict[Lockable, fl.BaseFileLock] = {}
 
         os.makedirs(str(self.base_path), exist_ok=True)
-
-    def dispose(self):
-        self.instance_id = (
-            None  # this should fail it object is used after dispose() call
-        )
 
     def acquire(self, lock: Lockable):
         if lock not in self.locks:
@@ -267,29 +260,24 @@ class ZooKeeperLockManager(BaseLockManager):
         self.client = KazooClient(**self.client_config)
         if not self.client.connected:
             self.client.start()
-            atexit.register(lambda: self.dispose())
+            atexit.register(self.__atexit)
         self.client.add_listener(self._lock_listener)
 
         self.logger.debug("opened lock manager", instance_id=self.instance_id)
 
+    def __atexit(self):
+        try:
+            self.dispose()
+        except DisposedError:
+            pass
+
     def dispose(self):
         self.logger.debug("dispose lock manager", instance_id=self.instance_id)
-        if self.client is not None:
-            self.client.stop()
-            self.client.close()
-        # render this object unusable (disposed)
-        self.client = None
-        self.instance_id = None
+        self.client.stop()
+        self.client.close()
+        super().dispose()
 
     def acquire(self, lock: Lockable):
-        if self.client is None:
-            self.logger.error(
-                "This method may only be called between open() and close()",
-                stack="\n" + "".join(traceback.format_stack()),
-            )
-        assert (
-            self.client is not None
-        ), "This method may only be called between open() and close()"
         zk_lock = self.client.Lock(self.lock_path(lock))
         self.logger.info(f"Locking '{lock}'")
         if not zk_lock.acquire():

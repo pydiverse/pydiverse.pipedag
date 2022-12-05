@@ -316,9 +316,8 @@ class SQLTableStore(BaseTableStore):
             self.sql_metadata.create_all(conn)
 
     def dispose(self):
-        if self.engine is not None:
-            self.engine.dispose()
-        self.engine = None
+        self.engine.dispose()
+        super().dispose()
 
     def init_stage(self, stage: Stage):
         cs_base = CreateSchema(self.get_schema(stage.name), if_not_exists=True)
