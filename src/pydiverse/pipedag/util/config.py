@@ -8,7 +8,7 @@ from typing import Any, Iterable
 import structlog
 import yaml
 
-from pydiverse.pipedag.util.deep_merge import deep_merge
+from pydiverse.pipedag.util import deep_merge
 from pydiverse.pipedag.util.import_ import import_object
 
 

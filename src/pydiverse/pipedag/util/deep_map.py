@@ -5,7 +5,6 @@ https://github.com/python/cpython/blob/main/Lib/copy.py
 """
 from __future__ import annotations
 
-import collections
 from typing import Callable
 
 _nil = []
