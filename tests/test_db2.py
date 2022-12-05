@@ -1,9 +1,11 @@
 import ibm_db
 import pandas as pd
+import pytest
 import sqlalchemy as sa
 import structlog
 
 
+@pytest.mark.ibm_db2
 def test_db2():
     logger = structlog.getLogger(module=__name__)
     conn = ibm_db.connect(
@@ -22,6 +24,7 @@ def test_db2():
         rows.append(row)
 
 
+@pytest.mark.ibm_db2
 def test_db2_sqlalchemy():
     logger = structlog.getLogger(module=__name__)
     engine = sa.create_engine("db2+ibm_db://db2inst1:password@localhost:50000/testdb")

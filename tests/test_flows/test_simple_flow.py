@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Blob, Flow, Stage, Table, materialize
@@ -58,10 +59,27 @@ def test_simple_flow():
     assert result.successful
 
 
-def test_simple_config():
-    cfg = (
-        PipedagConfig.default.get()
-    )  # this will use the default configuration instance=__any__
+def test_alternative_way_to_load_config():
+    # this will use the default configuration instance=__any__
+    cfg = PipedagConfig.default.get()
+    flow = _get_flow(cfg.pipedag_name)
+    result = flow.run(cfg)
+    assert result.successful
+
+
+@pytest.mark.mssql
+def test_mssql():
+    # this will use the default configuration instance=__any__
+    cfg = PipedagConfig.default.get(instance="mssql")
+    flow = _get_flow(cfg.pipedag_name)
+    result = flow.run(cfg)
+    assert result.successful
+
+
+@pytest.mark.ibm_db2
+def test_ibm_db2():
+    # this will use the default configuration instance=__any__
+    cfg = PipedagConfig.default.get(instance="ibm_db2")
     flow = _get_flow(cfg.pipedag_name)
     result = flow.run(cfg)
     assert result.successful

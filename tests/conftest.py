@@ -28,6 +28,7 @@ structlog.configure(
 os.environ["PIPEDAG_CONFIG"] = str(Path(__file__).parent)
 os.environ["POSTGRES_USERNAME"] = "sa"
 os.environ["POSTGRES_PASSWORD"] = "Pydiverse23"
+os.environ["MSSQL_USERNAME"] = "sa"
 os.environ["MSSQL_PASSWORD"] = "PidyQuant27"
 
 _logger = structlog.getLogger(module=__name__)

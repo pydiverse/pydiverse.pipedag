@@ -7,9 +7,13 @@ table_store_connections:
   mssql:
     # SQL Server: this can be used after running `docker-compose up`
     url: "mssql+pyodbc://{$MSSQL_USERNAME}:{$MSSQL_PASSWORD}@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
-    # schema_prefix: "master."  # SQL Server needs database.schema (uncomment only on of prefix and suffix)
-    schema_prefix: "{instance_id}_"  # SQL Server needs database.schema (uncomment only on of prefix and suffix)
+    schema_prefix: "{instance_id}_"  # SQL Server needs database.schema
     schema_suffix: ".dbo"   # Alternatively SQL Server databases can be used as schemas with .dbo default schema
+
+  ibm_db2:
+    # SQL Server: this can be used after running `docker-compose up`
+    url: "db2+ibm_db://db2inst1:password@localhost:50000/testdb"
+    schema_prefix: "{instance_id}_"
 
 instances:
   __any__:
@@ -50,3 +54,11 @@ instances:
       class: "pydiverse.pipedag.engine.SequentialEngine"
       ## Activate this class to work either with prefect 1.3.0 or prefect 2.0
       # class: "pydiverse.pipedag.engine.PrefectEngine"
+  mssql:
+    # Full dataset is using default database connection and schemas
+    table_store:
+      table_store_connection: mssql
+  ibm_db2:
+    # Full dataset is using default database connection and schemas
+    table_store:
+      table_store_connection: ibm_db2
