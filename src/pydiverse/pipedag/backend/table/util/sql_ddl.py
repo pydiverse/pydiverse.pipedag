@@ -258,7 +258,9 @@ def visit_drop_database(drop: DropDatabase, compiler, **kw):
     if drop.cascade:
         text.append("CASCADE")
     ret = " ".join(text)
-    assert False, f"Disable for now for safety reasons (not yet needed): {ret}"
+    raise NotImplementedError(
+        f"Disable for now for safety reasons (not yet needed): {ret}"
+    )
     # return ret
 
 
