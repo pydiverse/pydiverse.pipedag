@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from contextlib import contextmanager
 from enum import Enum
+from pathlib import Path
 from typing import Any, Callable, Union
 
 import structlog
@@ -180,13 +181,13 @@ class FileLockManager(BaseLockManager):
     def _init_conf_(cls, config: dict[str, Any], cfg: ConfigContext):
         return cls(cfg, **config)
 
-    def __init__(self, cfg: ConfigContext, base_path: str):
+    def __init__(self, cfg: ConfigContext, base_path: str | Path):
         super().__init__()
-        self.base_path = os.path.abspath(base_path)
+        self.base_path = Path(base_path).absolute()
         self.instance_id = cfg.instance_id
         self.locks: dict[Lockable, fl.BaseFileLock] = {}
 
-        os.makedirs(self.base_path, exist_ok=True)
+        os.makedirs(str(self.base_path), exist_ok=True)
 
     def dispose(self):
         self.instance_id = (
@@ -195,7 +196,7 @@ class FileLockManager(BaseLockManager):
 
     def acquire(self, lock: Lockable):
         if lock not in self.locks:
-            lock_path = self.lock_path(lock)
+            lock_path = str(self.lock_path(lock))
             self.locks[lock] = fl.FileLock(lock_path)
 
         f_lock = self.locks[lock]
@@ -217,11 +218,11 @@ class FileLockManager(BaseLockManager):
             del self.locks[lock]
             self.set_lock_state(lock, LockState.UNLOCKED)
 
-    def lock_path(self, lock: Lockable):
+    def lock_path(self, lock: Lockable) -> Path:
         if isinstance(lock, Stage):
-            return os.path.join(self.base_path, self.instance_id, lock.name + ".lock")
+            return self.base_path / self.instance_id / (lock.name + ".lock")
         elif isinstance(lock, str):
-            return os.path.join(self.base_path, self.instance_id, lock + ".lock")
+            return self.base_path / self.instance_id / (lock + ".lock")
         else:
             raise NotImplementedError(
                 f"Can't lock object of type '{type(lock).__name__}'"
