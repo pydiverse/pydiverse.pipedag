@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydiverse.pipedag.context import ConfigContext
 from pydiverse.pipedag.errors import CacheError
+from pydiverse.pipedag.util import normalize_name
 from pydiverse.pipedag.util.disposable import Disposable
 
 if TYPE_CHECKING:
@@ -82,25 +83,21 @@ class FileBlobStore(BaseBlobStore):
     In the base directory there will be two folders for every stage, one
     for the base and one for the transaction stage. Inside those folders the
     blobs will be stored as pickled files:
-    `/base_path/PROJECT_NAME/STAGE_NAME/BLOB_NAME.pkl`.
+    `/base_path/STAGE_NAME/BLOB_NAME.pkl`.
 
     To commit a stage, the only thing that has to be done is to rename
     the appropriate folders.
     """
 
-    @classmethod
-    def _init_conf_(cls, config: dict[str, Any], cfg: ConfigContext):
-        return cls(cfg, **config)
-
-    def __init__(
-        self,
-        cfg: ConfigContext,
-        base_path: str | Path,
-        blob_store_connection: str | None = None,
-    ):
-        self.base_path = Path(base_path).absolute() / cfg.instance_id
-        self.blob_store_connection = blob_store_connection  # for debug output
+    def __init__(self, base_path: str | Path):
+        self.base_path = Path(base_path).absolute()
         os.makedirs(self.base_path, exist_ok=True)
+
+    @classmethod
+    def _init_conf_(cls, config: dict[str, Any]):
+        instance_id = normalize_name(ConfigContext.get().instance_id)
+        base_path = Path(config["base_path"]) / instance_id
+        return cls(base_path)
 
     def init_stage(self, stage: Stage):
         stage_path = self.get_stage_path(stage.name)

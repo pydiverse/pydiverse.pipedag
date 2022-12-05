@@ -51,8 +51,7 @@ class SQLTableStore(BaseTableStore):
     METADATA_SCHEMA = "pipedag_metadata"
 
     @classmethod
-    def _init_conf_(cls, config: dict[str, Any], cfg: ConfigContext):
-        config = config.copy()
+    def _init_conf_(cls, config: dict[str, Any]):
         engine_url = config.pop("url")
         engine_url = replace_environment_variables(engine_url)
         if "url_attrs_file" in config:
@@ -100,16 +99,15 @@ class SQLTableStore(BaseTableStore):
             # Alternative: we could make cfg.attrs available for engine_url replacements. However, this makes it much
             # harder to analyze what information a config sends out to a remote server
             attrs = {}
+        cfg = ConfigContext.get()
         attrs["instance_id"] = cfg.instance_id
         # TODO: consider renaming {name} to {pipedag_name} and top level name: attribute of pipedag config as well
         attrs["name"] = cfg.pipedag_name
         engine_url = engine_url.format(**attrs)
-
-        return cls(cfg, engine_url, **config)
+        return cls(engine_url, **config)
 
     def __init__(
         self,
-        cfg: ConfigContext,
         engine_url: str,
         create_database_if_not_exists: bool = False,
         table_store_connection: str | None = None,
@@ -133,10 +131,9 @@ class SQLTableStore(BaseTableStore):
         """
         super().__init__(table_store_connection)
 
-        self.engine_url = engine_url
+        config = ConfigContext.get()
+
         self.create_database_if_not_exists = create_database_if_not_exists
-        self.engine = None
-        self.instance_id = None
         self.table_store_connection = table_store_connection
         self.schema_prefix = schema_prefix
         self.schema_suffix = schema_suffix
@@ -144,6 +141,15 @@ class SQLTableStore(BaseTableStore):
         self.print_sql = print_sql
         self.no_db_locking = no_db_locking
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
+
+        # TODO: Clean this up so that the __init__ function doesn't have to call ConfigContext.get()
+        engine_url = engine_url.format(
+            name=config.pipedag_name, instance_id=config.instance_id
+        )
+        self._init_database(
+            engine_url, config.instance_id, create_database_if_not_exists
+        )
+        self.engine = self._connect(engine_url, self.schema_prefix, self.schema_suffix)
 
         # Set up metadata tables and schema
         from sqlalchemy import BigInteger, Boolean, Column, DateTime, String
@@ -193,13 +199,6 @@ class SQLTableStore(BaseTableStore):
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
         )
-        self.instance_id = cfg.instance_id
-        format_dict = dict(name=cfg.pipedag_name, instance_id=cfg.instance_id)
-        engine_url = self.engine_url.format(**format_dict)
-        self._init_database(
-            engine_url, self.instance_id, self.create_database_if_not_exists
-        )
-        self.engine = self._connect(engine_url, self.schema_prefix, self.schema_suffix)
 
     @staticmethod
     def _init_database(

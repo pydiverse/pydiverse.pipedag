@@ -8,8 +8,8 @@ from typing import Any, Iterable
 import structlog
 import yaml
 
-from pydiverse.pipedag.context import ConfigContext
 from pydiverse.pipedag.util.deep_merge import deep_merge
+from pydiverse.pipedag.util.import_ import import_object
 
 
 def find_config(
@@ -364,6 +364,8 @@ class PipedagConfig:
         if per_user:
             instance_id = apply_per_user_id_change(per_user_template, instance_id)
 
+        from pydiverse.pipedag.context import ConfigContext
+
         cfg = ConfigContext(
             pipedag_name=pipedag_name,
             flow_name=flow_name,
@@ -375,10 +377,37 @@ class PipedagConfig:
             attrs=attrs,
         )
 
-        # make sure @cached_property store is already setup and loaded (this will throw config parsing errors earlier)
-        _ = cfg.store, cfg.auto_table, cfg.auto_blob
-        # also try creating orchestration engine and locking_manager
-        cfg.create_orchestration_engine().dispose()
-        cfg.create_lock_manager().dispose()
+        with cfg:
+            # make sure @cached_property store is already setup and loaded (this will throw config parsing errors earlier)
+            _ = cfg.store, cfg.auto_table, cfg.auto_blob
+            # also try creating orchestration engine and locking_manager
+            cfg.create_orchestration_engine().dispose()
+            cfg.create_lock_manager().dispose()
 
         return cfg
+
+
+def load_object(config_dict: dict):
+    """Instantiates an instance of an object given
+
+    The import path (module.Class) should be specified as the "class" value
+    of the dict. The rest of the dict get used as the instance config.
+
+    If the class defines a `_init_conf_` function, it gets called using the
+    config values, otherwise they just get passed to the class initializer.
+
+    >>> # module.Class(argument="value")
+    >>> load_instance({
+    >>>     "class": "module.Class",
+    >>>     "argument": "value",
+    >>> })
+    """
+
+    config_dict = config_dict.copy()
+    cls = import_object(config_dict.pop("class"))
+
+    try:
+        init_conf = getattr(cls, "_init_conf_")
+        return init_conf(config_dict)
+    except AttributeError:
+        return cls(**config_dict)
