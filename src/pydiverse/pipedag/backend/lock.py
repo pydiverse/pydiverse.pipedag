@@ -3,7 +3,6 @@ from __future__ import annotations
 import atexit
 import os
 import threading
-import traceback
 import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -27,7 +26,6 @@ __all__ = [
     "ZooKeeperLockManager",
 ]
 
-from pydiverse.pipedag.util.config import PipedagConfig
 from pydiverse.pipedag.util.disposable import Disposable
 
 
@@ -175,16 +173,18 @@ class FileLockManager(BaseLockManager):
         https://py-filelock.readthedocs.io/en/latest/index.html
     """
 
-    @classmethod
-    def _init_conf_(cls, config: dict[str, Any], cfg: ConfigContext):
-        return cls(cfg, **config)
-
-    def __init__(self, cfg: ConfigContext, base_path: str | Path):
+    def __init__(self, base_path: str | Path):
         super().__init__()
-        self.base_path = Path(base_path).absolute() / cfg.instance_id
+        self.base_path = Path(base_path).absolute()
         self.locks: dict[Lockable, fl.BaseFileLock] = {}
 
         os.makedirs(self.base_path, exist_ok=True)
+
+    @classmethod
+    def _init_conf_(cls, config: dict[str, Any]):
+        instance_id = normalize_name(ConfigContext.get().instance_id)
+        base_path = Path(config["base_path"]) / instance_id
+        return cls(base_path)
 
     def acquire(self, lock: Lockable):
         if lock not in self.locks:
@@ -242,22 +242,24 @@ class ZooKeeperLockManager(BaseLockManager):
     .. [1] https://zookeeper.apache.org/doc/r3.1.2/recipes.html#sc_recipes_Locks
     """
 
-    @classmethod
-    def _init_conf_(cls, config: dict[str, Any], cfg: ConfigContext):
-        # keep kwargs as config dictionary
-        return cls(config, cfg)
-
-    def __init__(self, client_config: dict[str, Any], cfg: ConfigContext):
+    def __init__(self, client: KazooClient, base_path: str):
         super().__init__()
 
-        self.client = KazooClient(**client_config)
+        self.client = client
+        self.base_path = base_path
         if not self.client.connected:
             self.client.start()
             atexit.register(self.__atexit)
         self.client.add_listener(self._lock_listener)
 
         self.locks: dict[Lockable, KazooLock] = {}
-        self.base_path = f"/pipedag/locks/{cfg.instance_id}/"
+
+    @classmethod
+    def _init_conf_(cls, config: dict[str, Any]):
+        client = KazooClient(**config)
+        instance_id = normalize_name(ConfigContext.get().instance_id)
+        base_path = f"/pipedag/locks/{instance_id}/"
+        return cls(client, base_path)
 
     def __atexit(self):
         try:

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import builtins
-import importlib
 from contextvars import ContextVar, Token
 from functools import cached_property
 from threading import Lock
 from typing import TYPE_CHECKING, Any, ClassVar
+
+from pydiverse.pipedag.util.config import load_object
+from pydiverse.pipedag.util.import_ import import_object
 
 if TYPE_CHECKING:
     from pydiverse.pipedag._typing import T
@@ -109,72 +110,19 @@ class ConfigContext(BaseAttrsContext):
     network_interface: str
     attrs: dict[str, Any]
 
-    @staticmethod
-    def import_object(import_path: str):
-        """Loads a class given an import path
-
-        >>> # An import statement like this
-        >>> from pandas import DataFrame
-        >>> # can be expressed as follows:
-        >>> ConfigContext.import_object("pandas.DataFrame")
-        """
-
-        parts = [part for part in import_path.split(".") if part]
-        module, n = None, 0
-
-        while n < len(parts):
-            try:
-                module = importlib.import_module(".".join(parts[: n + 1]))
-                n = n + 1
-            except ImportError:
-                break
-
-        obj = module or builtins
-        for part in parts[n:]:
-            obj = getattr(obj, part)
-
-        return obj
-
-    @staticmethod
-    def load_object(config_dict: dict, config_context: ConfigContext):
-        """Instantiates an instance of an object given
-
-        The import path (module.Class) should be specified as the "class" value
-        of the dict. The rest of the dict get used as the instance config.
-
-        If the class defines a `_init_conf_` function, it gets called using the
-        config valuesdef , otherwise they just get passed to the class initializer.
-
-        >>> # module.Class(argument="value")
-        >>> ConfigContext.load_object({
-        >>>     "class": "module.Class",
-        >>>     "argument": "value",
-        >>> })
-
-        """
-
-        config_dict = config_dict.copy()
-        cls = ConfigContext.import_object(config_dict.pop("class"))
-
-        try:
-            init_conf = getattr(cls, "_init_conf_")
-        except AttributeError:
-            return cls(**config_dict)
-        return init_conf(config_dict, cfg=config_context)
-
     @cached_property
     def auto_table(self) -> tuple[type, ...]:
-        return tuple(map(self.import_object, self.config_dict.get("auto_table", ())))
+        return tuple(map(import_object, self.config_dict.get("auto_table", ())))
 
     @cached_property
     def auto_blob(self) -> tuple[type, ...]:
-        return tuple(map(self.import_object, self.config_dict.get("auto_blob", ())))
+        return tuple(map(import_object, self.config_dict.get("auto_blob", ())))
 
     @cached_property
     def store(self):
         # Load objects referenced in config
-        table_store = self.load_object(self.config_dict["table_store"], self)
-        blob_store = self.load_object(self.config_dict["blob_store"], self)
+        table_store = load_object(self.config_dict["table_store"])
+        blob_store = load_object(self.config_dict["blob_store"])
         from pydiverse.pipedag.materialize.store import PipeDAGStore
 
         return PipeDAGStore(
@@ -183,10 +131,10 @@ class ConfigContext(BaseAttrsContext):
         )
 
     def create_lock_manager(self) -> BaseLockManager:
-        return self.load_object(self.config_dict["lock_manager"], self)
+        return load_object(self.config_dict["lock_manager"])
 
     def create_orchestration_engine(self) -> OrchestrationEngine:
-        return self.load_object(self.config_dict["orchestration"], self)
+        return load_object(self.config_dict["orchestration"])
 
     def close(self):
         # If the store has been initialized (and thus cached in the __dict__),

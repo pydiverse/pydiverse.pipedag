@@ -39,3 +39,29 @@ def requires(requirements: Any | list, exception: BaseException | type[BaseExcep
         return RaiserMeta(__name, __bases, __dict)
 
     return decorator
+
+
+def import_object(import_path: str):
+    """Loads a class given an import path
+
+    >>> # An import statement like this
+    >>> from pandas import DataFrame
+    >>> # can be expressed as follows:
+    >>> import_object("pandas.DataFrame")
+    """
+
+    parts = [part for part in import_path.split(".") if part]
+    module, n = None, 0
+
+    while n < len(parts):
+        try:
+            module = importlib.import_module(".".join(parts[: n + 1]))
+            n = n + 1
+        except ImportError:
+            break
+
+    obj = module or builtins
+    for part in parts[n:]:
+        obj = getattr(obj, part)
+
+    return obj
