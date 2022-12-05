@@ -225,7 +225,7 @@ class SQLTableStore(BaseTableStore):
                         with tmp_engine.connect() as conn:
                             conn.execute("COMMIT")
                             conn.execute(CreateDatabase(instance_id))
-                    except sa.exc.IntegrityError:
+                    except sa.exc.DBAPIError:
                         # This happens if multiple instances try to create the database
                         # at the same time.
                         with try_engine.connect() as conn:
