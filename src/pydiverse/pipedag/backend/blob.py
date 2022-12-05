@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydiverse.pipedag.context import ConfigContext
 from pydiverse.pipedag.errors import CacheError
+from pydiverse.pipedag.util.disposable import Disposable
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import Stage
@@ -20,7 +21,7 @@ __all__ = [
 ]
 
 
-class BaseBlobStore(ABC):
+class BaseBlobStore(Disposable, ABC):
     """Blob store base class
 
     A blob (binary large object) store is responsible for storing arbitrary
@@ -73,9 +74,6 @@ class BaseBlobStore(ABC):
         stage.
         """
 
-    def dispose(self):
-        """Close all resources (i.e. connections) and render object unusable."""
-
 
 class FileBlobStore(BaseBlobStore):
     """File based blob store
@@ -104,11 +102,6 @@ class FileBlobStore(BaseBlobStore):
         self.blob_store_connection = blob_store_connection  # for debug output
         self.instance_id = cfg.instance_id
         os.makedirs(str(self.base_path / self.instance_id), exist_ok=True)
-
-    def dispose(self):
-        self.instance_id = (
-            None  # this should fail any accesses after dispose() was called
-        )
 
     def init_stage(self, stage: Stage):
         stage_path = str(self.get_stage_path(stage.name))
@@ -166,13 +159,7 @@ class FileBlobStore(BaseBlobStore):
             return pickle.load(f)
 
     def get_stage_path(self, stage_name: str) -> Path:
-        assert (
-            self.instance_id is not None
-        ), "Don't call this method after dispose() call"
         return self.base_path / self.instance_id / stage_name
 
     def get_blob_path(self, stage_name: str, blob_name: str) -> Path:
-        assert (
-            self.instance_id is not None
-        ), "Don't call this method after dispose() call"
         return self.base_path / self.instance_id / stage_name / (blob_name + ".pkl")

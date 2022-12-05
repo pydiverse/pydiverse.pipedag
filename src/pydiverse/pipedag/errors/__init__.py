@@ -42,3 +42,10 @@ class RemoteProcessError(IPCError):
     """
     Exception raised if an exception occurred in the remote IPC process.
     """
+
+
+class DisposedError(Exception):
+    """
+    Exception raise when an object has been disposed, but some attributes are
+    being accessed nevertheless.
+    """

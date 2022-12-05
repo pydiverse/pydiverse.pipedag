@@ -44,8 +44,11 @@ class BaseContext:
                     raise RuntimeError
                 self._context_var.reset(self._token)
                 object.__setattr__(self, "_token", None)
+                self.close()
 
-    # noinspection PyUnresolvedReferences
+    def close(self):
+        """Function that gets called at __exit__"""
+
     @classmethod
     def get(cls: type[T]) -> T:
         return cls._context_var.get()
@@ -185,11 +188,12 @@ class ConfigContext(BaseAttrsContext):
     def create_orchestration_engine(self) -> OrchestrationEngine:
         return self.load_object(self.config_dict["orchestration"], self)
 
-    def dispose(self):
-        self.store.dispose()
-        # this should reset the @cached_property such that it will not automatically load any more
-        del __dict__["store"]
-        __dict__["store"] = None
+    def close(self):
+        # If the store has been initialized (and thus cached in the __dict__),
+        # dispose of it, and remove it from the cache.
+        if store := self.__dict__.get("store", None):
+            store.dispose()
+            self.__dict__.pop("store")
 
     def __getstate__(self):
         state = super().__getstate__()
