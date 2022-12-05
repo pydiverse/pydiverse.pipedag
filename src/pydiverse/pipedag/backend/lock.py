@@ -181,15 +181,14 @@ class FileLockManager(BaseLockManager):
 
     def __init__(self, cfg: ConfigContext, base_path: str | Path):
         super().__init__()
-        self.base_path = Path(base_path).absolute()
-        self.instance_id = cfg.instance_id
+        self.base_path = Path(base_path).absolute() / cfg.instance_id
         self.locks: dict[Lockable, fl.BaseFileLock] = {}
 
-        os.makedirs(str(self.base_path), exist_ok=True)
+        os.makedirs(self.base_path, exist_ok=True)
 
     def acquire(self, lock: Lockable):
         if lock not in self.locks:
-            lock_path = str(self.lock_path(lock))
+            lock_path = self.lock_path(lock)
             self.locks[lock] = fl.FileLock(lock_path)
 
         f_lock = self.locks[lock]
@@ -213,9 +212,9 @@ class FileLockManager(BaseLockManager):
 
     def lock_path(self, lock: Lockable) -> Path:
         if isinstance(lock, Stage):
-            return self.base_path / self.instance_id / (lock.name + ".lock")
+            return self.base_path / (lock.name + ".lock")
         elif isinstance(lock, str):
-            return self.base_path / self.instance_id / (lock + ".lock")
+            return self.base_path / (lock + ".lock")
         else:
             raise NotImplementedError(
                 f"Can't lock object of type '{type(lock).__name__}'"
@@ -262,7 +261,6 @@ class ZooKeeperLockManager(BaseLockManager):
             self.client.start()
             atexit.register(self.__atexit)
         self.client.add_listener(self._lock_listener)
-
         self.logger.debug("opened lock manager", instance_id=self.instance_id)
 
     def __atexit(self):
