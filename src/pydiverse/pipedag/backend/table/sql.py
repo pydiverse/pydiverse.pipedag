@@ -104,13 +104,14 @@ class SQLTableStore(BaseTableStore):
         # TODO: consider renaming {name} to {pipedag_name} and top level name: attribute of pipedag config as well
         attrs["name"] = cfg.pipedag_name
         engine_url = engine_url.format(**attrs)
+        if "table_store_connection" in config:
+            del config["table_store_connection"]
         return cls(engine_url, **config)
 
     def __init__(
         self,
         engine_url: str,
         create_database_if_not_exists: bool = False,
-        table_store_connection: str | None = None,
         schema_prefix: str = "",
         schema_suffix: str = "",
         print_materialize: bool = False,
@@ -122,19 +123,17 @@ class SQLTableStore(BaseTableStore):
 
         :param engine_url: URL for SQLAlchemy engine
         :param create_database_if_not_exists: whether to create database if it does not exist
-        :param table_store_connection: database connection name from config for logging purposes
         :param schema_prefix: prefix string for schemas (dot is interpreted as database.schema)
         :param schema_suffix: suffix string for schemas (dot is interpreted as database.schema)
         :param print_materialize: whether to print select statements before materialization
         :param print_sql: whether to print final SQL statements (except for metadata)
         :param no_db_locking: speed up database by telling it we will not rely on it's locking mechanisms
         """
-        super().__init__(table_store_connection)
+        super().__init__()
 
         config = ConfigContext.get()
 
         self.create_database_if_not_exists = create_database_if_not_exists
-        self.table_store_connection = table_store_connection
         self.schema_prefix = schema_prefix
         self.schema_suffix = schema_suffix
         self.print_materialize = print_materialize

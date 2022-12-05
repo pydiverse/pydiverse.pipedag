@@ -22,8 +22,8 @@ class DictTableStore(BaseTableStore):
     Should only ever be used for testing.
     """
 
-    def __init__(self, table_store_connection: str | None = None):
-        super().__init__(table_store_connection)
+    def __init__(self):
+        super().__init__()
         self.store = dict()
 
         self.metadata = dict()
