@@ -14,7 +14,7 @@ When executing a flow, pipedag searches for the config file in the following dir
 - The user folder
 
 **Attention: pipedag config files may be used for code execution under a different user ID.**
-Pipedag may be instructed to read yaml files with key-value pairs and sending content to arbitrary
+Pipedag may be instructed to read yaml files with key-value pairs and send content to arbitrary
 hosts. It can also be instructed to send content of environment variables (i.e. security tokens).
 Furthermore it can be instructed to load python classes in the python environment and the constructor
 be fed with arbitrary keyword arguments.
