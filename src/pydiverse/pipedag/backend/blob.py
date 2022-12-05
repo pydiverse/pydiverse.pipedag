@@ -98,17 +98,16 @@ class FileBlobStore(BaseBlobStore):
         base_path: str | Path,
         blob_store_connection: str | None = None,
     ):
-        self.base_path = Path(base_path).absolute()
+        self.base_path = Path(base_path).absolute() / cfg.instance_id
         self.blob_store_connection = blob_store_connection  # for debug output
-        self.instance_id = cfg.instance_id
-        os.makedirs(str(self.base_path / self.instance_id), exist_ok=True)
+        os.makedirs(self.base_path, exist_ok=True)
 
     def init_stage(self, stage: Stage):
-        stage_path = str(self.get_stage_path(stage.name))
-        transaction_path = str(self.get_stage_path(stage.transaction_name))
+        stage_path = self.get_stage_path(stage.name)
+        transaction_path = self.get_stage_path(stage.transaction_name)
 
         try:
-            os.mkdir(str(stage_path))
+            os.mkdir(stage_path)
         except FileExistsError:
             pass
 
@@ -119,9 +118,9 @@ class FileBlobStore(BaseBlobStore):
             os.mkdir(transaction_path)
 
     def commit_stage(self, stage: Stage):
-        stage_path = str(self.get_stage_path(stage.name))
-        transaction_path = str(self.get_stage_path(stage.transaction_name))
-        tmp_path = str(self.get_stage_path(stage.name + "__swap"))
+        stage_path = self.get_stage_path(stage.name)
+        transaction_path = self.get_stage_path(stage.transaction_name)
+        tmp_path = self.get_stage_path(stage.name + "__swap")
 
         os.rename(transaction_path, tmp_path)
         os.rename(stage_path, transaction_path)
@@ -130,15 +129,15 @@ class FileBlobStore(BaseBlobStore):
 
     def store_blob(self, blob: Blob):
         with open(
-            str(self.get_blob_path(blob.stage.transaction_name, blob.name)), "wb"
+            self.get_blob_path(blob.stage.transaction_name, blob.name), "wb"
         ) as f:
             pickle.dump(blob.obj, f, pickle.HIGHEST_PROTOCOL)
 
     def copy_blob_to_transaction(self, blob: Blob):
         try:
             shutil.copy2(
-                str(self.get_blob_path(blob.stage.name, blob.name)),
-                str(self.get_blob_path(blob.stage.transaction_name, blob.name)),
+                self.get_blob_path(blob.stage.name, blob.name),
+                self.get_blob_path(blob.stage.transaction_name, blob.name),
             )
         except FileNotFoundError:
             raise CacheError(
@@ -148,18 +147,18 @@ class FileBlobStore(BaseBlobStore):
 
     def delete_blob_from_transaction(self, blob: Blob):
         try:
-            os.remove(str(self.get_blob_path(blob.stage.transaction_name, blob.name)))
+            os.remove(self.get_blob_path(blob.stage.transaction_name, blob.name))
         except FileNotFoundError:
             return
 
     def retrieve_blob(self, blob: Blob):
         stage = blob.stage
 
-        with open(str(self.get_blob_path(stage.current_name, blob.name)), "rb") as f:
+        with open(self.get_blob_path(stage.current_name, blob.name), "rb") as f:
             return pickle.load(f)
 
     def get_stage_path(self, stage_name: str) -> Path:
-        return self.base_path / self.instance_id / stage_name
+        return self.base_path / stage_name
 
     def get_blob_path(self, stage_name: str, blob_name: str) -> Path:
-        return self.base_path / self.instance_id / stage_name / (blob_name + ".pkl")
+        return self.base_path / stage_name / (blob_name + ".pkl")
