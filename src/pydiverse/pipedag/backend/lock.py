@@ -16,7 +16,7 @@ import structlog
 from pydiverse.pipedag.context.context import ConfigContext
 from pydiverse.pipedag.core.stage import Stage
 from pydiverse.pipedag.errors import DisposedError, LockError
-from pydiverse.pipedag.util import normalize_name, requires
+from pydiverse.pipedag.util import Disposable, normalize_name, requires
 
 __all__ = [
     "BaseLockManager",
@@ -25,8 +25,6 @@ __all__ = [
     "FileLockManager",
     "ZooKeeperLockManager",
 ]
-
-from pydiverse.pipedag.util.disposable import Disposable
 
 
 class LockState(Enum):

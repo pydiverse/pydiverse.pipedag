@@ -1,8 +1,7 @@
 import pytest
 
 from pydiverse.pipedag.errors import DisposedError
-from pydiverse.pipedag.util import requires
-from pydiverse.pipedag.util.disposable import Disposable
+from pydiverse.pipedag.util import Disposable, requires
 
 
 def test_requires():

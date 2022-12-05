@@ -9,8 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydiverse.pipedag.context import ConfigContext
 from pydiverse.pipedag.errors import CacheError
-from pydiverse.pipedag.util import normalize_name
-from pydiverse.pipedag.util.disposable import Disposable
+from pydiverse.pipedag.util import Disposable, normalize_name
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import Stage
