@@ -131,8 +131,6 @@ class SQLTableStore(BaseTableStore):
         """
         super().__init__()
 
-        config = ConfigContext.get()
-
         self.create_database_if_not_exists = create_database_if_not_exists
         self.schema_prefix = schema_prefix
         self.schema_suffix = schema_suffix
@@ -141,13 +139,7 @@ class SQLTableStore(BaseTableStore):
         self.no_db_locking = no_db_locking
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
 
-        # TODO: Clean this up so that the __init__ function doesn't have to call ConfigContext.get()
-        engine_url = engine_url.format(
-            name=config.pipedag_name, instance_id=config.instance_id
-        )
-        self._init_database(
-            engine_url, config.instance_id, create_database_if_not_exists
-        )
+        self._init_database(engine_url, create_database_if_not_exists)
         self.engine = self._connect(engine_url, self.schema_prefix, self.schema_suffix)
 
         # Set up metadata tables and schema
@@ -200,42 +192,41 @@ class SQLTableStore(BaseTableStore):
         )
 
     @staticmethod
-    def _init_database(
-        engine_url: str, instance_id: str, create_database_if_not_exists: bool
-    ):
+    def _init_database(engine_url: str, create_database_if_not_exists: bool):
+        if not create_database_if_not_exists:
+            return
+
+        try_engine = sa.create_engine(engine_url)
+        if try_engine.dialect.name == "mssql":
+            try_engine.dispose()
+            return
+
         # Attention: this is a really hacky way to create a generic engine for creating a database before one can open a
         #  connection to self.engine_url which references a database and will fail if the database does not exist
-        try_engine = sa.create_engine(engine_url)
-        if (
-            create_database_if_not_exists
-            and instance_id != ""
-            and try_engine.dialect.name != "mssql"
-        ):
-            # hacky way to reverse engineer database URL without database
-            if try_engine.dialect.name == "postgresql":
-                # noinspection PyBroadException
+        url = sa.engine.make_url(engine_url)
+
+        if try_engine.dialect.name == "postgresql":
+            try:
+                with try_engine.connect() as conn:
+                    # try whether connection with database in connect string works
+                    conn.execute("SELECT 1")
+            except sa.exc.DBAPIError:
+                postgres_db_url = url.set(database="postgres")
+                tmp_engine = sa.create_engine(postgres_db_url)
                 try:
-                    with try_engine.connect() as conn:
-                        # try whether connection with database in connect string works
-                        conn.execute("SELECT 1")
+                    with tmp_engine.connect() as conn:
+                        conn.execute("COMMIT")
+                        conn.execute(CreateDatabase(url.database))
                 except sa.exc.DBAPIError:
-                    postgres_db_url = engine_url.replace(instance_id, "postgres")
-                    tmp_engine = sa.create_engine(postgres_db_url)
-                    try:
-                        with tmp_engine.connect() as conn:
-                            conn.execute("COMMIT")
-                            conn.execute(CreateDatabase(instance_id))
-                    except sa.exc.DBAPIError:
-                        # This happens if multiple instances try to create the database
-                        # at the same time.
-                        with try_engine.connect() as conn:
-                            # Verify database actually exists
-                            conn.execute("SELECT 1")
-            else:
-                raise NotImplementedError(
-                    "create_database_if_not_exists is only implemented for"
-                    " postgres, yet"
-                )
+                    # This happens if multiple instances try to create the database
+                    # at the same time.
+                    with try_engine.connect() as conn:
+                        # Verify database actually exists
+                        conn.execute("SELECT 1")
+        else:
+            raise NotImplementedError(
+                "create_database_if_not_exists is only implemented for postgres, yet"
+            )
         try_engine.dispose()
 
     @staticmethod
