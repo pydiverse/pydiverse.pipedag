@@ -17,8 +17,7 @@ from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import TaskMetadata
 from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.materialize.util import json as json_util
-from pydiverse.pipedag.util import deep_map
-from pydiverse.pipedag.util.disposable import Disposable
+from pydiverse.pipedag.util import Disposable, deep_map
 
 
 class PipeDAGStore(Disposable):

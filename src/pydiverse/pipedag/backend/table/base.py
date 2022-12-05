@@ -17,8 +17,7 @@ from pydiverse.pipedag.materialize.metadata import (
     TaskMetadata,
 )
 from pydiverse.pipedag.materialize.util import compute_cache_key
-from pydiverse.pipedag.util import requires
-from pydiverse.pipedag.util.disposable import Disposable
+from pydiverse.pipedag.util import Disposable, requires
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Stage
