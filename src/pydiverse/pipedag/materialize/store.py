@@ -194,10 +194,11 @@ class PipeDAGStore(Disposable):
             if isinstance(x, config.auto_blob):
                 x = Blob(x)
 
-            assert not isinstance(x, PipedagConfig), (
-                "It is not allowed to return a PipedagConfig object from an"
-                " @materialize task since it may screw cache invalidation"
-            )
+            if isinstance(x, PipedagConfig):
+                # Config objects are not an allowed return type, because they might mess up caching.
+                raise TypeError(
+                    "You can't return a PipedagConfig object from a materializing task."
+                )
 
             # Do the materialization
             if isinstance(x, (Table, RawSql, Blob)):
