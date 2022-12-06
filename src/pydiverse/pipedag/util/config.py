@@ -8,6 +8,7 @@ from typing import Any, Iterable
 import structlog
 import yaml
 
+from pydiverse.pipedag.context import ConfigContext
 from pydiverse.pipedag.util import deep_merge
 from pydiverse.pipedag.util.import_ import import_object
 
@@ -358,6 +359,7 @@ class PipedagConfig:
         pipedag_name = pipedag_config_dict.get("name", None)
         interface = config_dict.get("network_interface", "127.0.0.1")
         fail_fast = config_dict.get("fail_fast", False)
+        strict_result_get_locking = config_dict.get("strict_result_get_locking", True)
         attrs = config_dict.get("attrs", {})
         instance_id = config_dict.get("instance_id", flow_name)
         per_user_template = config_dict.get("per_user_template", "{id}_{username}")
@@ -373,41 +375,16 @@ class PipedagConfig:
             instance_id=instance_id,
             config_dict=config_dict.copy(),
             fail_fast=fail_fast,
+            strict_result_get_locking=strict_result_get_locking,
             network_interface=interface,
             attrs=attrs,
         )
 
-        with cfg:
-            # make sure @cached_property store is already setup and loaded (this will throw config parsing errors earlier)
-            _ = cfg.store, cfg.auto_table, cfg.auto_blob
-            # also try creating orchestration engine and locking_manager
-            cfg.create_orchestration_engine().dispose()
-            cfg.create_lock_manager().dispose()
+        # make sure @cached_property store is already setup and loaded
+        # (this will throw config parsing errors earlier)
+        _ = cfg.store, cfg.auto_table, cfg.auto_blob
+        # also try creating orchestration engine and locking_manager
+        cfg.create_orchestration_engine().dispose()
+        cfg.create_lock_manager().dispose()
 
         return cfg
-
-
-def load_object(config_dict: dict):
-    """Instantiates an instance of an object given
-
-    The import path (module.Class) should be specified as the "class" value
-    of the dict. The rest of the dict get used as the instance config.
-
-    If the class defines a `_init_conf_` function, it gets called using the
-    config values, otherwise they just get passed to the class initializer.
-
-    >>> # module.Class(argument="value")
-    >>> load_instance({
-    >>>     "class": "module.Class",
-    >>>     "argument": "value",
-    >>> })
-    """
-
-    config_dict = config_dict.copy()
-    cls = import_object(config_dict.pop("class"))
-
-    try:
-        init_conf = getattr(cls, "_init_conf_")
-        return init_conf(config_dict)
-    except AttributeError:
-        return cls(**config_dict)

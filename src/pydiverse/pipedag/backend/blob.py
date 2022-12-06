@@ -93,8 +93,8 @@ class FileBlobStore(BaseBlobStore):
         os.makedirs(self.base_path, exist_ok=True)
 
     @classmethod
-    def _init_conf_(cls, config: dict[str, Any]):
-        instance_id = normalize_name(ConfigContext.get().instance_id)
+    def _init_conf_(cls, config: dict[str, Any], cfg: ConfigContext):
+        instance_id = normalize_name(cfg.instance_id)
         base_path = Path(config["base_path"]) / instance_id
         return cls(base_path)
 

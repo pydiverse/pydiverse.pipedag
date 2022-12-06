@@ -5,7 +5,6 @@ from functools import cached_property
 from threading import Lock
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from pydiverse.pipedag.util.config import load_object
 from pydiverse.pipedag.util.import_ import import_object
 
 if TYPE_CHECKING:
@@ -101,11 +100,13 @@ class ConfigContext(BaseAttrsContext):
 
     config_dict: dict
 
+    # names
     pipedag_name: str
     flow_name: str
     instance_name: str
-    fail_fast: bool
     # per instance attributes
+    fail_fast: bool
+    strict_result_get_locking: bool
     instance_id: str  # may be used as database name or locking ID
     network_interface: str
     attrs: dict[str, Any]
@@ -121,8 +122,8 @@ class ConfigContext(BaseAttrsContext):
     @cached_property
     def store(self):
         # Load objects referenced in config
-        table_store = load_object(self.config_dict["table_store"])
-        blob_store = load_object(self.config_dict["blob_store"])
+        table_store = load_object(self.config_dict["table_store"], self)
+        blob_store = load_object(self.config_dict["blob_store"], self)
         from pydiverse.pipedag.materialize.store import PipeDAGStore
 
         return PipeDAGStore(
@@ -131,10 +132,10 @@ class ConfigContext(BaseAttrsContext):
         )
 
     def create_lock_manager(self) -> BaseLockManager:
-        return load_object(self.config_dict["lock_manager"])
+        return load_object(self.config_dict["lock_manager"], self)
 
     def create_orchestration_engine(self) -> OrchestrationEngine:
-        return load_object(self.config_dict["orchestration"])
+        return load_object(self.config_dict["orchestration"], self)
 
     def close(self):
         # If the store has been initialized (and thus cached in the __dict__),
@@ -152,3 +153,29 @@ class ConfigContext(BaseAttrsContext):
         return state
 
     _context_var = ContextVar("config_context")
+
+
+def load_object(config_dict: dict, cfg: ConfigContext):
+    """Instantiates an instance of an object given
+
+    The import path (module.Class) should be specified as the "class" value
+    of the dict. The rest of the dict get used as the instance config.
+
+    If the class defines a `_init_conf_` function, it gets called using the
+    config values, otherwise they just get passed to the class initializer.
+
+    >>> # module.Class(argument="value")
+    >>> load_instance({
+    >>>     "class": "module.Class",
+    >>>     "argument": "value",
+    >>> }, PipedagConfig.load().get())
+    """
+
+    config_dict = config_dict.copy()
+    cls = import_object(config_dict.pop("class"))
+
+    try:
+        init_conf = getattr(cls, "_init_conf_")
+        return init_conf(config_dict, cfg)
+    except AttributeError:
+        return cls(**config_dict)
