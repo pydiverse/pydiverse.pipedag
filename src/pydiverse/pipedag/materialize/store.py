@@ -18,6 +18,7 @@ from pydiverse.pipedag.materialize.metadata import TaskMetadata
 from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.materialize.util import json as json_util
 from pydiverse.pipedag.util import Disposable, deep_map
+from pydiverse.pipedag.util.config import PipedagConfig
 
 
 class PipeDAGStore(Disposable):
@@ -192,6 +193,11 @@ class PipeDAGStore(Disposable):
                     x = Table(x)
             if isinstance(x, config.auto_blob):
                 x = Blob(x)
+
+            assert not isinstance(x, PipedagConfig), (
+                "It is not allowed to return a PipedagConfig object from an"
+                " @materialize task since it may screw cache invalidation"
+            )
 
             # Do the materialization
             if isinstance(x, (Table, RawSql, Blob)):
