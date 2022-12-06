@@ -144,7 +144,7 @@ class SQLTableStore(BaseTableStore):
             self.sql_metadata,
             Column("id", BigInteger, primary_key=True, autoincrement=True),
             Column("stage", String(64)),
-            Column("cur_transaction_schema", String(256)),
+            Column("cur_transaction_name", String(256)),
             schema=self.metadata_schema.get(),
         )
 
@@ -283,7 +283,7 @@ class SQLTableStore(BaseTableStore):
                 metadata_rows = (
                     conn.execute(
                         self.stage_table.select().where(
-                            self.tasks_table.c.stage == stage.name
+                            self.stage_table.c.stage == stage.name
                         )
                     )
                     .mappings()
@@ -465,7 +465,7 @@ class SQLTableStore(BaseTableStore):
                     metadata_rows = (
                         conn.execute(
                             self.stage_table.select().where(
-                                self.tasks_table.c.stage == stage.name
+                                self.stage_table.c.stage == stage.name
                             )
                         )
                         .mappings()
@@ -475,14 +475,14 @@ class SQLTableStore(BaseTableStore):
                         conn.execute(
                             self.stage_table.insert().values(
                                 stage=stage.name,
-                                cur_transaction_schema=stage.transaction_name,
+                                cur_transaction_name=stage.transaction_name,
                             )
                         )
                     else:
                         conn.execute(
                             self.stage_table.update()
                             .where(self.stage_table.c.stage == stage.name)
-                            .values(cur_transaction_schema=stage.transaction_name)
+                            .values(cur_transaction_name=stage.transaction_name)
                         )
 
         else:

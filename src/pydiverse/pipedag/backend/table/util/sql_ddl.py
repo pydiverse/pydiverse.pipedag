@@ -314,13 +314,13 @@ def visit_drop_database(drop: DropDatabase, compiler, **kw):
     # return ret
 
 
-def _visit_create_obj_as_select(create, compiler, table, kw):
+def _visit_create_obj_as_select(create, compiler, _type, kw):
     name = compiler.preparer.quote_identifier(create.name)
     schema = compiler.preparer.format_schema(create.schema.get())
     kw = kw.copy()
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(create.query, **kw)
-    return f"CREATE {table} {schema}.{name} AS\n{select}"
+    return f"CREATE {_type} {schema}.{name} AS\n{select}"
 
 
 @compiles(CreateTableAsSelect)
@@ -344,6 +344,19 @@ def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
     return insert_into_in_query(select, database, schema, name)
 
 
+@compiles(CreateTableAsSelect, "ibm_db_sa")
+def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
+    name = compiler.preparer.quote_identifier(create.name)
+    schema = compiler.preparer.format_schema(create.schema.get())
+    kw = kw.copy()
+    kw["literal_binds"] = True
+    select = compiler.sql_compiler.process(create.query, **kw)
+    return (
+        f"CREATE TABLE {schema}.{name} AS (\n{select}\n)data initially deferred Refresh"
+        f" deferred; Refresh table {schema}.{name};"
+    )
+
+
 # noinspection DuplicatedCode
 @compiles(CreateViewAsSelect)
 def visit_create_view_as_select(create: CreateViewAsSelect, compiler, **kw):
@@ -354,10 +367,7 @@ def visit_create_view_as_select(create: CreateViewAsSelect, compiler, **kw):
 def visit_create_view_as_select(create: CreateViewAsSelect, compiler, **kw):
     # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     create = copy.deepcopy(create)
-    if all(c.lower() == c for c in create.name):
-        create.name = (
-            create.name.upper()
-        )  # DB2 seems to make tables uppercase if all lowercase given
+    create.name = ibm_db_sa_fix_name(create.name)
     return _visit_create_obj_as_select(create, compiler, "VIEW", kw)
 
 
@@ -395,25 +405,25 @@ def insert_into_in_query(select_sql, database, schema, table):
 
 # noinspection SqlDialectInspection
 @compiles(CopyTable)
-def visit_copy_table(copy: CopyTable, compiler, **kw):
-    from_name = compiler.preparer.quote_identifier(copy.from_name)
-    from_schema = compiler.preparer.format_schema(copy.from_schema.get())
+def visit_copy_table(copy_table: CopyTable, compiler, **kw):
+    from_name = compiler.preparer.quote_identifier(copy_table.from_name)
+    from_schema = compiler.preparer.format_schema(copy_table.from_schema.get())
     query = sa.text(f"SELECT * FROM {from_schema}.{from_name}")
-    create = CreateTableAsSelect(copy.to_name, copy.to_schema, query)
+    create = CreateTableAsSelect(copy_table.to_name, copy_table.to_schema, query)
     return compiler.process(create, **kw)
 
 
 # noinspection SqlDialectInspection
 @compiles(CopyTable, "mssql")
-def visit_copy_table(copy: CopyTable, compiler, **kw):
-    from_name = compiler.preparer.quote_identifier(copy.from_name)
-    full_name = copy.from_schema.get()
+def visit_copy_table(copy_table: CopyTable, compiler, **kw):
+    from_name = compiler.preparer.quote_identifier(copy_table.from_name)
+    full_name = copy_table.from_schema.get()
     # it was already checked that there is exactly one dot in schema prefix + suffix
     database_name, schema_name = full_name.split(".")
     database = compiler.preparer.format_schema(database_name)
     schema = compiler.preparer.format_schema(schema_name)
     query = sa.text(f"SELECT * FROM {database}.{schema}.{from_name}")
-    create = CreateTableAsSelect(copy.to_name, copy.to_schema, query)
+    create = CreateTableAsSelect(copy_table.to_name, copy_table.to_schema, query)
     return compiler.process(create, **kw)
 
 
@@ -431,21 +441,26 @@ def visit_drop_table(drop: DropTable, compiler, **kw):
 def visit_drop_table(drop: DropTable, compiler, **kw):
     # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     drop = copy.deepcopy(drop)
-    if all(c.lower() == c for c in drop.name):
-        drop.name = (
-            drop.name.upper()
-        )  # DB2 seems to make tables uppercase if all lowercase given
+    drop.name = ibm_db_sa_fix_name(drop.name)
     return _visit_drop_anything(drop, "TABLE", compiler, **kw)
 
 
 @compiles(DropView)
-def visit_drop_table(drop: DropView, compiler, **kw):
+def visit_drop_view(drop: DropView, compiler, **kw):
     return _visit_drop_anything(drop, "VIEW", compiler, **kw)
 
 
 @compiles(DropView, "mssql")
-def visit_drop_table(drop: DropView, compiler, **kw):
+def visit_drop_view(drop: DropView, compiler, **kw):
     return _visit_drop_anything_mssql(drop, "VIEW", compiler, **kw)
+
+
+@compiles(DropView, "ibm_db_sa")
+def visit_drop_view(drop: DropView, compiler, **kw):
+    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
+    drop = copy.deepcopy(drop)
+    drop.name = ibm_db_sa_fix_name(drop.name)
+    return _visit_drop_anything(drop, "VIEW", compiler, **kw)
 
 
 @compiles(DropProcedure)
@@ -507,3 +522,8 @@ def _visit_drop_anything_mssql(
     else:
         text.append(f"{database}.{schema}.{table}")
     return " ".join(text)
+
+
+def ibm_db_sa_fix_name(name):
+    # DB2 seems to create tables uppercase if all lowercase given
+    return name.upper() if all(c.lower() == c for c in name) else name
