@@ -150,6 +150,10 @@ class Stage:
         state.pop("logger", None)
         return state
 
+    def set_transaction_name(self, new_transaction_name):
+        # used by stage_commit_technique=READ_VIEWS to change odd/even transaction schemas
+        self._transaction_name = new_transaction_name
+
 
 class CommitStageTask(Task):
     def __init__(self, stage: Stage, flow: Flow):

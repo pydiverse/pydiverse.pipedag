@@ -17,6 +17,7 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     CreateDatabase,
     CreateSchema,
     CreateTableAsSelect,
+    CreateViewAsSelect,
     DropFunction,
     DropProcedure,
     DropSchema,
@@ -26,6 +27,7 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     Schema,
 )
 from pydiverse.pipedag.context import RunContext
+from pydiverse.pipedag.context.context import StageCommitTechnique
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import MaterializingTask
@@ -48,9 +50,13 @@ class SQLTableStore(BaseTableStore):
 
     METADATA_SCHEMA = "pipedag_metadata"
 
+    @classmethod
+    def _init_conf_(cls, config: dict[str, Any]):
+        engine_url = config.pop("url")
+        return cls(engine_url, **config)
+
     def __init__(
         self,
-        cfg: ConfigContext,
         engine_url: str,
         create_database_if_not_exists: bool = False,
         schema_prefix: str = "",
@@ -93,14 +99,14 @@ class SQLTableStore(BaseTableStore):
             "tasks",
             self.sql_metadata,
             Column("id", BigInteger, primary_key=True, autoincrement=True),
-            Column("name", String),
-            Column("stage", String),
-            Column("version", String),
+            Column("name", String(128)),
+            Column("stage", String(64)),
+            Column("version", String(64)),
             Column("timestamp", DateTime),
             Column("run_id", String(32)),  # TODO: Replace with appropriate type
             Column("cache_key", String(64)),  # TODO: Replace with appropriate type
             Column("cache_keys", String(128)),
-            Column("output_json", String),
+            Column("output_json", String(2048)),  # 2k might be too small => TBD
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
         )
@@ -110,8 +116,8 @@ class SQLTableStore(BaseTableStore):
             "lazy_tables",
             self.sql_metadata,
             Column("id", BigInteger, primary_key=True, autoincrement=True),
-            Column("name", String),
-            Column("stage", String),
+            Column("name", String(128)),
+            Column("stage", String(64)),
             Column("cache_key", String(64)),
             Column("cache_keys", String(128)),
             Column("in_transaction_schema", Boolean),
@@ -123,14 +129,25 @@ class SQLTableStore(BaseTableStore):
             "raw_sql_tables",
             self.sql_metadata,
             Column("id", BigInteger, primary_key=True, autoincrement=True),
-            Column("prev_tables", String),
-            Column("tables", String),
-            Column("stage", String),
+            Column("prev_tables", String(256)),
+            Column("tables", String(256)),
+            Column("stage", String(64)),
             Column("cache_key", String(64)),
             Column("cache_keys", String(128)),
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
         )
+
+        # Stage Table is unique for stage
+        self.stage_table = sa.Table(
+            "stages",
+            self.sql_metadata,
+            Column("id", BigInteger, primary_key=True, autoincrement=True),
+            Column("stage", String(64)),
+            Column("cur_transaction_schema", String(256)),
+            schema=self.metadata_schema.get(),
+        )
+
         self.instance_id = cfg.instance_id
         format_dict = dict(name=cfg.pipedag_name, instance_id=cfg.instance_id)
         engine_url = self.engine_url.format(**format_dict)
@@ -139,18 +156,13 @@ class SQLTableStore(BaseTableStore):
         )
         self.engine = self._connect(engine_url, self.schema_prefix, self.schema_suffix)
 
-    @classmethod
-    def _init_conf_(cls, config: dict[str, Any]):
-        engine_url = config.pop("url")
-        return cls(engine_url, **config)
-
     @staticmethod
     def _init_database(engine_url: str, create_database_if_not_exists: bool):
         if not create_database_if_not_exists:
             return
 
         try_engine = sa.create_engine(engine_url)
-        if try_engine.dialect.name == "mssql":
+        if try_engine.dialect.name in ["mssql", "ibm_db_sa"]:
             try_engine.dispose()
             return
 
@@ -264,6 +276,27 @@ class SQLTableStore(BaseTableStore):
         super().dispose()
 
     def init_stage(self, stage: Stage):
+        cfg = ConfigContext.get()
+        if cfg.stage_commit_technique == StageCommitTechnique.READ_VIEWS:
+            # determine whether we need to write to even or odd transaction-schema
+            with self.engine.connect() as conn:
+                metadata_rows = (
+                    conn.execute(
+                        self.stage_table.select().where(
+                            self.tasks_table.c.stage == stage.name
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+                cur_transaction_name = ""
+                if len(metadata_rows) == 1:
+                    cur_transaction_name = metadata_rows[0]["cur_transaction_name"]
+
+                suffix = "__even" if cur_transaction_name.endswith("__odd") else "__odd"
+                new_transaction_name = stage.name + suffix
+                stage.set_transaction_name(new_transaction_name)
+
         cs_base = CreateSchema(self.get_schema(stage.name), if_not_exists=True)
         ds_trans = DropSchema(
             self.get_schema(stage.transaction_name), if_exists=True, cascade=True
@@ -272,6 +305,9 @@ class SQLTableStore(BaseTableStore):
             self.get_schema(stage.transaction_name), if_not_exists=False
         )
 
+        dialect_supports_drop_cascade = True
+        if self.engine.dialect.name == "ibm_db_sa":
+            dialect_supports_drop_cascade = False
         if self.engine.dialect.name == "mssql" and "." in self.schema_suffix:
             # TODO: detect whether tmp_schema exists and rename it as base or transaction schema if one is missing
             # tmp_schema = self.get_schema(stage.name + "__swap")
@@ -325,6 +361,18 @@ class SQLTableStore(BaseTableStore):
         else:
             with self.engine.connect() as conn:
                 self.execute(cs_base, conn=conn)
+                if not dialect_supports_drop_cascade:
+                    meta = sa.MetaData()
+                    meta.reflect(
+                        bind=conn, schema=self.get_schema(stage.transaction_name).get()
+                    )
+                    for table in meta.tables.values():
+                        self.execute(
+                            DropTable(
+                                table.name, self.get_schema(stage.transaction_name)
+                            ),
+                            conn=conn,
+                        )
                 self.execute(ds_trans, conn=conn)
                 self.execute(cs_trans, conn=conn)
 
@@ -335,51 +383,112 @@ class SQLTableStore(BaseTableStore):
                 )
 
     def commit_stage(self, stage: Stage):
-        tmp_schema = self.get_schema(stage.name + "__swap")
-        # potentially this disposal must be optional since it does not allow for multi-threaded stage execution
-        self.engine.dispose()  # dispose open connections which may prevent schema swapping
-        with self.engine.connect() as conn:
-            with conn.begin():
-                # TODO: for mssql try to find schema does not exist and then move the forgotten tmp schema there
-                self.execute(
-                    DropSchema(tmp_schema, if_exists=True, cascade=True), conn=conn
-                )
-                # TODO: in case "." is in self.schema_prefix, we need to implement schema renaming by
-                #  creating the new schema and moving table objects over
-                self.execute(
-                    RenameSchema(
-                        self.get_schema(stage.name),
-                        tmp_schema,
-                    ),
-                    conn=conn,
-                )
-                self.execute(
-                    RenameSchema(
-                        self.get_schema(stage.transaction_name),
-                        self.get_schema(stage.name),
-                    ),
-                    conn=conn,
-                )
-                self.execute(
-                    RenameSchema(tmp_schema, self.get_schema(stage.transaction_name)),
-                    conn=conn,
-                )
+        cfg = ConfigContext.get()
+        if cfg.stage_commit_technique == StageCommitTechnique.SCHEMA_SWAP:
+            tmp_schema = self.get_schema(stage.name + "__swap")
+            # potentially this disposal must be optional since it does not allow for multi-threaded stage execution
+            self.engine.dispose()  # dispose open connections which may prevent schema swapping
+            with self.engine.connect() as conn:
+                with conn.begin():
+                    # TODO: for mssql try to find schema does not exist and then move the forgotten tmp schema there
+                    self.execute(
+                        DropSchema(tmp_schema, if_exists=True, cascade=True), conn=conn
+                    )
+                    # TODO: in case "." is in self.schema_prefix, we need to implement schema renaming by
+                    #  creating the new schema and moving table objects over
+                    self.execute(
+                        RenameSchema(
+                            self.get_schema(stage.name),
+                            tmp_schema,
+                        ),
+                        conn=conn,
+                    )
+                    self.execute(
+                        RenameSchema(
+                            self.get_schema(stage.transaction_name),
+                            self.get_schema(stage.name),
+                        ),
+                        conn=conn,
+                    )
+                    self.execute(
+                        RenameSchema(
+                            tmp_schema, self.get_schema(stage.transaction_name)
+                        ),
+                        conn=conn,
+                    )
 
-                for table in [
-                    self.tasks_table,
-                    self.lazy_cache_table,
-                    self.raw_sql_cache_table,
-                ]:
-                    conn.execute(
-                        table.delete()
-                        .where(table.c.stage == stage.name)
-                        .where(table.c.in_transaction_schema.in_([False]))
+                    for table in [
+                        self.tasks_table,
+                        self.lazy_cache_table,
+                        self.raw_sql_cache_table,
+                    ]:
+                        conn.execute(
+                            table.delete()
+                            .where(table.c.stage == stage.name)
+                            .where(table.c.in_transaction_schema.in_([False]))
+                        )
+                        conn.execute(
+                            table.update()
+                            .where(table.c.stage == stage.name)
+                            .values(in_transaction_schema=False)
+                        )
+        elif cfg.stage_commit_technique == StageCommitTechnique.READ_VIEWS:
+            # delete all read views in visible stage
+            dest_meta = sa.MetaData()
+            dest_meta.reflect(
+                bind=self.engine, schema=self.get_schema(stage.name).get()
+            )
+            # create views for all tables in transaction schema
+            src_meta = sa.MetaData()
+            src_meta.reflect(
+                bind=self.engine, schema=self.get_schema(stage.transaction_name).get()
+            )
+            with self.engine.connect() as conn:
+                with conn.begin():
+                    views = self.get_view_names(self.get_schema(stage.name).get())
+                    for view in views:
+                        self.execute(
+                            DropView(view, schema=self.get_schema(stage.name)),
+                            conn=conn,
+                        )
+
+                    for table in src_meta.tables.values():
+                        self.execute(
+                            CreateViewAsSelect(
+                                table.name,
+                                self.get_schema(stage.name),
+                                sa.select(table),
+                            ),
+                            conn=conn,
+                        )
+
+                    metadata_rows = (
+                        conn.execute(
+                            self.stage_table.select().where(
+                                self.tasks_table.c.stage == stage.name
+                            )
+                        )
+                        .mappings()
+                        .all()
                     )
-                    conn.execute(
-                        table.update()
-                        .where(table.c.stage == stage.name)
-                        .values(in_transaction_schema=False)
-                    )
+                    if len(metadata_rows) == 0:
+                        conn.execute(
+                            self.stage_table.insert().values(
+                                stage=stage.name,
+                                cur_transaction_schema=stage.transaction_name,
+                            )
+                        )
+                    else:
+                        conn.execute(
+                            self.stage_table.update()
+                            .where(self.stage_table.c.stage == stage.name)
+                            .values(cur_transaction_schema=stage.transaction_name)
+                        )
+
+        else:
+            assert (
+                False
+            ), f"Unexpected stage_commit_technique: {cfg.stage_commit_technique}"
 
     def copy_table_to_transaction(self, table: Table):
         stage = table.stage
