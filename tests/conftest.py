@@ -6,8 +6,9 @@ from pathlib import Path
 import structlog
 
 _log_level = logging.INFO
+_log_stream = sys.stdout  # use sys.stderr with `pytest -s in ci.yml`
 logging.basicConfig(
-    stream=sys.stderr,
+    stream=_log_stream,
     format="%(asctime)s [%(levelname)s] %(message)s",
     level=_log_level,
 )
@@ -22,7 +23,7 @@ structlog.configure(
     ],
     wrapper_class=structlog.make_filtering_bound_logger(_log_level),
     context_class=dict,
-    logger_factory=structlog.PrintLoggerFactory(sys.stderr),
+    logger_factory=structlog.PrintLoggerFactory(_log_stream),
     cache_logger_on_first_use=True,
 )
 os.environ["PIPEDAG_CONFIG"] = str(Path(__file__).parent)
