@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pydiverse.pipedag import Flow, Stage, materialize
 from pydiverse.pipedag.context import RunContext
+from pydiverse.pipedag.util.config import PipedagConfig
 
 from .pipedag_test import tasks_library as m
 
@@ -86,17 +87,34 @@ def test_materialize_blob():
 
 def test_failure():
     with Flow("flow") as f:
-        with Stage("failure stage"):
+        with Stage("failure_stage"):
             m.exception(0, True)
 
     assert not f.run(fail_fast=False).successful
 
     with Flow("flow") as f:
-        with Stage("failure stage"):
+        with Stage("failure_stage"):
             x = m.exception(0, True)
             m.noop(x)
 
     assert not f.run(fail_fast=False).successful
+
+
+@materialize()
+def fail_task():
+    return [1, (2, {PipedagConfig.load(): "str"})]
+
+
+def test_fail_task():
+    with Flow("flow") as f:
+        with Stage("failure_stage"):
+            fail_task()
+
+    result = f.run(fail_fast=False)
+    assert not result.successful
+    assert isinstance(result.underlying, AssertionError)
+    assert "PipedagConfig" in str(result.underlying)
+    assert "not allowed" in str(result.underlying)
 
 
 def test_materialize_memo_literal():
