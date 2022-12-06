@@ -277,9 +277,7 @@ class PipeDAGStore(Disposable):
         return m_value
 
     @staticmethod
-    def _check_names(
-        task: MaterializingTask, tables: list[Table], blobs: list[Blob]
-    ):
+    def _check_names(task: MaterializingTask, tables: list[Table], blobs: list[Blob]):
         if not tables and not blobs:
             # Nothing to check
             return
