@@ -11,11 +11,11 @@ from collections.abc import Iterable, Mapping
 
 
 def deep_merge(x, y):
-    cls = type(x)
-    cls2 = type(y)
-    assert (
-        cls == cls2
-    ), f"deep_merge failed due to mismatching types {cls} vs. {cls2}: '{x}' vs. '{y}'"
+    if type(x) != type(y):
+        raise TypeError(
+            f"deep_merge failed doe to type mismatch '{x}' (type: {type(x)}) vs. '{y}'"
+            f" (type: {type(y)})"
+        )
 
     if isinstance(x, Mapping):
         z = _deep_merge_dict(x, y)
@@ -28,7 +28,11 @@ def deep_merge(x, y):
 
 
 def _deep_merge_iterable(x: Iterable, y: Iterable):
-    return [deep_merge(a, b) for a, b in zip(x, y)]
+    # Merging lists is not trivial.
+    # There are a few different strategies: replace, unique, append, intersection, ...
+    return y
+    # return [*x, *y]
+    # return [deep_merge(a, b) for a, b in zip(x, y)]
 
 
 def _deep_merge_dict(x: Mapping, y: Mapping):

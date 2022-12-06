@@ -30,7 +30,7 @@ def assert_result(df: pd.DataFrame):
 
 def test_sql_node():
     # use a different way to initialize configuration for more test coverage
-    with PipedagConfig.load().get(per_user=True):
+    with PipedagConfig.default.get(per_user=True):
         with Flow("FLOW") as flow:
             with Stage("schema1"):
                 cfg = ConfigContext.get()

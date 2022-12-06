@@ -86,7 +86,7 @@ def test_source_invalidation():
     # update input hash trigger reload of new input data
     input_hash = hash(str(dfA))
 
-    with PipedagConfig.load().get():
+    with PipedagConfig.default.get():
         # this run should ignore fresh input at source nodes and not change outputs
         result = flow.run(ignore_fresh_input=True)
         assert result.successful

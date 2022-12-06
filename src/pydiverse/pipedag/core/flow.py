@@ -238,7 +238,7 @@ class Flow:
                 self.logger.debug("no ConfigContext is active")
         if config_context is None:
             # fall back further to read configuration from file in default locations
-            config_context = PipedagConfig.load().get()
+            config_context = PipedagConfig.default.get()
         with config_context:
             with RunContextServer(self, ignore_fresh_input):
                 if orchestration_engine is None:

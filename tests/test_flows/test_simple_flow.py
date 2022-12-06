@@ -60,7 +60,7 @@ def test_simple_flow():
 
 def test_simple_config():
     cfg = (
-        PipedagConfig.load().get()
+        PipedagConfig.default.get()
     )  # this will use the default configuration instance=__any__
     flow = _get_flow(cfg.pipedag_name)
     result = flow.run(cfg)
