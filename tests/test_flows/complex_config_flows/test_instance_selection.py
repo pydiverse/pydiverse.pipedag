@@ -8,7 +8,7 @@ import pytest
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
-from pydiverse.pipedag.context import DAGContext, StageLockContext
+from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.util.config import PipedagConfig
 
 dfA_source = pd.DataFrame(
@@ -154,7 +154,9 @@ def _check_result(result, out1, out2, *, head=999):
 
 @pytest.mark.slow5
 def test_run_full_instance(cfg_file_base_name):
-    pipedag_config = PipedagConfig.load(base_name=cfg_file_base_name)
+    pipedag_config = PipedagConfig.load(
+        path=Path(__file__).parent, base_name=cfg_file_base_name
+    )
     cfg = pipedag_config.get(instance="full")
 
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
@@ -164,7 +166,9 @@ def test_run_full_instance(cfg_file_base_name):
 
 @pytest.mark.slow4
 def test_run_midi_instance(cfg_file_base_name):
-    pipedag_config = PipedagConfig.load(base_name=cfg_file_base_name)
+    pipedag_config = PipedagConfig.load(
+        path=Path(__file__).parent, base_name=cfg_file_base_name
+    )
     cfg = pipedag_config.get(instance="midi")
 
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
@@ -174,7 +178,9 @@ def test_run_midi_instance(cfg_file_base_name):
 
 @pytest.mark.slow3
 def test_midi_instance_stages(cfg_file_base_name):
-    pipedag_config = PipedagConfig.load(base_name=cfg_file_base_name)
+    pipedag_config = PipedagConfig.load(
+        path=Path(__file__).parent, base_name=cfg_file_base_name
+    )
     cfg = pipedag_config.get(instance="midi")
 
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
@@ -184,7 +190,9 @@ def test_midi_instance_stages(cfg_file_base_name):
 
 @pytest.mark.slow2
 def test_run_mini_instance(cfg_file_base_name):
-    pipedag_config = PipedagConfig.load(base_name=cfg_file_base_name)
+    pipedag_config = PipedagConfig.load(
+        path=Path(__file__).parent, base_name=cfg_file_base_name
+    )
     cfg = pipedag_config.get(instance="mini")
 
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
@@ -194,13 +202,11 @@ def test_run_mini_instance(cfg_file_base_name):
 
 @pytest.mark.slow1
 def test_mini_instance_stages(cfg_file_base_name):
-    pipedag_config = PipedagConfig.load(base_name=cfg_file_base_name)
+    pipedag_config = PipedagConfig.load(
+        path=Path(__file__).parent, base_name=cfg_file_base_name
+    )
     cfg = pipedag_config.get(instance="mini")
 
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
 
     flow.run(cfg, stages=["simple_flow_stage2"])
-
-
-if __name__ == "__main__":
-    test_instance_selection()

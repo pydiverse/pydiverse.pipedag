@@ -54,6 +54,7 @@ class BaseContext:
     def close(self):
         """Function that gets called at __exit__"""
 
+    # noinspection PyUnresolvedReferences
     @classmethod
     def get(cls: type[T]) -> T:
         return cls._context_var.get()
