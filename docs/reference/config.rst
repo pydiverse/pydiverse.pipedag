@@ -518,7 +518,7 @@ class: pydiverse.pipedag.engine.PrefectEngine
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Hands over orchestration of pipedag flow execution to prefect.
-It supports both prefect 1.3.x and 2.y depending on which version is installed in the python environment.
+It supports both prefect 1.x and 2.y depending on which version is installed in the python environment.
 
 Prefect also supports caching features, but we don't use them with pipedag. But we actually like about prefect that it
 can also be used as a thin layer for executing pieces of code. It is also important that it has a UI that you can
@@ -528,7 +528,7 @@ Version 2.y is a radical change of principles which don't just have positive eff
 orchestration engine. For example, the radar view is pretty ill-suited for rather linear flows which is how most data
 pipelines look on a higher level.
 
-* For prefect 1.3.x, see: https://docs-v1.prefect.io/
+* For prefect 1.x, see: https://docs-v1.prefect.io/
 * For prefect 2.y, see: https://docs.prefect.io/
 
 pydiverse.pipedag.engine.SequentialEngine
@@ -585,7 +585,7 @@ example configuration
 
         orchestration:
           class: "pydiverse.pipedag.engine.SequentialEngine"
-          ## Activate this class to work either with prefect 1.3.0 or prefect 2.0
+          ## Activate this class to work either with prefect 1.x or prefect 2.y
           # class: "pydiverse.pipedag.engine.PrefectEngine"
 
     instances:
