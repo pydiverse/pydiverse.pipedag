@@ -71,7 +71,11 @@ class PrefectOneEngine(OrchestrationEngine):
             flow.add_edge(tasks[u], tasks[v])
 
         try:
-            flow.register(project_name=config_context.name)
+            flow.register(
+                project_name=config_context.pipedag_name
+                + "-"
+                + config_context.instance_id
+            )
         except ValueError as _e:
             self.logger.warning(
                 f"Please make sure project {config_context.name} exists: {_e}"

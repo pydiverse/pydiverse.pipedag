@@ -52,7 +52,7 @@ instances:
 
     orchestration:
       class: "pydiverse.pipedag.engine.SequentialEngine"
-      ## Activate this class to work either with prefect 1.3.0 or prefect 2.0
+      ## Activate this class to work either with prefect 1.x or prefect 2.x
       # class: "pydiverse.pipedag.engine.PrefectEngine"
   mssql:
     # Full dataset is using default database connection and schemas
