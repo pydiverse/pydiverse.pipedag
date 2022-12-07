@@ -23,6 +23,7 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     DropSchema,
     DropTable,
     DropView,
+    PrepareCreateTableAsSelect,
     RenameSchema,
     Schema,
 )
@@ -234,25 +235,29 @@ class SQLTableStore(BaseTableStore):
         """Executed raw SQL statements in the associated transaction stage"""
         sql = raw_sql.sql
         if self.engine.name == "mssql":
-            # if self.print_sql:
-            #     max_len = 50000  # consider making an option in ConfigContext
-            #     opt_end = '\n...' if len(sql) > max_len else ''
-            #     self.logger.info(f"Executing raw sql:\n{sql[0:max_len]}{opt_end}")
-            # # use pytsql for executing T-SQL scripts containing many GO statements
-            # pytsql.executes(sql, self.engine)
+            # noinspection PyBroadException
+            try:
+                import pytsql
 
-            # workaround: pytsql failed the scripts in this repo (DROP FUNCTION)
-            last_use = None
-            for stmt in re.split(r"\bGO\b", sql, flags=re.IGNORECASE):
-                if stmt.strip() == "":
-                    # allow GO at end of script
-                    continue
-                if re.match(r"\bUSE\b", stmt.strip()):
-                    last_use = stmt
-                with self.engine.connect() as conn:
-                    if last_use is not None:
-                        self.execute(last_use, conn=conn)
-                    self.execute(stmt, conn=conn)
+                if self.print_sql:
+                    max_len = 50000  # consider making an option in ConfigContext
+                    opt_end = "\n..." if len(sql) > max_len else ""
+                    self.logger.info(f"Executing raw sql:\n{sql[0:max_len]}{opt_end}")
+                # use pytsql for executing T-SQL scripts containing many GO statements
+                pytsql.executes(sql, self.engine)
+            except Exception:
+                # Fallback in case pytsql does not work
+                last_use = None
+                for stmt in re.split(r"\bGO\b", sql, flags=re.IGNORECASE):
+                    if stmt.strip() == "":
+                        # allow GO at end of script
+                        continue
+                    if re.match(r"\bUSE\b", stmt.strip()):
+                        last_use = stmt
+                    with self.engine.connect() as conn:
+                        if last_use is not None:
+                            self.execute(last_use, conn=conn)
+                        self.execute(stmt, conn=conn)
         else:
             for stmt in sql.split(";"):
                 self.execute(stmt)
@@ -810,6 +815,13 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
             )
         else:
             store.logger.info(f"Executing CREATE TABLE AS SELECT ({table})")
+        if store.engine.dialect.name == "ibm_db_sa":
+            # DB2 needs CREATE TABLE & INSERT INTO statements
+            store.execute(
+                PrepareCreateTableAsSelect(
+                    table.name, store.get_schema(stage_name), obj
+                )
+            )
         store.execute(
             CreateTableAsSelect(table.name, store.get_schema(stage_name), obj)
         )
