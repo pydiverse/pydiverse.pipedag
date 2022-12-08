@@ -62,6 +62,8 @@ class SQLTableStore(BaseTableStore):
         create_database_if_not_exists: bool = False,
         schema_prefix: str = "",
         schema_suffix: str = "",
+        disable_pytsql: bool = False,
+        pytsql_isolate_top_level_statements: bool = True,
         print_materialize: bool = False,
         print_sql: bool = False,
         no_db_locking: bool = True,
@@ -73,6 +75,8 @@ class SQLTableStore(BaseTableStore):
         :param create_database_if_not_exists: whether to create database if it does not exist
         :param schema_prefix: prefix string for schemas (dot is interpreted as database.schema)
         :param schema_suffix: suffix string for schemas (dot is interpreted as database.schema)
+        :param disable_pytsql: whether to disable the use of pytsql (dialect mssql only)
+        :param pytsql_isolate_top_level_statements: forward pytsql executes() parameter
         :param print_materialize: whether to print select statements before materialization
         :param print_sql: whether to print final SQL statements (except for metadata)
         :param no_db_locking: speed up database by telling it we will not rely on it's locking mechanisms
@@ -82,6 +86,8 @@ class SQLTableStore(BaseTableStore):
         self.create_database_if_not_exists = create_database_if_not_exists
         self.schema_prefix = schema_prefix
         self.schema_suffix = schema_suffix
+        self.disable_pytsql = disable_pytsql
+        self.pytsql_isolate_top_level_statements = pytsql_isolate_top_level_statements
         self.print_materialize = print_materialize
         self.print_sql = print_sql
         self.no_db_locking = no_db_locking
@@ -236,7 +242,9 @@ class SQLTableStore(BaseTableStore):
         sql = raw_sql.sql
         if self.engine.name == "mssql":
             # noinspection PyBroadException
-            try:
+            if not self.disable_pytsql:
+                # known problems for pytsql_isolate_top_level_statements: true:
+                #   - conditional DECLARE and SELECT statements are not handled properly
                 import pytsql
 
                 if self.print_sql:
@@ -244,9 +252,15 @@ class SQLTableStore(BaseTableStore):
                     opt_end = "\n..." if len(sql) > max_len else ""
                     self.logger.info(f"Executing raw sql:\n{sql[0:max_len]}{opt_end}")
                 # use pytsql for executing T-SQL scripts containing many GO statements
-                pytsql.executes(sql, self.engine)
-            except Exception:
-                # Fallback in case pytsql does not work
+                pytsql.executes(
+                    sql,
+                    self.engine,
+                    isolate_top_level_statements=self.pytsql_isolate_top_level_statements,
+                )
+            else:
+                # Offer an alternative SQL splitting in case pytsql does not work
+                # known problems:
+                #   - DECLARE statements will not be available across GO
                 last_use = None
                 for stmt in re.split(r"\bGO\b", sql, flags=re.IGNORECASE):
                     if stmt.strip() == "":

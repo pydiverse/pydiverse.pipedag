@@ -75,7 +75,7 @@ simple example configuration
         table_store:
           class: "pydiverse.pipedag.backend.table.SQLTableStore"
           url: "postgresql://sa:Pydiverse23@127.0.0.1:6543/{instance_id}"
-          create_database_if_not_exists: True
+          create_database_if_not_exists: true
 
         blob_store:
           class: "pydiverse.pipedag.backend.blob.FileBlobStore"
@@ -375,7 +375,7 @@ See `schema_prefix`_.
 create_database_if_not_exists
 """""""""""""""""""""""""""""
 
-default: False
+default: false
 
 The sqlalchmey engine `url`_ may include a database name which might not exist of first run of a pipedag instance.
 This parameter can be used to tell pipedag to create the database before it will try opening a database connection.
@@ -384,6 +384,30 @@ The parameter is ineffective for the following sqlalchemy dialects:
 
 - mssql: we use `database.schema` in schema swapping, so databases are automatically created when setting up a stage
 - ibm_db2: so far, we only use `instance_id`_ as schema prefix and don't (need to) know how to create a new database
+
+disable_pytsql
+""""""""""""""
+
+default: false
+
+For sqlalchemy dialect mssql, a package called pytsql is used for executing RawSql scripts.
+It has the advantage that it allows for some kind of SQL based print statements. However, it 
+may fail for some statements. For those cases, you can set `disable_pytsql: true` to use another
+logic for splitting up Raw SQL scripts and handing that over to sqlalchemy. This is actually
+quite a complex process for mssql. Sorry for any inconveniences. We will try to make it work
+for most tsql code that should be integrated in pipedag pipelines. However, the ultimate goal
+is to split up monolithic blocks of dynamic sql statements into defined transformations with
+dynamic aspects written in python.
+
+pytsql_isolate_top_level_statements
+"""""""""""""""""""""""""""""""""""
+
+default: true
+
+This parameter is handed over to https://pytsql.readthedocs.io/en/latest/api/pytsql.html#pytsql.executes
+and causes the script to be split in top level statements that are sent to sqlalchemy separately.
+The tricky part here is that some magic is done to make DECLARE statements reach across but it is not
+guaranteed to be identical to scripts executed by a SQL UI.
 
 class: pydiverse.pipedag.backend.table.DictTableStore
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -570,7 +594,7 @@ example configuration
           class: "pydiverse.pipedag.backend.table.SQLTableStore"
 
           table_store_connection: postgres
-          create_database_if_not_exists: True
+          create_database_if_not_exists: true
 
           print_materialize: true
           print_sql: true
@@ -688,7 +712,7 @@ which then can be later referenced
         table_store:
           # Postgres:
           <<: *db_postgres
-          create_database_if_not_exists: True
+          create_database_if_not_exists: true
 
           class: "pydiverse.pipedag.backend.table.SQLTableStore"
 
