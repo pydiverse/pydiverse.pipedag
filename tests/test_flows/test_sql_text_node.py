@@ -8,7 +8,6 @@ import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import ConfigContext
-from pydiverse.pipedag.util import config
 from pydiverse.pipedag.util.config import PipedagConfig
 
 

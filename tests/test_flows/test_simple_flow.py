@@ -4,10 +4,11 @@ import pandas as pd
 import pytest
 import sqlalchemy as sa
 
-from pydiverse.pipedag import Blob, Flow, Stage, Table, materialize
+from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.util.config import PipedagConfig
 
 
+# noinspection PyPep8Naming
 @materialize(nout=2, version="1.0")
 def inputs():
     dfA = pd.DataFrame(

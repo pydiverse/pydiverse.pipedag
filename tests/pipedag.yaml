@@ -58,6 +58,17 @@ instances:
     # Full dataset is using default database connection and schemas
     table_store:
       table_store_connection: mssql
+      disable_pytsql: True
+  mssql_pytsql:
+    table_store:
+      table_store_connection: mssql
+      disable_pytsql: False  # is already default
+      pytsql_isolate_top_level_statements: False
+  mssql_pytsql_isolate:
+    table_store:
+      table_store_connection: mssql
+      disable_pytsql: False  # is already default
+      pytsql_isolate_top_level_statements: True  # is already default
   ibm_db2:
     # Full dataset is using default database connection and schemas
     stage_commit_technique: READ_VIEWS
