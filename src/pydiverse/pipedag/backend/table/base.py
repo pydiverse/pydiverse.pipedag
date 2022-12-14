@@ -206,7 +206,7 @@ class BaseTableStore(metaclass=_TableStoreMeta):
         )
 
     def store_table_lazy(self, table: Table):
-        """Lazily sores a table in the associated commit stage
+        """Lazily stores a table in the associated commit stage
 
         The same as `store_table()`, with the difference being that if the
         table object represents a lazy table / query, the store first checks
@@ -249,7 +249,7 @@ class BaseTableStore(metaclass=_TableStoreMeta):
         )
 
     def store_raw_sql(self, raw_sql: RawSql):
-        """Lazily sores a table in the associated commit stage
+        """Lazily stores a table in the associated commit stage
 
         The same as `store_table()`, with the difference being that the store first checks
         if the same query with the same input (based on `raw_sql.cache_key`)
