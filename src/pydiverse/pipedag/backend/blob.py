@@ -74,9 +74,6 @@ class BaseBlobStore(Disposable, ABC):
         stage.
         """
 
-    def dispose(self):
-        """Close all resources (i.e. connections) and render object unusable."""
-
 
 class FileBlobStore(BaseBlobStore):
     """File based blob store
