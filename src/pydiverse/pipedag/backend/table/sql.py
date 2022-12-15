@@ -27,7 +27,7 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     Schema,
 )
 from pydiverse.pipedag.context import RunContext
-from pydiverse.pipedag.context.context import StageCommitTechnique
+from pydiverse.pipedag.context.context import ConfigContext, StageCommitTechnique
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import MaterializingTask
@@ -147,14 +147,6 @@ class SQLTableStore(BaseTableStore):
             Column("cur_transaction_name", String(256)),
             schema=self.metadata_schema.get(),
         )
-
-        self.instance_id = cfg.instance_id
-        format_dict = dict(name=cfg.pipedag_name, instance_id=cfg.instance_id)
-        engine_url = self.engine_url.format(**format_dict)
-        self._init_database(
-            engine_url, self.instance_id, self.create_database_if_not_exists
-        )
-        self.engine = self._connect(engine_url, self.schema_prefix, self.schema_suffix)
 
     @staticmethod
     def _init_database(engine_url: str, create_database_if_not_exists: bool):

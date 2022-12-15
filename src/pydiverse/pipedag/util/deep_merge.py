@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 
 
-def deep_merge(x, y):
+def deep_merge(x, y, check_enum=False):
     if type(x) != type(y):
         raise TypeError(
             f"deep_merge failed doe to type mismatch '{x}' (type: {type(x)}) vs. '{y}'"
