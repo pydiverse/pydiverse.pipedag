@@ -15,10 +15,10 @@ optional = false
 python-versions = ">=3.5"
 
 [package.extras]
-dev = ["coverage[toml] (>=5.0.2)", "hypothesis", "pympler", "pytest (>=4.3.0)", "mypy (>=0.900,!=0.940)", "pytest-mypy-plugins", "zope.interface", "furo", "sphinx", "sphinx-notfound-page", "pre-commit", "cloudpickle"]
-docs = ["furo", "sphinx", "zope.interface", "sphinx-notfound-page"]
-tests = ["coverage[toml] (>=5.0.2)", "hypothesis", "pympler", "pytest (>=4.3.0)", "mypy (>=0.900,!=0.940)", "pytest-mypy-plugins", "zope.interface", "cloudpickle"]
-tests_no_zope = ["coverage[toml] (>=5.0.2)", "hypothesis", "pympler", "pytest (>=4.3.0)", "mypy (>=0.900,!=0.940)", "pytest-mypy-plugins", "cloudpickle"]
+dev = ["cloudpickle", "coverage[toml] (>=5.0.2)", "furo", "hypothesis", "mypy (>=0.900,!=0.940)", "pre-commit", "pympler", "pytest (>=4.3.0)", "pytest-mypy-plugins", "sphinx", "sphinx-notfound-page", "zope.interface"]
+docs = ["furo", "sphinx", "sphinx-notfound-page", "zope.interface"]
+tests = ["cloudpickle", "coverage[toml] (>=5.0.2)", "hypothesis", "mypy (>=0.900,!=0.940)", "pympler", "pytest (>=4.3.0)", "pytest-mypy-plugins", "zope.interface"]
+tests-no-zope = ["cloudpickle", "coverage[toml] (>=5.0.2)", "hypothesis", "mypy (>=0.900,!=0.940)", "pympler", "pytest (>=4.3.0)", "pytest-mypy-plugins"]
 
 [[package]]
 name = "babel"
@@ -89,7 +89,7 @@ optional = true
 python-versions = ">=3.6.0"
 
 [package.extras]
-unicode_backport = ["unicodedata2"]
+unicode-backport = ["unicodedata2"]
 
 [[package]]
 name = "click"
@@ -163,7 +163,7 @@ complete = ["bokeh (>=2.4.2,<3)", "distributed (==2022.12.0)", "jinja2", "numpy 
 dataframe = ["numpy (>=1.18)", "pandas (>=1.0)"]
 diagnostics = ["bokeh (>=2.4.2,<3)", "jinja2"]
 distributed = ["distributed (==2022.12.0)"]
-test = ["pandas", "pytest", "pytest-rerunfailures", "pytest-xdist", "pre-commit"]
+test = ["pandas[test]", "pre-commit", "pytest", "pytest-rerunfailures", "pytest-xdist"]
 
 [[package]]
 name = "distlib"
@@ -271,7 +271,7 @@ abfs = ["adlfs"]
 adl = ["adlfs"]
 arrow = ["pyarrow (>=1)"]
 dask = ["dask", "distributed"]
-dropbox = ["dropboxdrivefs", "requests", "dropbox"]
+dropbox = ["dropbox", "dropboxdrivefs", "requests"]
 entrypoints = ["importlib-metadata"]
 fuse = ["fusepy"]
 gcs = ["gcsfs"]
@@ -280,7 +280,7 @@ github = ["requests"]
 gs = ["gcsfs"]
 gui = ["panel"]
 hdfs = ["pyarrow (>=1)"]
-http = ["requests", "aiohttp (!=4.0.0a0,!=4.0.0a1)"]
+http = ["aiohttp (!=4.0.0a0,!=4.0.0a1)", "requests"]
 libarchive = ["libarchive-c"]
 oci = ["ocifs"]
 s3 = ["s3fs"]
@@ -298,8 +298,8 @@ optional = false
 python-versions = ">=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*"
 
 [package.extras]
-docs = ["sphinx", "docutils (<0.18)"]
-test = ["objgraph", "psutil", "faulthandler"]
+docs = ["Sphinx", "docutils (<0.18)"]
+test = ["faulthandler", "objgraph", "psutil"]
 
 [[package]]
 name = "heapdict"
@@ -365,7 +365,7 @@ optional = false
 python-versions = ">=3.6"
 
 [package.extras]
-test = ["flake8 (>=5.0.4,<5.1.0)", "pycodestyle (>=2.9.1,<2.10.0)", "mypy (==0.971)", "pytest (>=6.2.4,<6.3.0)"]
+test = ["flake8 (>=5.0.4,<5.1.0)", "mypy (==0.971)", "pycodestyle (>=2.9.1,<2.10.0)", "pytest (>=6.2.4,<6.3.0)"]
 
 [[package]]
 name = "importlib-metadata"
@@ -379,9 +379,9 @@ python-versions = ">=3.7"
 zipp = ">=0.5"
 
 [package.extras]
-docs = ["sphinx (>=3.5)", "jaraco.packaging (>=9)", "rst.linker (>=1.9)", "furo", "jaraco.tidelift (>=1.4)"]
+docs = ["furo", "jaraco.packaging (>=9)", "jaraco.tidelift (>=1.4)", "rst.linker (>=1.9)", "sphinx (>=3.5)"]
 perf = ["ipython"]
-testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "flake8 (<5)", "pytest-cov", "pytest-enabler (>=1.3)", "packaging", "pyfakefs", "flufl.flake8", "pytest-perf (>=0.9.2)", "pytest-black (>=0.3.7)", "pytest-mypy (>=0.9.1)", "pytest-flake8", "importlib-resources (>=1.3)"]
+testing = ["flake8 (<5)", "flufl.flake8", "importlib-resources (>=1.3)", "packaging", "pyfakefs", "pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=1.3)", "pytest-flake8", "pytest-mypy (>=0.9.1)", "pytest-perf (>=0.9.2)"]
 
 [[package]]
 name = "importlib-resources"
@@ -395,8 +395,8 @@ python-versions = ">=3.7"
 zipp = {version = ">=3.1.0", markers = "python_version < \"3.10\""}
 
 [package.extras]
-docs = ["sphinx (>=3.5)", "jaraco.packaging (>=9)", "rst.linker (>=1.9)", "furo", "jaraco.tidelift (>=1.4)"]
-testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "flake8 (<5)", "pytest-cov", "pytest-enabler (>=1.3)", "pytest-black (>=0.3.7)", "pytest-mypy (>=0.9.1)", "pytest-flake8"]
+docs = ["furo", "jaraco.packaging (>=9)", "jaraco.tidelift (>=1.4)", "rst.linker (>=1.9)", "sphinx (>=3.5)"]
+testing = ["flake8 (<5)", "pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=1.3)", "pytest-flake8", "pytest-mypy (>=0.9.1)"]
 
 [[package]]
 name = "iniconfig"
@@ -432,13 +432,13 @@ python-versions = "*"
 six = "*"
 
 [package.extras]
-alldeps = ["flake8", "eventlet (>=0.17.1)", "gevent (>=1.2)", "pure-sasl (>=0.5.1)", "Sphinx (>=1.2.2)"]
+alldeps = ["Sphinx (>=1.2.2)", "eventlet (>=0.17.1)", "flake8", "gevent (>=1.2)", "pure-sasl (>=0.5.1)"]
 dev = ["flake8"]
 docs = ["Sphinx (>=1.2.2)"]
 eventlet = ["eventlet (>=0.17.1)"]
 gevent = ["gevent (>=1.2)"]
 sasl = ["pure-sasl (>=0.5.1)"]
-test = ["mock", "objgraph", "pytest", "pytest-cov", "gevent (>=1.2)", "eventlet (>=0.17.1)"]
+test = ["eventlet (>=0.17.1)", "gevent (>=1.2)", "mock", "objgraph", "pytest", "pytest-cov"]
 
 [[package]]
 name = "locket"
@@ -468,9 +468,9 @@ python-versions = ">=3.7"
 packaging = ">=17.0"
 
 [package.extras]
-dev = ["pytest", "pytz", "simplejson", "mypy (==0.990)", "flake8 (==5.0.4)", "flake8-bugbear (==22.10.25)", "pre-commit (>=2.4,<3.0)", "tox"]
-docs = ["sphinx (==5.3.0)", "sphinx-issues (==3.0.1)", "alabaster (==0.7.12)", "sphinx-version-warning (==1.1.2)", "autodocsumm (==0.2.9)"]
-lint = ["mypy (==0.990)", "flake8 (==5.0.4)", "flake8-bugbear (==22.10.25)", "pre-commit (>=2.4,<3.0)"]
+dev = ["flake8 (==5.0.4)", "flake8-bugbear (==22.10.25)", "mypy (==0.990)", "pre-commit (>=2.4,<3.0)", "pytest", "pytz", "simplejson", "tox"]
+docs = ["alabaster (==0.7.12)", "autodocsumm (==0.2.9)", "sphinx (==5.3.0)", "sphinx-issues (==3.0.1)", "sphinx-version-warning (==1.1.2)"]
+lint = ["flake8 (==5.0.4)", "flake8-bugbear (==22.10.25)", "mypy (==0.990)", "pre-commit (>=2.4,<3.0)"]
 tests = ["pytest", "pytz", "simplejson"]
 
 [[package]]
@@ -485,9 +485,9 @@ python-versions = ">=3.6"
 marshmallow = ">=3.0.0,<4.0.0"
 
 [package.extras]
-dev = ["pytest", "mock", "flake8 (==3.9.2)", "flake8-bugbear (==21.4.3)", "pre-commit (>=2.7,<3.0)", "tox"]
+dev = ["flake8 (==3.9.2)", "flake8-bugbear (==21.4.3)", "mock", "pre-commit (>=2.7,<3.0)", "pytest", "tox"]
 lint = ["flake8 (==3.9.2)", "flake8-bugbear (==21.4.3)", "pre-commit (>=2.7,<3.0)"]
-tests = ["pytest", "mock"]
+tests = ["mock", "pytest"]
 
 [[package]]
 name = "msgpack"
@@ -514,11 +514,11 @@ optional = false
 python-versions = ">=3.8"
 
 [package.extras]
-default = ["numpy (>=1.19)", "scipy (>=1.8)", "matplotlib (>=3.4)", "pandas (>=1.3)"]
-developer = ["pre-commit (>=2.20)", "mypy (>=0.982)"]
-doc = ["sphinx (>=5.2)", "pydata-sphinx-theme (>=0.11)", "sphinx-gallery (>=0.11)", "numpydoc (>=1.5)", "pillow (>=9.2)", "nb2plots (>=0.6)", "texext (>=0.6.6)"]
-extra = ["lxml (>=4.6)", "pygraphviz (>=1.9)", "pydot (>=1.4.2)", "sympy (>=1.10)"]
-test = ["pytest (>=7.2)", "pytest-cov (>=4.0)", "codecov (>=2.1)"]
+default = ["matplotlib (>=3.4)", "numpy (>=1.19)", "pandas (>=1.3)", "scipy (>=1.8)"]
+developer = ["mypy (>=0.982)", "pre-commit (>=2.20)"]
+doc = ["nb2plots (>=0.6)", "numpydoc (>=1.5)", "pillow (>=9.2)", "pydata-sphinx-theme (>=0.11)", "sphinx (>=5.2)", "sphinx-gallery (>=0.11)", "texext (>=0.6.6)"]
+extra = ["lxml (>=4.6)", "pydot (>=1.4.2)", "pygraphviz (>=1.9)", "sympy (>=1.10)"]
+test = ["codecov (>=2.1)", "pytest (>=7.2)", "pytest-cov (>=4.0)"]
 
 [[package]]
 name = "nodeenv"
@@ -527,6 +527,9 @@ description = "Node.js virtual environment builder"
 category = "dev"
 optional = false
 python-versions = ">=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*"
+
+[package.dependencies]
+setuptools = "*"
 
 [[package]]
 name = "numpy"
@@ -580,7 +583,7 @@ locket = "*"
 toolz = "*"
 
 [package.extras]
-complete = ["blosc", "pyzmq", "pandas (>=0.19.0)", "numpy (>=1.9.0)"]
+complete = ["blosc", "numpy (>=1.9.0)", "pandas (>=0.19.0)", "pyzmq"]
 
 [[package]]
 name = "pathspec"
@@ -619,8 +622,8 @@ optional = false
 python-versions = ">=3.7"
 
 [package.extras]
-docs = ["furo (>=2022.9.29)", "proselint (>=0.13)", "sphinx-autodoc-typehints (>=1.19.4)", "sphinx (>=5.3)"]
-test = ["appdirs (==1.4.4)", "pytest-cov (>=4)", "pytest-mock (>=3.10)", "pytest (>=7.2)"]
+docs = ["furo (>=2022.9.29)", "proselint (>=0.13)", "sphinx (>=5.3)", "sphinx-autodoc-typehints (>=1.19.4)"]
+test = ["appdirs (==1.4.4)", "pytest (>=7.2)", "pytest-cov (>=4)", "pytest-mock (>=3.10)"]
 
 [[package]]
 name = "pluggy"
@@ -631,8 +634,8 @@ optional = false
 python-versions = ">=3.6"
 
 [package.extras]
-testing = ["pytest-benchmark", "pytest"]
-dev = ["tox", "pre-commit"]
+dev = ["pre-commit", "tox"]
+testing = ["pytest", "pytest-benchmark"]
 
 [[package]]
 name = "pre-commit"
@@ -684,30 +687,30 @@ urllib3 = ">=1.26.0"
 
 [package.extras]
 airtable = ["airtable-python-wrapper (>=0.11)"]
-all_extras = ["airtable-python-wrapper (>=0.11)", "boto3 (>=1.9)", "azure-core (>=1.10.0)", "azure-cosmos (>=3.1.1)", "azure-mgmt-datafactory (>=2.7.0)", "azure-storage-blob (>=12.1.0)", "azure-identity (>=1.7.0)", "azureml-sdk", "atlassian-python-api (>=2.0.1)", "dask-cloudprovider[aws] (>=0.2.0)", "black", "graphviz (>=0.8)", "jinja2 (>=2.0,<4.0)", "Pygments (>=2.2,<3.0)", "pytest (>=6.0)", "testfixtures (>=6.10.3)", "pytest-env (>=0.6.0)", "pytest-xdist (>=2.0)", "flaky (>=3.0)", "responses (>=0.14.0)", "PyJWT (>=2.3.0)", "freezegun (>=1.0.0)", "pydantic (>=1.9.0)", "dropbox (>=9.0,<10.0)", "firebolt-sdk (>=0.2.1)", "great-expectations (>=0.13.8)", "sqlalchemy-redshift (>=0.8.11)", "google-cloud-bigquery (>=1.6.0)", "google-cloud-secret-manager (>=2.4.0)", "google-cloud-storage (>=1.13)", "google-cloud-aiplatform (>=1.4.0)", "google-auth (>=2.0)", "dulwich (>=0.19.7)", "PyGithub (>=1.51)", "python-gitlab (>=2.5.0)", "gspread (>=3.6.0)", "jira (>=2.0.0)", "papermill (>=2.2.0)", "nbconvert (>=6.0.7)", "ipykernel (>=6.9.2)", "confluent-kafka (>=1.7.0)", "dask-kubernetes (>=0.8.0)", "kubernetes (>=9.0.0a1)", "pandas (>=1.0.1)", "psycopg2-binary (>=2.8.2)", "prometheus-client (>=0.9.0)", "pymysql (>=0.9.3)", "pyodbc (>=4.0.30)", "pushbullet.py (>=0.11.0)", "redis (>=3.2.1)", "feedparser (>=5.0.1)", "snowflake-connector-python (>=1.8.2)", "spacy (>=2.0.0)", "jinja2 (>=2.0)", "hvac (>=0.10)", "graphviz (>=0.8.3)", "tweepy (>=3.5)", "pyarrow (>=5.0.0)", "pyexasol (>=0.16.1)", "soda-sql (>=2.0.0b25)", "soda-spark (>=0.2.1)", "sendgrid (>=6.7.0)", "py2neo (>=2021.2.3)", "transform (>=1.0.12)", "paramiko (>=2.10.4)", "toloka-kit (>=0.1.25)"]
-all_orchestration_extras = ["boto3 (>=1.9)", "azure-storage-blob (>=12.1.0)", "azure-identity (>=1.7.0)", "atlassian-python-api (>=2.0.1)", "google-cloud-secret-manager (>=2.4.0)", "google-cloud-storage (>=1.13)", "google-cloud-aiplatform (>=1.4.0)", "google-auth (>=2.0)", "dulwich (>=0.19.7)", "PyGithub (>=1.51)", "python-gitlab (>=2.5.0)", "kubernetes (>=9.0.0a1)"]
+all-extras = ["PyGithub (>=1.51)", "PyJWT (>=2.3.0)", "Pygments (>=2.2,<3.0)", "airtable-python-wrapper (>=0.11)", "atlassian-python-api (>=2.0.1)", "azure-core (>=1.10.0)", "azure-cosmos (>=3.1.1)", "azure-identity (>=1.7.0)", "azure-mgmt-datafactory (>=2.7.0)", "azure-storage-blob (>=12.1.0)", "azureml-sdk", "black", "boto3 (>=1.9)", "confluent-kafka (>=1.7.0)", "dask-cloudprovider[aws] (>=0.2.0)", "dask-kubernetes (>=0.8.0)", "dropbox (>=9.0,<10.0)", "dulwich (>=0.19.7)", "feedparser (>=5.0.1)", "firebolt-sdk (>=0.2.1)", "flaky (>=3.0)", "freezegun (>=1.0.0)", "google-auth (>=2.0)", "google-cloud-aiplatform (>=1.4.0)", "google-cloud-bigquery (>=1.6.0)", "google-cloud-secret-manager (>=2.4.0)", "google-cloud-storage (>=1.13)", "graphviz (>=0.8)", "graphviz (>=0.8.3)", "great-expectations (>=0.13.8)", "gspread (>=3.6.0)", "hvac (>=0.10)", "ipykernel (>=6.9.2)", "jinja2 (>=2.0)", "jinja2 (>=2.0,<4.0)", "jira (>=2.0.0)", "kubernetes (>=9.0.0a1)", "nbconvert (>=6.0.7)", "pandas (>=1.0.1)", "papermill (>=2.2.0)", "paramiko (>=2.10.4)", "prometheus-client (>=0.9.0)", "psycopg2-binary (>=2.8.2)", "pushbullet.py (>=0.11.0)", "py2neo (>=2021.2.3)", "pyarrow (>=5.0.0)", "pydantic (>=1.9.0)", "pyexasol (>=0.16.1)", "pymysql (>=0.9.3)", "pyodbc (>=4.0.30)", "pytest (>=6.0)", "pytest-env (>=0.6.0)", "pytest-xdist (>=2.0)", "python-gitlab (>=2.5.0)", "redis (>=3.2.1)", "responses (>=0.14.0)", "sendgrid (>=6.7.0)", "snowflake-connector-python (>=1.8.2)", "soda-spark (>=0.2.1)", "soda-sql (>=2.0.0b25)", "spacy (>=2.0.0)", "sqlalchemy-redshift (>=0.8.11)", "testfixtures (>=6.10.3)", "toloka-kit (>=0.1.25)", "transform (>=1.0.12)", "tweepy (>=3.5)"]
+all-orchestration-extras = ["PyGithub (>=1.51)", "atlassian-python-api (>=2.0.1)", "azure-identity (>=1.7.0)", "azure-storage-blob (>=12.1.0)", "boto3 (>=1.9)", "dulwich (>=0.19.7)", "google-auth (>=2.0)", "google-cloud-aiplatform (>=1.4.0)", "google-cloud-secret-manager (>=2.4.0)", "google-cloud-storage (>=1.13)", "kubernetes (>=9.0.0a1)", "python-gitlab (>=2.5.0)"]
 aws = ["boto3 (>=1.9)"]
-azure = ["azure-core (>=1.10.0)", "azure-cosmos (>=3.1.1)", "azure-mgmt-datafactory (>=2.7.0)", "azure-storage-blob (>=12.1.0)", "azure-identity (>=1.7.0)"]
+azure = ["azure-core (>=1.10.0)", "azure-cosmos (>=3.1.1)", "azure-identity (>=1.7.0)", "azure-mgmt-datafactory (>=2.7.0)", "azure-storage-blob (>=12.1.0)"]
 azureml = ["azureml-sdk"]
-base_library_ci = ["boto3 (>=1.9)", "azure-storage-blob (>=12.1.0)", "azure-identity (>=1.7.0)", "atlassian-python-api (>=2.0.1)", "google-cloud-secret-manager (>=2.4.0)", "google-cloud-storage (>=1.13)", "google-cloud-aiplatform (>=1.4.0)", "google-auth (>=2.0)", "dulwich (>=0.19.7)", "PyGithub (>=1.51)", "python-gitlab (>=2.5.0)", "kubernetes (>=9.0.0a1)", "black", "graphviz (>=0.8)", "jinja2 (>=2.0,<4.0)", "Pygments (>=2.2,<3.0)", "pytest (>=6.0)", "testfixtures (>=6.10.3)", "pytest-env (>=0.6.0)", "pytest-xdist (>=2.0)", "flaky (>=3.0)", "responses (>=0.14.0)", "PyJWT (>=2.3.0)", "freezegun (>=1.0.0)", "pandas (>=1.0.1)", "jira (>=2.0.0)"]
+base-library-ci = ["PyGithub (>=1.51)", "PyJWT (>=2.3.0)", "Pygments (>=2.2,<3.0)", "atlassian-python-api (>=2.0.1)", "azure-identity (>=1.7.0)", "azure-storage-blob (>=12.1.0)", "black", "boto3 (>=1.9)", "dulwich (>=0.19.7)", "flaky (>=3.0)", "freezegun (>=1.0.0)", "google-auth (>=2.0)", "google-cloud-aiplatform (>=1.4.0)", "google-cloud-secret-manager (>=2.4.0)", "google-cloud-storage (>=1.13)", "graphviz (>=0.8)", "jinja2 (>=2.0,<4.0)", "jira (>=2.0.0)", "kubernetes (>=9.0.0a1)", "pandas (>=1.0.1)", "pytest (>=6.0)", "pytest-env (>=0.6.0)", "pytest-xdist (>=2.0)", "python-gitlab (>=2.5.0)", "responses (>=0.14.0)", "testfixtures (>=6.10.3)"]
 bitbucket = ["atlassian-python-api (>=2.0.1)"]
 cubejs = ["PyJWT (>=2.3.0)"]
-dask_cloudprovider = ["dask-cloudprovider[aws] (>=0.2.0)"]
+dask-cloudprovider = ["dask-cloudprovider[aws] (>=0.2.0)"]
 databricks = ["pydantic (>=1.9.0)"]
-dev = ["black", "graphviz (>=0.8)", "jinja2 (>=2.0,<4.0)", "Pygments (>=2.2,<3.0)", "pytest (>=6.0)", "testfixtures (>=6.10.3)", "pytest-env (>=0.6.0)", "pytest-xdist (>=2.0)", "flaky (>=3.0)", "responses (>=0.14.0)", "PyJWT (>=2.3.0)", "freezegun (>=1.0.0)"]
+dev = ["PyJWT (>=2.3.0)", "Pygments (>=2.2,<3.0)", "black", "flaky (>=3.0)", "freezegun (>=1.0.0)", "graphviz (>=0.8)", "jinja2 (>=2.0,<4.0)", "pytest (>=6.0)", "pytest-env (>=0.6.0)", "pytest-xdist (>=2.0)", "responses (>=0.14.0)", "testfixtures (>=6.10.3)"]
 dremio = ["pyarrow (>=5.0.0)"]
 dropbox = ["dropbox (>=9.0,<10.0)"]
 exasol = ["pyexasol (>=0.16.1)"]
 firebolt = ["firebolt-sdk (>=0.2.1)"]
-gcp = ["google-cloud-bigquery (>=1.6.0)", "google-cloud-secret-manager (>=2.4.0)", "google-cloud-storage (>=1.13)", "google-cloud-aiplatform (>=1.4.0)", "google-auth (>=2.0)"]
+gcp = ["google-auth (>=2.0)", "google-cloud-aiplatform (>=1.4.0)", "google-cloud-bigquery (>=1.6.0)", "google-cloud-secret-manager (>=2.4.0)", "google-cloud-storage (>=1.13)"]
 ge = ["great-expectations (>=0.13.8)", "sqlalchemy-redshift (>=0.8.11)"]
 git = ["dulwich (>=0.19.7)"]
 github = ["PyGithub (>=1.51)"]
 gitlab = ["python-gitlab (>=2.5.0)"]
-google = ["google-cloud-bigquery (>=1.6.0)", "google-cloud-secret-manager (>=2.4.0)", "google-cloud-storage (>=1.13)", "google-cloud-aiplatform (>=1.4.0)", "google-auth (>=2.0)"]
+google = ["google-auth (>=2.0)", "google-cloud-aiplatform (>=1.4.0)", "google-cloud-bigquery (>=1.6.0)", "google-cloud-secret-manager (>=2.4.0)", "google-cloud-storage (>=1.13)"]
 gsheets = ["gspread (>=3.6.0)"]
 jira = ["jira (>=2.0.0)"]
-jupyter = ["papermill (>=2.2.0)", "nbconvert (>=6.0.7)", "ipykernel (>=6.9.2)"]
+jupyter = ["ipykernel (>=6.9.2)", "nbconvert (>=6.0.7)", "papermill (>=2.2.0)"]
 kafka = ["confluent-kafka (>=1.7.0)"]
 kubernetes = ["dask-kubernetes (>=0.8.0)", "kubernetes (>=9.0.0a1)"]
 mysql = ["pymysql (>=0.9.3)"]
@@ -724,10 +727,10 @@ snowflake = ["snowflake-connector-python (>=1.8.2)"]
 sodaspark = ["soda-spark (>=0.2.1)"]
 sodasql = ["soda-sql (>=2.0.0b25)"]
 spacy = ["spacy (>=2.0.0)"]
-sql_server = ["pyodbc (>=4.0.30)"]
-task_library_ci = ["airtable-python-wrapper (>=0.11)", "boto3 (>=1.9)", "azure-core (>=1.10.0)", "azure-cosmos (>=3.1.1)", "azure-mgmt-datafactory (>=2.7.0)", "azure-storage-blob (>=12.1.0)", "azure-identity (>=1.7.0)", "azureml-sdk", "atlassian-python-api (>=2.0.1)", "black", "graphviz (>=0.8)", "jinja2 (>=2.0,<4.0)", "Pygments (>=2.2,<3.0)", "pytest (>=6.0)", "testfixtures (>=6.10.3)", "pytest-env (>=0.6.0)", "pytest-xdist (>=2.0)", "flaky (>=3.0)", "responses (>=0.14.0)", "PyJWT (>=2.3.0)", "freezegun (>=1.0.0)", "pydantic (>=1.9.0)", "dropbox (>=9.0,<10.0)", "firebolt-sdk (>=0.2.1)", "great-expectations (>=0.13.8)", "sqlalchemy-redshift (>=0.8.11)", "google-cloud-bigquery (>=1.6.0)", "google-cloud-secret-manager (>=2.4.0)", "google-cloud-storage (>=1.13)", "google-cloud-aiplatform (>=1.4.0)", "google-auth (>=2.0)", "dulwich (>=0.19.7)", "PyGithub (>=1.51)", "python-gitlab (>=2.5.0)", "gspread (>=3.6.0)", "jira (>=2.0.0)", "papermill (>=2.2.0)", "nbconvert (>=6.0.7)", "ipykernel (>=6.9.2)", "confluent-kafka (>=1.7.0)", "dask-kubernetes (>=0.8.0)", "kubernetes (>=9.0.0a1)", "pandas (>=1.0.1)", "psycopg2-binary (>=2.8.2)", "prometheus-client (>=0.9.0)", "pymysql (>=0.9.3)", "pushbullet.py (>=0.11.0)", "redis (>=3.2.1)", "feedparser (>=5.0.1)", "snowflake-connector-python (>=1.8.2)", "spacy (>=2.0.0)", "jinja2 (>=2.0)", "hvac (>=0.10)", "graphviz (>=0.8.3)", "tweepy (>=3.5)", "pyarrow (>=5.0.0)", "pyexasol (>=0.16.1)", "sendgrid (>=6.7.0)", "py2neo (>=2021.2.3)", "transform (>=1.0.12)", "paramiko (>=2.10.4)", "toloka-kit (>=0.1.25)"]
+sql-server = ["pyodbc (>=4.0.30)"]
+task-library-ci = ["PyGithub (>=1.51)", "PyJWT (>=2.3.0)", "Pygments (>=2.2,<3.0)", "airtable-python-wrapper (>=0.11)", "atlassian-python-api (>=2.0.1)", "azure-core (>=1.10.0)", "azure-cosmos (>=3.1.1)", "azure-identity (>=1.7.0)", "azure-mgmt-datafactory (>=2.7.0)", "azure-storage-blob (>=12.1.0)", "azureml-sdk", "black", "boto3 (>=1.9)", "confluent-kafka (>=1.7.0)", "dask-kubernetes (>=0.8.0)", "dropbox (>=9.0,<10.0)", "dulwich (>=0.19.7)", "feedparser (>=5.0.1)", "firebolt-sdk (>=0.2.1)", "flaky (>=3.0)", "freezegun (>=1.0.0)", "google-auth (>=2.0)", "google-cloud-aiplatform (>=1.4.0)", "google-cloud-bigquery (>=1.6.0)", "google-cloud-secret-manager (>=2.4.0)", "google-cloud-storage (>=1.13)", "graphviz (>=0.8)", "graphviz (>=0.8.3)", "great-expectations (>=0.13.8)", "gspread (>=3.6.0)", "hvac (>=0.10)", "ipykernel (>=6.9.2)", "jinja2 (>=2.0)", "jinja2 (>=2.0,<4.0)", "jira (>=2.0.0)", "kubernetes (>=9.0.0a1)", "nbconvert (>=6.0.7)", "pandas (>=1.0.1)", "papermill (>=2.2.0)", "paramiko (>=2.10.4)", "prometheus-client (>=0.9.0)", "psycopg2-binary (>=2.8.2)", "pushbullet.py (>=0.11.0)", "py2neo (>=2021.2.3)", "pyarrow (>=5.0.0)", "pydantic (>=1.9.0)", "pyexasol (>=0.16.1)", "pymysql (>=0.9.3)", "pytest (>=6.0)", "pytest-env (>=0.6.0)", "pytest-xdist (>=2.0)", "python-gitlab (>=2.5.0)", "redis (>=3.2.1)", "responses (>=0.14.0)", "sendgrid (>=6.7.0)", "snowflake-connector-python (>=1.8.2)", "spacy (>=2.0.0)", "sqlalchemy-redshift (>=0.8.11)", "testfixtures (>=6.10.3)", "toloka-kit (>=0.1.25)", "transform (>=1.0.12)", "tweepy (>=3.5)"]
 templates = ["jinja2 (>=2.0)"]
-test = ["pytest (>=6.0)", "testfixtures (>=6.10.3)", "pytest-env (>=0.6.0)", "pytest-xdist (>=2.0)", "flaky (>=3.0)", "responses (>=0.14.0)", "PyJWT (>=2.3.0)", "freezegun (>=1.0.0)"]
+test = ["PyJWT (>=2.3.0)", "flaky (>=3.0)", "freezegun (>=1.0.0)", "pytest (>=6.0)", "pytest-env (>=0.6.0)", "pytest-xdist (>=2.0)", "responses (>=0.14.0)", "testfixtures (>=6.10.3)"]
 toloka = ["toloka-kit (>=0.1.25)"]
 transform = ["transform (>=1.0.12)"]
 twitter = ["tweepy (>=3.5)"]
@@ -743,7 +746,7 @@ optional = true
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
 
 [package.extras]
-test = ["ipaddress", "mock", "enum34", "pywin32", "wmi"]
+test = ["enum34", "ipaddress", "mock", "pywin32", "wmi"]
 
 [[package]]
 name = "psycopg2"
@@ -812,7 +815,7 @@ optional = false
 python-versions = ">=3.6.8"
 
 [package.extras]
-diagrams = ["railroad-diagrams", "jinja2"]
+diagrams = ["jinja2", "railroad-diagrams"]
 
 [[package]]
 name = "pytest"
@@ -846,7 +849,7 @@ python-versions = ">=3.7"
 pytest = ">=5.0"
 
 [package.extras]
-dev = ["pre-commit", "tox", "pytest-asyncio"]
+dev = ["pre-commit", "pytest-asyncio", "tox"]
 
 [[package]]
 name = "pytest-timeout"
@@ -881,16 +884,16 @@ name = "python-box"
 version = "6.1.0"
 description = "Advanced Python dictionaries with dot notation access"
 category = "main"
-optional = true
+optional = false
 python-versions = ">=3.7"
 
 [package.extras]
-pyyaml = ["pyyaml"]
-all = ["ruamel.yaml (>=0.17)", "toml", "msgpack"]
+all = ["msgpack", "ruamel.yaml (>=0.17)", "toml"]
 msgpack = ["msgpack"]
-"ruamel.yaml" = ["ruamel.yaml (>=0.17)"]
+pyyaml = ["PyYAML"]
+ruamel-yaml = ["ruamel.yaml (>=0.17)"]
 toml = ["toml"]
-tomli = ["tomli-w", "tomli"]
+tomli = ["tomli", "tomli-w"]
 yaml = ["ruamel.yaml (>=0.17)"]
 
 [[package]]
@@ -966,7 +969,20 @@ urllib3 = ">=1.21.1,<1.27"
 
 [package.extras]
 socks = ["PySocks (>=1.5.6,!=1.5.7)"]
-use_chardet_on_py3 = ["chardet (>=3.0.2,<6)"]
+use-chardet-on-py3 = ["chardet (>=3.0.2,<6)"]
+
+[[package]]
+name = "setuptools"
+version = "65.6.3"
+description = "Easily download, build, install, upgrade, and uninstall Python packages"
+category = "dev"
+optional = false
+python-versions = ">=3.7"
+
+[package.extras]
+docs = ["furo", "jaraco.packaging (>=9)", "jaraco.tidelift (>=1.4)", "pygments-github-lexers (==0.0.5)", "rst.linker (>=1.9)", "sphinx (>=3.5)", "sphinx-favicon", "sphinx-hoverxref (<2)", "sphinx-inline-tabs", "sphinx-notfound-page (==0.8.3)", "sphinx-reredirects", "sphinxcontrib-towncrier"]
+testing = ["build[virtualenv]", "filelock (>=3.4.0)", "flake8 (<5)", "flake8-2020", "ini2toml[lite] (>=0.9)", "jaraco.envs (>=2.2)", "jaraco.path (>=3.2.0)", "pip (>=19.1)", "pip-run (>=8.8)", "pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=1.3)", "pytest-flake8", "pytest-mypy (>=0.9.1)", "pytest-perf", "pytest-timeout", "pytest-xdist", "tomli-w (>=1.0.0)", "virtualenv (>=13.0.0)", "wheel"]
+testing-integration = ["build[virtualenv]", "filelock (>=3.4.0)", "jaraco.envs (>=2.2)", "jaraco.path (>=3.2.0)", "pytest", "pytest-enabler", "pytest-xdist", "tomli", "virtualenv (>=13.0.0)", "wheel"]
 
 [[package]]
 name = "six"
@@ -1029,8 +1045,8 @@ sphinxcontrib-serializinghtml = ">=1.1.5"
 
 [package.extras]
 docs = ["sphinxcontrib-websupport"]
-lint = ["flake8 (>=3.5.0)", "flake8-comprehensions", "flake8-bugbear", "flake8-simplify", "isort", "mypy (>=0.981)", "sphinx-lint", "docutils-stubs", "types-typed-ast", "types-requests"]
-test = ["pytest (>=4.6)", "html5lib", "typed-ast", "cython"]
+lint = ["docutils-stubs", "flake8 (>=3.5.0)", "flake8-bugbear", "flake8-comprehensions", "flake8-simplify", "isort", "mypy (>=0.981)", "sphinx-lint", "types-requests", "types-typed-ast"]
+test = ["cython", "html5lib", "pytest (>=4.6)", "typed_ast"]
 
 [[package]]
 name = "sphinx-rtd-theme"
@@ -1045,7 +1061,7 @@ docutils = "<0.18"
 sphinx = ">=1.6,<6"
 
 [package.extras]
-dev = ["transifex-client", "sphinxcontrib-httpdomain", "bump2version", "wheel"]
+dev = ["bump2version", "sphinxcontrib-httpdomain", "transifex-client", "wheel"]
 
 [[package]]
 name = "sphinxcontrib-apidoc"
@@ -1068,8 +1084,8 @@ optional = true
 python-versions = ">=3.5"
 
 [package.extras]
+lint = ["docutils-stubs", "flake8", "mypy"]
 test = ["pytest"]
-lint = ["docutils-stubs", "mypy", "flake8"]
 
 [[package]]
 name = "sphinxcontrib-devhelp"
@@ -1080,8 +1096,8 @@ optional = true
 python-versions = ">=3.5"
 
 [package.extras]
+lint = ["docutils-stubs", "flake8", "mypy"]
 test = ["pytest"]
-lint = ["docutils-stubs", "mypy", "flake8"]
 
 [[package]]
 name = "sphinxcontrib-htmlhelp"
@@ -1092,8 +1108,8 @@ optional = true
 python-versions = ">=3.6"
 
 [package.extras]
+lint = ["docutils-stubs", "flake8", "mypy"]
 test = ["html5lib", "pytest"]
-lint = ["docutils-stubs", "mypy", "flake8"]
 
 [[package]]
 name = "sphinxcontrib-jsmath"
@@ -1104,7 +1120,7 @@ optional = true
 python-versions = ">=3.5"
 
 [package.extras]
-test = ["mypy", "flake8", "pytest"]
+test = ["flake8", "mypy", "pytest"]
 
 [[package]]
 name = "sphinxcontrib-qthelp"
@@ -1115,8 +1131,8 @@ optional = true
 python-versions = ">=3.5"
 
 [package.extras]
+lint = ["docutils-stubs", "flake8", "mypy"]
 test = ["pytest"]
-lint = ["docutils-stubs", "mypy", "flake8"]
 
 [[package]]
 name = "sphinxcontrib-serializinghtml"
@@ -1127,8 +1143,8 @@ optional = true
 python-versions = ">=3.5"
 
 [package.extras]
+lint = ["docutils-stubs", "flake8", "mypy"]
 test = ["pytest"]
-lint = ["docutils-stubs", "mypy", "flake8"]
 
 [[package]]
 name = "sqlalchemy"
@@ -1142,25 +1158,25 @@ python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,>=2.7"
 greenlet = {version = "!=0.4.17", markers = "python_version >= \"3\" and (platform_machine == \"aarch64\" or platform_machine == \"ppc64le\" or platform_machine == \"x86_64\" or platform_machine == \"amd64\" or platform_machine == \"AMD64\" or platform_machine == \"win32\" or platform_machine == \"WIN32\")"}
 
 [package.extras]
-aiomysql = ["greenlet (!=0.4.17)", "aiomysql"]
-aiosqlite = ["typing_extensions (!=3.10.0.1)", "greenlet (!=0.4.17)", "aiosqlite"]
+aiomysql = ["aiomysql", "greenlet (!=0.4.17)"]
+aiosqlite = ["aiosqlite", "greenlet (!=0.4.17)", "typing_extensions (!=3.10.0.1)"]
 asyncio = ["greenlet (!=0.4.17)"]
-asyncmy = ["greenlet (!=0.4.17)", "asyncmy (>=0.2.3,!=0.2.4)"]
-mariadb_connector = ["mariadb (>=1.0.1,!=1.1.2)"]
+asyncmy = ["asyncmy (>=0.2.3,!=0.2.4)", "greenlet (!=0.4.17)"]
+mariadb-connector = ["mariadb (>=1.0.1,!=1.1.2)"]
 mssql = ["pyodbc"]
-mssql_pymssql = ["pymssql"]
-mssql_pyodbc = ["pyodbc"]
-mypy = ["sqlalchemy2-stubs", "mypy (>=0.910)"]
-mysql = ["mysqlclient (>=1.4.0,<2)", "mysqlclient (>=1.4.0)"]
-mysql_connector = ["mysql-connector-python"]
-oracle = ["cx_oracle (>=7,<8)", "cx_oracle (>=7)"]
+mssql-pymssql = ["pymssql"]
+mssql-pyodbc = ["pyodbc"]
+mypy = ["mypy (>=0.910)", "sqlalchemy2-stubs"]
+mysql = ["mysqlclient (>=1.4.0)", "mysqlclient (>=1.4.0,<2)"]
+mysql-connector = ["mysql-connector-python"]
+oracle = ["cx_oracle (>=7)", "cx_oracle (>=7,<8)"]
 postgresql = ["psycopg2 (>=2.7)"]
-postgresql_asyncpg = ["greenlet (!=0.4.17)", "asyncpg"]
-postgresql_pg8000 = ["pg8000 (>=1.16.6,!=1.29.0)"]
-postgresql_psycopg2binary = ["psycopg2-binary"]
-postgresql_psycopg2cffi = ["psycopg2cffi"]
-pymysql = ["pymysql (<1)", "pymysql"]
-sqlcipher = ["sqlcipher3-binary"]
+postgresql-asyncpg = ["asyncpg", "greenlet (!=0.4.17)"]
+postgresql-pg8000 = ["pg8000 (>=1.16.6,!=1.29.0)"]
+postgresql-psycopg2binary = ["psycopg2-binary"]
+postgresql-psycopg2cffi = ["psycopg2cffi"]
+pymysql = ["pymysql", "pymysql (<1)"]
+sqlcipher = ["sqlcipher3_binary"]
 
 [[package]]
 name = "structlog"
@@ -1171,9 +1187,9 @@ optional = false
 python-versions = ">=3.7"
 
 [package.extras]
-dev = ["structlog"]
+dev = ["structlog[docs,tests,typing]"]
 docs = ["furo", "myst-parser", "sphinx", "sphinx-notfound-page", "sphinxcontrib-mermaid", "twisted"]
-tests = ["coverage", "freezegun (>=0.2.8)", "pretend", "pytest-asyncio (>=0.17)", "pytest (>=6.0)", "simplejson"]
+tests = ["coverage[toml]", "freezegun (>=0.2.8)", "pretend", "pytest (>=6.0)", "pytest-asyncio (>=0.17)", "simplejson"]
 typing = ["mypy", "rich", "twisted"]
 
 [[package]]
@@ -1252,8 +1268,8 @@ optional = true
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*"
 
 [package.extras]
-brotli = ["brotlicffi (>=0.8.0)", "brotli (>=1.0.9)", "brotlipy (>=0.6.0)"]
-secure = ["pyOpenSSL (>=0.14)", "cryptography (>=1.3.4)", "idna (>=2.0.0)", "certifi", "urllib3-secure-extra", "ipaddress"]
+brotli = ["brotli (>=1.0.9)", "brotlicffi (>=0.8.0)", "brotlipy (>=0.6.0)"]
+secure = ["certifi", "cryptography (>=1.3.4)", "idna (>=2.0.0)", "ipaddress", "pyOpenSSL (>=0.14)", "urllib3-secure-extra"]
 socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 
 [[package]]
@@ -1306,13 +1322,13 @@ optional = true
 python-versions = ">=3.7"
 
 [package.extras]
-docs = ["sphinx (>=3.5)", "jaraco.packaging (>=9)", "rst.linker (>=1.9)", "furo", "jaraco.tidelift (>=1.4)"]
-testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "flake8 (<5)", "pytest-cov", "pytest-enabler (>=1.3)", "jaraco.itertools", "func-timeout", "jaraco.functools", "more-itertools", "pytest-black (>=0.3.7)", "pytest-mypy (>=0.9.1)", "pytest-flake8"]
+docs = ["furo", "jaraco.packaging (>=9)", "jaraco.tidelift (>=1.4)", "rst.linker (>=1.9)", "sphinx (>=3.5)"]
+testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools", "more-itertools", "pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=1.3)", "pytest-flake8", "pytest-mypy (>=0.9.1)"]
 
 [extras]
 docs = ["Sphinx", "sphinx-rtd-theme", "sphinxcontrib-apidoc"]
 filelock = ["filelock"]
-ibm_db2 = ["ibm-db", "ibm-db-sa"]
+ibm-db2 = ["ibm-db", "ibm-db-sa"]
 mssql = ["pyodbc"]
 prefect = ["prefect"]
 zookeeper = ["kazoo"]
@@ -1320,7 +1336,7 @@ zookeeper = ["kazoo"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "809d3ada4781e0fbdb076b7d6eec525d25bc12c70e0e6aedf9b1686d8c9e659a"
+content-hash = "914aaaae010a8b6a7044bc53f2452bd6822a220fd077dcdc6979bf1d5671ab6b"
 
 [metadata.files]
 alabaster = [
@@ -2070,6 +2086,13 @@ pyyaml = [
     {file = "PyYAML-6.0-cp310-cp310-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:f84fbc98b019fef2ee9a1cb3ce93e3187a6df0b2538a651bfb890254ba9f90b5"},
     {file = "PyYAML-6.0-cp310-cp310-win32.whl", hash = "sha256:2cd5df3de48857ed0544b34e2d40e9fac445930039f3cfe4bcc592a1f836d513"},
     {file = "PyYAML-6.0-cp310-cp310-win_amd64.whl", hash = "sha256:daf496c58a8c52083df09b80c860005194014c3698698d1a57cbcfa182142a3a"},
+    {file = "PyYAML-6.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:d4b0ba9512519522b118090257be113b9468d804b19d63c71dbcf4a48fa32358"},
+    {file = "PyYAML-6.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:81957921f441d50af23654aa6c5e5eaf9b06aba7f0a19c18a538dc7ef291c5a1"},
+    {file = "PyYAML-6.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:afa17f5bc4d1b10afd4466fd3a44dc0e245382deca5b3c353d8b757f9e3ecb8d"},
+    {file = "PyYAML-6.0-cp311-cp311-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:dbad0e9d368bb989f4515da330b88a057617d16b6a8245084f1b05400f24609f"},
+    {file = "PyYAML-6.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:432557aa2c09802be39460360ddffd48156e30721f5e8d917f01d31694216782"},
+    {file = "PyYAML-6.0-cp311-cp311-win32.whl", hash = "sha256:bfaef573a63ba8923503d27530362590ff4f576c626d86a9fed95822a8255fd7"},
+    {file = "PyYAML-6.0-cp311-cp311-win_amd64.whl", hash = "sha256:01b45c0191e6d66c470b6cf1b9531a771a83c1c4208272ead47a3ae4f2f603bf"},
     {file = "PyYAML-6.0-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:897b80890765f037df3403d22bab41627ca8811ae55e9a722fd0392850ec4d86"},
     {file = "PyYAML-6.0-cp36-cp36m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:50602afada6d6cbfad699b0c7bb50d5ccffa7e46a3d738092afddc1f9758427f"},
     {file = "PyYAML-6.0-cp36-cp36m-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:48c346915c114f5fdb3ead70312bd042a953a8ce5c7106d5bfb1a5254e47da92"},
@@ -2100,6 +2123,10 @@ pyyaml = [
 requests = [
     {file = "requests-2.28.1-py3-none-any.whl", hash = "sha256:8fefa2a1a1365bf5520aac41836fbee479da67864514bdb821f31ce07ce65349"},
     {file = "requests-2.28.1.tar.gz", hash = "sha256:7c5599b102feddaa661c826c56ab4fee28bfd17f5abca1ebbe3e7f19d7c97983"},
+]
+setuptools = [
+    {file = "setuptools-65.6.3-py3-none-any.whl", hash = "sha256:57f6f22bde4e042978bcd50176fdb381d7c21a9efa4041202288d3737a0c6a54"},
+    {file = "setuptools-65.6.3.tar.gz", hash = "sha256:a7620757bf984b58deaf32fc8a4577a9bbc0850cf92c20e1ce41c38c19e5fb75"},
 ]
 six = [
     {file = "six-1.16.0-py2.py3-none-any.whl", hash = "sha256:8abb2f1d86890a2dfb989f9a77cfcfd3e47c2a354b01111771326f8aa26e0254"},
