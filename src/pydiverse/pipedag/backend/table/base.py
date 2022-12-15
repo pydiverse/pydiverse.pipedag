@@ -453,9 +453,6 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             and stage was found
         """
 
-    def dispose(self):
-        """Close all resources (i.e. connections) and render object unusable."""
-
 
 class TableHook(Generic[StoreT], ABC):
     """Base class to define how to handle a specific table
