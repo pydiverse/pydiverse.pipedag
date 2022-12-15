@@ -51,7 +51,7 @@ class SQLTableStore(BaseTableStore):
     METADATA_SCHEMA = "pipedag_metadata"
 
     @classmethod
-    def _init_conf_(cls, config: dict[str, Any], cfg: ConfigContext):
+    def _init_conf_(cls, config: dict[str, Any]):
         engine_url = config.pop("url")
         engine_url = replace_environment_variables(engine_url)
         if "url_attrs_file" in config:
@@ -99,6 +99,7 @@ class SQLTableStore(BaseTableStore):
             # Alternative: we could make cfg.attrs available for engine_url replacements. However, this makes it much
             # harder to analyze what information a config sends out to a remote server
             attrs = {}
+        cfg = ConfigContext.get()
         attrs["instance_id"] = cfg.instance_id
         # TODO: consider renaming {name} to {pipedag_name} and top level name: attribute of pipedag config as well
         attrs["name"] = cfg.pipedag_name

@@ -5,8 +5,6 @@ import sqlalchemy as sa
 from pandas.testing import assert_frame_equal
 
 from pydiverse.pipedag import Blob, Flow, Stage, Table, materialize
-from pydiverse.pipedag.context.run_context import StageLockContext
-from pydiverse.pipedag.util.config import PipedagConfig
 
 dfA = pd.DataFrame(
     {
@@ -74,26 +72,22 @@ def test_simple_flow():
 
             blob_tuple = blob_task(1, 2)
 
-    cfg = PipedagConfig.load().get()
-    with StageLockContext(cfg):
-        result = flow.run(
-            cfg
-        )  # this will use the default configuration instance=__any__
-        assert result.successful
+    result = flow.run()  # this will use the default configuration instance=__any__
+    assert result.successful
 
-        # Check result.get works
-        assert_frame_equal(result.get(a, as_type=pd.DataFrame), dfA)
-        assert_frame_equal(result.get(b, as_type=pd.DataFrame), dfB)
-        assert_frame_equal(result.get(inp, as_type=pd.DataFrame)[0], dfA)
-        assert_frame_equal(result.get(inp, as_type=pd.DataFrame)[1], dfB)
-        assert_frame_equal(
-            result.get(joined, as_type=pd.DataFrame) * 2,
-            result.get(joined_times_2, as_type=pd.DataFrame),
-        )
+    # Check result.get works
+    assert_frame_equal(result.get(a, as_type=pd.DataFrame), dfA)
+    assert_frame_equal(result.get(b, as_type=pd.DataFrame), dfB)
+    assert_frame_equal(result.get(inp, as_type=pd.DataFrame)[0], dfA)
+    assert_frame_equal(result.get(inp, as_type=pd.DataFrame)[1], dfB)
+    assert_frame_equal(
+        result.get(joined, as_type=pd.DataFrame) * 2,
+        result.get(joined_times_2, as_type=pd.DataFrame),
+    )
 
-        result.get(x)
-        result.get(v)
-        assert tuple(result.get(blob_tuple)) == (1, 2)
+    result.get(x)
+    result.get(v)
+    assert tuple(result.get(blob_tuple)) == (1, 2)
 
 
 if __name__ == "__main__":

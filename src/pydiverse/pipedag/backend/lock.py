@@ -179,8 +179,8 @@ class FileLockManager(BaseLockManager):
         os.makedirs(self.base_path, exist_ok=True)
 
     @classmethod
-    def _init_conf_(cls, config: dict[str, Any], cfg: ConfigContext):
-        instance_id = normalize_name(cfg.instance_id)
+    def _init_conf_(cls, config: dict[str, Any]):
+        instance_id = normalize_name(ConfigContext.get().instance_id)
         base_path = Path(config["base_path"]) / instance_id
         return cls(base_path)
 
@@ -253,9 +253,9 @@ class ZooKeeperLockManager(BaseLockManager):
         self.locks: dict[Lockable, KazooLock] = {}
 
     @classmethod
-    def _init_conf_(cls, config: dict[str, Any], cfg: ConfigContext):
+    def _init_conf_(cls, config: dict[str, Any]):
         client = KazooClient(**config)
-        instance_id = normalize_name(cfg.instance_id)
+        instance_id = normalize_name(ConfigContext.get().instance_id)
         base_path = f"/pipedag/locks/{instance_id}/"
         return cls(client, base_path)
 
