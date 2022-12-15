@@ -27,6 +27,7 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
 )
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.errors import CacheError
+from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import (
     LazyTableMetadata,
@@ -217,7 +218,9 @@ class SQLTableStore(BaseTableStore):
                 #     conn.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
                 return self.execute(query, conn=conn)
 
-    def do_execute_raw_sql(self, sql: str, stage_name: str):
+    def execute_raw_sql(self, raw_sql: RawSql):
+        """Executed raw SQL statements in the associated transaction stage"""
+        sql = raw_sql.sql
         if self.engine.name == "mssql":
             # if self.print_sql:
             #     max_len = 50000  # consider making an option in ConfigContext
@@ -703,15 +706,6 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         )
 
     @classmethod
-    def execute_raw_sql(
-        cls,
-        store,
-        sql: str,
-        stage_name: str,
-    ):
-        store.do_execute_raw_sql(sql, stage_name)
-
-    @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
         return sa.Table(
             table.name,
@@ -754,15 +748,6 @@ class PandasTableHook(TableHook[SQLTableStore]):
             schema=schema,
             index=False,
         )
-
-    @classmethod
-    def execute_raw_sql(
-        cls,
-        store,
-        sql: str,
-        stage_name: str,
-    ):
-        SQLAlchemyTableHook.execute_raw_sql(store, sql, stage_name)
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
@@ -821,15 +806,6 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             # noinspection PyTypeChecker
             return SQLAlchemyTableHook.materialize(store, table, stage_name)
         raise NotImplementedError
-
-    @classmethod
-    def execute_raw_sql(
-        cls,
-        store,
-        sql: str,
-        stage_name: str,
-    ):
-        SQLAlchemyTableHook.execute_raw_sql(store, sql, stage_name)
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
