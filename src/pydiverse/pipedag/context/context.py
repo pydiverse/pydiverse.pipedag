@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from pydiverse.pipedag.backend import BaseLockManager
     from pydiverse.pipedag.engine.base import OrchestrationEngine
     from pydiverse.pipedag.core import Flow, Stage, Task
+    from pydiverse.pipedag.context.run_context import StageLockStateHandler
 
 import structlog
 from attrs import frozen
@@ -101,11 +102,14 @@ class ConfigContext(BaseAttrsContext):
 
     config_dict: dict
 
+    # names
     pipedag_name: str
     flow_name: str
     instance_name: str
-    fail_fast: bool
+
     # per instance attributes
+    fail_fast: bool
+    strict_result_get_locking: bool
     instance_id: str  # may be used as database name or locking ID
     network_interface: str
     attrs: dict[str, Any]
@@ -152,3 +156,23 @@ class ConfigContext(BaseAttrsContext):
         return state
 
     _context_var = ContextVar("config_context")
+
+
+class StageLockContext(BaseContext):
+    """
+    Context manager used to keep stages locked until after flow.run() has been called
+    """
+
+    lock_state_handlers: [StageLockStateHandler]
+
+    _context_var = ContextVar("stage_lock_context")
+
+    def __init__(self):
+        self.logger = structlog.getLogger(module=__name__, cls=self.__class__.__name__)
+        self.logger.info(f"OPEN STAGE LOCK CONTEXT {id(self)}")
+        self.lock_state_handlers = []
+
+    def close(self):
+        self.logger.info(f"CLOSE STAGE LOCK CONTEXT {id(self)}")
+        for lock_state_handler in self.lock_state_handlers:
+            lock_state_handler.dispose()

@@ -211,6 +211,16 @@ When true, will provide nicer stack traces for debugging but will make it harder
 occasional errors are expected.
 
 
+strict_result_get_locking
+-------------------------
+
+default: true
+
+When true, check that `Result.get()` is only called within `with StageLockContext(...)` statement.
+This does not allow a flow to change result outputs before they are fetched. The defautl is a good
+choice when (potentially) running tests in parallel. For interactive debugging it might be handy to
+disable this check.
+
 table_store
 -----------
 

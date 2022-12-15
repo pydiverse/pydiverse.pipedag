@@ -104,11 +104,16 @@ class PipedagConfig:
                 "fail_fast": False,
                 "network_interface": "127.0.0.1",
                 "per_user_template": "{id}_{username}",
+                "strict_result_get_locking": True,
                 "auto_table": [],
                 "auto_blob": [],
                 "attrs": {},
             },
         )
+
+        # TODO: Delegate selecting where variables can be expanded to the corresponding classes.
+        #       eg. SQLTableStore._expand_env_vars = ["url", "url_attrs_file"]
+        #       eg. SQLTableStore._expand_vars = ["url", "schema_prefix", "schema_suffix"]
 
         # First expand all environment variables
         self.__expand_environment_variables(config)
@@ -142,6 +147,7 @@ class PipedagConfig:
             config_dict=config,
             pipedag_name=self.name,
             flow_name=flow,
+            strict_result_get_locking=config["strict_result_get_locking"],
             instance_name=instance,
             instance_id=config["instance_id"],
             fail_fast=config["fail_fast"],

@@ -7,7 +7,7 @@ import pandas as pd
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
-from pydiverse.pipedag.context import DAGContext
+from pydiverse.pipedag.context import DAGContext, StageLockContext
 from pydiverse.pipedag.util.config import PipedagConfig
 
 dfA_source = pd.DataFrame(
@@ -119,22 +119,25 @@ def test_instance_selection(cfg_file_name):
 
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
 
-    result = flow.run(cfg)
-    _check_result(result, out1, out2)
+    with StageLockContext():
+        result = flow.run(cfg)
+        _check_result(result, out1, out2)
 
     cfg = pipedag_config.get(instance="midi")
 
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
 
-    result = flow.run(cfg)
-    _check_result(result, out1, out2, head=2)
+    with StageLockContext():
+        result = flow.run(cfg)
+        _check_result(result, out1, out2, head=2)
 
     cfg = pipedag_config.get(instance="mini")
 
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
 
-    result = flow.run(cfg)
-    _check_result(result, out1, out2, head=1)
+    with StageLockContext():
+        result = flow.run(cfg)
+        _check_result(result, out1, out2, head=1)
 
 
 def _check_result(result, out1, out2, *, head=999):
