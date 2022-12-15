@@ -116,7 +116,7 @@ class PipedagConfig:
         #       eg. SQLTableStore._expand_vars = ["url", "schema_prefix", "schema_suffix"]
 
         # First expand all environment variables
-        self.__expand_environment_variables(config)
+        self.__expand_environment_variables(inout_config=config)
 
         # Intermediate variable processing
         if per_user:
@@ -140,7 +140,7 @@ class PipedagConfig:
             _set(config, url, "table_store", "url")
 
         # Finally, expand all normal variables
-        self.__expand_variables(config)
+        self.__expand_variables(inout_config=config)
 
         # Construct final ConfigContext
         config_context = ConfigContext(
@@ -205,21 +205,21 @@ class PipedagConfig:
 
         return merged
 
-    def __expand_environment_variables(self, config):
+    def __expand_environment_variables(self, *, inout_config):
         locations = [
             ("table_store", "url"),
             ("table_store", "url_attrs_file"),
         ]
 
         for location in locations:
-            value: str = _get(config, location, default=None)
+            value: str = _get(inout_config, location, default=None)
             if value is None:
                 continue
 
             value = expand_environment_variables(value)
-            _set(config, value, location)
+            _set(inout_config, value, location)
 
-    def __expand_variables(self, config):
+    def __expand_variables(self, *, inout_config):
         locations = [
             ("table_store", "url"),
             ("table_store", "schema_prefix"),
@@ -229,7 +229,7 @@ class PipedagConfig:
         # TODO: Decide on a list of available variables
         variables = {
             "username": getpass.getuser(),
-            "instance_id": config.get("instance_id"),
+            "instance_id": inout_config.get("instance_id"),
             "name": self.name,
         }
 
@@ -238,12 +238,12 @@ class PipedagConfig:
                 variables.pop(key)
 
         for location in locations:
-            value: str = _get(config, location, default=None)
+            value: str = _get(inout_config, location, default=None)
             if value is None:
                 continue
 
             value = expand_variables(value, variables)
-            _set(config, value, location)
+            _set(inout_config, value, location)
 
 
 def find_config(
