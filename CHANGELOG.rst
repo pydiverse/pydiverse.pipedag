@@ -15,6 +15,7 @@ Changelog
    create statements (currently, views/functions/procedures are only supported for dialect mssql). This feature should
    only be used for getting legacy code running in pipedag before converting it to programatically generated or manual
    SELECT statements.
+- Support pytsql library for executing raw SQL scripts with dialect=mssql (i.e. supports PRINT capture)
 - Manual Cache Invalidation for source nodes: @materialize(cache=f) parameter can take an arbitrary function that gets
    the same arguments as the task function and returns a hash. If the hash is different than for the previous run, the
    task is considered cache invalid.
