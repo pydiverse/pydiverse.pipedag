@@ -60,7 +60,7 @@ class PipeDAGStore(Disposable):
         self.blob_store.dispose()
         super().dispose()
 
-    #### Stage ####
+    # ### Stage ### #
 
     def init_stage(self, stage: Stage):
         """Initializes the stage in all backends
@@ -103,7 +103,7 @@ class PipeDAGStore(Disposable):
             self.table_store.commit_stage(stage)
             self.blob_store.commit_stage(stage)
 
-    #### Materialization ####
+    # ### Materialization ### #
 
     def dematerialize_item(
         self, item: Table | Blob | Any, as_type: type, ctx: RunContext = None
@@ -276,9 +276,8 @@ class PipeDAGStore(Disposable):
 
         return m_value
 
-    def _check_names(
-        self, task: MaterializingTask, tables: list[Table], blobs: list[Blob]
-    ):
+    @staticmethod
+    def _check_names(task: MaterializingTask, tables: list[Table], blobs: list[Blob]):
         if not tables and not blobs:
             # Nothing to check
             return
@@ -356,10 +355,10 @@ class PipeDAGStore(Disposable):
             ctx.remove_names(stage, tables, blobs)
             raise e
 
-    #### Cache ####
+    # ### Cache ### #
 
+    @staticmethod
     def compute_task_cache_key(
-        self,
         task: MaterializingTask,
         input_json: str,
     ) -> str:
@@ -445,10 +444,10 @@ class PipeDAGStore(Disposable):
             lambda table: self.table_store.copy_table_to_transaction(table),
             lambda raw_sql: None,  # raw sql scripts cannot be part of a non-lazy task
             lambda blob: self.blob_store.copy_blob_to_transaction(blob),
-            lambda task: self.table_store.copy_task_metadata_to_transaction(task),
+            lambda _task: self.table_store.copy_task_metadata_to_transaction(_task),
         )
 
-    #### Utils ####
+    # ### Utils ### #
 
     def json_encode(self, value: Materializable) -> str:
         """Encode a materializable value as json

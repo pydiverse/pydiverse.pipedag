@@ -65,6 +65,19 @@ You can inspect the contents of the PipeDAT Postgres database at `postgresql://p
 To reset the state of the docker containers you can run `docker compose down`.
 This might be necessary if the database cache gets corrupted.
 
+## Testing db2 functionality
+
+For running @pytest.mark.ibm_db2 tests, you need to spin up a docker container without `docker compose` since it needs
+the `--priviledged` option which `docker compose` does not offer.
+
+```bash
+docker run -h db2server --name db2server --restart=always --detach --privileged=true -p 50000:50000 --env-file docker_db2.env_list -v /Docker:/database ibmcom/db2
+```
+
+Then check `docker logs db2server | grep -i completed` until you see `(*) Setup has completed.`.
+
+Afterwards you can run `pytest -m ibm_db2`.
+
 ## Troubleshooting
 
 ### Installing mssql odbc driver for linux

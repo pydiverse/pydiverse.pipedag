@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextvars import ContextVar, Token
+from enum import Enum
 from functools import cached_property
 from threading import Lock
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -51,6 +52,7 @@ class BaseContext:
     def close(self):
         """Function that gets called at __exit__"""
 
+    # noinspection PyUnresolvedReferences
     @classmethod
     def get(cls: type[T]) -> T:
         return cls._context_var.get()
@@ -86,6 +88,11 @@ class TaskContext(BaseAttrsContext):
     _context_var = ContextVar("task_context")
 
 
+class StageCommitTechnique(Enum):
+    SCHEMA_SWAP = 0
+    READ_VIEWS = 1
+
+
 @frozen(slots=False)
 class ConfigContext(BaseAttrsContext):
     """
@@ -111,6 +118,7 @@ class ConfigContext(BaseAttrsContext):
     fail_fast: bool
     strict_result_get_locking: bool
     instance_id: str  # may be used as database name or locking ID
+    stage_commit_technique: StageCommitTechnique
     network_interface: str
     attrs: dict[str, Any]
 

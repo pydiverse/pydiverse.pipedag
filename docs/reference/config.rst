@@ -159,6 +159,51 @@ different runs on the same instance_id will not mess with identically named sche
 instances can be run from IDE, Continuous Integration, and the Orchestration Engine UI without collisions, automatically
 ensuring cache validity the running code commit in the moment of transactionally committing a stage result.
 
+stage_commit_technique:
+-----------------------
+
+default: "schema_swap"
+
+We want to prepare the whole output of a `Stage` before we make it visible to an explorative user looking in the the
+table_store / database. There should never be a time when he sees a mix of new and old tables of that schema and the
+switch (stage commit) should happen in an instance. We don't use database transactionality features because of expected
+slowdowns and we do want to look at partial output for debugging.
+
+In order to commit stages, we currently offer the following techniques:
+
+- "schema_swap": We prepare output in a <stage>__tmp schema and then swap schemas for <stage> and <stage>__tmp with
+three rename operations.
+
+- "read_views": We use two schemas <stage>__odd <stage>__even and fill schema <stage> just with views to one of those
+schemas.
+
+We do not support all techniques for all sqlalchemy dialects:
+
+.. list-table:: Stage commit technique support by sqlalchemy dialect
+    :widths: 20 10 10 60
+    :header-rows: 1
+
+    *
+        - dialect
+        - schema_swap
+        - read_views
+        - comment
+    *
+        - postgres
+        - yes
+        - yes
+        -
+    *
+        - mssql
+        - yes
+        - yes
+        - we use schema='database.schema' for sqlalchemy and ignore create_database_if_not_exists
+    *
+        - ibm_db_sa
+        - no
+        - yes
+        - we don't have schema rename permission in our application areas and ignore create_database_if_not_exists
+
 per_user_template
 -----------------
 
@@ -326,6 +371,19 @@ schema_suffix
 """""""""""""
 
 See `schema_prefix`_.
+
+create_database_if_not_exists
+"""""""""""""""""""""""""""""
+
+default: False
+
+The sqlalchmey engine `url`_ may include a database name which might not exist of first run of a pipedag instance.
+This parameter can be used to tell pipedag to create the database before it will try opening a database connection.
+
+The parameter is ineffective for the following sqlalchemy dialects:
+
+- mssql: we use `database.schema` in schema swapping, so databases are automatically created when setting up a stage
+- ibm_db2: so far, we only use `instance_id`_ as schema prefix and don't (need to) know how to create a new database
 
 class: pydiverse.pipedag.backend.table.DictTableStore
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

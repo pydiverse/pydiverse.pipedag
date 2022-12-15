@@ -38,6 +38,18 @@ jobs:
       matrix:
         os: [Ubuntu]
         python-version: ['3.8', '3.9', '3.10']
+    services:
+      ibm_db2:
+        image: ibmcom/db2:11.5.5.1
+        env:
+          LICENSE: accept
+          DB2INSTANCE: db2inst1
+          DB2INST1_PASSWORD: password
+          DBNAME: testdb
+          UPDATEAVAIL: "NO"
+        options: --privileged
+        ports:
+          - 50000:50000
     steps:
       - name: Checkout branch
         uses: actions/checkout@v2.3.5
@@ -83,7 +95,7 @@ jobs:
 
       - name: Install dependencies
         shell: bash
-        run: poetry install -vvv
+        run: poetry install -vvv -E mssql -E ibm_db2
 
       - name: Start Docker Compose
         uses: isbang/compose-action@v1.4.1
@@ -94,8 +106,12 @@ jobs:
         shell: bash
         run: sleep 2
 
+      - name: Wait for DB/2
+        timeout-minutes: 2
+        run: until docker logs "${{ job.services.ibm_db2.id }}" 2>&1 | grep -q "Setup has completed"; do sleep 10; echo Waiting; done
+
       - name: Test
         shell: bash
         run: |
-          # poetry run pytest -q tests
-          poetry run pytest -s tests  # interactive log output
+          poetry run pytest -q tests -m 'not mssql'
+          # poetry run pytest -s tests  # interactive log output

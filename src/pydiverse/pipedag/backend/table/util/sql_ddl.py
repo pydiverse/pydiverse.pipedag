@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import re
 
 import sqlalchemy as sa
@@ -14,6 +15,7 @@ __all__ = [
     "DropSchema",
     "RenameSchema",
     "CreateTableAsSelect",
+    "CreateViewAsSelect",
     "CopyTable",
     "DropTable",
     "CreateDatabase",
@@ -35,12 +37,14 @@ class Schema:
         return self.prefix + self.name + self.suffix
 
 
+# noinspection PyAbstractClass
 class CreateSchema(DDLElement):
     def __init__(self, schema: Schema, if_not_exists=False):
         self.schema = schema
         self.if_not_exists = if_not_exists
 
 
+# noinspection PyAbstractClass
 class DropSchema(DDLElement):
     def __init__(self, schema: Schema, if_exists=False, cascade=False):
         self.schema = schema
@@ -48,18 +52,21 @@ class DropSchema(DDLElement):
         self.cascade = cascade
 
 
+# noinspection PyAbstractClass
 class RenameSchema(DDLElement):
     def __init__(self, from_: Schema, to: Schema):
         self.from_ = from_
         self.to = to
 
 
+# noinspection PyAbstractClass
 class CreateDatabase(DDLElement):
     def __init__(self, database: str, if_not_exists=False):
         self.database = database
         self.if_not_exists = if_not_exists
 
 
+# noinspection PyAbstractClass
 class DropDatabase(DDLElement):
     def __init__(self, database: str, if_exists=False, cascade=False):
         self.database = database
@@ -67,6 +74,7 @@ class DropDatabase(DDLElement):
         self.cascade = cascade
 
 
+# noinspection PyAbstractClass
 class CreateTableAsSelect(DDLElement):
     def __init__(self, name: str, schema: Schema, query: Select | TextClause | sa.Text):
         self.name = name
@@ -74,6 +82,15 @@ class CreateTableAsSelect(DDLElement):
         self.query = query
 
 
+# noinspection PyAbstractClass
+class CreateViewAsSelect(DDLElement):
+    def __init__(self, name: str, schema: Schema, query: Select | TextClause | sa.Text):
+        self.name = name
+        self.schema = schema
+        self.query = query
+
+
+# noinspection PyAbstractClass
 class CopyTable(DDLElement):
     def __init__(
         self,
@@ -90,6 +107,7 @@ class CopyTable(DDLElement):
         self.if_not_exists = if_not_exists
 
 
+# noinspection PyAbstractClass
 class DropTable(DDLElement):
     def __init__(self, name, schema: Schema, if_exists=False):
         self.name = name
@@ -97,6 +115,7 @@ class DropTable(DDLElement):
         self.if_exists = if_exists
 
 
+# noinspection PyAbstractClass
 class DropView(DDLElement):
     def __init__(self, name, schema: Schema, if_exists=False):
         # attention: for mssql, this statement must be prefixed with a 'USE <database>' statement
@@ -105,6 +124,7 @@ class DropView(DDLElement):
         self.if_exists = if_exists
 
 
+# noinspection PyAbstractClass
 class DropProcedure(DDLElement):
     def __init__(self, name, schema: Schema, if_exists=False):
         # attention: for mssql, this statement must be prefixed with a 'USE <database>' statement
@@ -113,6 +133,7 @@ class DropProcedure(DDLElement):
         self.if_exists = if_exists
 
 
+# noinspection PyAbstractClass
 class DropFunction(DDLElement):
     def __init__(self, name, schema: Schema, if_exists=False):
         # attention: for mssql, this statement must be prefixed with a 'USE <database>' statement
@@ -169,6 +190,21 @@ def visit_create_schema(create: CreateSchema, compiler, **kw):
         return create_database
 
 
+# noinspection SqlDialectInspection
+@compiles(CreateSchema, "ibm_db_sa")
+def visit_create_schema(create: CreateSchema, compiler, **kw):
+    """For IBM DB2 we need to jump through extra hoops for if_exists=True."""
+    _ = kw
+    schema = compiler.preparer.format_schema(create.schema.get())
+    if create.if_not_exists:
+        return (
+            "BEGIN\ndeclare continue handler for sqlstate '42710' begin end;\n"
+            f"execute immediate 'CREATE SCHEMA {schema}';\nEND"
+        )
+    else:
+        return f"CREATE SCHEMA {schema}"
+
+
 @compiles(DropSchema)
 def visit_drop_schema(drop: DropSchema, compiler, **kw):
     _ = kw
@@ -201,6 +237,21 @@ def visit_drop_schema(drop: DropSchema, compiler, **kw):
         text.append("IF EXISTS")
     text.append(name)
     return " ".join(text)
+
+
+# noinspection SqlDialectInspection
+@compiles(DropSchema, "ibm_db_sa")
+def visit_drop_schema(drop: DropSchema, compiler, **kw):
+    """For IBM DB2 we need to jump through extra hoops for if_exists=True."""
+    _ = kw
+    schema = compiler.preparer.format_schema(drop.schema.get())
+    if drop.if_exists:
+        return (
+            "BEGIN\ndeclare continue handler for sqlstate '42704' begin end;\n"
+            f"execute immediate 'DROP SCHEMA {schema} RESTRICT';\nEND"
+        )
+    else:
+        return f"DROP SCHEMA {schema} RESTRICT"
 
 
 @compiles(RenameSchema)
@@ -264,16 +315,18 @@ def visit_drop_database(drop: DropDatabase, compiler, **kw):
     # return ret
 
 
-@compiles(CreateTableAsSelect)
-def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
+def _visit_create_obj_as_select(create, compiler, _type, kw):
     name = compiler.preparer.quote_identifier(create.name)
     schema = compiler.preparer.format_schema(create.schema.get())
-
     kw = kw.copy()
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(create.query, **kw)
+    return f"CREATE {_type} {schema}.{name} AS\n{select}"
 
-    return f"CREATE TABLE {schema}.{name} AS\n{select}"
+
+@compiles(CreateTableAsSelect)
+def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
+    return _visit_create_obj_as_select(create, compiler, "TABLE", kw)
 
 
 @compiles(CreateTableAsSelect, "mssql")
@@ -290,6 +343,33 @@ def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
     select = compiler.sql_compiler.process(create.query, **kw)
 
     return insert_into_in_query(select, database, schema, name)
+
+
+@compiles(CreateTableAsSelect, "ibm_db_sa")
+def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
+    name = compiler.preparer.quote_identifier(create.name)
+    schema = compiler.preparer.format_schema(create.schema.get())
+    kw = kw.copy()
+    kw["literal_binds"] = True
+    select = compiler.sql_compiler.process(create.query, **kw)
+    return (
+        f"CREATE TABLE {schema}.{name} AS (\n{select}\n)data initially deferred Refresh"
+        f" deferred; Refresh table {schema}.{name};"
+    )
+
+
+# noinspection DuplicatedCode
+@compiles(CreateViewAsSelect)
+def visit_create_view_as_select(create: CreateViewAsSelect, compiler, **kw):
+    return _visit_create_obj_as_select(create, compiler, "VIEW", kw)
+
+
+@compiles(CreateViewAsSelect, "ibm_db_sa")
+def visit_create_view_as_select(create: CreateViewAsSelect, compiler, **kw):
+    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
+    create = copy.deepcopy(create)
+    create.name = ibm_db_sa_fix_name(create.name)
+    return _visit_create_obj_as_select(create, compiler, "VIEW", kw)
 
 
 def insert_into_in_query(select_sql, database, schema, table):
@@ -326,25 +406,25 @@ def insert_into_in_query(select_sql, database, schema, table):
 
 # noinspection SqlDialectInspection
 @compiles(CopyTable)
-def visit_copy_table(copy: CopyTable, compiler, **kw):
-    from_name = compiler.preparer.quote_identifier(copy.from_name)
-    from_schema = compiler.preparer.format_schema(copy.from_schema.get())
+def visit_copy_table(copy_table: CopyTable, compiler, **kw):
+    from_name = compiler.preparer.quote_identifier(copy_table.from_name)
+    from_schema = compiler.preparer.format_schema(copy_table.from_schema.get())
     query = sa.text(f"SELECT * FROM {from_schema}.{from_name}")
-    create = CreateTableAsSelect(copy.to_name, copy.to_schema, query)
+    create = CreateTableAsSelect(copy_table.to_name, copy_table.to_schema, query)
     return compiler.process(create, **kw)
 
 
 # noinspection SqlDialectInspection
 @compiles(CopyTable, "mssql")
-def visit_copy_table(copy: CopyTable, compiler, **kw):
-    from_name = compiler.preparer.quote_identifier(copy.from_name)
-    full_name = copy.from_schema.get()
+def visit_copy_table(copy_table: CopyTable, compiler, **kw):
+    from_name = compiler.preparer.quote_identifier(copy_table.from_name)
+    full_name = copy_table.from_schema.get()
     # it was already checked that there is exactly one dot in schema prefix + suffix
     database_name, schema_name = full_name.split(".")
     database = compiler.preparer.format_schema(database_name)
     schema = compiler.preparer.format_schema(schema_name)
     query = sa.text(f"SELECT * FROM {database}.{schema}.{from_name}")
-    create = CreateTableAsSelect(copy.to_name, copy.to_schema, query)
+    create = CreateTableAsSelect(copy_table.to_name, copy_table.to_schema, query)
     return compiler.process(create, **kw)
 
 
@@ -358,14 +438,30 @@ def visit_drop_table(drop: DropTable, compiler, **kw):
     return _visit_drop_anything_mssql(drop, "TABLE", compiler, **kw)
 
 
+@compiles(DropTable, "ibm_db_sa")
+def visit_drop_table(drop: DropTable, compiler, **kw):
+    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
+    drop = copy.deepcopy(drop)
+    drop.name = ibm_db_sa_fix_name(drop.name)
+    return _visit_drop_anything(drop, "TABLE", compiler, **kw)
+
+
 @compiles(DropView)
-def visit_drop_table(drop: DropView, compiler, **kw):
+def visit_drop_view(drop: DropView, compiler, **kw):
     return _visit_drop_anything(drop, "VIEW", compiler, **kw)
 
 
 @compiles(DropView, "mssql")
-def visit_drop_table(drop: DropView, compiler, **kw):
+def visit_drop_view(drop: DropView, compiler, **kw):
     return _visit_drop_anything_mssql(drop, "VIEW", compiler, **kw)
+
+
+@compiles(DropView, "ibm_db_sa")
+def visit_drop_view(drop: DropView, compiler, **kw):
+    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
+    drop = copy.deepcopy(drop)
+    drop.name = ibm_db_sa_fix_name(drop.name)
+    return _visit_drop_anything(drop, "VIEW", compiler, **kw)
 
 
 @compiles(DropProcedure)
@@ -389,10 +485,17 @@ def visit_drop_table(drop: DropProcedure, compiler, **kw):
 
 
 def _visit_drop_anything(
-    drop: DropTable | DropView | DropProcedure | DropFunction, _type, compiler, **kw
+    drop: DropTable | DropView | DropProcedure | DropFunction,
+    _type,
+    compiler,
+    dont_quote_table=False,
+    **kw,
 ):
     _ = kw
-    table = compiler.preparer.quote_identifier(drop.name)
+    if dont_quote_table:
+        table = drop.name
+    else:
+        table = compiler.preparer.quote_identifier(drop.name)
     schema = compiler.preparer.format_schema(drop.schema.get())
     text = [f"DROP {_type}"]
     if drop.if_exists:
@@ -420,3 +523,8 @@ def _visit_drop_anything_mssql(
     else:
         text.append(f"{database}.{schema}.{table}")
     return " ".join(text)
+
+
+def ibm_db_sa_fix_name(name):
+    # DB2 seems to create tables uppercase if all lowercase given
+    return name.upper() if all(c.lower() == c for c in name) else name

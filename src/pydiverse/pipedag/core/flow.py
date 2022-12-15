@@ -213,6 +213,7 @@ class Flow:
         orchestration_engine: OrchestrationEngine = None,
         fail_fast: bool | None = None,
         ignore_fresh_input: bool = False,
+        stages: list[str] = None,
         **kwargs,
     ) -> Result:
         """Execute a flow
@@ -230,6 +231,9 @@ class Flow:
         :return:
             Result object that gives information whether run was successful
         """
+
+        # TODO: implement running only a subset of stages (see parameter stages)
+
         if config_context is None:
             # fall back to an active config context if not given explicitly
             try:

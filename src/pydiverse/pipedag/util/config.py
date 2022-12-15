@@ -105,10 +105,28 @@ class PipedagConfig:
                 "network_interface": "127.0.0.1",
                 "per_user_template": "{id}_{username}",
                 "strict_result_get_locking": True,
+                "stage_commit_technique": "SCHEMA_SWAP",
                 "auto_table": [],
                 "auto_blob": [],
                 "attrs": {},
             },
+        )
+
+        # check enums
+        # Alternative: could be a feature of __get_merged_config_dict in case default value is set to Enum
+        from pydiverse.pipedag.context.context import StageCommitTechnique
+
+        config["stage_commit_technique"] = (
+            config["stage_commit_technique"].strip().upper()
+        )
+        if not hasattr(StageCommitTechnique, config["stage_commit_technique"]):
+            raise ValueError(
+                "Found unknown setting stage_commit_technique:"
+                f" '{config['stage_commit_technique']}'; Expected one of:"
+                f" {', '.join([v.name for v in StageCommitTechnique])}"
+            )
+        stage_commit_technique = getattr(
+            StageCommitTechnique, config["stage_commit_technique"]
         )
 
         # TODO: Delegate selecting where variables can be expanded to the corresponding classes.
@@ -150,6 +168,7 @@ class PipedagConfig:
             strict_result_get_locking=config["strict_result_get_locking"],
             instance_name=instance,
             instance_id=config["instance_id"],
+            stage_commit_technique=stage_commit_technique,
             fail_fast=config["fail_fast"],
             network_interface=config["network_interface"],
             attrs=Box(config["attrs"], frozen_box=True),
@@ -205,7 +224,8 @@ class PipedagConfig:
 
         return merged
 
-    def __expand_environment_variables(self, *, inout_config):
+    @staticmethod
+    def __expand_environment_variables(*, inout_config):
         locations = [
             ("table_store", "url"),
             ("table_store", "url_attrs_file"),
