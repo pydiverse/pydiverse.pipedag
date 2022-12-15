@@ -60,9 +60,6 @@ class Task:
         self.logger = structlog.get_logger()
         self._visualize_hidden = False
 
-        # TODO: Get rid of task.value; tasks shouldn't contain state
-        self.value = None
-
     def __repr__(self):
         return f"<Task '{self.name}' {hex(id(self))} (id: {self.id})>"
 
@@ -135,17 +132,9 @@ class Task:
         if config_context is None:
             config_context = ConfigContext.get()
 
-        # With multiprocessing the task value doesn't get shared between
-        # processes. That's why we must take a dict of inputs as arguments
-        # (when running with multiprocessing) and update the value of all
-        # relevant tasks.
-        for task_id, value in inputs.items():
-            task = self.input_tasks[task_id]
-            task.value = value
-
         with run_context, config_context:
             try:
-                result = self._run()
+                result = self._run(inputs)
             except Exception as e:
                 self.did_finish(FinalTaskState.FAILED)
                 raise e
@@ -153,15 +142,18 @@ class Task:
                 self.did_finish(FinalTaskState.COMPLETED)
                 return result
 
-    def _run(self):
+    def _run(self, inputs: [int, Any]):
         args = self._bound_args.args
         kwargs = self._bound_args.kwargs
 
+        # Because tasks don't contain any state, we must retrieve the value
+        # it returned from the inputs dictionary. This is especially important
+        # because with multiprocessing it is impossible to even share state.
         def task_result_mapper(x):
             if isinstance(x, Task):
-                return x.value
-            elif isinstance(x, TaskGetItem):
-                return x.value
+                return x.resolve_value(inputs[x.id])
+            if isinstance(x, TaskGetItem):
+                return x.resolve_value(inputs[x.task.id])
             return x
 
         args = deep_map(args, task_result_mapper)
@@ -169,7 +161,6 @@ class Task:
 
         with TaskContext(task=self):
             result = self.fn(*args, **kwargs)
-        self.value = result
 
         return result
 
@@ -179,6 +170,9 @@ class Task:
         else:
             self.logger.warning("Task failed", task=self, state=state)
         RunContext.get().did_finish_task(self, state)
+
+    def resolve_value(self, task_value: Any):
+        return task_value
 
 
 class TaskGetItem:
@@ -194,8 +188,8 @@ class TaskGetItem:
     def __getitem__(self, item):
         return TaskGetItem(self.task, self, item)
 
-    @property
-    def value(self):
-        if self.parent.value is None:
+    def resolve_value(self, task_value: Any):
+        parent_value = self.parent.resolve_value(task_value)
+        if parent_value is None:
             raise TypeError(f"Parent ({self.parent}) value is None.")
-        return self.parent.value[self.item]
+        return parent_value[self.item]

@@ -77,16 +77,36 @@ class PrefectOneEngine(OrchestrationEngine):
                 f"Please make sure project {config_context.name} exists: {_e}"
             )
 
-        return flow
+        return flow, tasks
 
     def run(self, flow: Flow, **run_kwargs):
-        prefect_flow = self.construct_prefect_flow(flow)
+        prefect_flow, tasks_map = self.construct_prefect_flow(flow)
         result = prefect_flow.run(**run_kwargs)
+
+        # Compute task_values
+        task_values = {}
+        for task, prefect_task in tasks_map.items():
+            task_values[task] = result.result[prefect_task].result
+
+        # If the task failed, extract the exception
+        exception = None
+        if result.is_failed():
+            for task_res in result.result.values():
+                if task_res.is_failed() and isinstance(task_res.result, Exception):
+                    exception = task_res.result
+                    break
+            else:
+                # Generic Fallback
+                exception = Exception(
+                    f"Prefect run failed with message: {result.message}"
+                )
 
         return Result(
             underlying=result,
             successful=result.is_successful(),
             config_context=ConfigContext.get(),
+            task_values=task_values,
+            exception=exception,
         )
 
 
@@ -134,6 +154,8 @@ class PrefectTwoEngine(OrchestrationEngine):
                     wait_for=parents,
                 )
 
+            return futures
+
         return pipedag_flow
 
     def run(self, flow: Flow, **kwargs):
@@ -142,10 +164,27 @@ class PrefectTwoEngine(OrchestrationEngine):
         prefect_flow = self.construct_prefect_flow(flow)
         result = prefect_flow(return_state=True)
 
+        # Compute task_values
+        task_values = {}
+        successful = result.is_completed()
+        for task, state in result.data.items():
+            successful &= state.is_completed()
+            task_values[task] = state.data
+
+        # If the task failed, extract the exception
+        exception = None
+        if not successful:
+            for state in result.data.values():
+                if state.is_failed() or state.is_crashed():
+                    exception = prefect.states.get_state_exception(state)
+                    break
+
         return Result(
             underlying=result,
-            successful=result.is_completed(),
+            successful=successful,
             config_context=ConfigContext.get(),
+            task_values=result,
+            exception=exception,
         )
 
 

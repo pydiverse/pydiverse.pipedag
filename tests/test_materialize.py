@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pandas as pd
 import pytest
 
 from pydiverse.pipedag import Flow, Stage, materialize
@@ -92,14 +93,16 @@ def test_failure():
         with Stage("failure_stage"):
             m.exception(0, True)
 
-    assert not f.run(fail_fast=False).successful
+    with pytest.raises(Exception, match="THIS EXCEPTION IS EXPECTED"):
+        f.run(fail_fast=True)
 
     with Flow("flow") as f:
         with Stage("failure_stage"):
             x = m.exception(0, True)
             m.noop(x)
 
-    assert not f.run(fail_fast=False).successful
+    with pytest.raises(Exception, match="THIS EXCEPTION IS EXPECTED"):
+        f.run(fail_fast=True)
 
 
 def test_return_pipedag_config():
@@ -182,7 +185,7 @@ def test_materialize_memo_with_failure():
 
 def test_stage_ref_counter():
     def check_rc(stage, expected):
-        @materialize(lazy=True)
+        @materialize(lazy=True, input_type=pd.DataFrame)
         def _m_check_rc(x):
             assert RunContext.get().get_stage_ref_count(stage) == expected
             return x

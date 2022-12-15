@@ -22,6 +22,9 @@ class Result:
     successful: bool
     config_context: ConfigContext | None
 
+    task_values: dict[Task, Any]
+    exception: Exception = None
+
     def get(self, task: Task | TaskGetItem, as_type: type = None) -> Materializable:
         """Load the results of a task from the database.
 
@@ -64,4 +67,5 @@ class Result:
                     item, as_type=as_type, ctx=run_ctx
                 )
 
-            return deep_map(task.value, dematerialize_mapper)
+            task_value = self.task_values[root_task]
+            return deep_map(task.resolve_value(task_value), dematerialize_mapper)
