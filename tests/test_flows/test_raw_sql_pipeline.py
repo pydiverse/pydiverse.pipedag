@@ -55,7 +55,7 @@ def raw_sql_bind_schema(
 
 
 def _test_raw_sql(instance):
-    cfg = PipedagConfig.load().get(instance=instance)
+    cfg = PipedagConfig.default.get(instance=instance)
     parent_dir = Path(__file__).parent / "raw_sql_scripts" / instance
     with Flow() as flow:
         with Stage("helper") as out_stage:

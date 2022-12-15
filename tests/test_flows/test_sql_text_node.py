@@ -48,7 +48,7 @@ def test_sql_node():
 @pytest.mark.mssql
 def test_sql_node_mssql():
     # use a different way to initialize configuration for more test coverage
-    with PipedagConfig.load().get(instance="mssql", per_user=True):
+    with PipedagConfig.default.get(instance="mssql", per_user=True):
         with Flow() as flow:
             with Stage("schema1"):
                 parent_dir = Path(__file__).parent
@@ -64,7 +64,7 @@ def test_sql_node_mssql():
 @pytest.mark.ibm_db2
 def test_sql_node_db2():
     # use a different way to initialize configuration for more test coverage
-    with PipedagConfig.load().get(instance="ibm_db2", per_user=True):
+    with PipedagConfig.default.get(instance="ibm_db2", per_user=True):
         with Flow() as flow:
             with Stage("schema1"):
                 parent_dir = Path(__file__).parent

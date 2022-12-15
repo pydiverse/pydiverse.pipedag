@@ -369,7 +369,7 @@ def load_object(config_dict: dict):
     config values, otherwise they just get passed to the class initializer.
 
     >>> # module.Class(argument="value")
-    >>> load_instance({
+    >>> load_object({
     >>>     "class": "module.Class",
     >>>     "argument": "value",
     >>> })
