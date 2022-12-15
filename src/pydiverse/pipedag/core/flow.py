@@ -244,7 +244,7 @@ class Flow:
             # fall back further to read configuration from file in default locations
             config_context = PipedagConfig.default.get()
         with config_context:
-            with RunContextServer(self, ignore_fresh_input):
+            with RunContextServer(self):
                 if orchestration_engine is None:
                     orchestration_engine = config_context.create_orchestration_engine()
                 result = orchestration_engine.run(flow=self, **kwargs)

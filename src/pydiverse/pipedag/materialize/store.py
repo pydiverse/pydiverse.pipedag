@@ -158,7 +158,7 @@ class PipeDAGStore(Disposable):
         output object with the required metadata to allow dematerialization.
 
         :param task: The task instance which produced `value`. Must have
-            the correct `cache_keys` attribute set.
+            the correct `cache_key` attribute set.
         :param value: The output of the task. Must be materializable; this
             means it can only contain the following object types:
             `dict`, `list`, `tuple`,
@@ -202,16 +202,14 @@ class PipeDAGStore(Disposable):
 
             # Do the materialization
             if isinstance(x, (Table, RawSql, Blob)):
-                x.cache_keys = task.cache_keys
+                x.cache_key = task.cache_key
 
                 if isinstance(x, (Table, Blob)):
                     x.stage = stage
                     # Update name:
                     # - If no name has been provided, generate on automatically
                     # - If the provided name ends with %%, perform name mangling
-                    auto_suffix = (
-                        f"{list(task.cache_keys.values())[0]}_{next(counter):04d}"
-                    )
+                    auto_suffix = f"{task.cache_key}_{next(counter):04d}"
                     if x.name is None:
                         x.name = task.name + "_" + auto_suffix
                     elif x.name.endswith("%%"):
@@ -248,7 +246,7 @@ class PipeDAGStore(Disposable):
             version=task.version,
             timestamp=datetime.datetime.now(),
             run_id=ctx.run_id,
-            cache_keys=task.cache_keys,
+            cache_key=task.cache_key,
             output_json=output_json,
         )
 
@@ -374,8 +372,6 @@ class PipeDAGStore(Disposable):
         - Task Version
         - Inputs
 
-        This is currently independent of RunContext.get_cache_key_type().
-
         :param task: The task
         :param input_json: The inputs provided to the task serialized as a json
         """
@@ -393,7 +389,7 @@ class PipeDAGStore(Disposable):
         """Try to retrieve the cached outputs for a task
 
         :param task: The materializing task for which to retrieve
-            the cached output. Must have the `cache_keys` attribute set.
+            the cached output. Must have the `cache_key` attribute set.
         :raises CacheError: if no matching task exists in the cache
         """
 

@@ -7,7 +7,6 @@ import structlog
 from typing_extensions import Self
 
 from pydiverse.pipedag._typing import StoreT, T
-from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.container import RawSql, Table
 from pydiverse.pipedag.materialize.core import MaterializingTask
@@ -214,26 +213,20 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         Used when `lazy = True` is set for a materializing task.
         """
 
-        lazy_cache_keys = self.compute_lazy_table_cache_keys(table)
-        cache_key_type = RunContext.get().get_cache_key_type()
-        if (
-            cache_key_type not in lazy_cache_keys
-            or lazy_cache_keys[cache_key_type] is None
-        ):
+        lazy_cache_key = self.compute_lazy_table_cache_key(table)
+        if lazy_cache_key is None:
             # Fallback to default implementation
             return self.store_table(table)
 
         # Must update table cache key here to ensure that any downstream
         # task get invalidated in case the query changed.
-        table.cache_keys = lazy_cache_keys
+        table.cache_key = lazy_cache_key
 
         # Store table
         try:
             # Try retrieving the table from the cache and then copying it
             # to the transaction stage
-            metadata = self.retrieve_lazy_table_metadata(
-                lazy_cache_keys[cache_key_type], table.stage
-            )
+            metadata = self.retrieve_lazy_table_metadata(lazy_cache_key, table.stage)
             self.copy_lazy_table_to_transaction(metadata, table)
             self.logger.info(f"Lazy cache of table '{table.name}' found")
         except CacheError as e:
@@ -247,7 +240,7 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             LazyTableMetadata(
                 name=table.name,
                 stage=table.stage.name,
-                cache_keys=lazy_cache_keys,
+                cache_key=lazy_cache_key,
             )
         )
 
@@ -259,24 +252,21 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         has already been executed before. If yes, instead of evaluating
         the query, it just copies the previous result to the commit stage.
         """
-        raw_sql_cache_keys = self.compute_raw_sql_cache_keys(raw_sql)
+        raw_sql_cache_key = self.compute_raw_sql_cache_key(raw_sql)
 
         # Must update table cache key here to ensure that any downstream
         # task get invalidated in case the query changed.
-        raw_sql.cache_keys = raw_sql_cache_keys
+        raw_sql.cache_key = raw_sql_cache_key
 
         prev_tables = self.list_tables(raw_sql.stage, include_everything=True)
         # Store table
-        cache_key_type = RunContext.get().get_cache_key_type()
         try:
             # Try retrieving the table from the cache and then copying it
             # to the transaction stage
-            metadata = self.retrieve_raw_sql_metadata(
-                raw_sql_cache_keys[cache_key_type], raw_sql.stage
-            )
+            metadata = self.retrieve_raw_sql_metadata(raw_sql_cache_key, raw_sql.stage)
             self.copy_raw_sql_tables_to_transaction(metadata, raw_sql.stage)
             self.logger.info(f"Lazy cache of stage '{raw_sql.stage}' found")
-        except (CacheError, KeyError) as e:
+        except CacheError as e:
             self.logger.warning("cache miss", exception=str(e))
 
             # Either not found in cache, or copying failed -> fallback
@@ -289,7 +279,7 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
                 prev_tables=prev_tables,
                 tables=self.list_tables(raw_sql.stage, include_everything=True),
                 stage=raw_sql.stage.name,
-                cache_keys=raw_sql_cache_keys,
+                cache_key=raw_sql_cache_key,
             )
         )
 
@@ -381,15 +371,14 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
 
     # Lazy Table Metadata
 
-    def compute_lazy_table_cache_keys(self, table: Table) -> dict[str, str] | None:
-        """Get cache keys that identify a lazy table
+    def compute_lazy_table_cache_key(self, table: Table) -> str | None:
+        """Get a cache key that identifies a lazy table
 
         This cache key is based on the inputs of a task and the query
-        that the table object represents. There are cache keys based on
-        different assumptions held in a dictionary.
+        that the table object represents.
 
         :param table: The table for which to compute the cache key
-        :return: Either a cache key per assumption (dict[str,str]) or None if the table doesn't
+        :return: Either a cache key (str) or None if the table doesn't
             represent a lazy query
         """
         try:
@@ -398,12 +387,9 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         except TypeError:
             return None
 
-        return {
-            name: compute_cache_key("LAZY-TABLE", cache_key, query_str)
-            for name, cache_key in table.cache_keys.items()
-        }
+        return compute_cache_key("LAZY-TABLE", table.cache_key, query_str)
 
-    def compute_raw_sql_cache_keys(self, raw_sql: RawSql) -> dict[str, str] | None:
+    def compute_raw_sql_cache_key(self, raw_sql: RawSql) -> str | None:
         """Get a cache key that identifies a lazy table
 
         This cache key is based on the inputs of a task and the query
@@ -412,10 +398,7 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         :param raw_sql: Raw SQL statements for which to compute the cache key
         :return: Cache key (str)
         """
-        return {
-            name: compute_cache_key("RAW-SQL", cache_key, raw_sql.sql)
-            for name, cache_key in raw_sql.cache_keys.items()
-        }
+        return compute_cache_key("RAW-SQL", raw_sql.cache_key, raw_sql.sql)
 
     @abstractmethod
     def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
