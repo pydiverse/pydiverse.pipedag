@@ -188,13 +188,12 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
     def execute_raw_sql(self, raw_sql: RawSql):
         """Executed raw SQL statements in the associated transaction stage
 
-        The implementation details of this get handled by the registered
-        TableHooks.
+        This method is overridden by actual table stores that can handle raw SQL.
         """
 
-        # take any registered table hook since we only care about the materialization target
-        hook = self._REGISTERED_TABLES[0]
-        hook.execute_raw_sql(self, raw_sql.sql, raw_sql.stage.transaction_name)
+        raise NotImplementedError(
+            "This table store does not support executing raw sql statements"
+        )
 
     def list_tables(self, stage: Stage, *, include_everything=False) -> list[str]:
         # take any registered table hook since we only care about the materialization target
@@ -489,17 +488,6 @@ class TableHook(Generic[StoreT], ABC):
 
         :param store: The store which called this method
         :param table: The table that should be materialized
-        :param stage_name: The name of the stage in which the table should
-            be stored - can either be `stage.name` or `stage.transaction_name`.
-        """
-
-    @classmethod
-    @abstractmethod
-    def execute_raw_sql(cls, store: StoreT, sql: str, stage_name: str) -> None:
-        """Execute raw SQL statements
-
-        :param store: The store which called this method
-        :param sql: The raw SQL statements that should be executed
         :param stage_name: The name of the stage in which the table should
             be stored - can either be `stage.name` or `stage.transaction_name`.
         """

@@ -159,17 +159,6 @@ class PandasTableHook(TableHook[DictTableStore]):
         store.store[stage_name][table.name] = table.obj
 
     @classmethod
-    def execute_raw_sql(
-        cls,
-        store,
-        sql: str,
-        stage_name: str,
-    ):
-        raise NotImplementedError(
-            "This table store does not support executing raw sql statements"
-        )
-
-    @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
         return store.store[stage_name][table.name].copy()
 
@@ -210,17 +199,6 @@ class PydiverseTransformTableHook(TableHook[DictTableStore]):
         table.obj = table.obj >> collect()
         # noinspection PyTypeChecker
         return PandasTableHook.materialize(store, table, stage_name)
-
-    @classmethod
-    def execute_raw_sql(
-        cls,
-        store,
-        sql: str,
-        stage_name: str,
-    ):
-        raise NotImplementedError(
-            "This table store does not support executing raw sql statements"
-        )
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):

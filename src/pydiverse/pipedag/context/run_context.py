@@ -14,14 +14,19 @@ from typing import TYPE_CHECKING, Any
 import msgpack
 import structlog
 
-from pydiverse.pipedag.context.context import BaseContext, ConfigContext
+from pydiverse.pipedag.context.context import (
+    BaseContext,
+    ConfigContext,
+    StageLockContext,
+)
 from pydiverse.pipedag.errors import LockError, RemoteProcessError, StageError
+from pydiverse.pipedag.util import Disposable
 from pydiverse.pipedag.util.ipc import IPCServer
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Flow, Stage
     from pydiverse.pipedag._typing import T
-    from pydiverse.pipedag.backend import LockState
+    from pydiverse.pipedag.backend import BaseLockManager, LockState
     from pydiverse.pipedag.core import Task
     from pydiverse.pipedag.materialize import Blob, Table
 
@@ -36,57 +41,6 @@ def synchronized(lock_attr: str):
         return synced_func
 
     return decorator
-
-
-class StageLockContext(BaseContext):
-    """A context manager for keeping stage locking information."""
-
-    _context_var = ContextVar("stage_lock_context")
-
-    def __init__(self, cfg: ConfigContext | None = None):
-        if cfg is None:
-            # Fall back to activated config context
-            cfg = ConfigContext.get()
-        self.logger = structlog.get_logger(cls=type(self).__name__)
-        self.lock_manager = cfg.create_lock_manager()
-        self.lock_manager.add_lock_state_listener(self._lock_state_listener)
-
-    def close(self):
-        self.logger.debug("release all stage locks")
-        self._release_all_locks()
-        self.lock_manager.dispose()
-        self.lock_manager = None
-
-    def _lock_state_listener(
-        self, stage: Stage, old_state: LockState, new_state: LockState
-    ):
-        """Internal listener that gets notified when the state of a lock changes"""
-        from pydiverse.pipedag.backend import LockState
-        from pydiverse.pipedag.core import Stage
-
-        if not isinstance(stage, Stage):
-            return
-
-        # Logging
-        if new_state == LockState.UNCERTAIN:
-            self.logger.warning(
-                f"Lock for stage '{stage.name}' transitioned to UNCERTAIN state."
-            )
-        if old_state == LockState.UNCERTAIN and new_state == LockState.LOCKED:
-            self.logger.info(
-                f"Lock for stage '{stage.name}' is still LOCKED (after being"
-                " UNCERTAIN)."
-            )
-        if old_state == LockState.UNCERTAIN and new_state == LockState.INVALID:
-            self.logger.error(f"Lock for stage '{stage.name}' has become INVALID.")
-
-    def _release_all_locks(self):
-        assert (
-            self.lock_manager is not None
-        ), "this method may only be called between __enter__() and __exit__()"
-        locks = list(self.lock_manager.lock_states.items())
-        for lock, state in locks:
-            self.lock_manager.release(lock)
 
 
 class RunContextServer(IPCServer):
@@ -142,32 +96,35 @@ class RunContextServer(IPCServer):
         self.task_memo_lock = Lock()
 
         # LOCKING
+        config_ctx = ConfigContext.get()
+        self.lock_manager = config_ctx.create_lock_manager()
+        self.lock_handler = StageLockStateHandler(self.lock_manager)
+
         try:
-            self.lock = StageLockContext.get()
+            # If we are inside a StageLockContext, then we shouldn't release any
+            # stage locks, instead they get released when StageLockContext.__exit__
+            # gets called.
+            stage_lock_context = StageLockContext.get()
+            stage_lock_context.lock_state_handlers.append(self.lock_handler)
+            self.keep_stages_locked = True
         except LookupError:
-            cfg = ConfigContext.get()
-            self.lock = StageLockContext(cfg)
+            self.keep_stages_locked = False
 
     def __enter__(self):
-        self.logger.debug("enter context")
         super().__enter__()
-        self.lock.__enter__()
 
         # INITIALIZE EVERYTHING
-        with self.lock.lock_manager("_pipedag_setup_"):
+        with self.lock_manager("_pipedag_setup_"):
             config_ctx = ConfigContext.get()
             config_ctx.store.table_store.setup()
 
             # Acquire a lock on all stages
-            # We lock all stages from the start to prevent two flows from
+            # We must lock all stages from the start to prevent two flows from
             # deadlocking each other (lock order inversion). To lock the stage
             # only when it's needed (may result in deadlocks), the lock should
             # get acquired in the `PipeDAGStore.init_stage` function instead.
-            #
-            # In the future we want to implement more minimalistic locking with
-            # an active deadlock prevention method
             for stage in self.stages:
-                self.lock.lock_manager.acquire(stage)
+                self.lock_manager.acquire(stage)
 
         # INITIALIZE REFERENCE COUNTERS
         for stage in self.stages:
@@ -177,16 +134,15 @@ class RunContextServer(IPCServer):
 
         self.__context_proxy = RunContext(self)
         self.__context_proxy.__enter__()
-        self.logger.debug("entered context")
         return self.__context_proxy
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.logger.debug("exit context")
-        self.lock.__exit__()
         self.__context_proxy.__exit__(exc_type, exc_val, exc_tb)
+
+        if not self.keep_stages_locked:
+            self.lock_handler.dispose()
+
         super().__exit__(exc_type, exc_val, exc_tb)
-        self.lock = None  # don't use lock_manager any more
-        self.logger.debug("exited context")
 
     def handle_request(self, request):
         try:
@@ -297,49 +253,23 @@ class RunContextServer(IPCServer):
                 raise RuntimeError
 
     # LOCKING
+
     def acquire_stage_lock(self, stage_id: int):
-        assert self.lock is not None, "this method may not be called after __exit__()"
         stage = self.stages[stage_id]
-        self.lock.lock_manager.acquire(stage)
+        self.lock_manager.acquire(stage)
 
     def release_stage_lock(self, stage_id: int):
-        assert self.lock is not None, "this method may not be called after __exit__()"
-        stage = self.stages[stage_id]
-        self.lock.lock_manager.release(stage)
+        if not self.keep_stages_locked:
+            stage = self.stages[stage_id]
+            self.lock_manager.release(stage)
 
     def validate_stage_lock(self, stage_id: int):
-        assert self.lock is not None, "this method may not be called after __exit__()"
-        from pydiverse.pipedag.backend.lock import LockState
-
         stage = self.stages[stage_id]
-        did_log = False
-        while True:
-            state = self.lock.lock_manager.get_lock_state(stage)
-
-            if state == LockState.LOCKED:
-                return
-            elif state == LockState.UNLOCKED:
-                raise LockError(f"Lock for stage '{stage.name}' is unlocked.")
-            elif state == LockState.INVALID:
-                raise LockError(f"Lock for stage '{stage.name}' is invalid.")
-            elif state == LockState.UNCERTAIN:
-                if not did_log:
-                    self.logger.info(
-                        f"Waiting for stage '{stage.name}' lock state to"
-                        " become known again..."
-                    )
-                    did_log = True
-
-                time.sleep(0.01)
-
-            else:
-                raise ValueError(f"Invalid state '{state}'.")
+        self.lock_handler.validate_stage_lock(stage)
 
     # TASK
 
     def did_finish_task(self, task_id: int, final_state_value: int):
-        assert self.lock is not None, "this method may not be called after __exit__()"
-
         # TODO: Do something with the final state.
         #       For example: The object returned by flow.run could have a list
         #       of tasks and their final states.
@@ -362,8 +292,9 @@ class RunContextServer(IPCServer):
                         stage=stage,
                     )
 
-        for stage in stages_to_release:
-            self.lock.lock_manager.release(stage)
+        if not self.keep_stages_locked:
+            for stage in stages_to_release:
+                self.lock_manager.release(stage)
 
     def get_memo_key(self, task, cache_keys: dict[str, str]):
         sub_key = "-".join(cache_keys.values())
@@ -601,6 +532,74 @@ class DematerializeRunContext(BaseContext):
 
     def validate_stage_lock(self, stage: Stage):
         pass
+
+
+# Stage Locking
+
+
+class StageLockStateHandler(Disposable):
+    """
+    Handle LockState changes (i.e. locks that may become UNCERTAIN or externally UNLOCKED)
+    """
+
+    def __init__(self, lock_manager: BaseLockManager):
+        self.logger = structlog.get_logger(cls=type(self).__name__)
+        self.lock_manager = lock_manager
+        self.lock_manager.add_lock_state_listener(self._lock_state_listener)
+
+    def dispose(self):
+        self.logger.debug("Disposing of StageLockStateHandler")
+        self.lock_manager.dispose()
+        super().dispose()
+
+    def _lock_state_listener(
+        self, stage: Stage, old_state: LockState, new_state: LockState
+    ):
+        """Internal listener that gets notified when the state of a lock changes"""
+        from pydiverse.pipedag.backend import LockState
+        from pydiverse.pipedag.core import Stage
+
+        if not isinstance(stage, Stage):
+            return
+
+        # Logging
+        if new_state == LockState.UNCERTAIN:
+            self.logger.warning(
+                f"Lock for stage '{stage.name}' transitioned to UNCERTAIN state."
+            )
+        if old_state == LockState.UNCERTAIN and new_state == LockState.LOCKED:
+            self.logger.info(
+                f"Lock for stage '{stage.name}' is still LOCKED (after being"
+                " UNCERTAIN)."
+            )
+        if old_state == LockState.UNCERTAIN and new_state == LockState.INVALID:
+            self.logger.error(f"Lock for stage '{stage.name}' has become INVALID.")
+
+    def validate_stage_lock(self, stage):
+        from pydiverse.pipedag.backend.lock import LockState
+
+        did_log = False
+        while True:
+            state = self.lock_manager.get_lock_state(stage)
+
+            if state == LockState.LOCKED:
+                return
+            elif state == LockState.UNLOCKED:
+                raise LockError(f"Lock for stage '{stage.name}' is unlocked.")
+            elif state == LockState.INVALID:
+                raise LockError(f"Lock for stage '{stage.name}' is invalid.")
+            elif state == LockState.UNCERTAIN:
+                if not did_log:
+                    self.logger.info(
+                        f"Waiting for stage '{stage.name}' lock state to"
+                        " become known again..."
+                    )
+                    did_log = True
+
+                time.sleep(0.01)
+
+            else:
+                raise ValueError(f"Invalid state '{state}'.")
 
 
 # States

@@ -112,7 +112,7 @@ _instances: &instances
   mssql:
     # Full dataset is using default database connection and schemas
     table_store:
-      table_store_connection: mssql
+      <<: *db_mssql
 
 flows:
   __any__:

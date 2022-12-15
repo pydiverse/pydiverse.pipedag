@@ -3,14 +3,12 @@ from __future__ import annotations
 import json
 import re
 import warnings
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import sqlalchemy as sa
 import sqlalchemy.exc
 import sqlalchemy.sql.elements
-import yaml
 
 from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
@@ -27,8 +25,9 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     RenameSchema,
     Schema,
 )
-from pydiverse.pipedag.context import ConfigContext, RunContext
+from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.errors import CacheError
+from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import (
     LazyTableMetadata,
@@ -36,7 +35,6 @@ from pydiverse.pipedag.materialize.metadata import (
     TaskMetadata,
 )
 from pydiverse.pipedag.materialize.util import compute_cache_key
-from pydiverse.pipedag.util.config import replace_environment_variables
 
 
 class SQLTableStore(BaseTableStore):
@@ -49,63 +47,6 @@ class SQLTableStore(BaseTableStore):
     """
 
     METADATA_SCHEMA = "pipedag_metadata"
-
-    @classmethod
-    def _init_conf_(cls, config: dict[str, Any], cfg: ConfigContext):
-        engine_url = config.pop("url")
-        engine_url = replace_environment_variables(engine_url)
-        if "url_attrs_file" in config:
-            attrs_file = config.pop("url_attrs_file")
-            attrs_file = replace_environment_variables(attrs_file)
-            if not Path(attrs_file).is_file():
-                raise AttributeError(
-                    f"Failed opening file referenced in 'url_attrs_file': {attrs_file}"
-                )
-            with open(attrs_file, encoding="utf-8") as fh:
-                attrs = yaml.safe_load(fh)
-            # TODO: use nicer schema verification code
-            if not isinstance(attrs, dict):
-                raise AttributeError(
-                    "Expected dictionary in yaml format in file referenced by"
-                    f" 'url_attrs_file': {attrs_file}"
-                )
-            for key, value in attrs.items():
-                if not isinstance(key, str):
-                    key = str(key)
-                    if "{" in key or "[" in key or "(" in key or "," in key:
-                        raise AttributeError(
-                            "Expected keys as type string in yaml file referenced by"
-                            f" 'url_attrs_file': {attrs_file}; Found {key}"
-                        )
-                if not isinstance(value, str):
-                    value = str(value)
-                    if "{" in value or "[" in value or "(" in value or "," in value:
-                        raise AttributeError(
-                            f"Expected '{key}' type string in yaml file referenced by"
-                            f" 'url_attrs_file': {attrs_file}; Found {value}"
-                        )
-                assert "{" not in key, "just to avoid messy lookups"
-                assert "}" not in key, "just to avoid messy lookups"
-                assert "{" not in value, "prevent recursive lookups"
-                assert "}" not in value, "prevent recursive lookups"
-            # keep the two identifiers "instance_id" and "name" for later
-            assert (
-                "instance_id" not in attrs
-            ), f"please remove 'instance_id' attribute from: {attrs_file}"
-            assert (
-                "name" not in attrs
-            ), f"please remove 'name' attribute from: {attrs_file}"
-        else:
-            # Alternative: we could make cfg.attrs available for engine_url replacements. However, this makes it much
-            # harder to analyze what information a config sends out to a remote server
-            attrs = {}
-        attrs["instance_id"] = cfg.instance_id
-        # TODO: consider renaming {name} to {pipedag_name} and top level name: attribute of pipedag config as well
-        attrs["name"] = cfg.pipedag_name
-        engine_url = engine_url.format(**attrs)
-        if "table_store_connection" in config:
-            del config["table_store_connection"]
-        return cls(engine_url, **config)
 
     def __init__(
         self,
@@ -190,6 +131,11 @@ class SQLTableStore(BaseTableStore):
             schema=self.metadata_schema.get(),
         )
 
+    @classmethod
+    def _init_conf_(cls, config: dict[str, Any]):
+        engine_url = config.pop("url")
+        return cls(engine_url, **config)
+
     @staticmethod
     def _init_database(engine_url: str, create_database_if_not_exists: bool):
         if not create_database_if_not_exists:
@@ -272,7 +218,9 @@ class SQLTableStore(BaseTableStore):
                 #     conn.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
                 return self.execute(query, conn=conn)
 
-    def do_execute_raw_sql(self, sql: str, stage_name: str):
+    def execute_raw_sql(self, raw_sql: RawSql):
+        """Executed raw SQL statements in the associated transaction stage"""
+        sql = raw_sql.sql
         if self.engine.name == "mssql":
             # if self.print_sql:
             #     max_len = 50000  # consider making an option in ConfigContext
@@ -758,15 +706,6 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         )
 
     @classmethod
-    def execute_raw_sql(
-        cls,
-        store,
-        sql: str,
-        stage_name: str,
-    ):
-        store.do_execute_raw_sql(sql, stage_name)
-
-    @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
         return sa.Table(
             table.name,
@@ -809,15 +748,6 @@ class PandasTableHook(TableHook[SQLTableStore]):
             schema=schema,
             index=False,
         )
-
-    @classmethod
-    def execute_raw_sql(
-        cls,
-        store,
-        sql: str,
-        stage_name: str,
-    ):
-        SQLAlchemyTableHook.execute_raw_sql(store, sql, stage_name)
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
@@ -876,15 +806,6 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             # noinspection PyTypeChecker
             return SQLAlchemyTableHook.materialize(store, table, stage_name)
         raise NotImplementedError
-
-    @classmethod
-    def execute_raw_sql(
-        cls,
-        store,
-        sql: str,
-        stage_name: str,
-    ):
-        SQLAlchemyTableHook.execute_raw_sql(store, sql, stage_name)
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):

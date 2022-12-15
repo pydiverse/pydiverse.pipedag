@@ -5,6 +5,7 @@ from functools import cached_property
 from threading import Lock
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from pydiverse.pipedag.util.config import load_object
 from pydiverse.pipedag.util.import_ import import_object
 
 if TYPE_CHECKING:
@@ -12,6 +13,7 @@ if TYPE_CHECKING:
     from pydiverse.pipedag.backend import BaseLockManager
     from pydiverse.pipedag.engine.base import OrchestrationEngine
     from pydiverse.pipedag.core import Flow, Stage, Task
+    from pydiverse.pipedag.context.run_context import StageLockStateHandler
 
 import structlog
 from attrs import frozen
@@ -104,6 +106,7 @@ class ConfigContext(BaseAttrsContext):
     pipedag_name: str
     flow_name: str
     instance_name: str
+
     # per instance attributes
     fail_fast: bool
     strict_result_get_locking: bool
@@ -122,8 +125,8 @@ class ConfigContext(BaseAttrsContext):
     @cached_property
     def store(self):
         # Load objects referenced in config
-        table_store = load_object(self.config_dict["table_store"], self)
-        blob_store = load_object(self.config_dict["blob_store"], self)
+        table_store = load_object(self.config_dict["table_store"])
+        blob_store = load_object(self.config_dict["blob_store"])
         from pydiverse.pipedag.materialize.store import PipeDAGStore
 
         return PipeDAGStore(
@@ -132,10 +135,10 @@ class ConfigContext(BaseAttrsContext):
         )
 
     def create_lock_manager(self) -> BaseLockManager:
-        return load_object(self.config_dict["lock_manager"], self)
+        return load_object(self.config_dict["lock_manager"])
 
     def create_orchestration_engine(self) -> OrchestrationEngine:
-        return load_object(self.config_dict["orchestration"], self)
+        return load_object(self.config_dict["orchestration"])
 
     def close(self):
         # If the store has been initialized (and thus cached in the __dict__),
@@ -155,27 +158,21 @@ class ConfigContext(BaseAttrsContext):
     _context_var = ContextVar("config_context")
 
 
-def load_object(config_dict: dict, cfg: ConfigContext):
-    """Instantiates an instance of an object given
-
-    The import path (module.Class) should be specified as the "class" value
-    of the dict. The rest of the dict get used as the instance config.
-
-    If the class defines a `_init_conf_` function, it gets called using the
-    config values, otherwise they just get passed to the class initializer.
-
-    >>> # module.Class(argument="value")
-    >>> load_instance({
-    >>>     "class": "module.Class",
-    >>>     "argument": "value",
-    >>> }, PipedagConfig.load().get())
+class StageLockContext(BaseContext):
+    """
+    Context manager used to keep stages locked until after flow.run() has been called
     """
 
-    config_dict = config_dict.copy()
-    cls = import_object(config_dict.pop("class"))
+    lock_state_handlers: [StageLockStateHandler]
 
-    try:
-        init_conf = getattr(cls, "_init_conf_")
-        return init_conf(config_dict, cfg)
-    except AttributeError:
-        return cls(**config_dict)
+    _context_var = ContextVar("stage_lock_context")
+
+    def __init__(self):
+        self.logger = structlog.getLogger(module=__name__, cls=self.__class__.__name__)
+        self.logger.info(f"OPEN STAGE LOCK CONTEXT {id(self)}")
+        self.lock_state_handlers = []
+
+    def close(self):
+        self.logger.info(f"CLOSE STAGE LOCK CONTEXT {id(self)}")
+        for lock_state_handler in self.lock_state_handlers:
+            lock_state_handler.dispose()

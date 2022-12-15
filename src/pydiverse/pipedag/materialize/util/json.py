@@ -51,8 +51,7 @@ def json_default(o):
     if isinstance(o, PipedagConfig):
         return {
             PIPEDAG_TYPE: PIPEDAG_TYPE_PIPEDAG_CONFIG,
-            "pipedag_config_dict": o.pipedag_config_dict,
-            "config_file": str(o.config_file),
+            "config_dict": o.config_dict,
         }
 
     raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
@@ -86,7 +85,9 @@ def json_object_hook(d: dict):
         elif pipedag_type == PIPEDAG_TYPE_STAGE:
             return stages[d["name"]]
         elif pipedag_type == PIPEDAG_TYPE_PIPEDAG_CONFIG:
-            return PipedagConfig(d["pipedag_config_dict"], d["config_file"])
+            # PipedagConfig objects are allowed as input to @materialize tasks, but it is not allowed
+            # as output since this might cause trouble for cache-invalidation
+            raise TypeError("PipedagConfig can't be deserialized.")
         else:
             raise ValueError(
                 f"Invalid value for '{PIPEDAG_TYPE}' key: {repr(pipedag_type)}"

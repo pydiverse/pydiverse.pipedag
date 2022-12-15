@@ -5,12 +5,10 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from attrs import frozen
 
-from pydiverse.pipedag.context import ConfigContext
-from pydiverse.pipedag.context.run_context import (
-    DematerializeRunContext,
-    StageLockContext,
-)
+from pydiverse.pipedag.context import ConfigContext, StageLockContext
+from pydiverse.pipedag.context.run_context import DematerializeRunContext
 from pydiverse.pipedag.core.task import Task, TaskGetItem
+from pydiverse.pipedag.errors import LockError
 from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.util import deep_map
 
@@ -51,8 +49,8 @@ class Result:
             try:
                 StageLockContext.get()
             except LookupError:
-                assert False, (
-                    "Called Result.get() without opening StageLockContext; consider"
+                raise LockError(
+                    "Called Result.get() without opening StageLockContext. Consider"
                     " using 'strict_result_get_locking: false' for interactive"
                     " debugging"
                 )

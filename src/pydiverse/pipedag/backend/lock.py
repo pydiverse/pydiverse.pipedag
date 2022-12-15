@@ -86,6 +86,10 @@ class BaseLockManager(Disposable, ABC):
         finally:
             self.release(lock)
 
+    def dispose(self):
+        self.release_all()
+        super().dispose()
+
     @abstractmethod
     def acquire(self, lock: Lockable):
         """Acquires a lock to access a given object"""
@@ -93,6 +97,12 @@ class BaseLockManager(Disposable, ABC):
     @abstractmethod
     def release(self, lock: Lockable):
         """Releases a previously acquired lock"""
+
+    def release_all(self):
+        """Releases all aquired locks"""
+        locks = list(self.lock_states.items())
+        for lock, state in locks:
+            self.release(lock)
 
     def add_lock_state_listener(self, listener: LockStateListener):
         """Add a function to be called when the state of a lock changes
@@ -179,8 +189,8 @@ class FileLockManager(BaseLockManager):
         os.makedirs(self.base_path, exist_ok=True)
 
     @classmethod
-    def _init_conf_(cls, config: dict[str, Any], cfg: ConfigContext):
-        instance_id = normalize_name(cfg.instance_id)
+    def _init_conf_(cls, config: dict[str, Any]):
+        instance_id = normalize_name(ConfigContext.get().instance_id)
         base_path = Path(config["base_path"]) / instance_id
         return cls(base_path)
 
@@ -253,9 +263,9 @@ class ZooKeeperLockManager(BaseLockManager):
         self.locks: dict[Lockable, KazooLock] = {}
 
     @classmethod
-    def _init_conf_(cls, config: dict[str, Any], cfg: ConfigContext):
+    def _init_conf_(cls, config: dict[str, Any]):
         client = KazooClient(**config)
-        instance_id = normalize_name(cfg.instance_id)
+        instance_id = normalize_name(ConfigContext.get().instance_id)
         base_path = f"/pipedag/locks/{instance_id}/"
         return cls(client, base_path)
 
@@ -266,8 +276,11 @@ class ZooKeeperLockManager(BaseLockManager):
             pass
 
     def dispose(self):
+        self.release_all()
         self.client.stop()
         self.client.close()
+        self.lock_states.clear()
+        self.locks.clear()
         super().dispose()
 
     def acquire(self, lock: Lockable):

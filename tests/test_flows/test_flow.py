@@ -5,8 +5,7 @@ import sqlalchemy as sa
 from pandas.testing import assert_frame_equal
 
 from pydiverse.pipedag import Blob, Flow, Stage, Table, materialize
-from pydiverse.pipedag.context.run_context import StageLockContext
-from pydiverse.pipedag.util.config import PipedagConfig
+from pydiverse.pipedag.context import StageLockContext
 
 dfA = pd.DataFrame(
     {
@@ -74,11 +73,8 @@ def test_simple_flow():
 
             blob_tuple = blob_task(1, 2)
 
-    cfg = PipedagConfig.load().get()
-    with StageLockContext(cfg):
-        result = flow.run(
-            cfg
-        )  # this will use the default configuration instance=__any__
+    with StageLockContext():
+        result = flow.run()  # this will use the default configuration instance=__any__
         assert result.successful
 
         # Check result.get works
