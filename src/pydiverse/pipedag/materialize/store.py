@@ -13,7 +13,10 @@ from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.errors import DuplicateNameError, StageError
 from pydiverse.pipedag.materialize.container import RawSql
-from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.core import (
+    MaterializingTask,
+    get_effective_cache_key,
+)
 from pydiverse.pipedag.materialize.metadata import TaskMetadata
 from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.materialize.util import json as json_util
@@ -150,6 +153,7 @@ class PipeDAGStore(Disposable):
         self,
         task: MaterializingTask,
         value: Materializable,
+        is_task_cache_valid: bool,
     ) -> Materializable:
         """Stores the output of a task in the backend
 
@@ -164,6 +168,8 @@ class PipeDAGStore(Disposable):
             `dict`, `list`, `tuple`,
             `int`, `float`, `str`, `bool`, `None`,
             and PipeDAG's `Table` and `Blob` type.
+        :param is_task_cache_valid: Whether the task input and version are cache valid. This is needed for
+            materializing lazy tables which do their own query based cache invalidation on top.
         :return: A copy of `value` with additional metadata
         """
 
@@ -202,15 +208,14 @@ class PipeDAGStore(Disposable):
 
             # Do the materialization
             if isinstance(x, (Table, RawSql, Blob)):
-                x.cache_keys = task.cache_keys
-
                 if isinstance(x, (Table, Blob)):
                     x.stage = stage
                     # Update name:
                     # - If no name has been provided, generate on automatically
+                    # - Be careful that automatic name does not change with ignore_fresh_input
                     # - If the provided name ends with %%, perform name mangling
                     auto_suffix = (
-                        f"{list(task.cache_keys.values())[0]}_{next(counter):04d}"
+                        f"{get_effective_cache_key(True, task.input_hash, task.version, None)}_{next(counter):04d}"
                     )
                     if x.name is None:
                         x.name = task.name + "_" + auto_suffix
@@ -248,14 +253,15 @@ class PipeDAGStore(Disposable):
             version=task.version,
             timestamp=datetime.datetime.now(),
             run_id=ctx.run_id,
-            cache_keys=task.cache_keys,
+            input_hash=task.input_hash,
+            cache_fn_hash=task.cache_fn_hash,
             output_json=output_json,
         )
 
         # Materialize
         def store_table(table: Table):
             if task.lazy:
-                self.table_store.store_table_lazy(table)
+                self.table_store.store_table_lazy(table, is_task_cache_valid)
             else:
                 self.table_store.store_table(table)
 

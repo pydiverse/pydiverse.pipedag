@@ -109,9 +109,24 @@ class MaterializingTask(Task):
         self.cache = cache
         self.lazy = lazy
 
-        # TODO: Remove cache keys from instance
+        # TODO: Remove caching hashes from instance
         #       Inside a task instance there should be *no* state
-        self.cache_keys = {}
+        self.input_hash = None
+        self.cache_fn_hash = None
+
+    def get_effective_cache_key(self, ctx: RunContext):
+        return get_effective_cache_key(
+            ctx.ignore_fresh_input, self.input_hash, self.version, self.cache_fn_hash
+        )
+
+
+def get_effective_cache_key(ignore_fresh_input, input_hash, version, cache_fn_hash):
+    # Task name and task stage are checked independently of hashes / cache keys.
+    # If we want to ignore fresh input, we simply don't process the cache_fn_hash which would change with fresh input
+    if ignore_fresh_input:
+        return input_hash + version
+    else:
+        return input_hash + version + cache_fn_hash
 
 
 class MaterializationWrapper:
@@ -149,24 +164,17 @@ class MaterializationWrapper:
         store.ensure_stage_is_ready(task.stage)
 
         # Compute the cache key for the task inputs
-        input_json_tasks_only = store.json_encode(bound.arguments)
-        input_json = input_json_tasks_only
+        input_hash_basis = store.json_encode(bound.arguments)
+        cache_fn_output = ""
         if task.cache is not None:
-            input_json += store.json_encode(task.cache(*args, **kwargs))
-        input_jsons = {name: input_json for name in RunContext.get_cache_key_types()}
-        assert "tasks_only" in input_jsons
-        if task.cache is not None:
-            input_jsons["tasks_only"] = input_json_tasks_only
-        # task-cache_key is currently independent of RunContext.get_cache_key_type(), but this might change
-        task.cache_keys = {
-            name: store.compute_task_cache_key(task, input_json)
-            for name, input_json in input_jsons.items()
-        }
+            cache_fn_output = store.json_encode(task.cache(*args, **kwargs))
+        task.input_hash = store.compute_task_cache_key(task, input_hash_basis)
+        task.cache_fn_hash = store.compute_task_cache_key(task, cache_fn_output)
 
         # Check if this task has already been run with the same inputs
         # If yes, return memoized result. This prevents DuplicateNameExceptions
         ctx = RunContext.get()
-        with ctx.task_memo(task, task.cache_keys) as (success, memo):
+        with ctx.task_memo(task, task.input_hash) as (success, memo):
             if success:
                 task.logger.info(
                     "Task has already been run with the same inputs."
@@ -176,19 +184,23 @@ class MaterializationWrapper:
                 return memo
 
             # If task is not lazy, check the cache
-            if not task.lazy:
-                try:
-                    cached_output = store.retrieve_cached_output(task)
-                    store.copy_cached_output_to_transaction_stage(cached_output, task)
-                    ctx.store_task_memo(task, task.cache_keys, cached_output)
-                    task.logger.info(f"Found task in cache. Using cached result.")
-                    return cached_output
-                except CacheError as e:
-                    task.logger.info(
-                        "There is no cached output for this task, yet.",
-                        exception=str(e),
-                    )
-                    pass
+            is_task_cache_valid = False
+            try:
+                cached_output = store.retrieve_cached_output(task)
+                is_task_cache_valid = True
+            except CacheError as e:
+                task.logger.info(
+                    "There is no cached output for this task, yet.",
+                    exception=str(e),
+                )
+                pass
+
+            # Eager cache validation is done before calling the task function
+            if not task.lazy and is_task_cache_valid:
+                store.copy_cached_output_to_transaction_stage(cached_output, task)
+                ctx.store_task_memo(task, task.input_hash, cached_output)
+                task.logger.info(f"Found task in cache. Using cached result.")
+                return cached_output
 
             # Not found in cache / lazy -> Evaluate Function
             args, kwargs = store.dematerialize_task_inputs(
@@ -196,7 +208,7 @@ class MaterializationWrapper:
             )
 
             result = self.fn(*args, **kwargs)
-            result = store.materialize_task(task, result)
+            result = store.materialize_task(task, result, is_task_cache_valid)
 
             # Delete underlying objects from result (after materializing them)
             def obj_del_mutator(x):
@@ -205,7 +217,7 @@ class MaterializationWrapper:
                 return x
 
             result = deep_map(result, obj_del_mutator)
-            ctx.store_task_memo(task, task.cache_keys, result)
+            ctx.store_task_memo(task, task.input_hash, result)
             self.value = result
 
             return result

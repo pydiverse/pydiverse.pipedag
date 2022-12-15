@@ -402,9 +402,6 @@ class RunContext(BaseContext):
         self.ignore_fresh_input = server.ignore_fresh_input
         self.run_id = server.run_id
 
-    def get_cache_key_type(self):
-        return "tasks_only" if self.ignore_fresh_input else "default"
-
     @staticmethod
     def get_cache_key_types():
         return ["default", "tasks_only"]

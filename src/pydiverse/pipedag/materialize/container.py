@@ -22,7 +22,7 @@ class Table(Generic[T]):
     :param stage: Stage in which the result was emitted
     :param primary_key: Optional name of the primary key that should be
         used when materializing this table
-    :param cache_keys: Optional dictionary of keys used for cache invalidation (manual use is discouraged)
+    :param cache_key: Optional key used for cache invalidation (manual use is discouraged)
     """
 
     def __init__(
@@ -31,7 +31,7 @@ class Table(Generic[T]):
         name: str | None = None,
         stage: Stage | None = None,
         primary_key: str | None = None,
-        cache_keys: dict[str, str] | None = None,
+        cache_key: str | None = None,
     ):
         self._name = None
 
@@ -40,7 +40,7 @@ class Table(Generic[T]):
         self.stage = stage
         self.primary_key = primary_key
 
-        self.cache_keys = cache_keys
+        self.cache_key = cache_key
 
     def __str__(self):
         return f"<Table: {self.name} ({self.stage.name})>"

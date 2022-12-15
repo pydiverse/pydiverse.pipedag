@@ -8,7 +8,10 @@ from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.errors import CacheError, StageError
-from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.core import (
+    MaterializingTask,
+    get_effective_cache_key,
+)
 from pydiverse.pipedag.materialize.metadata import (
     LazyTableMetadata,
     RawSqlMetadata,
@@ -62,7 +65,7 @@ class DictTableStore(BaseTableStore):
                 f"Can't copy table '{table.name}' to transaction."
                 f" Stage '{stage.name}' has already been committed."
             )
-        if table.cache_keys is None:
+        if table.cache_key is None:
             raise ValueError(f"Table cache keys can't be None")
 
         try:
@@ -100,28 +103,38 @@ class DictTableStore(BaseTableStore):
             return
 
     def store_task_metadata(self, metadata: TaskMetadata, stage: Stage):
-        for cache_key in metadata.cache_keys.values():
-            self.t_metadata[stage][cache_key] = metadata
+        MaterializingTask()
+        ctx = RunContext.get()
+        # TODO: sql.py has more elaborate filter to ensure ignore_fresh_input can be switched on and off
+        cache_key = get_effective_cache_key(
+            ctx.ignore_fresh_input,
+            metadata.input_hash,
+            metadata.version,
+            metadata.cache_fn_hash,
+        )
+        self.t_metadata[stage][cache_key] = metadata
 
     def copy_task_metadata_to_transaction(self, task: MaterializingTask):
         stage = task.stage
-        for cache_key in task.cache_keys.values():
-            self.t_metadata[stage][cache_key] = self.metadata[stage][cache_key]
+        ctx = RunContext.get()
+        # TODO: sql.py has more elaborate filter to ensure ignore_fresh_input can be switched on and off
+        cache_key = task.get_effective_cache_key(ctx)
+        self.t_metadata[stage][cache_key] = self.metadata[stage][cache_key]
 
     def retrieve_task_metadata(self, task: MaterializingTask) -> TaskMetadata:
-        cache_key_type = RunContext.get().get_cache_key_type()
-        cache_key = task.cache_keys[cache_key_type]
+        ctx = RunContext.get()
+        # TODO: sql.py has more elaborate filter to ensure ignore_fresh_input can be switched on and off
+        cache_key = task.get_effective_cache_key(ctx)
         try:
             return self.metadata[task.stage][cache_key]
         except KeyError:
             raise CacheError(
-                "There is no metadata for task "
-                f"'{task.name}' with cache key '{cache_key}'({cache_key_type}), yet"
+                f"There is no metadata for task '{task.name}' with cache key"
+                f" '{cache_key}'({ctx.ignore_fresh_input}), yet"
             )
 
     def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
-        for cache_key in metadata.cache_keys.values():
-            self.t_lazy_table_metadata[metadata.stage][cache_key] = metadata
+        self.t_lazy_table_metadata[metadata.stage][metadata.query_hash] = metadata
 
     def retrieve_lazy_table_metadata(
         self, cache_key: str, stage: Stage
@@ -132,8 +145,7 @@ class DictTableStore(BaseTableStore):
             raise CacheError
 
     def store_raw_sql_metadata(self, metadata: RawSqlMetadata):
-        for cache_key in metadata.cache_keys.values():
-            self.t_raw_sql_metadata[metadata.stage][cache_key] = metadata
+        self.t_raw_sql_metadata[metadata.stage][metadata.cache_key] = metadata
 
     def retrieve_raw_sql_metadata(self, cache_key: str, stage: Stage) -> RawSqlMetadata:
         try:

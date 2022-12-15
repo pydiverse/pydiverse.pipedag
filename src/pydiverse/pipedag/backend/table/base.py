@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from abc import ABC, ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, Any, Generic, Type
 
@@ -202,8 +203,9 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             self, stage.transaction_name, include_everything=include_everything
         )
 
-    def store_table_lazy(self, table: Table):
-        """Lazily stores a table in the associated commit stage
+    def store_table_lazy(self, table: Table, is_task_cache_valid: bool):
+        """
+        Lazily stores a table in the associated commit stage.
 
         The same as `store_table()`, with the difference being that if the
         table object represents a lazy table / query, the store first checks
@@ -212,32 +214,34 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         the query, it just copies the previous result to the commit stage.
 
         Used when `lazy = True` is set for a materializing task.
+
+        :param table: The lazy table object that will be created or copied depending on cache validity.
+        :param is_task_cache_valid: If the task is not cache valid, all tables produced by this task are neither.
+        :return: None
         """
 
-        lazy_cache_keys = self.compute_lazy_table_cache_keys(table)
-        cache_key_type = RunContext.get().get_cache_key_type()
-        if (
-            cache_key_type not in lazy_cache_keys
-            or lazy_cache_keys[cache_key_type] is None
-        ):
-            # Fallback to default implementation
-            return self.store_table(table)
+        lazy_query_hash = self.compute_lazy_table_query_hash(table)
 
         # Must update table cache key here to ensure that any downstream
-        # task get invalidated in case the query changed.
-        table.cache_keys = lazy_cache_keys
+        # task gets invalidated in case the query changed.
+        table.query_hash = lazy_query_hash
 
         # Store table
         try:
+            if not is_task_cache_valid:
+                raise CacheError(
+                    f"Task producing table '{table.name}' is not cache valid"
+                )
             # Try retrieving the table from the cache and then copying it
             # to the transaction stage
-            metadata = self.retrieve_lazy_table_metadata(
-                lazy_cache_keys[cache_key_type], table.stage
-            )
+            metadata = self.retrieve_lazy_table_metadata(lazy_query_hash, table.stage)
             self.copy_lazy_table_to_transaction(metadata, table)
             self.logger.info(f"Lazy cache of table '{table.name}' found")
+            store_id = metadata.store_id
         except CacheError as e:
             self.logger.warning("cache miss", exception=str(e))
+            # invalidate downstream tasks reading this table with UUID in metadata
+            store_id = uuid.uuid4().hex[:20]
 
             # Either not found in cache, or copying failed -> fallback
             self.store_table(table)
@@ -247,7 +251,8 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             LazyTableMetadata(
                 name=table.name,
                 stage=table.stage.name,
-                cache_keys=lazy_cache_keys,
+                query_hash=lazy_query_hash,
+                store_id=store_id,
             )
         )
 
@@ -259,21 +264,14 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         has already been executed before. If yes, instead of evaluating
         the query, it just copies the previous result to the commit stage.
         """
-        raw_sql_cache_keys = self.compute_raw_sql_cache_keys(raw_sql)
-
-        # Must update table cache key here to ensure that any downstream
-        # task get invalidated in case the query changed.
-        raw_sql.cache_keys = raw_sql_cache_keys
+        raw_sql_cache_key = self.compute_raw_sql_query_hash(raw_sql)
 
         prev_tables = self.list_tables(raw_sql.stage, include_everything=True)
         # Store table
-        cache_key_type = RunContext.get().get_cache_key_type()
         try:
             # Try retrieving the table from the cache and then copying it
             # to the transaction stage
-            metadata = self.retrieve_raw_sql_metadata(
-                raw_sql_cache_keys[cache_key_type], raw_sql.stage
-            )
+            metadata = self.retrieve_raw_sql_metadata(raw_sql_cache_key, raw_sql.stage)
             self.copy_raw_sql_tables_to_transaction(metadata, raw_sql.stage)
             self.logger.info(f"Lazy cache of stage '{raw_sql.stage}' found")
         except (CacheError, KeyError) as e:
@@ -289,7 +287,7 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
                 prev_tables=prev_tables,
                 tables=self.list_tables(raw_sql.stage, include_everything=True),
                 stage=raw_sql.stage.name,
-                cache_keys=raw_sql_cache_keys,
+                cache_key=raw_sql_cache_key,
             )
         )
 
@@ -381,16 +379,15 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
 
     # Lazy Table Metadata
 
-    def compute_lazy_table_cache_keys(self, table: Table) -> dict[str, str] | None:
-        """Get cache keys that identify a lazy table
+    def compute_lazy_table_query_hash(self, table: Table) -> str | None:
+        """Get cache keys that identify a lazy table query
 
-        This cache key is based on the inputs of a task and the query
-        that the table object represents. There are cache keys based on
-        different assumptions held in a dictionary.
+        This query hash is only based on the query
+        that the table object represents. Additionally, to checking the query hash it is also
+        important that the task and task input is cache valid.
 
-        :param table: The table for which to compute the cache key
-        :return: Either a cache key per assumption (dict[str,str]) or None if the table doesn't
-            represent a lazy query
+        :param table: The table for which to compute the query hash
+        :return: query hash (str)
         """
         try:
             hook = self.get_m_table_hook(type(table.obj))
@@ -398,24 +395,23 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         except TypeError:
             return None
 
-        return {
-            name: compute_cache_key("LAZY-TABLE", cache_key, query_str)
-            for name, cache_key in table.cache_keys.items()
-        }
+        # table.cache_key is just preliminary up to this point and does not include query_str, yet
+        return compute_cache_key("LAZY-TABLE", query_str)
 
-    def compute_raw_sql_cache_keys(self, raw_sql: RawSql) -> dict[str, str] | None:
-        """Get a cache key that identifies a lazy table
+    @staticmethod
+    def compute_raw_sql_query_hash(raw_sql: RawSql) -> str | None:
+        """Get a cache key that identifies a lazy table query
 
-        This cache key is based on the inputs of a task and the query
-        that the raw SQL string represents.
+        This query hash is only based on the query
+        that the raw SQL statement represents. Additionally, to checking the query hash it is also
+        important that the task and task input is cache valid.
 
-        :param raw_sql: Raw SQL statements for which to compute the cache key
-        :return: Cache key (str)
+        :param raw_sql: Raw SQL statements for which to compute the query hash
+        :return: query hash (str)
         """
-        return {
-            name: compute_cache_key("RAW-SQL", cache_key, raw_sql.sql)
-            for name, cache_key in raw_sql.cache_keys.items()
-        }
+
+        # raw_sql.cache_key is just preliminary up to this point and does not include query_str, yet
+        return compute_cache_key("RAW-SQL", raw_sql.sql)
 
     @abstractmethod
     def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
