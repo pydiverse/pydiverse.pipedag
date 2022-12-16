@@ -33,6 +33,8 @@ os.environ["POSTGRES_PASSWORD"] = "Pydiverse23"
 os.environ["MSSQL_USERNAME"] = "sa"
 os.environ["MSSQL_PASSWORD"] = "PidyQuant27"
 
+os.environ["PYDIVERSE_PIPEDAGE_PYTEST"] = "1"
+
 _logger = structlog.getLogger(module=__name__)
 _logger.info(
     "Setting default config directory via PIPEDAG_CONFIG variable",
