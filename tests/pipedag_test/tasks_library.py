@@ -10,6 +10,11 @@ def noop(x):
     return x
 
 
+@materialize(input_type=pd.DataFrame)
+def noop2(x):
+    return x
+
+
 @materialize(nout=2)
 def create_tuple(x, y):
     return x, y
@@ -27,7 +32,7 @@ def two():
 
 @materialize
 def assert_equal(x, y):
-    assert x == y
+    assert x == y, f"{x} != {y}"
     return x, y
 
 
