@@ -393,6 +393,9 @@ class RunContext(BaseContext):
         self.flow = server.flow
         self.run_id = server.run_id
 
+        # Configuration Options
+        self.ignore_fresh_input = False
+
     def _request(self, op: str, *args):
         error, result = self.client.request([op, args])
 

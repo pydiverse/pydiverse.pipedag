@@ -20,7 +20,8 @@ class TaskMetadata:
     version: str | None
     timestamp: datetime.datetime
     run_id: str
-    cache_key: str
+    input_hash: str
+    cache_fn_hash: str
     output_json: str
 
 

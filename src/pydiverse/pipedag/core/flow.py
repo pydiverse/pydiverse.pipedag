@@ -234,20 +234,20 @@ class Flow:
 
         # TODO: implement running only a subset of stages (see parameter stages)
 
+        # Get the ConfigContext to use
         if config_context is None:
-            # fall back to an active config context if not given explicitly
             try:
                 config_context = ConfigContext.get()
             except LookupError:
-                self.logger.debug("no ConfigContext is active")
-        if config_context is None:
-            # fall back further to read configuration from file in default locations
-            config_context = PipedagConfig.default.get()
-        with config_context:
-            with RunContextServer(self):
-                if orchestration_engine is None:
-                    orchestration_engine = config_context.create_orchestration_engine()
-                result = orchestration_engine.run(flow=self, **kwargs)
+                config_context = PipedagConfig.default.get()
+
+        with config_context, RunContextServer(self) as run_context:
+            # Configure Run Context
+            run_context.ignore_fresh_input = ignore_fresh_input
+
+            if orchestration_engine is None:
+                orchestration_engine = config_context.create_orchestration_engine()
+            result = orchestration_engine.run(flow=self, **kwargs)
 
         fail_fast = config_context.fail_fast if fail_fast is None else fail_fast
         if not result.successful and fail_fast:

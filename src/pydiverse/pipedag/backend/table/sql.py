@@ -109,8 +109,9 @@ class SQLTableStore(BaseTableStore):
             Column("stage", String(64)),
             Column("version", String(64)),
             Column("timestamp", DateTime),
-            Column("run_id", String(32)),  # TODO: Replace with appropriate type
-            Column("cache_key", String(64)),  # TODO: Replace with appropriate type
+            Column("run_id", String(32)),
+            Column("input_hash", String(32)),
+            Column("cache_fn_hash", String(32)),
             Column("output_json", String(2048)),  # 2k might be too small => TBD
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
@@ -628,44 +629,30 @@ class SQLTableStore(BaseTableStore):
                     version=metadata.version,
                     timestamp=metadata.timestamp,
                     run_id=metadata.run_id,
-                    cache_key=metadata.cache_key,
+                    input_hash=metadata.input_hash,
+                    cache_fn_hash=metadata.cache_fn_hash,
                     output_json=metadata.output_json,
                     in_transaction_schema=True,
                 )
             )
 
     # noinspection DuplicatedCode
-    def copy_task_metadata_to_transaction(self, task: MaterializingTask):
-        with self.engine.connect() as conn:
-            metadata = (
-                conn.execute(
-                    self.tasks_table.select()
-                    .where(self.tasks_table.c.stage == task.stage.name)
-                    .where(self.tasks_table.c.version == task.version)
-                    .where(self.tasks_table.c.cache_key == task.cache_key)
-                    .where(self.tasks_table.c.in_transaction_schema.in_([False]))
-                )
-                .mappings()
-                .one()
-            )
-
-            metadata_copy = dict(metadata)
-            metadata_copy["in_transaction_schema"] = True
-            del metadata_copy["id"]
-
-            conn.execute(self.tasks_table.insert().values(**metadata_copy))
-
-    # noinspection DuplicatedCode
     def retrieve_task_metadata(self, task: MaterializingTask) -> TaskMetadata:
-        # noinspection PyUnresolvedReferences
+        ignore_fresh_input = RunContext.get().ignore_fresh_input
         try:
             with self.engine.connect() as conn:
                 result = (
                     conn.execute(
                         self.tasks_table.select()
+                        .where(self.tasks_table.c.name == task.name)
                         .where(self.tasks_table.c.stage == task.stage.name)
                         .where(self.tasks_table.c.version == task.version)
-                        .where(self.tasks_table.c.cache_key == task.cache_key)
+                        .where(self.tasks_table.c.input_hash == task.input_hash)
+                        .where(
+                            self.tasks_table.c.cache_fn_hash == task.cache_fn_hash
+                            if not ignore_fresh_input
+                            else sa.literal(True)
+                        )
                         .where(self.tasks_table.c.in_transaction_schema.in_([False]))
                     )
                     .mappings()
@@ -675,7 +662,7 @@ class SQLTableStore(BaseTableStore):
             raise CacheError("Multiple results found task metadata")
 
         if result is None:
-            raise CacheError(f"Couldn't retrieve task for cache key {task.cache_key}")
+            raise CacheError(f"Couldn't retrieve task from cache: {task}")
 
         return TaskMetadata(
             name=result.name,
@@ -683,7 +670,8 @@ class SQLTableStore(BaseTableStore):
             version=result.version,
             timestamp=result.timestamp,
             run_id=result.run_id,
-            cache_key=result.cache_key,
+            input_hash=result.input_hash,
+            cache_fn_hash=result.cache_fn_hash,
             output_json=result.output_json,
         )
 

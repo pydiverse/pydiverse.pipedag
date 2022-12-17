@@ -359,10 +359,6 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         """
 
     @abstractmethod
-    def copy_task_metadata_to_transaction(self, task: MaterializingTask):
-        """Copy a task's metadata from the cache to the transaction"""
-
-    @abstractmethod
     def retrieve_task_metadata(self, task: MaterializingTask) -> TaskMetadata:
         """Retrieve a task's metadata from the store
 

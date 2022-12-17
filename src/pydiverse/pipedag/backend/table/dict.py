@@ -101,10 +101,6 @@ class DictTableStore(BaseTableStore):
     def store_task_metadata(self, metadata: TaskMetadata, stage: Stage):
         self.t_metadata[stage][metadata.cache_key] = metadata
 
-    def copy_task_metadata_to_transaction(self, task: MaterializingTask):
-        stage = task.stage
-        self.t_metadata[stage][task.cache_key] = self.metadata[stage][task.cache_key]
-
     def retrieve_task_metadata(self, task: MaterializingTask) -> TaskMetadata:
         try:
             return self.metadata[task.stage][task.cache_key]
