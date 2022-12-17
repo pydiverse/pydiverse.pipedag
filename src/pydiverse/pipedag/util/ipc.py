@@ -37,7 +37,7 @@ class IPCServer(threading.Thread):
         super().__init__(name="IPCServer", daemon=True)
 
         # Reduce recv_timeout when running pytest for better performance
-        is_running_pytest = "PYDIVERSE_PIPEDAGE_PYTEST" in os.environ
+        is_running_pytest = "PYDIVERSE_PIPEDAG_PYTEST" in os.environ
         recv_timeout = 200 if not is_running_pytest else 10
 
         self.socket = pynng.Rep0(listen=listen, recv_timeout=recv_timeout)
