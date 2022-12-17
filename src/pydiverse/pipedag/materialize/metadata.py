@@ -66,4 +66,5 @@ class RawSqlMetadata:
     prev_tables: list[str]
     tables: list[str]
     stage: str
-    cache_key: str
+    query_hash: str
+    store_id: str

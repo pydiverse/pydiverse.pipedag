@@ -65,7 +65,7 @@ class DictTableStore(BaseTableStore):
                 f"Can't copy table '{table.name}' to transaction."
                 f" Stage '{stage.name}' has already been committed."
             )
-        if table.cache_key is None:
+        if table.store_id is None:
             raise ValueError(f"Table cache keys can't be None")
 
         try:

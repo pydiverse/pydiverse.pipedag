@@ -110,9 +110,9 @@ class SQLTableStore(BaseTableStore):
             Column("stage", String(64)),
             Column("version", String(64)),
             Column("timestamp", DateTime),
-            Column("run_id", String(32)),  # TODO: Replace with appropriate type
-            Column("cache_key", String(64)),  # TODO: Replace with appropriate type
-            Column("cache_keys", String(128)),
+            Column("run_id", String(32)),
+            Column("input_hash", String(64)),
+            Column("cache_fn_hash", String(64)),
             Column("output_json", String(2048)),  # 2k might be too small => TBD
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
@@ -125,8 +125,8 @@ class SQLTableStore(BaseTableStore):
             Column("id", BigInteger, primary_key=True, autoincrement=True),
             Column("name", String(128)),
             Column("stage", String(64)),
-            Column("cache_key", String(64)),
-            Column("cache_keys", String(128)),
+            Column("query_hash", String(64)),
+            Column("store_id", String(64)),
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
         )
@@ -139,8 +139,8 @@ class SQLTableStore(BaseTableStore):
             Column("prev_tables", String(256)),
             Column("tables", String(256)),
             Column("stage", String(64)),
-            Column("cache_key", String(64)),
-            Column("cache_keys", String(128)),
+            Column("query_hash", String(64)),
+            Column("store_id", String(64)),
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
         )
@@ -642,7 +642,7 @@ class SQLTableStore(BaseTableStore):
     # noinspection DuplicatedCode
     def copy_task_metadata_to_transaction(self, task: MaterializingTask):
         with self.engine.connect() as conn:
-            # copy metadata from any of the task.cache_keys
+            # copy metadata for marking copy from transaction schema to final schema
             metadata_rows = (
                 conn.execute(
                     self.tasks_table.select()
@@ -738,22 +738,22 @@ class SQLTableStore(BaseTableStore):
         return LazyTableMetadata(
             name=result.name,
             stage=result.stage,
-            cache_keys=json.loads(result.cache_keys),
+            query_hash=result.query_hash,
+            store_id=result.store_id,
         )
 
     def store_raw_sql_metadata(self, metadata: RawSqlMetadata):
         with self.engine.connect() as conn:
-            for cache_key in metadata.cache_keys.values():
-                conn.execute(
-                    self.raw_sql_cache_table.insert().values(
-                        prev_tables=json.dumps(metadata.prev_tables),
-                        tables=json.dumps(metadata.tables),
-                        stage=metadata.stage,
-                        cache_key=cache_key,
-                        cache_keys=json.dumps(metadata.cache_keys),
-                        in_transaction_schema=True,
-                    )
+            conn.execute(
+                self.raw_sql_cache_table.insert().values(
+                    prev_tables=json.dumps(metadata.prev_tables),
+                    tables=json.dumps(metadata.tables),
+                    stage=metadata.stage,
+                    query_hash=metadata.query_hash,
+                    store_id=metadata.store_id,
+                    in_transaction_schema=True,
                 )
+            )
 
     def retrieve_raw_sql_metadata(self, cache_key: str, stage: Stage) -> RawSqlMetadata:
         # noinspection PyUnresolvedReferences,DuplicatedCode
@@ -783,7 +783,8 @@ class SQLTableStore(BaseTableStore):
             prev_tables=json.loads(result.prev_tables),
             tables=json.loads(result.tables),
             stage=result.stage,
-            cache_keys=json.loads(result.cache_keys),
+            query_hash=result.query_hash,
+            store_id=result.store_id,
         )
 
     def get_stage_hash(self, stage: Stage):

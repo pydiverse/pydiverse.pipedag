@@ -296,18 +296,15 @@ class RunContextServer(IPCServer):
             for stage in stages_to_release:
                 self.lock_manager.release(stage)
 
-    def get_memo_key(self, task, cache_keys: dict[str, str]):
-        sub_key = "-".join(cache_keys.values())
-        memo_key = (task.stage.id, sub_key)
+    def get_memo_key(self, task, input_hash: str):
+        memo_key = (task.stage.id, input_hash)
         return memo_key
 
-    def enter_task_memo(
-        self, task_id: int, cache_keys: dict[str, str]
-    ) -> tuple[bool, Any]:
+    def enter_task_memo(self, task_id: int, input_hash: str) -> tuple[bool, Any]:
         task = self.tasks[task_id]
 
         with self.task_memo_lock:
-            memo_key = self.get_memo_key(task, cache_keys)
+            memo_key = self.get_memo_key(task, input_hash)
             memo = self.task_memo[memo_key]
             if memo is MemoState.NONE:
                 self.task_memo[memo_key] = MemoState.WAITING
@@ -332,9 +329,9 @@ class RunContextServer(IPCServer):
         return True, memo
 
     @synchronized("task_memo_lock")
-    def exit_task_memo(self, task_id: int, cache_keys: dict[str, str], success: bool):
+    def exit_task_memo(self, task_id: int, input_hash: str, success: bool):
         task = self.tasks[task_id]
-        memo_key = self.get_memo_key(task, cache_keys)
+        memo_key = self.get_memo_key(task, input_hash)
 
         if not success:
             self.task_memo[memo_key] = MemoState.FAILED
@@ -345,9 +342,9 @@ class RunContextServer(IPCServer):
             raise Exception("set_task_memo not called")
 
     @synchronized("task_memo_lock")
-    def store_task_memo(self, task_id: int, cache_keys: dict[str, str], value: Any):
+    def store_task_memo(self, task_id: int, input_hash: str, value: Any):
         task = self.tasks[task_id]
-        memo_key = self.get_memo_key(task, cache_keys)
+        memo_key = self.get_memo_key(task, input_hash)
         memo = self.task_memo[memo_key]
 
         if memo is not MemoState.WAITING:
@@ -473,19 +470,19 @@ class RunContext(BaseContext):
         self._request("did_finish_task", task.id, final_state.value)
 
     @contextmanager
-    def task_memo(self, task: Task, cache_keys: dict[str, str]):
-        success, memo = self._request("enter_task_memo", task.id, cache_keys)
+    def task_memo(self, task: Task, input_hash: str):
+        success, memo = self._request("enter_task_memo", task.id, input_hash)
 
         try:
             yield success, memo
         except Exception as e:
-            self._request("exit_task_memo", task.id, cache_keys, False)
+            self._request("exit_task_memo", task.id, input_hash, False)
             raise e
         else:
-            self._request("exit_task_memo", task.id, cache_keys, True)
+            self._request("exit_task_memo", task.id, input_hash, True)
 
-    def store_task_memo(self, task: Task, cache_keys: dict[str, str], result: Any):
-        self._request("store_task_memo", task.id, cache_keys, result)
+    def store_task_memo(self, task: Task, input_hash: str, result: Any):
+        self._request("store_task_memo", task.id, input_hash, result)
 
     # TABLE / BLOB: Names
 

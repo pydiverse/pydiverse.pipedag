@@ -162,7 +162,7 @@ class PipeDAGStore(Disposable):
         output object with the required metadata to allow dematerialization.
 
         :param task: The task instance which produced `value`. Must have
-            the correct `cache_keys` attribute set.
+            the correct `input_hash`/`chache_fn_hash` attributes set.
         :param value: The output of the task. Must be materializable; this
             means it can only contain the following object types:
             `dict`, `list`, `tuple`,
@@ -399,7 +399,8 @@ class PipeDAGStore(Disposable):
         """Try to retrieve the cached outputs for a task
 
         :param task: The materializing task for which to retrieve
-            the cached output. Must have the `cache_keys` attribute set.
+            the cached output. Must have the correct
+            `input_hash`/`chache_fn_hash` attributes set.
         :raises CacheError: if no matching task exists in the cache
         """
 
