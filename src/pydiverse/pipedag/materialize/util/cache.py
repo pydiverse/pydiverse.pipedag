@@ -9,9 +9,13 @@ def compute_cache_key(*args: str) -> str:
     :return: A sha256 base32 digest, trimmed to 20 char length
     """
 
-    v_str = "PYDIVERSE|" + "|".join(map(str, args))
-    v_bytes = v_str.encode("utf8")
-    v_hash = hashlib.sha256(v_bytes)
+    combined_hash = hashlib.sha256(b"PIPEDAG")
+    for arg in args:
+        arg_bytes = str(arg).encode("utf8")
+        arg_bytes_len = len(arg_bytes).to_bytes(length=8, byteorder="big")
+
+        combined_hash.update(arg_bytes_len)
+        combined_hash.update(arg_bytes)
 
     # Only take first 20 characters of base32 digest (100 bits). This
     # provides 50 bits of collision resistance, which is more than enough.
@@ -21,5 +25,6 @@ def compute_cache_key(*args: str) -> str:
 
     # NOTE: Can't use base64 because it contains lower and upper case
     #       letters; identifiers in pipedag are all lowercase
-    hash_str = base64.b32encode(v_hash.digest()).decode("ascii").lower()
+    hash_digest = combined_hash.digest()
+    hash_str = base64.b32encode(hash_digest).decode("ascii").lower()
     return hash_str[:20]

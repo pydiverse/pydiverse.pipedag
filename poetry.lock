@@ -7,6 +7,14 @@ optional = true
 python-versions = "*"
 
 [[package]]
+name = "antlr4-python3-runtime"
+version = "4.9.2"
+description = "ANTLR 4.9.2 runtime for Python 3.7"
+category = "main"
+optional = true
+python-versions = "*"
+
+[[package]]
 name = "attrs"
 version = "22.1.0"
 description = "Classes Without Boilerplate"
@@ -142,7 +150,7 @@ python-dateutil = "*"
 
 [[package]]
 name = "dask"
-version = "2022.12.0"
+version = "2022.12.1"
 description = "Parallel PyData with Task Scheduling"
 category = "main"
 optional = true
@@ -159,10 +167,10 @@ toolz = ">=0.8.2"
 
 [package.extras]
 array = ["numpy (>=1.18)"]
-complete = ["bokeh (>=2.4.2,<3)", "distributed (==2022.12.0)", "jinja2", "numpy (>=1.18)", "pandas (>=1.0)"]
+complete = ["bokeh (>=2.4.2,<3)", "distributed (==2022.12.1)", "jinja2", "numpy (>=1.18)", "pandas (>=1.0)"]
 dataframe = ["numpy (>=1.18)", "pandas (>=1.0)"]
 diagnostics = ["bokeh (>=2.4.2,<3)", "jinja2"]
-distributed = ["distributed (==2022.12.0)"]
+distributed = ["distributed (==2022.12.1)"]
 test = ["pandas[test]", "pre-commit", "pytest", "pytest-rerunfailures", "pytest-xdist"]
 
 [[package]]
@@ -175,7 +183,7 @@ python-versions = "*"
 
 [[package]]
 name = "distributed"
-version = "2022.12.0"
+version = "2022.12.1"
 description = "Distributed scheduler for Dask"
 category = "main"
 optional = true
@@ -184,7 +192,7 @@ python-versions = ">=3.8"
 [package.dependencies]
 click = ">=7.0"
 cloudpickle = ">=1.5.0"
-dask = "2022.12.0"
+dask = "2022.12.1"
 jinja2 = "*"
 locket = ">=1.0.0"
 msgpack = ">=0.6.0"
@@ -331,7 +339,7 @@ sqlalchemy = ">=0.7.3"
 
 [[package]]
 name = "identify"
-version = "2.5.9"
+version = "2.5.10"
 description = "File identification library for Python"
 category = "dev"
 optional = false
@@ -922,6 +930,19 @@ text-unidecode = ">=1.3"
 unidecode = ["Unidecode (>=1.1.1)"]
 
 [[package]]
+name = "pytsql"
+version = "1.1.4"
+description = "`Pytsql` allows to run mssql sripts, typically run via GUIs, via CLI."
+category = "main"
+optional = true
+python-versions = ">=3.7.0"
+
+[package.dependencies]
+antlr4-python3-runtime = "4.9.2"
+pyodbc = ">=4.0.30"
+sqlalchemy = ">=1.4"
+
+[[package]]
 name = "pytz"
 version = "2022.6"
 description = "World timezone definitions, modern and historical"
@@ -1329,19 +1350,22 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 docs = ["Sphinx", "sphinx-rtd-theme", "sphinxcontrib-apidoc"]
 filelock = ["filelock"]
 ibm-db2 = ["ibm-db", "ibm-db-sa"]
-mssql = ["pyodbc"]
+mssql = ["pyodbc", "pytsql"]
 prefect = ["prefect"]
 zookeeper = ["kazoo"]
 
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "914aaaae010a8b6a7044bc53f2452bd6822a220fd077dcdc6979bf1d5671ab6b"
+content-hash = "15f2f04b1ad052af676f1c3a165f087edb6ed14dbea0f8513bdde406002c97a7"
 
 [metadata.files]
 alabaster = [
     {file = "alabaster-0.7.12-py2.py3-none-any.whl", hash = "sha256:446438bdcca0e05bd45ea2de1668c1d9b032e1a9154c2c259092d77031ddd359"},
     {file = "alabaster-0.7.12.tar.gz", hash = "sha256:a661d72d58e6ea8a57f7a86e37d86716863ee5e92788398526d58b26a4e4dc02"},
+]
+antlr4-python3-runtime = [
+    {file = "antlr4-python3-runtime-4.9.2.tar.gz", hash = "sha256:31f5abdc7faf16a1a6e9bf2eb31565d004359b821b09944436a34361929ae85a"},
 ]
 attrs = [
     {file = "attrs-22.1.0-py2.py3-none-any.whl", hash = "sha256:86efa402f67bf2df34f51a335487cf46b1ec130d02b8d39fd248abfd30da551c"},
@@ -1463,16 +1487,16 @@ croniter = [
     {file = "croniter-1.3.8.tar.gz", hash = "sha256:32a5ec04e97ec0837bcdf013767abd2e71cceeefd3c2e14c804098ce51ad6cd9"},
 ]
 dask = [
-    {file = "dask-2022.12.0-py3-none-any.whl", hash = "sha256:3995d2b856920f90bc9bba7329cbe839fe0d45b4e674da22320f37a2d0e3e4f8"},
-    {file = "dask-2022.12.0.tar.gz", hash = "sha256:159acc4a65f2ea042b453f12dee66fd515a159f4b3b9ca0d08c18cae485a2be0"},
+    {file = "dask-2022.12.1-py3-none-any.whl", hash = "sha256:a833ee774bf702c08d22f31412358d12b007df36c6e8c107f32f17a4b20f1f68"},
+    {file = "dask-2022.12.1.tar.gz", hash = "sha256:ef12c98a6681964494ddfee4ba8071ebc8895d3c4ea27f5c5160a14e29f01d92"},
 ]
 distlib = [
     {file = "distlib-0.3.6-py2.py3-none-any.whl", hash = "sha256:f35c4b692542ca110de7ef0bea44d73981caeb34ca0b9b6b2e6d7790dda8f80e"},
     {file = "distlib-0.3.6.tar.gz", hash = "sha256:14bad2d9b04d3a36127ac97f30b12a19268f211063d8f8ee4f47108896e11b46"},
 ]
 distributed = [
-    {file = "distributed-2022.12.0-py3-none-any.whl", hash = "sha256:3544ac4b6857bbf65657895e52f0068b69ae88529223c9ba5e79c1024e6f9a66"},
-    {file = "distributed-2022.12.0.tar.gz", hash = "sha256:d93707757f7fa3b2b803e43f6c14c41c3e453e9714bca8bf3013d3bf083c18ce"},
+    {file = "distributed-2022.12.1-py3-none-any.whl", hash = "sha256:d7abd29277c6b7af8df7fef68c1552100478d3da7bf6a4a3562142be8948c1e8"},
+    {file = "distributed-2022.12.1.tar.gz", hash = "sha256:87fedcfbf2126d14c3865c8e445c41eccabd2b07eaff87528af2afd9e20ced6c"},
 ]
 docker = [
     {file = "docker-6.0.1-py3-none-any.whl", hash = "sha256:dbcb3bd2fa80dca0788ed908218bf43972772009b881ed1e20dfc29a65e49782"},
@@ -1572,8 +1596,8 @@ ibm-db-sa = [
     {file = "ibm_db_sa-0.3.8.tar.gz", hash = "sha256:21086bbab8161dddf650644f6743e42f530d48d505562e12a8a12138744211e0"},
 ]
 identify = [
-    {file = "identify-2.5.9-py2.py3-none-any.whl", hash = "sha256:a390fb696e164dbddb047a0db26e57972ae52fbd037ae68797e5ae2f4492485d"},
-    {file = "identify-2.5.9.tar.gz", hash = "sha256:906036344ca769539610436e40a684e170c3648b552194980bb7b617a8daeb9f"},
+    {file = "identify-2.5.10-py2.py3-none-any.whl", hash = "sha256:fb7c2feaeca6976a3ffa31ec3236a6911fbc51aec9acc111de2aed99f244ade2"},
+    {file = "identify-2.5.10.tar.gz", hash = "sha256:dce9e31fee7dbc45fea36a9e855c316b8fbf807e65a862f160840bb5a2bf5dfd"},
 ]
 idna = [
     {file = "idna-3.4-py3-none-any.whl", hash = "sha256:90b77e79eaa3eba6de819a0c442c0b4ceefc341a7a2ab77d7562bf49f425c5c2"},
@@ -2053,6 +2077,56 @@ python-dateutil = [
 python-slugify = [
     {file = "python-slugify-7.0.0.tar.gz", hash = "sha256:7a0f21a39fa6c1c4bf2e5984c9b9ae944483fd10b54804cb0e23a3ccd4954f0b"},
     {file = "python_slugify-7.0.0-py2.py3-none-any.whl", hash = "sha256:003aee64f9fd955d111549f96c4b58a3f40b9319383c70fad6277a4974bbf570"},
+]
+pytsql = [
+    {file = "pytsql-1.1.4-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:d0dade18f7569f5e2866f20ff44cbb27d96c29cb04fcaac2c8b9b389a41274c6"},
+    {file = "pytsql-1.1.4-cp310-cp310-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:66064bac2217cd406276e4bb97670ba383b3bb2b599cadc1bf30da1ab901c71f"},
+    {file = "pytsql-1.1.4-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d473e047cd93564c67d53f1018f468debe5b4e678f560dd65fa6f3b6e72dc495"},
+    {file = "pytsql-1.1.4-cp310-cp310-musllinux_1_1_i686.whl", hash = "sha256:e37944354dd1c75d7a466f217d8a594b6a2c4ac076b4f51e45e17b7c91039bea"},
+    {file = "pytsql-1.1.4-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:7737abe6c962f8dea199b5e9151a3d7a170b19192c729cfa76ae155525f8a908"},
+    {file = "pytsql-1.1.4-cp310-cp310-win32.whl", hash = "sha256:6c8ecb7731a9a5805a299a3a58642718e97953ba9a6f89450f7fcbdbf89057e2"},
+    {file = "pytsql-1.1.4-cp310-cp310-win_amd64.whl", hash = "sha256:2ec8a4308f5b08c894f01beb311519365793f2774975143b73fcc85499cb65fd"},
+    {file = "pytsql-1.1.4-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:a095c910e9e10a1a8399436c41c30a535fe75e8f2bdf33362573b71fc50b0ecb"},
+    {file = "pytsql-1.1.4-cp311-cp311-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:0627fcae5b70874a7c36cdba7210d77376a711340d60f1c793eeddf63cda6f55"},
+    {file = "pytsql-1.1.4-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:01ffb43f34dbe87722d4c3a223670a7e61b833ca31d35c580d7c4f38613b7bfc"},
+    {file = "pytsql-1.1.4-cp311-cp311-musllinux_1_1_i686.whl", hash = "sha256:50b770c4734aec005dd9d3fd712b6c2133d6c22004164c3317c401fe8d3797a6"},
+    {file = "pytsql-1.1.4-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:90cb072649db8e87137665a1c1f86a692f5689fd970f740ff52098e966a4f426"},
+    {file = "pytsql-1.1.4-cp311-cp311-win32.whl", hash = "sha256:78b93638f542f992b3d210158ec948fe622f733bb4fd0a6701f05a598d413eba"},
+    {file = "pytsql-1.1.4-cp311-cp311-win_amd64.whl", hash = "sha256:3119018de1feb654d941b18cc0f6dd9e7deada032a96082dadac02d0db7e2349"},
+    {file = "pytsql-1.1.4-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:29ab3ca7a1da555b6437b1f9dae058de34799926ada0e6de08b253b1d9d2820a"},
+    {file = "pytsql-1.1.4-cp37-cp37m-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:b21a6a12097d36419a257844cb8efa39e0f32c6952c72904cc65347e4405ce53"},
+    {file = "pytsql-1.1.4-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8bf40041fc996839425886e23ddc1a7bdfec3347470b28fc990bf9489874f021"},
+    {file = "pytsql-1.1.4-cp37-cp37m-musllinux_1_1_i686.whl", hash = "sha256:79f871b1f58b293b59e5f440a95e290c310f48c7f40512242e7336fa1577318d"},
+    {file = "pytsql-1.1.4-cp37-cp37m-musllinux_1_1_x86_64.whl", hash = "sha256:47e83be37b094d3be56818807b1154efe19235bce2e10f9b5310d20f568fdc18"},
+    {file = "pytsql-1.1.4-cp37-cp37m-win32.whl", hash = "sha256:0b2528feab048621e4e089c69c0c2798d66c47b0ba33c76a166a5754c9cec908"},
+    {file = "pytsql-1.1.4-cp37-cp37m-win_amd64.whl", hash = "sha256:d51c67f04687c8599e8cb670c5087c7cc5857338c4726156f77a5dc29264d13f"},
+    {file = "pytsql-1.1.4-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:4f06fd16ce8964d54943df66a45b07488348f20b4b2c2ed48a2ac8d778cccf18"},
+    {file = "pytsql-1.1.4-cp38-cp38-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:8fe69d5dd924aa798c636c5e72810e2ca07ad6adcf492903ef0e447e7e7e500c"},
+    {file = "pytsql-1.1.4-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:17eb6aa4cf5f500c9f0ef05c60dfcaf7953149c2fc8b91cb8b8810c00c32d4bd"},
+    {file = "pytsql-1.1.4-cp38-cp38-musllinux_1_1_i686.whl", hash = "sha256:4ba114c7ab7bf389e6e556af5dfd3ec308c667fc60eb3d655588947d9182b339"},
+    {file = "pytsql-1.1.4-cp38-cp38-musllinux_1_1_x86_64.whl", hash = "sha256:2dbaced52a845370fdb4075865be22a90e582b61ba41fa9c189f0bdcc11db235"},
+    {file = "pytsql-1.1.4-cp38-cp38-win32.whl", hash = "sha256:560c6853a64983d7f6b675e42e2a15b835556b999b051744724048e75fd86ebf"},
+    {file = "pytsql-1.1.4-cp38-cp38-win_amd64.whl", hash = "sha256:a699b4573a39cb2cdcf939aa59c43abe11d54f4274ecef7918215b3620d92b37"},
+    {file = "pytsql-1.1.4-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:34a4e6154e9d7094f2b415cd7b67493ce40b0652c56e243eac4430600aa0231e"},
+    {file = "pytsql-1.1.4-cp39-cp39-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:05cb8d30ca7cf64f777a7121511cbee9494fb86ab0b3b0854ef119a4bcf2880a"},
+    {file = "pytsql-1.1.4-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d71bebec32397f05cc1528b10e31c1cd7c0fdcf8cc1f56c14c533cf84f3d4e56"},
+    {file = "pytsql-1.1.4-cp39-cp39-musllinux_1_1_i686.whl", hash = "sha256:b3b4789ed12131a5f71cfd86b599588bbe5a9d5c594ccd719de34508648e7693"},
+    {file = "pytsql-1.1.4-cp39-cp39-musllinux_1_1_x86_64.whl", hash = "sha256:bff883b68eb127c8074c55b0d0c873a179e90251c12892cb6afac216b6883229"},
+    {file = "pytsql-1.1.4-cp39-cp39-win32.whl", hash = "sha256:9c4fd37613eab17c443e5192ac9258efd96357bd88198a2d2dc2e99e22db9369"},
+    {file = "pytsql-1.1.4-cp39-cp39-win_amd64.whl", hash = "sha256:16b21bac95edf92b8ac6b567d6106fa4f8eb460e9d747898d059d6b984a8d3e3"},
+    {file = "pytsql-1.1.4-pp37-pypy37_pp73-macosx_10_9_x86_64.whl", hash = "sha256:d6615da20afdfe5adad94311507bbd49f2fcc6d8f560e76a399a130331458170"},
+    {file = "pytsql-1.1.4-pp37-pypy37_pp73-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:d4fb29a6a0e5a32f24f049cd337c0d9f479a25b988f8a6fa92a37b990cf81673"},
+    {file = "pytsql-1.1.4-pp37-pypy37_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f853e80725873e87aaa7ab17924d7a57d46feb35ba6fc6e8f1f9e4dac7b05ebb"},
+    {file = "pytsql-1.1.4-pp37-pypy37_pp73-win_amd64.whl", hash = "sha256:36c01d8fe14386050fdc508630fcdfa4b1769d84c048f14eba1620df596e8b75"},
+    {file = "pytsql-1.1.4-pp38-pypy38_pp73-macosx_10_9_x86_64.whl", hash = "sha256:56c8537116334b4cc1eae9e737388cd8d6495ae0fe2032563415d5e8e69ba1d7"},
+    {file = "pytsql-1.1.4-pp38-pypy38_pp73-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:f9f7d653bbc29f470cf7ba2a445c7d24b4abe5dfbd5367f328a23eb8f244e875"},
+    {file = "pytsql-1.1.4-pp38-pypy38_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:012badee88761ae4842b09e5ec4dedc2f0770f84ab6341783ec51b3eb49631c4"},
+    {file = "pytsql-1.1.4-pp38-pypy38_pp73-win_amd64.whl", hash = "sha256:cd28a8ab222c1a441e1fcd3d9a6dd84491608a8da864956f8a6095aebae1641d"},
+    {file = "pytsql-1.1.4-pp39-pypy39_pp73-macosx_10_9_x86_64.whl", hash = "sha256:7a7ee82d9bbfd571fdc68a5c20b830b8c2d82e589c8f284fbe490349001a049b"},
+    {file = "pytsql-1.1.4-pp39-pypy39_pp73-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:9175c2421f535627c2c944e0dcd2570270462fe9c7b173b726deae25755353ae"},
+    {file = "pytsql-1.1.4-pp39-pypy39_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c7812257fc25cbbe4df0a4406bb02a18bc344d4bf1b7c42eb8600b6fce0783e8"},
+    {file = "pytsql-1.1.4-pp39-pypy39_pp73-win_amd64.whl", hash = "sha256:51eef327aaffce5d83db1f9eda46e308b90a171e146d9605107ccd500b0cf2e3"},
+    {file = "pytsql-1.1.4.tar.gz", hash = "sha256:5f396bac32c4355d2e9456b214a0e9929e9cab56e6b280199a13950287bce523"},
 ]
 pytz = [
     {file = "pytz-2022.6-py2.py3-none-any.whl", hash = "sha256:222439474e9c98fced559f1709d89e6c9cbf8d79c794ff3eb9f8800064291427"},
