@@ -247,13 +247,10 @@ class Flow:
             with RunContextServer(self, ignore_fresh_input):
                 if orchestration_engine is None:
                     orchestration_engine = config_context.create_orchestration_engine()
-                res = orchestration_engine.run(flow=self, **kwargs)
-        actual_fail_fast = config_context.fail_fast if fail_fast is None else fail_fast
-        if (
-            actual_fail_fast
-            and not res.successful
-            and isinstance(res.underlying, Exception)
-        ):
-            # make sure proper stack trace is printed
-            raise res.underlying
-        return res
+                result = orchestration_engine.run(flow=self, **kwargs)
+
+        fail_fast = config_context.fail_fast if fail_fast is None else fail_fast
+        if not result.successful and fail_fast:
+            raise result.exception or Exception("Flow run failed")
+
+        return result

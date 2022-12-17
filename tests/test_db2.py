@@ -3,6 +3,14 @@ import pytest
 import sqlalchemy as sa
 import structlog
 
+try:
+    import ibm_db
+except ImportError as e:
+    import warnings
+
+    warnings.warn(str(e), ImportWarning)
+    ibm_db = None
+
 
 @pytest.mark.ibm_db2
 def test_db2():

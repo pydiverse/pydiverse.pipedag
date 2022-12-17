@@ -76,7 +76,7 @@ docker run -h db2server --name db2server --restart=always --detach --privileged=
 
 Then check `docker logs db2server | grep -i completed` until you see `(*) Setup has completed.`.
 
-Afterwards you can run `pytest -m ibm_db2`.
+Afterwards you can run `pytest --ibm_db2`.
 
 ## Troubleshooting
 

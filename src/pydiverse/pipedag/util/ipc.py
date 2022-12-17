@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ipaddress
+import os
 import struct
 import threading
 import uuid
@@ -35,7 +36,11 @@ class IPCServer(threading.Thread):
     ):
         super().__init__(name="IPCServer", daemon=True)
 
-        self.socket = pynng.Rep0(listen=listen, recv_timeout=200)
+        # Reduce recv_timeout when running pytest for better performance
+        is_running_pytest = "PYDIVERSE_PIPEDAGE_PYTEST" in os.environ
+        recv_timeout = 200 if not is_running_pytest else 10
+
+        self.socket = pynng.Rep0(listen=listen, recv_timeout=recv_timeout)
         self.nonces = set()
 
         self.__stop_flag = False

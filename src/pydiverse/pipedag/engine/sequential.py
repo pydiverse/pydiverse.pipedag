@@ -21,8 +21,10 @@ class SequentialEngine(OrchestrationEngine):
         run_context = RunContext.get()
         config_context = ConfigContext.get()
 
+        results = {}
+        exception = None
+
         try:
-            results = {}
             for task in flow.tasks:
                 results[task] = task.run(
                     inputs={
@@ -32,15 +34,15 @@ class SequentialEngine(OrchestrationEngine):
                     config_context=config_context,
                 )
 
-            return Result(
-                underlying=results,
-                successful=True,
-                config_context=ConfigContext.get(),
-            )
-
         except Exception as e:
-            return Result(
-                underlying=e,
-                successful=False,
-                config_context=None,
-            )
+            if run_kwargs.get("fail_fast", False):
+                raise e
+            exception = e
+
+        return Result(
+            underlying=results,
+            successful=(exception is None),
+            config_context=ConfigContext.get(),
+            task_values=results,
+            exception=exception,
+        )
