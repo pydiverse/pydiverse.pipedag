@@ -52,12 +52,25 @@ instances:
 
     orchestration:
       class: "pydiverse.pipedag.engine.SequentialEngine"
-      ## Activate this class to work either with prefect 1.3.0 or prefect 2.0
+      ## Activate this class to work either with prefect 1.x or prefect 2.x
       # class: "pydiverse.pipedag.engine.PrefectEngine"
   mssql:
+    # Full dataset is using default database connection and schemas
     table_store:
       table_store_connection: mssql
+      disable_pytsql: True
+  mssql_pytsql:
+    table_store:
+      table_store_connection: mssql
+      disable_pytsql: False  # is already default
+      pytsql_isolate_top_level_statements: False
+  mssql_pytsql_isolate:
+    table_store:
+      table_store_connection: mssql
+      disable_pytsql: False  # is already default
+      pytsql_isolate_top_level_statements: True  # is already default
   ibm_db2:
+    # Full dataset is using default database connection and schemas
     stage_commit_technique: READ_VIEWS
     table_store:
       table_store_connection: ibm_db2

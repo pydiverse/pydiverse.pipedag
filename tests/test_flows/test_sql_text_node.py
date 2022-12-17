@@ -3,11 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import pytest
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import ConfigContext
-from pydiverse.pipedag.util import config
 from pydiverse.pipedag.util.config import PipedagConfig
 
 
@@ -37,6 +37,38 @@ def test_sql_node():
                 print(f"pipedag_name={cfg.pipedag_name}")
                 parent_dir = Path(__file__).parent
                 tab1 = table_1(str(parent_dir / "sql_scripts" / "script1.sql"))
+                tab2 = table_2(str(parent_dir / "sql_scripts" / "script2.sql"), tab1)
+                assert_result(tab2)
+
+        flow_result = flow.run()
+        assert flow_result.successful
+
+
+# noinspection DuplicatedCode
+@pytest.mark.mssql
+def test_sql_node_mssql():
+    # use a different way to initialize configuration for more test coverage
+    with PipedagConfig.default.get(instance="mssql", per_user=True):
+        with Flow() as flow:
+            with Stage("schema1"):
+                parent_dir = Path(__file__).parent
+                tab1 = table_1(str(parent_dir / "sql_scripts" / "script1.sql"))
+                tab2 = table_2(str(parent_dir / "sql_scripts" / "script2.sql"), tab1)
+                assert_result(tab2)
+
+        flow_result = flow.run()
+        assert flow_result.successful
+
+
+# noinspection DuplicatedCode
+@pytest.mark.ibm_db2
+def test_sql_node_db2():
+    # use a different way to initialize configuration for more test coverage
+    with PipedagConfig.default.get(instance="ibm_db2", per_user=True):
+        with Flow() as flow:
+            with Stage("schema1"):
+                parent_dir = Path(__file__).parent
+                tab1 = table_1(str(parent_dir / "sql_scripts" / "script1-db2.sql"))
                 tab2 = table_2(str(parent_dir / "sql_scripts" / "script2.sql"), tab1)
                 assert_result(tab2)
 

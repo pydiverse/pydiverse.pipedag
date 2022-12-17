@@ -51,6 +51,7 @@ def blob_task(x, y):
     return Blob(x), Blob(y)
 
 
+# noinspection PyTypeChecker
 def test_simple_flow():
     with Flow() as flow:
         with Stage("simple_flow_stage1"):

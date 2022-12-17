@@ -15,6 +15,7 @@ __all__ = [
     "DropSchema",
     "RenameSchema",
     "CreateTableAsSelect",
+    "PrepareCreateTableAsSelect",
     "CreateViewAsSelect",
     "CopyTable",
     "DropTable",
@@ -76,6 +77,16 @@ class DropDatabase(DDLElement):
 
 # noinspection PyAbstractClass
 class CreateTableAsSelect(DDLElement):
+    def __init__(self, name: str, schema: Schema, query: Select | TextClause | sa.Text):
+        self.name = name
+        self.schema = schema
+        self.query = query
+
+
+# noinspection PyAbstractClass
+class PrepareCreateTableAsSelect(DDLElement):
+    """Prepare a CreateTableAsSelect statement for DB2."""
+
     def __init__(self, name: str, schema: Schema, query: Select | TextClause | sa.Text):
         self.name = name
         self.schema = schema
@@ -315,13 +326,13 @@ def visit_drop_database(drop: DropDatabase, compiler, **kw):
     # return ret
 
 
-def _visit_create_obj_as_select(create, compiler, _type, kw):
+def _visit_create_obj_as_select(create, compiler, _type, kw, *, prefix="", suffix=""):
     name = compiler.preparer.quote_identifier(create.name)
     schema = compiler.preparer.format_schema(create.schema.get())
     kw = kw.copy()
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(create.query, **kw)
-    return f"CREATE {_type} {schema}.{name} AS\n{select}"
+    return f"CREATE {_type} {schema}.{name} AS\n{prefix}{select}{suffix}"
 
 
 @compiles(CreateTableAsSelect)
@@ -347,14 +358,24 @@ def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
 
 @compiles(CreateTableAsSelect, "ibm_db_sa")
 def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
-    name = compiler.preparer.quote_identifier(create.name)
+    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
+    create_name = ibm_db_sa_fix_name(create.name)
+
+    name = compiler.preparer.quote_identifier(create_name)
     schema = compiler.preparer.format_schema(create.schema.get())
     kw = kw.copy()
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(create.query, **kw)
-    return (
-        f"CREATE TABLE {schema}.{name} AS (\n{select}\n)data initially deferred Refresh"
-        f" deferred; Refresh table {schema}.{name};"
+    return f"INSERT INTO {schema}.{name}\n{select}"
+
+
+@compiles(PrepareCreateTableAsSelect, "ibm_db_sa")
+def visit_prepare_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
+    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
+    create = copy.deepcopy(create)
+    create.name = ibm_db_sa_fix_name(create.name)
+    return _visit_create_obj_as_select(
+        create, compiler, "TABLE", kw, prefix="(", suffix=") DEFINITION ONLY"
     )
 
 

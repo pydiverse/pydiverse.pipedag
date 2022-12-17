@@ -88,15 +88,15 @@ class FileBlobStore(BaseBlobStore):
     the appropriate folders.
     """
 
-    def __init__(self, base_path: str | Path):
-        self.base_path = Path(base_path).absolute()
-        os.makedirs(self.base_path, exist_ok=True)
-
     @classmethod
     def _init_conf_(cls, config: dict[str, Any]):
         instance_id = normalize_name(ConfigContext.get().instance_id)
         base_path = Path(config["base_path"]) / instance_id
         return cls(base_path)
+
+    def __init__(self, base_path: str | Path):
+        self.base_path = Path(base_path).absolute()
+        os.makedirs(self.base_path, exist_ok=True)
 
     def init_stage(self, stage: Stage):
         stage_path = self.get_stage_path(stage.name)

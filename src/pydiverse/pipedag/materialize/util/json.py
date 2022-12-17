@@ -7,6 +7,8 @@ type of the object.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydiverse.pipedag import Stage
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.materialize.container import Blob, RawSql, Table
@@ -18,6 +20,7 @@ PIPEDAG_TYPE_RAWSQL = "raw_sql"
 PIPEDAG_TYPE_BLOB = "blob"
 PIPEDAG_TYPE_STAGE = "stage"
 PIPEDAG_TYPE_PIPEDAG_CONFIG = "pipedag_config"
+PIPEDAG_TYPE_PATH = "path"
 
 
 def json_default(o):
@@ -52,6 +55,11 @@ def json_default(o):
         return {
             PIPEDAG_TYPE: PIPEDAG_TYPE_PIPEDAG_CONFIG,
             "config_dict": o.config_dict,
+        }
+    if isinstance(o, Path):
+        return {
+            PIPEDAG_TYPE: PIPEDAG_TYPE_PATH,
+            "path": str(o),
         }
 
     raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
@@ -88,6 +96,8 @@ def json_object_hook(d: dict):
             # PipedagConfig objects are allowed as input to @materialize tasks, but it is not allowed
             # as output since this might cause trouble for cache-invalidation
             raise TypeError("PipedagConfig can't be deserialized.")
+        elif pipedag_type == PIPEDAG_TYPE_PATH:
+            return Path(d["path"])
         else:
             raise ValueError(
                 f"Invalid value for '{PIPEDAG_TYPE}' key: {repr(pipedag_type)}"
