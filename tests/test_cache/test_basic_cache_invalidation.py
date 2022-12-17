@@ -1,30 +1,14 @@
 from __future__ import annotations
 
-import copy
-import unittest.mock
-
 import pandas as pd
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Blob, Flow, Stage, Table
 from pydiverse.pipedag.context import StageLockContext
-from pydiverse.pipedag.core.task import TaskGetItem
-from pydiverse.pipedag.materialize.core import MaterializingTask, materialize
+from pydiverse.pipedag.materialize.core import materialize
 
 from ..pipedag_test import tasks_library as m
-
-
-def spy_task(mocker, task) -> unittest.mock.Mock:
-    if isinstance(task, TaskGetItem):
-        task = task.task
-    if not isinstance(task, MaterializingTask):
-        raise TypeError("Expected object of type MaterializingTask or TaskGetItem")
-
-    task.fn = copy.copy(task.fn)
-    spy = mocker.spy(task.fn, "fn")
-    spy.mock.__dict__["_mock_name"] = task.name
-    return spy
-
+from .spy import spy_task
 
 # Test Basic Cache Invalidation Behaviour
 
