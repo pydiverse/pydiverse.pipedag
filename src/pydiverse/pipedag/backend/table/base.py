@@ -234,9 +234,9 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             # Try retrieving the table from the cache and then copying it
             # to the transaction stage
             metadata = self.retrieve_lazy_table_metadata(lazy_query_hash, table.stage)
-            assert (
-                metadata.store_id is not None
-            ), "store_id=NULL should never be found in metadata table"
+            # Ensure table store_id is identical whenever tables are loaded from cache.
+            # This change also affects Table objects in task_output datastructure used for computing
+            # output_json.
             table.store_id = metadata.store_id
             self.copy_lazy_table_to_transaction(metadata, table)
             self.logger.info(f"Lazy cache of table '{table.name}' found")
@@ -247,9 +247,6 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             self.store_table(table)
 
         # Store metadata
-        assert (
-            table.store_id is not None
-        ), "store_id=NULL should never be written to metadata table"
         self.store_lazy_table_metadata(
             LazyTableMetadata(
                 name=table.name,
@@ -275,9 +272,9 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             # Try retrieving the table from the cache and then copying it
             # to the transaction stage
             metadata = self.retrieve_raw_sql_metadata(raw_sql_query_hash, raw_sql.stage)
-            assert (
-                metadata.store_id is not None
-            ), "store_id=NULL should never be found in metadata table"
+            # Ensure table store_id is identical whenever tables are loaded from cache.
+            # This change also affects Table objects in task_output datastructure used for computing
+            # output_json.
             raw_sql.store_id = metadata.store_id
             self.copy_raw_sql_tables_to_transaction(metadata, raw_sql.stage)
             self.logger.info(f"Lazy cache of stage '{raw_sql.stage}' found")
@@ -289,9 +286,6 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
 
         # Store metadata
         # Attention: Raw SQL statements may only be executed sequentially within stage for store.list_tables to work
-        assert (
-            raw_sql.store_id is not None
-        ), "store_id=NULL should never be written to metadata table"
         self.store_raw_sql_metadata(
             RawSqlMetadata(
                 prev_tables=prev_tables,

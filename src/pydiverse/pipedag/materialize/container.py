@@ -127,7 +127,8 @@ class Blob(Generic[T]):
         self.name = name
         self.stage = stage
 
-        self.store_id = store_id
+        # This store_id is used for downstream cache invalidation in case this table is not retrieved from cache
+        self.store_id = store_id or uuid.uuid4().hex[:20]
 
     def __str__(self):
         return f"<Blob: {self.name} ({self.stage.name})>"
