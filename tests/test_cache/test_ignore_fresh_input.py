@@ -119,6 +119,68 @@ def test_table(mocker):
         child_spy.assert_called_once()
 
 
+def test_lazy_table(mocker):
+    cache_value = 0
+    lazy_value = 0
+
+    def cache():
+        nonlocal cache_value
+        return cache_value
+
+    @materialize(cache=cache, lazy=True, nout=2)
+    def input_task():
+        nonlocal lazy_value
+        return Table(sa.text(f"SELECT {lazy_value} as x")), cache_value
+
+    @materialize(input_type=pd.DataFrame)
+    def get_first(table, col):
+        return int(table[col][0])
+
+    with Flow() as flow:
+        with Stage("stage_1"):
+            out, out_cache = input_task()
+            child = get_first(out, "x")
+            cache_child = m.noop(out_cache)
+
+    # Initial Call
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(child) == 0
+
+    # Calling flow.run again should call the lazy task but not the child task
+    out_spy = spy_task(mocker, out)
+    child_spy = spy_task(mocker, child)
+    cache_spy = spy_task(mocker, cache_child)
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(child) == 0
+        assert result.get(cache_child) == 0
+        assert out_spy.call_count == 1
+        child_spy.assert_not_called()
+        cache_spy.assert_not_called()
+
+    # Changing the cache value while setting ignore_fresh_input=True should
+    # still call the lazy task.
+    cache_value = 1
+    with StageLockContext():
+        result = flow.run(ignore_fresh_input=True)
+        assert result.get(child) == 0
+        assert result.get(cache_child) == 1
+        assert out_spy.call_count == 2
+        child_spy.assert_not_called()
+        cache_spy.assert_called_once()
+
+    # Only changing the lazy_value should cause the child task to get called
+    lazy_value = 1
+    with StageLockContext():
+        result = flow.run(ignore_fresh_input=True)
+        assert result.get(child) == 1
+        assert result.get(cache_child) == 1
+        assert out_spy.call_count == 3
+        child_spy.assert_called_once()
+        cache_spy.assert_called_once()
+
+
 def test_blob(mocker):
     cache_value = 0
 
