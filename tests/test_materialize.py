@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
+import sqlalchemy as sa
 
-from pydiverse.pipedag import Flow, Stage, materialize
-from pydiverse.pipedag.context import RunContext
+from pydiverse.pipedag import Flow, Stage, Table, materialize
+from pydiverse.pipedag.context import RunContext, StageLockContext
 from pydiverse.pipedag.util.config import PipedagConfig
 
 from .pipedag_test import tasks_library as m
@@ -262,3 +263,64 @@ def test_nout_and_getitem():
                 m.assert_equal(a[i], b[3 - i])
 
     assert f.run().successful
+
+
+def test_name_mangling_tables():
+    @materialize
+    def table_task_1():
+        return Table(pd.DataFrame({"x": [1]}), name="table_%%")
+
+    @materialize
+    def table_task_2():
+        return Table(pd.DataFrame({"x": [2]}), name="table_%%")
+
+    with Flow() as f:
+        with Stage("stage_1"):
+            table_1 = table_task_1()
+            table_2 = table_task_2()
+
+    with StageLockContext():
+        result = f.run()
+        assert result.get(table_1, as_type=pd.DataFrame)["x"][0] == 1
+        assert result.get(table_2, as_type=pd.DataFrame)["x"][0] == 2
+
+
+def test_name_mangling_lazy_tables():
+    @materialize(lazy=True)
+    def lazy_task_1():
+        return Table(sa.text("SELECT 1 as x"), name="table_%%")
+
+    @materialize(lazy=True)
+    def lazy_task_2():
+        return Table(sa.text("SELECT 2 as x"), name="table_%%")
+
+    with Flow() as f:
+        with Stage("stage_1"):
+            lazy_1 = lazy_task_1()
+            lazy_2 = lazy_task_2()
+
+    with StageLockContext():
+        result = f.run()
+        assert result.get(lazy_1, as_type=pd.DataFrame)["x"][0] == 1
+        assert result.get(lazy_2, as_type=pd.DataFrame)["x"][0] == 2
+
+
+def test_name_mangling_lazy_table_cache_fn():
+    # Only the cache fn output of these two tasks is different
+    @materialize(lazy=True, cache=lambda: 1, name="lazy_task")
+    def lazy_task_1():
+        return Table(sa.text("SELECT 1 as x"))
+
+    @materialize(lazy=True, cache=lambda: 2, name="lazy_task")
+    def lazy_task_2():
+        return Table(sa.text("SELECT 2 as x"))
+
+    with Flow() as f:
+        with Stage("stage_1"):
+            lazy_1 = lazy_task_1()
+            lazy_2 = lazy_task_2()
+
+    with StageLockContext():
+        result = f.run()
+        assert result.get(lazy_1, as_type=pd.DataFrame)["x"][0] == 1
+        assert result.get(lazy_2, as_type=pd.DataFrame)["x"][0] == 2
