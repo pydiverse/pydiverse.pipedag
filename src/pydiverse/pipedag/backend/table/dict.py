@@ -50,29 +50,29 @@ class DictTableStore(BaseTableStore):
                 f"Can't copy table '{table.name}' to transaction."
                 f" Stage '{stage.name}' has already been committed."
             )
-        if table.cache_key is None:
-            raise ValueError(f"Table cache key can't be None")
 
         try:
-            self.store[stage.transaction_name][table.name] = self.store[stage.name][
-                table.name
-            ]
+            t = self.store[stage.name][table.name]
+            self.store[stage.transaction_name][table.name] = t
         except KeyError:
-            raise CacheError
-
-    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
-        if (metadata.stage not in self.store) or (
-            metadata.name not in self.store[metadata.stage]
-        ):
             raise CacheError(
-                f"Can't copy lazy table '{metadata.name}' (stage:"
-                f" '{metadata.stage}') to transaction because no such table"
-                " exists."
+                f"No table with name '{table.name}' found in '{stage.name}' stage"
             )
 
-        self.store[table.stage.transaction_name][table.name] = self.store[
-            metadata.stage
-        ][metadata.name]
+    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, stage: Stage):
+        if stage.did_commit:
+            raise StageError(
+                f"Can't copy table '{metadata.name}' to transaction."
+                f" Stage '{stage.name}' has already been committed."
+            )
+
+        try:
+            t = self.store[stage.name][metadata.name]
+            self.store[stage.transaction_name][metadata.name] = t
+        except KeyError:
+            raise CacheError(
+                f"No table with name '{metadata.name}' found in '{stage.name}' stage"
+            )
 
     def delete_table_from_transaction(self, table: Table):
         try:
@@ -81,24 +81,28 @@ class DictTableStore(BaseTableStore):
             return
 
     def store_task_metadata(self, metadata: TaskMetadata, stage: Stage):
-        self.t_metadata[stage][metadata.cache_key] = metadata
+        cache_key = metadata.input_hash + str(metadata.cache_fn_hash)
+        self.t_metadata[stage][cache_key] = metadata
 
     def retrieve_task_metadata(self, task: MaterializingTask) -> TaskMetadata:
+        cache_key = task.input_hash + str(task.cache_fn_hash)
         try:
-            return self.metadata[task.stage][task.cache_key]
+            return self.metadata[task.stage][cache_key]
         except KeyError:
             raise CacheError(
                 "There is no metadata for task "
-                f"'{task.name}' with cache key '{task.cache_key}', yet"
+                f"'{task.name}' with cache key '{task.input_hash}', yet"
             )
 
     def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
-        self.t_lazy_table_metadata[metadata.stage][metadata.cache_key] = metadata
+        cache_key = metadata.query_hash + metadata.task_hash
+        self.t_lazy_table_metadata[metadata.stage][cache_key] = metadata
 
     def retrieve_lazy_table_metadata(
         self, query_hash: str, task_hash: str, stage: Stage
     ) -> LazyTableMetadata:
         try:
+            cache_key = query_hash + task_hash
             return self.lazy_table_metadata[stage.name][cache_key]
         except (TypeError, KeyError):
             raise CacheError

@@ -126,7 +126,7 @@ class MaterializingTask(Task):
         TaskContext.get().input_hash = value
 
     @property
-    def cache_fn_hash(self) -> str:
+    def cache_fn_hash(self) -> str | None:
         return TaskContext.get().cache_fn_hash
 
     @cache_fn_hash.setter
