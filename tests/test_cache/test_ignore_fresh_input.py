@@ -5,6 +5,7 @@ import sqlalchemy as sa
 
 from pydiverse.pipedag import Blob, Flow, Stage, Table
 from pydiverse.pipedag.context import StageLockContext
+from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import materialize
 
 from ..pipedag_test import tasks_library as m
@@ -19,12 +20,10 @@ def test_literal(mocker):
     cache_value = 0
 
     def cache():
-        nonlocal cache_value
         return cache_value
 
     @materialize(cache=cache)
     def return_cache_value():
-        nonlocal cache_value
         return cache_value
 
     with Flow() as flow:
@@ -71,12 +70,10 @@ def test_table(mocker):
     cache_value = 0
 
     def cache():
-        nonlocal cache_value
         return cache_value
 
     @materialize(cache=cache)
     def return_cache_table():
-        nonlocal cache_value
         return Table(sa.text(f"SELECT {cache_value} as X"))
 
     @materialize(input_type=pd.DataFrame)
@@ -124,12 +121,10 @@ def test_lazy_table(mocker):
     lazy_value = 0
 
     def cache():
-        nonlocal cache_value
         return cache_value
 
     @materialize(cache=cache, lazy=True, nout=2)
     def input_task():
-        nonlocal lazy_value
         return Table(sa.text(f"SELECT {lazy_value} as x")), cache_value
 
     @materialize(input_type=pd.DataFrame)
@@ -180,17 +175,24 @@ def test_lazy_table(mocker):
         child_spy.assert_called_once()
         cache_spy.assert_called_once()
 
+    # The child task shouldn't get called again, because the lazy sql didn't change
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(child) == 1
+        assert result.get(cache_child) == 1
+        assert out_spy.call_count == 4
+        child_spy.assert_called_once()
+        cache_spy.assert_called_once()
+
 
 def test_blob(mocker):
     cache_value = 0
 
     def cache():
-        nonlocal cache_value
         return cache_value
 
     @materialize(cache=cache)
     def return_cache_blob():
-        nonlocal cache_value
         return Blob(cache_value)
 
     with Flow() as flow:
@@ -233,6 +235,72 @@ def test_blob(mocker):
         child_spy.assert_called_once()
 
 
+def test_raw_sql(mocker):
+    cache_value = 0
+    raw_value = 0
+
+    def cache(*args, **kwargs):
+        return cache_value
+
+    @materialize(lazy=True, cache=cache)
+    def raw_sql_task(stage):
+        return RawSql(
+            f"""
+            CREATE TABLE {stage.transaction_name}.raw_table AS 
+            SELECT {raw_value} as x
+            """,
+            "raw_table",
+            stage,
+        )
+
+    @materialize
+    def child_task(input):
+        return Table(sa.text(f"SELECT * FROM {input.stage.transaction_name}.raw_table"))
+
+    with Flow() as flow:
+        with Stage("raw_sql_stage") as stage:
+            out = raw_sql_task(stage)
+            child = child_task(out)
+
+    # Initial Run
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(child, as_type=pd.DataFrame)["x"][0] == 0
+
+    # Calling flow.run again should call the raw sql task but not the child task
+    out_spy = spy_task(mocker, out)
+    child_spy = spy_task(mocker, child)
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(child, as_type=pd.DataFrame)["x"][0] == 0
+        assert out_spy.call_count == 1
+        child_spy.assert_not_called()
+
+    # Changing the cache value while setting ignore_fresh_input=True should
+    # still call the raw sql task.
+    cache_value = 1
+    with StageLockContext():
+        result = flow.run(ignore_fresh_input=True)
+        assert result.get(child, as_type=pd.DataFrame)["x"][0] == 0
+        assert out_spy.call_count == 2
+        child_spy.assert_not_called()
+
+    # Only changing the raw_value should cause the child task to get called
+    raw_value = 1
+    with StageLockContext():
+        result = flow.run(ignore_fresh_input=True)
+        assert result.get(child, as_type=pd.DataFrame)["x"][0] == 1
+        assert out_spy.call_count == 3
+        child_spy.assert_called_once()
+
+    # The child task shouldn't get called again, because the raw sql didn't change
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(child, as_type=pd.DataFrame)["x"][0] == 1
+        assert out_spy.call_count == 4
+        child_spy.assert_called_once()
+
+
 # Some more complicated tests that validate the behaviour of
 # ignore_fresh_input=True
 
@@ -243,7 +311,6 @@ def test_input_invalid(mocker):
 
     @materialize(lazy=True)
     def input_task():
-        nonlocal lazy_value
         return lazy_value
 
     with Flow() as flow:
@@ -282,12 +349,10 @@ def test_cache_temporarily_different(mocker):
     cache_value = 0
 
     def cache():
-        nonlocal cache_value
         return cache_value
 
     @materialize(cache=cache)
     def return_cache_value():
-        nonlocal cache_value
         return cache_value
 
     with Flow() as flow:

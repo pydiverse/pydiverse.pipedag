@@ -5,6 +5,7 @@ import sqlalchemy as sa
 
 from pydiverse.pipedag import Blob, Flow, Stage, Table
 from pydiverse.pipedag.context import StageLockContext
+from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import materialize
 
 from ..pipedag_test import tasks_library as m
@@ -51,12 +52,10 @@ def test_changed_cache_fn_literal(mocker):
     cache_value = 0
 
     def cache():
-        nonlocal cache_value
         return cache_value
 
     @materialize(cache=cache)
     def return_cache_value():
-        nonlocal cache_value
         return cache_value
 
     with Flow() as flow:
@@ -94,12 +93,10 @@ def test_change_cache_fn_table(mocker):
     cache_value = 0
 
     def cache():
-        nonlocal cache_value
         return cache_value
 
     @materialize(cache=cache)
     def return_cache_table():
-        nonlocal cache_value
         return Table(sa.text(f"SELECT {cache_value} as X"))
 
     @materialize(input_type=pd.DataFrame)
@@ -138,12 +135,10 @@ def test_change_cache_fn_blob(mocker):
     cache_value = 0
 
     def cache():
-        nonlocal cache_value
         return cache_value
 
     @materialize(cache=cache)
     def return_cache_blob():
-        nonlocal cache_value
         return Blob(cache_value)
 
     with Flow() as flow:
@@ -257,7 +252,6 @@ def test_change_lazy_query(mocker):
 
     @materialize(lazy=True, nout=2)
     def lazy_task():
-        nonlocal query_str
         return 0, Table(sa.text(query_str), name="lazy_table")
 
     @materialize(input_type=pd.DataFrame)
@@ -298,6 +292,54 @@ def test_change_lazy_query(mocker):
         assert result.get(value) == 2
         assert lazy_spy.call_count == 3
         value_spy.assert_called_once()
+        const_spy.assert_not_called()
+
+
+def test_change_raw_sql(mocker):
+    raw_sql = "SELECT 1 as x"
+
+    @materialize(lazy=True, nout=2)
+    def raw_task(stage):
+        return 0, RawSql(raw_sql, "raw_task", stage)
+
+    @materialize
+    def raw_child(raw):
+        return raw.sql
+
+    with Flow() as flow:
+        with Stage("stage_1") as s:
+            const, raw = raw_task(s)
+            child = raw_child(raw)
+            const = m.noop(const)
+
+    # Initial Run
+    raw_spy = spy_task(mocker, raw)
+    with StageLockContext():
+        result = flow.run()
+        assert result.successful
+        assert result.get(child) == "SELECT 1 as x"
+        assert raw_spy.call_count == 1
+
+    # Second run, because the task is lazy, it should always get called.
+    # The value task however shouldn't get called.
+    child_spy = spy_task(mocker, child)
+    const_spy = spy_task(mocker, const)
+    with StageLockContext():
+        result = flow.run()
+        assert result.successful
+        assert result.get(child) == "SELECT 1 as x"
+        assert raw_spy.call_count == 2
+        child_spy.assert_not_called()
+        const_spy.assert_not_called()
+
+    # Third run with changed query_str
+    raw_sql = "SELECT 2 as x"
+    with StageLockContext():
+        result = flow.run()
+        assert result.successful
+        assert result.get(child) == "SELECT 2 as x"
+        assert raw_spy.call_count == 3
+        child_spy.assert_called_once()
         const_spy.assert_not_called()
 
 
