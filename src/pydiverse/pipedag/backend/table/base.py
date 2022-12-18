@@ -194,13 +194,6 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             "This table store does not support executing raw sql statements"
         )
 
-    def list_tables(self, stage: Stage, *, include_everything=False) -> list[str]:
-        # take any registered table hook since we only care about the materialization target
-        hook = self._REGISTERED_TABLES[0]
-        return hook.list_tables(
-            self, stage.transaction_name, include_everything=include_everything
-        )
-
     def store_table_lazy(self, table: Table, task: MaterializingTask):
         """Lazily stores a table in the associated commit stage
 
@@ -439,6 +432,13 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             "This table store does not support executing raw sql statements"
         )
 
+    # Utility
+
+    @abstractmethod
+    def list_tables(self, stage: Stage) -> list[str]:
+        # TODO: Document what this function does @windiana42
+        pass
+
 
 class TableHook(Generic[StoreT], ABC):
     """Base class to define how to handle a specific table
@@ -517,14 +517,3 @@ class TableHook(Generic[StoreT], ABC):
         :raises TypeError: if the type doesn't support lazy queries.
         """
         raise TypeError(f"Lazy query not supported with object of type {type(obj)}")
-
-    @classmethod
-    @abstractmethod
-    def list_tables(cls, store: StoreT, stage_name: str) -> list[str]:
-        """Retrieve list of tables in store for a particular stage
-
-        :param store: The store in which the table is stored
-        :param stage_name: The name of the stage from which te table should
-            be retrieved
-        :return: The retrieved table (converted to the correct type)
-        """

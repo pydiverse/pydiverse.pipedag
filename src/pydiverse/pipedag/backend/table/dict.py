@@ -103,6 +103,9 @@ class DictTableStore(BaseTableStore):
         except (TypeError, KeyError):
             raise CacheError
 
+    def list_tables(self, stage):
+        return self.store[stage.transaction_name].keys()
+
 
 @DictTableStore.register_table(pd)
 class PandasTableHook(TableHook[DictTableStore]):
@@ -129,10 +132,6 @@ class PandasTableHook(TableHook[DictTableStore]):
         if name := obj.attrs.get("name"):
             return Table(obj, name)
         return super().auto_table(obj)
-
-    @classmethod
-    def list_tables(cls, store, stage_name):
-        return store.store[stage_name].keys()
 
 
 try:
@@ -173,7 +172,3 @@ class PydiverseTransformTableHook(TableHook[DictTableStore]):
     def auto_table(cls, obj: pdt.Table):
         # noinspection PyProtectedMember
         return Table(obj, obj._impl.name)
-
-    @classmethod
-    def list_tables(cls, store, stage_name):
-        return PandasTableHook.list_tables(store, stage_name)

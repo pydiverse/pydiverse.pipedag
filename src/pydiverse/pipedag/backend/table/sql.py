@@ -539,6 +539,8 @@ class SQLTableStore(BaseTableStore):
         )
 
     def get_view_names(self, schema: str, *, include_everything=False) -> list[str]:
+        # TODO: Document what this function does @windiana42
+        #       Especially the include_everything argument
         inspector = sa.inspect(self.engine)
         if include_everything and self.engine.dialect.name == "mssql":
             return list(self.get_mssql_sql_modules(schema).keys())
@@ -768,21 +770,26 @@ class SQLTableStore(BaseTableStore):
             task_hash=result.task_hash,
         )
 
+    def list_tables(self, stage, *, include_everything=False):
+        # TODO: Document what include_everything does.
+        inspector = sa.inspect(self.engine)
+        schema = self.get_schema(stage.transaction_name).get()
+
+        table_names = inspector.get_table_names(schema)
+        view_names = self.get_view_names(schema, include_everything=include_everything)
+
+        return table_names + view_names
+
     def get_stage_hash(self, stage: Stage):
-        query = (
-            sa.select(self.tasks_table.c.output_json)
-            .where(
-                (self.tasks_table.c.stage == stage.name)
-                & ~self.tasks_table.c.in_transaction_schema
-            )
-            .order_by(self.tasks_table.c.output_json)
-        )
-        return compute_cache_key(
-            *[
-                output_json
-                for output_json in pd.read_sql(query, con=self.engine).iloc[0]
-            ]
-        )
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                sa.select([self.tasks_table.c.output_json])
+                .where(self.tasks_table.c.stage == stage.name)
+                .where(self.tasks_table.c.in_transaction_schema.in_([False]))
+                .order_by(self.tasks_table.c.output_json)
+            ).all()
+            result = [row[0] for row in result]
+        return compute_cache_key(*result)
 
 
 @SQLTableStore.register_table()
@@ -836,14 +843,6 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     def lazy_query_str(cls, store, obj) -> str:
         return str(obj.compile(store.engine, compile_kwargs={"literal_binds": True}))
 
-    @classmethod
-    def list_tables(cls, store, stage_name, *, include_everything=False):
-        inspector = sa.inspect(store.engine)
-        schema = store.get_schema(stage_name).get()
-        return inspector.get_table_names(schema) + store.get_view_names(
-            schema, include_everything=include_everything
-        )
-
 
 @SQLTableStore.register_table(pd)
 class PandasTableHook(TableHook[SQLTableStore]):
@@ -880,10 +879,6 @@ class PandasTableHook(TableHook[SQLTableStore]):
         if name := obj.attrs.get("name"):
             return Table(obj, name)
         return super().auto_table(obj)
-
-    @classmethod
-    def list_tables(cls, store, stage_name):
-        return SQLAlchemyTableHook.list_tables(store, stage_name)
 
 
 try:
@@ -951,7 +946,3 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         if query is not None:
             return str(query)
         return super().lazy_query_str(store, obj)
-
-    @classmethod
-    def list_tables(cls, store, stage_name):
-        return SQLAlchemyTableHook.list_tables(store, stage_name)
