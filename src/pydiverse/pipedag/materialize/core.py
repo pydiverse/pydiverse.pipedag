@@ -110,10 +110,26 @@ class MaterializingTask(Task):
         self.cache = cache
         self.lazy = lazy
 
-        # TODO: Remove cache key from instance
-        #       Inside a task instance there should be *no* state
-        self.input_hash = None
-        self.cache_fn_hash = None
+    # The following properties are all just convenient ways to access the state
+    # stored in TaskContext. The reason these properties aren't stored inside the
+    # task object itself is because tasks shouldn't have state, because they get
+    # reused between different flow runs.
+
+    @property
+    def input_hash(self) -> str:
+        return TaskContext.get().input_hash
+
+    @input_hash.setter
+    def input_hash(self, value):
+        TaskContext.get().input_hash = value
+
+    @property
+    def cache_fn_hash(self) -> str:
+        return TaskContext.get().cache_fn_hash
+
+    @cache_fn_hash.setter
+    def cache_fn_hash(self, value):
+        TaskContext.get().cache_fn_hash = value
 
     @property
     def combined_cache_key(self):

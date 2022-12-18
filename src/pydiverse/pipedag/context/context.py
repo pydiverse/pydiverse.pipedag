@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from pydiverse.pipedag.context.run_context import StageLockStateHandler
 
 import structlog
-from attrs import frozen
+from attrs import define, frozen
 
 logger = structlog.get_logger()
 
@@ -52,7 +52,6 @@ class BaseContext:
     def close(self):
         """Function that gets called at __exit__"""
 
-    # noinspection PyUnresolvedReferences
     @classmethod
     def get(cls: type[T]) -> T:
         return cls._context_var.get()
@@ -79,11 +78,19 @@ class DAGContext(BaseAttrsContext):
     _context_var = ContextVar("dag_context")
 
 
-@frozen
-class TaskContext(BaseAttrsContext):
-    """Context used while executing a task"""
+@define
+class TaskContext(BaseContext):
+    """Context used while executing a task
+
+    It is used to retrieve a reference to the task object from within a running task.
+    It also serves as a place to store temporary state while processing a task.
+    """
 
     task: Task
+
+    # Temporary state associated with a task during materialization
+    input_hash: str = None
+    cache_fn_hash: str = None
 
     _context_var = ContextVar("task_context")
 
