@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import functools
 import inspect
-import json
 from functools import partial
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from pydiverse.pipedag._typing import CallableT
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
@@ -13,6 +12,9 @@ from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.container import Blob, Table
 from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.util import deep_map
+
+if TYPE_CHECKING:
+    from pydiverse.pipedag.materialize.metadata import TaskMetadata
 
 
 def materialize(
@@ -132,13 +134,33 @@ class MaterializingTask(Task):
         TaskContext.get().cache_fn_hash = value
 
     @property
-    def combined_cache_key(self):
+    def cache_metadata(self) -> TaskMetadata:
+        return TaskContext.get().cache_metadata
+
+    @cache_metadata.setter
+    def cache_metadata(self, value):
+        TaskContext.get().cache_metadata = value
+
+    def combined_cache_key(self, from_cache_metadata=False):
+        from pydiverse.pipedag.materialize.util.cache import compute_cache_key
+
+        if from_cache_metadata and (cache_metadata := self.cache_metadata) is not None:
+            name = cache_metadata.name
+            version = cache_metadata.version
+            input_hash = cache_metadata.input_hash
+            cache_fn_hash = cache_metadata.cache_fn_hash
+        else:
+            name = self.name
+            version = self.version
+            input_hash = self.input_hash
+            cache_fn_hash = self.cache_fn_hash
+
         return compute_cache_key(
             "TASK",
-            self.name,
-            self.version,
-            self.input_hash,
-            self.cache_fn_hash,
+            name,
+            version,
+            input_hash,
+            cache_fn_hash,
         )
 
 
@@ -187,7 +209,7 @@ class MaterializationWrapper:
 
         task.input_hash = input_hash
         task.cache_fn_hash = cache_fn_hash
-        combined_cache_key = task.combined_cache_key
+        combined_cache_key = task.combined_cache_key()
 
         # Check if this task has already been run with the same inputs
         # If yes, return memoized result. This prevents DuplicateNameExceptions
@@ -201,22 +223,23 @@ class MaterializationWrapper:
 
                 return memo
 
-            # If task is not lazy, check the cache
-            if not task.lazy:
-                try:
-                    cached_output, cache_metadata = store.retrieve_cached_output(task)
+            # Check the cache
+            try:
+                cached_output, cache_metadata = store.retrieve_cached_output(task)
+                task.cache_metadata = cache_metadata
+                if not task.lazy:
+                    # Task isn't lazy -> copy cache to transaction stage
                     store.copy_cached_output_to_transaction_stage(
                         cached_output, cache_metadata, task
                     )
                     ctx.store_task_memo(task, combined_cache_key, cached_output)
                     task.logger.info(f"Found task in cache. Using cached result.")
                     return cached_output
-                except CacheError as e:
-                    task.logger.info(
-                        "Failed to retrieve task from cache.",
-                        error=str(e),
-                    )
-                    pass
+            except CacheError as e:
+                task.logger.info(
+                    "Failed to retrieve task from cache.",
+                    exception=str(e),
+                )
 
             # Not found in cache / lazy -> Evaluate Function
             args, kwargs = store.dematerialize_task_inputs(

@@ -181,8 +181,7 @@ class PipeDAGStore(Disposable):
         blobs = []
 
         config = ConfigContext.get()
-
-        combined_cache_key = task.combined_cache_key
+        combined_cache_key = task.combined_cache_key()
 
         def materialize_mutator(x, counter=itertools.count()):
             # Automatically convert an object to a table / blob if its
@@ -255,7 +254,7 @@ class PipeDAGStore(Disposable):
 
         def store_table(table: Table):
             if task.lazy:
-                self.table_store.store_table_lazy(table)
+                self.table_store.store_table_lazy(table, task)
             else:
                 self.table_store.store_table(table)
 
@@ -267,7 +266,7 @@ class PipeDAGStore(Disposable):
             raw_sqls,
             blobs,
             store_table,
-            self.table_store.store_raw_sql,
+            lambda raw_sql: self.table_store.store_raw_sql(raw_sql, task),
             self.blob_store.store_blob,
             lambda: self.table_store.store_task_metadata(metadata, stage),
         )

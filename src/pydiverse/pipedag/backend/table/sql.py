@@ -124,7 +124,8 @@ class SQLTableStore(BaseTableStore):
             Column("id", BigInteger, primary_key=True, autoincrement=True),
             Column("name", String(128)),
             Column("stage", String(64)),
-            Column("cache_key", String(64)),
+            Column("query_hash", String(32)),
+            Column("task_hash", String(32)),
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
         )
@@ -137,7 +138,8 @@ class SQLTableStore(BaseTableStore):
             Column("prev_tables", String(256)),
             Column("tables", String(256)),
             Column("stage", String(64)),
-            Column("cache_key", String(64)),
+            Column("query_hash", String(32)),
+            Column("task_hash", String(32)),
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
         )
@@ -517,7 +519,7 @@ class SQLTableStore(BaseTableStore):
             )
         )
 
-    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
+    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, stage: Stage):
         if not sa.inspect(self.engine).has_table(
             metadata.name, schema=self.get_schema(metadata.stage).get()
         ):
@@ -531,8 +533,8 @@ class SQLTableStore(BaseTableStore):
             CopyTable(
                 metadata.name,
                 self.get_schema(metadata.stage),
-                table.name,
-                self.get_schema(table.stage.transaction_name),
+                metadata.name,
+                self.get_schema(stage.transaction_name),
             )
         )
 
@@ -681,22 +683,23 @@ class SQLTableStore(BaseTableStore):
                 self.lazy_cache_table.insert().values(
                     name=metadata.name,
                     stage=metadata.stage,
-                    cache_key=metadata.cache_key,
+                    query_hash=metadata.query_hash,
+                    task_hash=metadata.task_hash,
                     in_transaction_schema=True,
                 )
             )
 
     def retrieve_lazy_table_metadata(
-        self, cache_key: str, stage: Stage
+        self, query_hash: str, task_hash: str, stage: Stage
     ) -> LazyTableMetadata:
-        # noinspection PyUnresolvedReferences,DuplicatedCode
         try:
             with self.engine.connect() as conn:
                 result = (
                     conn.execute(
                         self.lazy_cache_table.select()
                         .where(self.lazy_cache_table.c.stage == stage.name)
-                        .where(self.lazy_cache_table.c.cache_key == cache_key)
+                        .where(self.lazy_cache_table.c.query_hash == query_hash)
+                        .where(self.lazy_cache_table.c.task_hash == task_hash)
                         .where(
                             self.lazy_cache_table.c.in_transaction_schema.in_([False])
                         )
@@ -713,7 +716,8 @@ class SQLTableStore(BaseTableStore):
         return LazyTableMetadata(
             name=result.name,
             stage=result.stage,
-            cache_key=result.cache_key,
+            query_hash=result.query_hash,
+            task_hash=result.task_hash,
         )
 
     def store_raw_sql_metadata(self, metadata: RawSqlMetadata):
@@ -724,20 +728,23 @@ class SQLTableStore(BaseTableStore):
                     prev_tables=";".join(metadata.prev_tables),
                     tables=";".join(metadata.tables),
                     stage=metadata.stage,
-                    cache_key=metadata.cache_key,
+                    query_hash=metadata.query_hash,
+                    task_hash=metadata.task_hash,
                     in_transaction_schema=True,
                 )
             )
 
-    def retrieve_raw_sql_metadata(self, cache_key: str, stage: Stage) -> RawSqlMetadata:
-        # noinspection PyUnresolvedReferences,DuplicatedCode
+    def retrieve_raw_sql_metadata(
+        self, query_hash: str, task_hash: str, stage: Stage
+    ) -> RawSqlMetadata:
         try:
             with self.engine.connect() as conn:
                 result = (
                     conn.execute(
                         self.raw_sql_cache_table.select()
                         .where(self.raw_sql_cache_table.c.stage == stage.name)
-                        .where(self.raw_sql_cache_table.c.cache_key == cache_key)
+                        .where(self.raw_sql_cache_table.c.query_hash == query_hash)
+                        .where(self.raw_sql_cache_table.c.task_hash == task_hash)
                         .where(
                             self.raw_sql_cache_table.c.in_transaction_schema.in_(
                                 [False]
@@ -748,16 +755,17 @@ class SQLTableStore(BaseTableStore):
                     .one_or_none()
                 )
         except sa.exc.MultipleResultsFound:
-            raise CacheError("Multiple results found for lazy table cache key")
+            raise CacheError("Multiple results found for raw sql cache key")
 
         if result is None:
-            raise CacheError("No result found for lazy table cache key")
+            raise CacheError("No result found for raw sql cache key")
 
         return RawSqlMetadata(
             prev_tables=result.prev_tables.split(";"),
             tables=result.tables.split(";"),
             stage=result.stage,
-            cache_key=result.cache_key,
+            query_hash=result.query_hash,
+            task_hash=result.task_hash,
         )
 
     def get_stage_hash(self, stage: Stage):

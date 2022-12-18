@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from pydiverse.pipedag.engine.base import OrchestrationEngine
     from pydiverse.pipedag.core import Flow, Stage, Task
     from pydiverse.pipedag.context.run_context import StageLockStateHandler
+    from pydiverse.pipedag.materialize.metadata import TaskMetadata
 
 import structlog
 from attrs import define, frozen
@@ -91,6 +92,7 @@ class TaskContext(BaseContext):
     # Temporary state associated with a task during materialization
     input_hash: str = None
     cache_fn_hash: str = None
+    cache_metadata: TaskMetadata = None
 
     _context_var = ContextVar("task_context")
 

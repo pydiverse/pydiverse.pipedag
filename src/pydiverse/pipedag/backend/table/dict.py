@@ -8,11 +8,7 @@ from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
 from pydiverse.pipedag.errors import CacheError, StageError
 from pydiverse.pipedag.materialize.core import MaterializingTask
-from pydiverse.pipedag.materialize.metadata import (
-    LazyTableMetadata,
-    RawSqlMetadata,
-    TaskMetadata,
-)
+from pydiverse.pipedag.materialize.metadata import LazyTableMetadata, TaskMetadata
 
 
 class DictTableStore(BaseTableStore):
@@ -31,9 +27,6 @@ class DictTableStore(BaseTableStore):
         self.lazy_table_metadata = dict()
         self.t_lazy_table_metadata = dict()
 
-        self.raw_sql_metadata = dict()
-        self.t_raw_sql_metadata = dict()
-
     def init_stage(self, stage: Stage):
         self.store.setdefault(stage.name, {})
         self.store[stage.transaction_name] = {}
@@ -44,15 +37,11 @@ class DictTableStore(BaseTableStore):
         self.lazy_table_metadata.setdefault(stage, {})
         self.t_lazy_table_metadata[stage] = {}
 
-        self.raw_sql_metadata.setdefault(stage, {})
-        self.t_raw_sql_metadata[stage] = {}
-
     def commit_stage(self, stage: Stage):
         self.store[stage.name] = self.store[stage.transaction_name]
         del self.store[stage.transaction_name]
         self.metadata[stage] = self.t_metadata[stage]
         self.lazy_table_metadata[stage] = self.t_lazy_table_metadata[stage]
-        self.raw_sql_metadata[stage] = self.t_raw_sql_metadata[stage]
 
     def copy_table_to_transaction(self, table: Table):
         stage = table.stage
@@ -85,13 +74,6 @@ class DictTableStore(BaseTableStore):
             metadata.stage
         ][metadata.name]
 
-    def copy_raw_sql_tables_to_transaction(
-        self, metadata: RawSqlMetadata, target_stage: Stage
-    ):
-        raise NotImplementedError(
-            "The DictTableStore does not support raw SQL statements"
-        )
-
     def delete_table_from_transaction(self, table: Table):
         try:
             self.store[table.stage.transaction_name].pop(table.name)
@@ -114,19 +96,10 @@ class DictTableStore(BaseTableStore):
         self.t_lazy_table_metadata[metadata.stage][metadata.cache_key] = metadata
 
     def retrieve_lazy_table_metadata(
-        self, cache_key: str, stage: Stage
+        self, query_hash: str, task_hash: str, stage: Stage
     ) -> LazyTableMetadata:
         try:
             return self.lazy_table_metadata[stage.name][cache_key]
-        except (TypeError, KeyError):
-            raise CacheError
-
-    def store_raw_sql_metadata(self, metadata: RawSqlMetadata):
-        self.t_raw_sql_metadata[metadata.stage][metadata.cache_key] = metadata
-
-    def retrieve_raw_sql_metadata(self, cache_key: str, stage: Stage) -> RawSqlMetadata:
-        try:
-            return self.raw_sql_metadata[stage.name][cache_key]
         except (TypeError, KeyError):
             raise CacheError
 

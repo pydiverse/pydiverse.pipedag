@@ -30,6 +30,7 @@ class Table(Generic[T]):
         name: str | None = None,
         stage: Stage | None = None,
         primary_key: str | None = None,
+        *,
         cache_key: str | None = None,
     ):
         self._name = None
@@ -58,7 +59,8 @@ class Table(Generic[T]):
 class RawSql:
     """Container for raw sql strings
 
-    This allows wrapping legacy sql code with pipedag before it is converted to proper tasks that allow tracing tables.
+    This allows wrapping legacy sql code with pipedag before it is converted
+    to proper tasks that allow tracing tables.
 
     :param sql: The table object to wrap
     :param cache_key: Optional key used for cache invalidation (manual use is discouraged)
@@ -69,6 +71,7 @@ class RawSql:
         sql: str | None = None,
         name: str | None = None,
         stage: Stage | None = None,
+        *,
         cache_key: str | None = None,
     ):
         self._name = None
@@ -111,6 +114,7 @@ class Blob(Generic[T]):
         obj: T | None = None,
         name: str | None = None,
         stage: Stage | None = None,
+        *,
         cache_key: str | None = None,
     ):
         self._name = None
