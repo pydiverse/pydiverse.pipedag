@@ -115,6 +115,8 @@ class MaterializingTask(Task):
         self.cache_fn_hash = None
 
     def get_effective_cache_key(self, ctx: RunContext):
+        # The effective cache_key cannot be reliably used for cache invalidation. See sql.py how to do it better.
+        # It may still be useful for simplified implementation of some testing backends like dict.py.
         return get_effective_cache_key(
             ctx.ignore_fresh_input, self.input_hash, self.version, self.cache_fn_hash
         )
@@ -124,9 +126,9 @@ def get_effective_cache_key(ignore_fresh_input, input_hash, version, cache_fn_ha
     # Task name and task stage are checked independently of hashes / cache keys.
     # If we want to ignore fresh input, we simply don't process the cache_fn_hash which would change with fresh input
     if ignore_fresh_input:
-        return input_hash + version
+        return f"{input_hash}-{version}"
     else:
-        return input_hash + version + cache_fn_hash
+        return f"{input_hash}-{version}-{cache_fn_hash}"
 
 
 class MaterializationWrapper:
@@ -183,7 +185,7 @@ class MaterializationWrapper:
 
                 return memo
 
-            # If task is not lazy, check the cache
+            # Check the cache (lazy tasks also need to validate their input+cache_fn)
             is_task_cache_valid = False
             try:
                 cached_output = store.retrieve_cached_output(task)

@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import uuid
 from abc import ABC, ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, Any, Generic, Type
+from typing import TYPE_CHECKING, Any, Generic
 
 import structlog
 from typing_extensions import Self
 
 from pydiverse.pipedag._typing import StoreT, T
-from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.container import RawSql, Table
 from pydiverse.pipedag.materialize.core import MaterializingTask
@@ -54,7 +52,8 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
     data as long as they have the same name and stage.
 
     The same is also true for the task metadata where the task `stage`,
-    `version` and `cache_key` act as the primary keys (those values are
+    `version` and relevant compoents of `input_hash`, `cache_fn_hash`, and
+    `query_hash` act as the primary keys (those values are
     stored both in the task object and the metadata object).
 
     To implement the stage transaction and commit mechanism, a technique
@@ -209,7 +208,7 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
 
         The same as `store_table()`, with the difference being that if the
         table object represents a lazy table / query, the store first checks
-        if the same query with the same input (based on `table.cache_key`)
+        if the same query with the same input (based on `table.input_hash`)
         has already been executed before. If yes, instead of evaluating
         the query, it just copies the previous result to the commit stage.
 
@@ -235,24 +234,28 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             # Try retrieving the table from the cache and then copying it
             # to the transaction stage
             metadata = self.retrieve_lazy_table_metadata(lazy_query_hash, table.stage)
+            assert (
+                metadata.store_id is not None
+            ), "store_id=NULL should never be found in metadata table"
+            table.store_id = metadata.store_id
             self.copy_lazy_table_to_transaction(metadata, table)
             self.logger.info(f"Lazy cache of table '{table.name}' found")
-            store_id = metadata.store_id
         except CacheError as e:
             self.logger.warning("cache miss", exception=str(e))
-            # invalidate downstream tasks reading this table with UUID in metadata
-            store_id = uuid.uuid4().hex[:20]
 
             # Either not found in cache, or copying failed -> fallback
             self.store_table(table)
 
         # Store metadata
+        assert (
+            table.store_id is not None
+        ), "store_id=NULL should never be written to metadata table"
         self.store_lazy_table_metadata(
             LazyTableMetadata(
                 name=table.name,
                 stage=table.stage.name,
                 query_hash=lazy_query_hash,
-                store_id=store_id,
+                store_id=table.store_id,
             )
         )
 
@@ -260,18 +263,22 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         """Lazily stores a table in the associated commit stage
 
         The same as `store_table()`, with the difference being that the store first checks
-        if the same query with the same input (based on `raw_sql.cache_key`)
+        if the same query with the same input (based on `raw_sql.input_hash`)
         has already been executed before. If yes, instead of evaluating
         the query, it just copies the previous result to the commit stage.
         """
-        raw_sql_cache_key = self.compute_raw_sql_query_hash(raw_sql)
+        raw_sql_query_hash = self.compute_raw_sql_query_hash(raw_sql)
 
         prev_tables = self.list_tables(raw_sql.stage, include_everything=True)
         # Store table
         try:
             # Try retrieving the table from the cache and then copying it
             # to the transaction stage
-            metadata = self.retrieve_raw_sql_metadata(raw_sql_cache_key, raw_sql.stage)
+            metadata = self.retrieve_raw_sql_metadata(raw_sql_query_hash, raw_sql.stage)
+            assert (
+                metadata.store_id is not None
+            ), "store_id=NULL should never be found in metadata table"
+            raw_sql.store_id = metadata.store_id
             self.copy_raw_sql_tables_to_transaction(metadata, raw_sql.stage)
             self.logger.info(f"Lazy cache of stage '{raw_sql.stage}' found")
         except (CacheError, KeyError) as e:
@@ -282,12 +289,16 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
 
         # Store metadata
         # Attention: Raw SQL statements may only be executed sequentially within stage for store.list_tables to work
+        assert (
+            raw_sql.store_id is not None
+        ), "store_id=NULL should never be written to metadata table"
         self.store_raw_sql_metadata(
             RawSqlMetadata(
                 prev_tables=prev_tables,
                 tables=self.list_tables(raw_sql.stage, include_everything=True),
                 stage=raw_sql.stage.name,
-                cache_key=raw_sql_cache_key,
+                query_hash=raw_sql_query_hash,
+                store_id=raw_sql.store_id,
             )
         )
 
@@ -395,7 +406,6 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         except TypeError:
             return None
 
-        # table.cache_key is just preliminary up to this point and does not include query_str, yet
         return compute_cache_key("LAZY-TABLE", query_str)
 
     @staticmethod
@@ -410,7 +420,6 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         :return: query hash (str)
         """
 
-        # raw_sql.cache_key is just preliminary up to this point and does not include query_str, yet
         return compute_cache_key("RAW-SQL", raw_sql.sql)
 
     @abstractmethod
@@ -424,11 +433,11 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
 
     @abstractmethod
     def retrieve_lazy_table_metadata(
-        self, cache_key: str, stage: Stage
+        self, query_hash: str, stage: Stage
     ) -> LazyTableMetadata:
         """Retrieve a lazy table's metadata from the store
 
-        :raises CacheError: if not metadata that matches the provided cache_key
+        :raises CacheError: if not metadata that matches the provided query_hash
             and stage was found
         """
 
@@ -442,10 +451,12 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         """
 
     @abstractmethod
-    def retrieve_raw_sql_metadata(self, cache_key: str, stage: Stage) -> RawSqlMetadata:
+    def retrieve_raw_sql_metadata(
+        self, query_hash: str, stage: Stage
+    ) -> RawSqlMetadata:
         """Retrieve raw SQL metadata from the store
 
-        :raises CacheError: if not metadata that matches the provided cache_key
+        :raises CacheError: if not metadata that matches the provided query_hash
             and stage was found
         """
 

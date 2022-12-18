@@ -103,7 +103,6 @@ class DictTableStore(BaseTableStore):
             return
 
     def store_task_metadata(self, metadata: TaskMetadata, stage: Stage):
-        MaterializingTask()
         ctx = RunContext.get()
         # TODO: sql.py has more elaborate filter to ensure ignore_fresh_input can be switched on and off
         cache_key = get_effective_cache_key(

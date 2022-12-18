@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING, Generic
 
 from pydiverse.pipedag._typing import T
@@ -40,7 +41,8 @@ class Table(Generic[T]):
         self.stage = stage
         self.primary_key = primary_key
 
-        self.store_id = store_id
+        # This store_id is used for downstream cache invalidation in case this table is not retrieved from cache
+        self.store_id = store_id or uuid.uuid4().hex[:20]
 
     def __str__(self):
         return f"<Table: {self.name} ({self.stage.name})>"
@@ -80,7 +82,8 @@ class RawSql:
         self.name = name
         self.stage = stage
 
-        self.store_id = store_id
+        # This store_id is used for downstream cache invalidation in case this table is not retrieved from cache
+        self.store_id = store_id or uuid.uuid4().hex[:20]
 
     def __str__(self):
         sql_short = self.sql.strip()[0:40].replace("\n", "").strip()

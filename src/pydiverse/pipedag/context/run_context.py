@@ -399,10 +399,6 @@ class RunContext(BaseContext):
         self.ignore_fresh_input = server.ignore_fresh_input
         self.run_id = server.run_id
 
-    @staticmethod
-    def get_cache_key_types():
-        return ["default", "tasks_only"]
-
     def _request(self, op: str, *args):
         error, result = self.client.request([op, args])
 

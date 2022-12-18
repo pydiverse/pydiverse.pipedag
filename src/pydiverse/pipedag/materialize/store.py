@@ -215,7 +215,7 @@ class PipeDAGStore(Disposable):
                     # - Be careful that automatic name does not change with ignore_fresh_input
                     # - If the provided name ends with %%, perform name mangling
                     auto_suffix = (
-                        f"{get_effective_cache_key(True, task.input_hash, task.version, None)}_{next(counter):04d}"
+                        f"{compute_cache_key(task.input_hash, task.version)}_{next(counter):04d}"
                     )
                     if x.name is None:
                         x.name = task.name + "_" + auto_suffix
@@ -243,20 +243,7 @@ class PipeDAGStore(Disposable):
 
             return x
 
-        m_value = deep_map(value, materialize_mutator)
-
-        # Metadata
-        output_json = self.json_encode(m_value)
-        metadata = TaskMetadata(
-            name=task.name,
-            stage=stage.name,
-            version=task.version,
-            timestamp=datetime.datetime.now(),
-            run_id=ctx.run_id,
-            input_hash=task.input_hash,
-            cache_fn_hash=task.cache_fn_hash,
-            output_json=output_json,
-        )
+        task_output = deep_map(value, materialize_mutator)
 
         # Materialize
         def store_table(table: Table):
@@ -277,10 +264,26 @@ class PipeDAGStore(Disposable):
             store_table,
             store_raw_sql,
             lambda blob: self.blob_store.store_blob(blob),
-            lambda _: self.table_store.store_task_metadata(metadata, stage),
+            # lazy execution of _get_task_metadata is necessary since {Table/RawSQL}.store_idx can be filled from cache
+            lambda _: self.table_store.store_task_metadata(
+                self._get_task_metadata(ctx, stage, task, task_output), stage
+            ),
         )
 
-        return m_value
+        return task_output
+
+    def _get_task_metadata(self, ctx, stage, task, task_output):
+        output_json = self.json_encode(task_output)
+        return TaskMetadata(
+            name=task.name,
+            stage=stage.name,
+            version=task.version,
+            timestamp=datetime.datetime.now(),
+            run_id=ctx.run_id,
+            input_hash=task.input_hash,
+            cache_fn_hash=task.cache_fn_hash,
+            output_json=output_json,
+        )
 
     @staticmethod
     def _check_names(task: MaterializingTask, tables: list[Table], blobs: list[Blob]):
@@ -366,7 +369,7 @@ class PipeDAGStore(Disposable):
     @staticmethod
     def compute_task_cache_key(
         task: MaterializingTask,
-        input_json: str,
+        extra_information: str,
     ) -> str:
         """Compute the cache key for a task
 
@@ -380,16 +383,14 @@ class PipeDAGStore(Disposable):
         - Task Version
         - Inputs
 
-        This is currently independent of RunContext.get_cache_key_type().
-
         :param task: The task
-        :param input_json: The inputs provided to the task serialized as a json
+        :param extra_information: The inputs provided to the task serialized as a json
         """
         return compute_cache_key(
             "TASK",
             task.name,
             task.version or "None",
-            input_json,
+            extra_information,
         )
 
     def retrieve_cached_output(

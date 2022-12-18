@@ -32,7 +32,7 @@ class LazyTableMetadata:
     This class is only provided for convenience for those table store
     backends that implement the `lazy` option for the `store_table` method.
 
-    The `cache_key` is initially filled with the effective task cache invalidation hash
+    The `query_hash` is initially filled with the effective task cache invalidation hash
     which depends on Flow.run(ignore_fresh_input=) parameter, task.input_hash,
     task.version, and task.cache_fn_hash. In a second step, the lazy query string
     is also factored in the cache key, so lazy tables are automatically cache managed.
@@ -54,7 +54,7 @@ class LazyTableMetadata:
 class RawSqlMetadata:
     """Metadata associated with raw sql statements
 
-    The cache_key is initially filled with the effective task cache invalidation hash
+    The query_hash is initially filled with the effective task cache invalidation hash
     which depends on Flow.run(ignore_fresh_input=) parameter, task.input_hash,
     task.version, and task.cache_fn_hash. In a second step, the lazy query string
     is also factored in the cache key, so lazy tables are automatically cache managed.
