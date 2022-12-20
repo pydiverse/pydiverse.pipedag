@@ -215,14 +215,7 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             # -> Fallback to default implementation
             return self.store_table(table)
 
-        def compute_table_cache_key():
-            assert query_hash is not None
-            assert task_hash is not None
-            return compute_cache_key(query_hash, task_hash)
-
         # Store table
-        # At this point we MUST also update table.cache_key, so that any downstream
-        # tasks get invalidated if the query string changed.
         try:
             # Try retrieving the table from the cache and then copying it
             # to the transaction stage
@@ -232,16 +225,18 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             )
             self.copy_lazy_table_to_transaction(metadata, table.stage)
             self.logger.info(f"Lazy cache of table '{table.name}' found")
-
             table.name = metadata.name
-            table.cache_key = compute_table_cache_key()
         except CacheError as e:
             # Either not found in cache, or copying failed
             # -> Store using default method
             self.logger.warning("cache miss", exception=str(e))
             task_hash = task.combined_cache_key()
-            table.cache_key = compute_table_cache_key()
             self.store_table(table)
+
+        # At this point we MUST also update the cache info, so that any downstream
+        # tasks get invalidated if the query string changed.
+        table.cache_info.query_hash = query_hash
+        table.cache_info.task_hash = task_hash
 
         # Store metadata
         self.store_lazy_table_metadata(
@@ -263,17 +258,9 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         """
 
         query_hash = compute_cache_key("RAW-SQL", raw_sql.sql)
-
-        def compute_raw_sql_cache_key():
-            assert query_hash is not None
-            assert task_hash is not None
-            return compute_cache_key(query_hash, task_hash)
-
         prev_tables = self.list_tables(raw_sql.stage, include_everything=True)
 
         # Store tables
-        # At this point we MUST also update raw_sql.cache_key, so that any downstream
-        # tasks get invalidated if the sql query string changed.
         try:
             # Try retrieving the table from the cache and then copying it
             # to the transaction stage
@@ -283,15 +270,17 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             )
             self.copy_raw_sql_tables_to_transaction(metadata, raw_sql.stage)
             self.logger.info(f"Lazy cache of stage '{raw_sql.stage}' found")
-
-            raw_sql.cache_key = compute_raw_sql_cache_key()
         except CacheError as e:
             # Either not found in cache, or copying failed
             # -> Store using default method
             self.logger.warning("cache miss", exception=str(e))
             task_hash = task.combined_cache_key()
-            raw_sql.cache_key = compute_raw_sql_cache_key()
             self.execute_raw_sql(raw_sql)
+
+        # At this point we MUST also update the cache info, so that any downstream
+        # tasks get invalidated if the sql query string changed.
+        raw_sql.cache_info.query_hash = query_hash
+        raw_sql.cache_info.task_hash = task_hash
 
         # Store metadata
         # Attention: Raw SQL statements may only be executed sequentially within

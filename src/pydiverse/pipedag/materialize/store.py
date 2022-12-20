@@ -204,7 +204,7 @@ class PipeDAGStore(Disposable):
 
             # Do the materialization
             if isinstance(x, (Table, RawSql, Blob)):
-                x.cache_key = combined_cache_key
+                x.cache_info.task_hash = combined_cache_key
 
                 if isinstance(x, (Table, Blob)):
                     x.stage = stage

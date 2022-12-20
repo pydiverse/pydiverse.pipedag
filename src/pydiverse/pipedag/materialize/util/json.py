@@ -30,26 +30,26 @@ def json_default(o):
             PIPEDAG_TYPE: PIPEDAG_TYPE_TABLE,
             "stage": o.stage.name,
             "name": o.name,
-            "cache_key": o.cache_key,
+            "cache_key": o.cache_info.cache_key,
         }
     if isinstance(o, RawSql):
         return {
             PIPEDAG_TYPE: PIPEDAG_TYPE_RAWSQL,
             "stage": o.stage.name,
             "name": o.name,
-            "cache_key": o.cache_key,
-        }
-    if isinstance(o, Stage):
-        return {
-            PIPEDAG_TYPE: PIPEDAG_TYPE_STAGE,
-            "name": o.name,
+            "cache_key": o.cache_info.cache_key,
         }
     if isinstance(o, Blob):
         return {
             PIPEDAG_TYPE: PIPEDAG_TYPE_BLOB,
             "stage": o.stage.name,
             "name": o.name,
-            "cache_key": o.cache_key,
+            "cache_key": o.cache_info.cache_key,
+        }
+    if isinstance(o, Stage):
+        return {
+            PIPEDAG_TYPE: PIPEDAG_TYPE_STAGE,
+            "name": o.name,
         }
     if isinstance(o, PipedagConfig):
         return {
