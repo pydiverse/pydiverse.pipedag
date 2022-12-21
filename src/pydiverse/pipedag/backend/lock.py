@@ -59,7 +59,7 @@ class LockState(Enum):
     INVALID = 3
 
 
-Lockable = Union[Stage, str]
+Lockable = Union[Stage, str]  # noqa: UP007
 LockStateListener = Callable[[Lockable, LockState, LockState], None]
 
 
@@ -101,7 +101,7 @@ class BaseLockManager(Disposable, ABC):
     def release_all(self):
         """Releases all aquired locks"""
         locks = list(self.lock_states.items())
-        for lock, state in locks:
+        for lock, _state in locks:
             self.release(lock)
 
     def add_lock_state_listener(self, listener: LockStateListener):

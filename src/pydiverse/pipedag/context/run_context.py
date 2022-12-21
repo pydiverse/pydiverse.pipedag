@@ -50,13 +50,16 @@ class RunContextServer(IPCServer):
         REQUEST: [method_name, arguments]
         RESPONSE: [error, result]
 
-    Currently, we interrupt socket listening every 200ms for seeing stop() instruction from other thread.
-    Alternative: Replace busy waiting with an interrupt based mechanism (eg threading.Event)
+    Currently, we interrupt socket listening every 200ms for seeing stop()
+    instruction from other thread.
+    Alternative:
+        Replace busy waiting with an interrupt based  mechanism (eg threading.Event).
 
-    RunContextServer spawns a thread in __enter__(). The actual context is managed in RunContext class. The constructor
-    of RunContext() spawns the thread by calling RunContextServer.get_client(). The returned IPCClient object
-    supports __getstate__() / __setstate__() methods, so they support serialization and deserialization in case of
-    multi-node execution of tasks in pipedag graph.
+    RunContextServer spawns a thread in __enter__(). The actual context is managed
+    in RunContext class. The constructor of RunContext() spawns the thread by
+    calling RunContextServer.get_client(). The returned IPCClient object
+    supports __getstate__() / __setstate__() methods, so they support serialization
+    and deserialization in case of multi-node execution of tasks in pipedag graph.
     """
 
     def __init__(self, flow: Flow):
@@ -272,7 +275,7 @@ class RunContextServer(IPCServer):
         # TODO: Do something with the final state.
         #       For example: The object returned by flow.run could have a list
         #       of tasks and their final states.
-        final_state = FinalTaskState(final_state_value)
+        _final_state = FinalTaskState(final_state_value)
         task = self.tasks[task_id]
 
         stages_to_release = []
@@ -307,8 +310,10 @@ class RunContextServer(IPCServer):
 
         if memo is MemoState.WAITING:
             self.logger.info(
-                "Task is currently being run with the same inputs."
-                " Waiting for the other task to finish...",
+                (
+                    "Task is currently being run with the same inputs."
+                    " Waiting for the other task to finish..."
+                ),
                 task=task,
             )
         while memo is MemoState.WAITING:
@@ -506,10 +511,11 @@ class RunContext(BaseContext):
 class DematerializeRunContext(BaseContext):
     """Dummy RunContext that returns `COMMITTED` as the stage state for all stages
 
-    To dematerialize an object we must know it the associates state has been committed or not.
-    This context replaces the RunContext created by RunContextServer during the execution of
-    a flow with one that only sets the state of each state to `COMMITTED`. This allows us
-    to dematerialize the objects that have been stored after a flow has finished running.
+    To dematerialize an object we must know it the associates state has been
+    committed or not. This context replaces the RunContext created by
+    RunContextServer during the execution of a flow with one that only sets the
+    state of each state to `COMMITTED`. This allows us to dematerialize the
+    objects that have been stored after a flow has finished running.
     """
 
     _context_var = RunContext._context_var
@@ -526,7 +532,8 @@ class DematerializeRunContext(BaseContext):
 
 class StageLockStateHandler(Disposable):
     """
-    Handle LockState changes (i.e. locks that may become UNCERTAIN or externally UNLOCKED)
+    Handle LockState changes (i.e. locks that may become UNCERTAIN
+    or externally UNLOCKED).
     """
 
     def __init__(self, lock_manager: BaseLockManager):

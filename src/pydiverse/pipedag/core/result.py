@@ -29,8 +29,9 @@ class Result:
         """Load the results of a task from the database.
 
         :param task: The task
-        :param as_type: The type as which tables produced by this task should be dematerialized.
-            If no type is specified, the input type of the task is used.
+        :param as_type: The type as which tables produced by this task should
+            be dematerialized. If no type is specified, the input type of
+            the task is used.
         :return: The results of the task.
         """
         if not self.successful:
@@ -56,7 +57,7 @@ class Result:
                     "Called Result.get() without opening StageLockContext. Consider"
                     " using 'strict_result_get_locking: false' for interactive"
                     " debugging"
-                )
+                ) from None
 
         # TODO: Check that the results loaded from the database correspond
         #       to the run_id of this result object.

@@ -71,15 +71,24 @@ class SQLTableStore(BaseTableStore):
         """
         Construct table store.
 
-        :param engine_url: URL for SQLAlchemy engine
-        :param create_database_if_not_exists: whether to create database if it does not exist
-        :param schema_prefix: prefix string for schemas (dot is interpreted as database.schema)
-        :param schema_suffix: suffix string for schemas (dot is interpreted as database.schema)
-        :param disable_pytsql: whether to disable the use of pytsql (dialect mssql only)
-        :param pytsql_isolate_top_level_statements: forward pytsql executes() parameter
-        :param print_materialize: whether to print select statements before materialization
-        :param print_sql: whether to print final SQL statements (except for metadata)
-        :param no_db_locking: speed up database by telling it we will not rely on it's locking mechanisms
+        :param engine_url:
+            URL for SQLAlchemy engine
+        :param create_database_if_not_exists:
+            whether to create database if it does not exist
+        :param schema_prefix:
+            prefix string for schemas (dot is interpreted as database.schema)
+        :param schema_suffix:
+            suffix string for schemas (dot is interpreted as database.schema)
+        :param disable_pytsql:
+            whether to disable the use of pytsql (dialect mssql only)
+        :param pytsql_isolate_top_level_statements:
+            forward pytsql executes() parameter
+        :param print_materialize:
+            whether to print select statements before materialization
+        :param print_sql:
+            whether to print final SQL statements (except for metadata)
+        :param no_db_locking:
+            speed up database by telling it we will not rely on it's locking mechanisms
         """
         super().__init__()
 
@@ -165,8 +174,10 @@ class SQLTableStore(BaseTableStore):
             try_engine.dispose()
             return
 
-        # Attention: this is a really hacky way to create a generic engine for creating a database before one can open a
-        #  connection to self.engine_url which references a database and will fail if the database does not exist
+        # Attention: This is a really hacky way to create a generic engine for
+        #            creating a database before one can open a connection to
+        #            self.engine_url which references a database and will fail
+        #            if the database does not exist
         url = sa.engine.make_url(engine_url)
 
         if try_engine.dialect.name == "postgresql":
@@ -198,7 +209,8 @@ class SQLTableStore(BaseTableStore):
         engine = sa.create_engine(engine_url)
         if engine.dialect.name == "mssql":
             engine.dispose()
-            # this is needed to allow for CREATE DATABASE statements (we don't rely on database transactions anyways)
+            # this is needed to allow for CREATE DATABASE statements
+            # (we don't rely on database transactions anyways)
             engine = sa.create_engine(engine_url, connect_args={"autocommit": True})
 
         if engine.dialect.name == "mssql":
@@ -231,7 +243,8 @@ class SQLTableStore(BaseTableStore):
                 self.logger.info(f"Executing sql:\n{query_str}")
             return conn.execute(query)
         else:
-            # TODO: also replace engine.connect() with own context manager that can be used in other places
+            # TODO: also replace engine.connect() with own context manager
+            #       that can be used in other places
             with self.engine.connect() as conn:
                 # if self.engine.dialect.name == "mssql" and self.no_db_locking:
                 #     conn.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
@@ -320,7 +333,8 @@ class SQLTableStore(BaseTableStore):
         if self.engine.dialect.name == "ibm_db_sa":
             dialect_supports_drop_cascade = False
         if self.engine.dialect.name == "mssql" and "." in self.schema_suffix:
-            # TODO: detect whether tmp_schema exists and rename it as base or transaction schema if one is missing
+            # TODO: detect whether tmp_schema exists and rename it as base or
+            #       transaction schema if one is missing
             # tmp_schema = self.get_schema(stage.name + "__swap")
             cs_trans_initial = CreateSchema(
                 self.get_schema(stage.transaction_name), if_not_exists=True
@@ -329,7 +343,8 @@ class SQLTableStore(BaseTableStore):
             full_name = schema.get()
             database, schema_only = full_name.split(".")
 
-            # don't drop/create databases, just replace the schema underneath (files will keep name on renaming)
+            # don't drop/create databases, just replace the schema underneath
+            # (files will keep name on renaming)
             with self.engine.connect() as conn:
                 self.execute(cs_base, conn=conn)
                 self.execute(cs_trans_initial, conn=conn)
@@ -397,16 +412,20 @@ class SQLTableStore(BaseTableStore):
         cfg = ConfigContext.get()
         if cfg.stage_commit_technique == StageCommitTechnique.SCHEMA_SWAP:
             tmp_schema = self.get_schema(stage.name + "__swap")
-            # potentially this disposal must be optional since it does not allow for multi-threaded stage execution
-            self.engine.dispose()  # dispose open connections which may prevent schema swapping
+            # potentially this disposal must be optional since it does not allow
+            # for multi-threaded stage execution
+            # dispose open connections which may prevent schema swapping
+            self.engine.dispose()
             with self.engine.connect() as conn:
                 with conn.begin():
-                    # TODO: for mssql try to find schema does not exist and then move the forgotten tmp schema there
+                    # TODO: for mssql try to find schema does not exist and then move
+                    #       the forgotten tmp schema there
                     self.execute(
                         DropSchema(tmp_schema, if_exists=True, cascade=True), conn=conn
                     )
-                    # TODO: in case "." is in self.schema_prefix, we need to implement schema renaming by
-                    #  creating the new schema and moving table objects over
+                    # TODO: in case "." is in self.schema_prefix, we need to implement
+                    #       schema renaming by creating the new schema and moving
+                    #       table objects over
                     self.execute(
                         RenameSchema(
                             self.get_schema(stage.name),
@@ -497,9 +516,9 @@ class SQLTableStore(BaseTableStore):
                         )
 
         else:
-            assert (
-                False
-            ), f"Unexpected stage_commit_technique: {cfg.stage_commit_technique}"
+            raise ValueError(
+                f"Unexpected stage_commit_technique: {cfg.stage_commit_technique}"
+            )
 
     def copy_table_to_transaction(self, table: Table):
         stage = table.stage
@@ -603,7 +622,7 @@ class SQLTableStore(BaseTableStore):
                         SELECT definition
                         FROM sys.sql_modules
                         WHERE [object_id] = OBJECT_ID('[{src_schema_only}].[{table_name}]');
-                    """
+                    """  # noqa: E501
                     view_sql = self.execute(sql, conn=conn).fetchone()
                     assert view_sql is not None
                     view_sql = view_sql[0]
@@ -675,7 +694,7 @@ class SQLTableStore(BaseTableStore):
                     .one_or_none()
                 )
         except sa.exc.MultipleResultsFound:
-            raise CacheError("Multiple results found task metadata")
+            raise CacheError("Multiple results found task metadata") from None
 
         if result is None:
             raise CacheError(f"Couldn't retrieve task from cache: {task}")
@@ -725,7 +744,9 @@ class SQLTableStore(BaseTableStore):
                     .one_or_none()
                 )
         except sa.exc.MultipleResultsFound:
-            raise CacheError("Multiple results found for lazy table cache key")
+            raise CacheError(
+                "Multiple results found for lazy table cache key"
+            ) from None
 
         if result is None:
             raise CacheError("No result found for lazy table cache key")
@@ -774,7 +795,7 @@ class SQLTableStore(BaseTableStore):
                     .one_or_none()
                 )
         except sa.exc.MultipleResultsFound:
-            raise CacheError("Multiple results found for raw sql cache key")
+            raise CacheError("Multiple results found for raw sql cache key") from None
 
         if result is None:
             raise CacheError("No result found for raw sql cache key")

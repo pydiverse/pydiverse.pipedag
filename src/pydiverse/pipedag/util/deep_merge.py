@@ -4,7 +4,7 @@ Seems to be solved already in various ways (do we like an extra dependency for p
 https://stackoverflow.com/questions/3232943/update-value-of-a-nested-dictionary-of-varying-depth
 But for snippets, license restrictions exist:
 https://www.ictrecht.nl/en/blog/what-is-the-license-status-of-stackoverflow-code-snippets
-"""
+"""  # noqa: E501
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
@@ -37,7 +37,7 @@ def _deep_merge_iterable(x: Iterable, y: Iterable):
 
 def _deep_merge_dict(x: Mapping, y: Mapping):
     z = dict(x)
-    for key, value in x.items():
+    for key in x:
         if key in y:
             z[key] = deep_merge(x[key], y[key])
     z.update({key: value for key, value in y.items() if key not in z})
