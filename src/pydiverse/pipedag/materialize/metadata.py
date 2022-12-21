@@ -20,7 +20,8 @@ class TaskMetadata:
     version: str | None
     timestamp: datetime.datetime
     run_id: str
-    cache_keys: dict[str, str]
+    input_hash: str
+    cache_fn_hash: str
     output_json: str
 
 
@@ -31,9 +32,8 @@ class LazyTableMetadata:
     This class is only provided for convenience for those table store
     backends that implement the `lazy` option for the `store_table` method.
 
-    The `cache_keys` should incorporate the `cache_key` value of the
-    producing task (this ensures that there will be no match if the inputs
-    to the task change) and the query that produces the table.
+    The `query_hash` is a hash of the query string that produced this table.
+    The `task_hash` is the combined hash of the task that produced this table.
 
     The `name` and `stage` values are used to retrieve the appropriate
     table from the cache.
@@ -41,16 +41,16 @@ class LazyTableMetadata:
 
     name: str
     stage: str
-    cache_keys: dict[str, str]
+    query_hash: str
+    task_hash: str
 
 
 @dataclass
 class RawSqlMetadata:
     """Metadata associated with raw sql statements
 
-    The `cache_keys` should incorporate the `cache_key` value of the
-    producing task (this ensures that there will be no match if the inputs
-    to the task change) and the query that produces the table.
+    The `query_hash` is a hash of the raw sql string.
+    The `task_hash` is the combined hash of the task that produced statement.
 
     The `tables` and `stage` values are used to retrieve the appropriate
     tables from the cache.
@@ -59,4 +59,5 @@ class RawSqlMetadata:
     prev_tables: list[str]
     tables: list[str]
     stage: str
-    cache_keys: dict[str, str]
+    query_hash: str
+    task_hash: str

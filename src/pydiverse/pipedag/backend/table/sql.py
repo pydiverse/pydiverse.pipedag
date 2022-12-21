@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 import warnings
 from typing import Any
@@ -110,9 +109,9 @@ class SQLTableStore(BaseTableStore):
             Column("stage", String(64)),
             Column("version", String(64)),
             Column("timestamp", DateTime),
-            Column("run_id", String(32)),  # TODO: Replace with appropriate type
-            Column("cache_key", String(64)),  # TODO: Replace with appropriate type
-            Column("cache_keys", String(128)),
+            Column("run_id", String(32)),
+            Column("input_hash", String(32)),
+            Column("cache_fn_hash", String(32)),
             Column("output_json", String(2048)),  # 2k might be too small => TBD
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
@@ -125,8 +124,8 @@ class SQLTableStore(BaseTableStore):
             Column("id", BigInteger, primary_key=True, autoincrement=True),
             Column("name", String(128)),
             Column("stage", String(64)),
-            Column("cache_key", String(64)),
-            Column("cache_keys", String(128)),
+            Column("query_hash", String(32)),
+            Column("task_hash", String(32)),
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
         )
@@ -139,8 +138,8 @@ class SQLTableStore(BaseTableStore):
             Column("prev_tables", String(256)),
             Column("tables", String(256)),
             Column("stage", String(64)),
-            Column("cache_key", String(64)),
-            Column("cache_keys", String(128)),
+            Column("query_hash", String(32)),
+            Column("task_hash", String(32)),
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
         )
@@ -520,7 +519,7 @@ class SQLTableStore(BaseTableStore):
             )
         )
 
-    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
+    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, stage: Stage):
         if not sa.inspect(self.engine).has_table(
             metadata.name, schema=self.get_schema(metadata.stage).get()
         ):
@@ -534,8 +533,8 @@ class SQLTableStore(BaseTableStore):
             CopyTable(
                 metadata.name,
                 self.get_schema(metadata.stage),
-                table.name,
-                self.get_schema(table.stage.transaction_name),
+                metadata.name,
+                self.get_schema(stage.transaction_name),
             )
         )
 
@@ -627,56 +626,37 @@ class SQLTableStore(BaseTableStore):
 
     def store_task_metadata(self, metadata: TaskMetadata, stage: Stage):
         with self.engine.connect() as conn:
-            for cache_key in metadata.cache_keys.values():
-                conn.execute(
-                    self.tasks_table.insert().values(
-                        name=metadata.name,
-                        stage=metadata.stage,
-                        version=metadata.version,
-                        timestamp=metadata.timestamp,
-                        run_id=metadata.run_id,
-                        cache_key=cache_key,
-                        cache_keys=json.dumps(metadata.cache_keys),
-                        output_json=metadata.output_json,
-                        in_transaction_schema=True,
-                    )
+            conn.execute(
+                self.tasks_table.insert().values(
+                    name=metadata.name,
+                    stage=metadata.stage,
+                    version=metadata.version,
+                    timestamp=metadata.timestamp,
+                    run_id=metadata.run_id,
+                    input_hash=metadata.input_hash,
+                    cache_fn_hash=metadata.cache_fn_hash,
+                    output_json=metadata.output_json,
+                    in_transaction_schema=True,
                 )
-
-    # noinspection DuplicatedCode
-    def copy_task_metadata_to_transaction(self, task: MaterializingTask):
-        with self.engine.connect() as conn:
-            # copy metadata from any of the task.cache_keys
-            metadata_rows = (
-                conn.execute(
-                    self.tasks_table.select()
-                    .where(self.tasks_table.c.stage == task.stage.name)
-                    .where(self.tasks_table.c.version == task.version)
-                    .where(self.tasks_table.c.in_transaction_schema.in_([False]))
-                )
-                .mappings()
-                .all()
             )
-
-            for metadata in metadata_rows:
-                metadata_copy = dict(metadata)
-                metadata_copy["in_transaction_schema"] = True
-                del metadata_copy["id"]
-
-                conn.execute(self.tasks_table.insert().values(**metadata_copy))
 
     # noinspection DuplicatedCode
     def retrieve_task_metadata(self, task: MaterializingTask) -> TaskMetadata:
-        # noinspection PyUnresolvedReferences
-        cache_key_type = RunContext.get().get_cache_key_type()
-        cache_key = task.cache_keys[cache_key_type]
+        ignore_fresh_input = RunContext.get().ignore_fresh_input
         try:
             with self.engine.connect() as conn:
                 result = (
                     conn.execute(
                         self.tasks_table.select()
+                        .where(self.tasks_table.c.name == task.name)
                         .where(self.tasks_table.c.stage == task.stage.name)
                         .where(self.tasks_table.c.version == task.version)
-                        .where(self.tasks_table.c.cache_key == cache_key)
+                        .where(self.tasks_table.c.input_hash == task.input_hash)
+                        .where(
+                            self.tasks_table.c.cache_fn_hash == task.cache_fn_hash
+                            if not ignore_fresh_input
+                            else sa.literal(True)
+                        )
                         .where(self.tasks_table.c.in_transaction_schema.in_([False]))
                     )
                     .mappings()
@@ -686,7 +666,7 @@ class SQLTableStore(BaseTableStore):
             raise CacheError("Multiple results found task metadata")
 
         if result is None:
-            raise CacheError(f"Couldn't retrieve task for cache key {cache_key}")
+            raise CacheError(f"Couldn't retrieve task from cache: {task}")
 
         return TaskMetadata(
             name=result.name,
@@ -694,34 +674,34 @@ class SQLTableStore(BaseTableStore):
             version=result.version,
             timestamp=result.timestamp,
             run_id=result.run_id,
-            cache_keys=json.loads(result.cache_keys),
+            input_hash=result.input_hash,
+            cache_fn_hash=result.cache_fn_hash,
             output_json=result.output_json,
         )
 
     def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
         with self.engine.connect() as conn:
-            for cache_key in metadata.cache_keys.values():
-                conn.execute(
-                    self.lazy_cache_table.insert().values(
-                        name=metadata.name,
-                        stage=metadata.stage,
-                        cache_key=cache_key,
-                        cache_keys=json.dumps(metadata.cache_keys),
-                        in_transaction_schema=True,
-                    )
+            conn.execute(
+                self.lazy_cache_table.insert().values(
+                    name=metadata.name,
+                    stage=metadata.stage,
+                    query_hash=metadata.query_hash,
+                    task_hash=metadata.task_hash,
+                    in_transaction_schema=True,
                 )
+            )
 
     def retrieve_lazy_table_metadata(
-        self, cache_key: str, stage: Stage
+        self, query_hash: str, task_hash: str, stage: Stage
     ) -> LazyTableMetadata:
-        # noinspection PyUnresolvedReferences,DuplicatedCode
         try:
             with self.engine.connect() as conn:
                 result = (
                     conn.execute(
                         self.lazy_cache_table.select()
                         .where(self.lazy_cache_table.c.stage == stage.name)
-                        .where(self.lazy_cache_table.c.cache_key == cache_key)
+                        .where(self.lazy_cache_table.c.query_hash == query_hash)
+                        .where(self.lazy_cache_table.c.task_hash == task_hash)
                         .where(
                             self.lazy_cache_table.c.in_transaction_schema.in_([False])
                         )
@@ -738,32 +718,35 @@ class SQLTableStore(BaseTableStore):
         return LazyTableMetadata(
             name=result.name,
             stage=result.stage,
-            cache_keys=json.loads(result.cache_keys),
+            query_hash=result.query_hash,
+            task_hash=result.task_hash,
         )
 
     def store_raw_sql_metadata(self, metadata: RawSqlMetadata):
         with self.engine.connect() as conn:
-            for cache_key in metadata.cache_keys.values():
-                conn.execute(
-                    self.raw_sql_cache_table.insert().values(
-                        prev_tables=json.dumps(metadata.prev_tables),
-                        tables=json.dumps(metadata.tables),
-                        stage=metadata.stage,
-                        cache_key=cache_key,
-                        cache_keys=json.dumps(metadata.cache_keys),
-                        in_transaction_schema=True,
-                    )
+            conn.execute(
+                self.raw_sql_cache_table.insert().values(
+                    # ToDo: consider quoting or array column
+                    prev_tables=";".join(metadata.prev_tables),
+                    tables=";".join(metadata.tables),
+                    stage=metadata.stage,
+                    query_hash=metadata.query_hash,
+                    task_hash=metadata.task_hash,
+                    in_transaction_schema=True,
                 )
+            )
 
-    def retrieve_raw_sql_metadata(self, cache_key: str, stage: Stage) -> RawSqlMetadata:
-        # noinspection PyUnresolvedReferences,DuplicatedCode
+    def retrieve_raw_sql_metadata(
+        self, query_hash: str, task_hash: str, stage: Stage
+    ) -> RawSqlMetadata:
         try:
             with self.engine.connect() as conn:
                 result = (
                     conn.execute(
                         self.raw_sql_cache_table.select()
                         .where(self.raw_sql_cache_table.c.stage == stage.name)
-                        .where(self.raw_sql_cache_table.c.cache_key == cache_key)
+                        .where(self.raw_sql_cache_table.c.query_hash == query_hash)
+                        .where(self.raw_sql_cache_table.c.task_hash == task_hash)
                         .where(
                             self.raw_sql_cache_table.c.in_transaction_schema.in_(
                                 [False]
@@ -774,16 +757,17 @@ class SQLTableStore(BaseTableStore):
                     .one_or_none()
                 )
         except sa.exc.MultipleResultsFound:
-            raise CacheError("Multiple results found for lazy table cache key")
+            raise CacheError("Multiple results found for raw sql cache key")
 
         if result is None:
-            raise CacheError("No result found for lazy table cache key")
+            raise CacheError("No result found for raw sql cache key")
 
         return RawSqlMetadata(
-            prev_tables=json.loads(result.prev_tables),
-            tables=json.loads(result.tables),
+            prev_tables=result.prev_tables.split(";"),
+            tables=result.tables.split(";"),
             stage=result.stage,
-            cache_keys=json.loads(result.cache_keys),
+            query_hash=result.query_hash,
+            task_hash=result.task_hash,
         )
 
     def list_tables(self, stage, *, include_everything=False):
@@ -797,32 +781,15 @@ class SQLTableStore(BaseTableStore):
         return table_names + view_names
 
     def get_stage_hash(self, stage: Stage):
-        # TODO: Ensure that this is still valid + document
-        #       I believe that the following should be enough:
-        #    with self.engine.connect() as conn:
-        #        result = conn.execute(
-        #            sa.select([self.tasks_table.c.output_json])
-        #                .where(self.tasks_table.c.stage == stage.name)
-        #                .where(self.tasks_table.c.in_transaction_schema.in_([False]))
-        #        ).all()
-        #        result = [row[0] for row in result]
-        #     return compute_cache_key(*result)
-
-        hash_components = []
-        for table, col in [
-            (self.tasks_table, self.tasks_table.c.output_json),
-            (self.lazy_cache_table, self.lazy_cache_table.c.cache_key),
-            (self.raw_sql_cache_table, self.raw_sql_cache_table.c.cache_key),
-        ]:
-            query = (
-                sa.select(col)
-                .where((table.c.stage == stage.name) & ~table.c.in_transaction_schema)
-                .order_by(col)
-            )
-            hash_components += [
-                val for val in pd.read_sql(query, con=self.engine).iloc[:, 0]
-            ]
-        return compute_cache_key(*hash_components)
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                sa.select([self.tasks_table.c.output_json])
+                .where(self.tasks_table.c.stage == stage.name)
+                .where(self.tasks_table.c.in_transaction_schema.in_([False]))
+                .order_by(self.tasks_table.c.output_json)
+            ).all()
+            result = [row[0] for row in result]
+        return compute_cache_key(*result)
 
 
 @SQLTableStore.register_table()

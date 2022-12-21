@@ -6,14 +6,9 @@ import pandas as pd
 
 from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
-from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.errors import CacheError, StageError
 from pydiverse.pipedag.materialize.core import MaterializingTask
-from pydiverse.pipedag.materialize.metadata import (
-    LazyTableMetadata,
-    RawSqlMetadata,
-    TaskMetadata,
-)
+from pydiverse.pipedag.materialize.metadata import LazyTableMetadata, TaskMetadata
 
 
 class DictTableStore(BaseTableStore):
@@ -32,9 +27,6 @@ class DictTableStore(BaseTableStore):
         self.lazy_table_metadata = dict()
         self.t_lazy_table_metadata = dict()
 
-        self.raw_sql_metadata = dict()
-        self.t_raw_sql_metadata = dict()
-
     def init_stage(self, stage: Stage):
         self.store.setdefault(stage.name, {})
         self.store[stage.transaction_name] = {}
@@ -45,15 +37,11 @@ class DictTableStore(BaseTableStore):
         self.lazy_table_metadata.setdefault(stage, {})
         self.t_lazy_table_metadata[stage] = {}
 
-        self.raw_sql_metadata.setdefault(stage, {})
-        self.t_raw_sql_metadata[stage] = {}
-
     def commit_stage(self, stage: Stage):
         self.store[stage.name] = self.store[stage.transaction_name]
         del self.store[stage.transaction_name]
         self.metadata[stage] = self.t_metadata[stage]
         self.lazy_table_metadata[stage] = self.t_lazy_table_metadata[stage]
-        self.raw_sql_metadata[stage] = self.t_raw_sql_metadata[stage]
 
     def copy_table_to_transaction(self, table: Table):
         stage = table.stage
@@ -62,36 +50,29 @@ class DictTableStore(BaseTableStore):
                 f"Can't copy table '{table.name}' to transaction."
                 f" Stage '{stage.name}' has already been committed."
             )
-        if table.cache_keys is None:
-            raise ValueError(f"Table cache keys can't be None")
 
         try:
-            self.store[stage.transaction_name][table.name] = self.store[stage.name][
-                table.name
-            ]
+            t = self.store[stage.name][table.name]
+            self.store[stage.transaction_name][table.name] = t
         except KeyError:
-            raise CacheError
-
-    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
-        if (metadata.stage not in self.store) or (
-            metadata.name not in self.store[metadata.stage]
-        ):
             raise CacheError(
-                f"Can't copy lazy table '{metadata.name}' (stage:"
-                f" '{metadata.stage}') to transaction because no such table"
-                " exists."
+                f"No table with name '{table.name}' found in '{stage.name}' stage"
             )
 
-        self.store[table.stage.transaction_name][table.name] = self.store[
-            metadata.stage
-        ][metadata.name]
+    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, stage: Stage):
+        if stage.did_commit:
+            raise StageError(
+                f"Can't copy table '{metadata.name}' to transaction."
+                f" Stage '{stage.name}' has already been committed."
+            )
 
-    def copy_raw_sql_tables_to_transaction(
-        self, metadata: RawSqlMetadata, target_stage: Stage
-    ):
-        raise NotImplementedError(
-            "The DictTableStore does not support raw SQL statements"
-        )
+        try:
+            t = self.store[stage.name][metadata.name]
+            self.store[stage.transaction_name][metadata.name] = t
+        except KeyError:
+            raise CacheError(
+                f"No table with name '{metadata.name}' found in '{stage.name}' stage"
+            )
 
     def delete_table_from_transaction(self, table: Table):
         try:
@@ -100,44 +81,29 @@ class DictTableStore(BaseTableStore):
             return
 
     def store_task_metadata(self, metadata: TaskMetadata, stage: Stage):
-        for cache_key in metadata.cache_keys.values():
-            self.t_metadata[stage][cache_key] = metadata
-
-    def copy_task_metadata_to_transaction(self, task: MaterializingTask):
-        stage = task.stage
-        for cache_key in task.cache_keys.values():
-            self.t_metadata[stage][cache_key] = self.metadata[stage][cache_key]
+        cache_key = metadata.input_hash + str(metadata.cache_fn_hash)
+        self.t_metadata[stage][cache_key] = metadata
 
     def retrieve_task_metadata(self, task: MaterializingTask) -> TaskMetadata:
-        cache_key_type = RunContext.get().get_cache_key_type()
-        cache_key = task.cache_keys[cache_key_type]
+        cache_key = task.input_hash + str(task.cache_fn_hash)
         try:
             return self.metadata[task.stage][cache_key]
         except KeyError:
             raise CacheError(
                 "There is no metadata for task "
-                f"'{task.name}' with cache key '{cache_key}'({cache_key_type}), yet"
+                f"'{task.name}' with cache key '{task.input_hash}', yet"
             )
 
     def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
-        for cache_key in metadata.cache_keys.values():
-            self.t_lazy_table_metadata[metadata.stage][cache_key] = metadata
+        cache_key = metadata.query_hash + metadata.task_hash
+        self.t_lazy_table_metadata[metadata.stage][cache_key] = metadata
 
     def retrieve_lazy_table_metadata(
-        self, cache_key: str, stage: Stage
+        self, query_hash: str, task_hash: str, stage: Stage
     ) -> LazyTableMetadata:
         try:
+            cache_key = query_hash + task_hash
             return self.lazy_table_metadata[stage.name][cache_key]
-        except (TypeError, KeyError):
-            raise CacheError
-
-    def store_raw_sql_metadata(self, metadata: RawSqlMetadata):
-        for cache_key in metadata.cache_keys.values():
-            self.t_raw_sql_metadata[metadata.stage][cache_key] = metadata
-
-    def retrieve_raw_sql_metadata(self, cache_key: str, stage: Stage) -> RawSqlMetadata:
-        try:
-            return self.raw_sql_metadata[stage.name][cache_key]
         except (TypeError, KeyError):
             raise CacheError
 

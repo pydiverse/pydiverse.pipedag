@@ -158,7 +158,7 @@ class PipeDAGStore(Disposable):
         output object with the required metadata to allow dematerialization.
 
         :param task: The task instance which produced `value`. Must have
-            the correct `cache_keys` attribute set.
+            the correct `cache_key` attribute set.
         :param value: The output of the task. Must be materializable; this
             means it can only contain the following object types:
             `dict`, `list`, `tuple`,
@@ -181,6 +181,7 @@ class PipeDAGStore(Disposable):
         blobs = []
 
         config = ConfigContext.get()
+        combined_cache_key = task.combined_cache_key()
 
         def materialize_mutator(x, counter=itertools.count()):
             # Automatically convert an object to a table / blob if its
@@ -202,16 +203,14 @@ class PipeDAGStore(Disposable):
 
             # Do the materialization
             if isinstance(x, (Table, RawSql, Blob)):
-                x.cache_keys = task.cache_keys
+                x.cache_key = combined_cache_key
 
                 if isinstance(x, (Table, Blob)):
                     x.stage = stage
                     # Update name:
                     # - If no name has been provided, generate on automatically
                     # - If the provided name ends with %%, perform name mangling
-                    auto_suffix = (
-                        f"{list(task.cache_keys.values())[0]}_{next(counter):04d}"
-                    )
+                    auto_suffix = f"{combined_cache_key}_{next(counter):04d}"
                     if x.name is None:
                         x.name = task.name + "_" + auto_suffix
                     elif x.name.endswith("%%"):
@@ -248,20 +247,18 @@ class PipeDAGStore(Disposable):
             version=task.version,
             timestamp=datetime.datetime.now(),
             run_id=ctx.run_id,
-            cache_keys=task.cache_keys,
+            input_hash=task.input_hash,
+            cache_fn_hash=task.cache_fn_hash,
             output_json=output_json,
         )
 
-        # Materialize
         def store_table(table: Table):
             if task.lazy:
-                self.table_store.store_table_lazy(table)
+                self.table_store.store_table_lazy(table, task)
             else:
                 self.table_store.store_table(table)
 
-        def store_raw_sql(raw_sql: RawSql):
-            self.table_store.store_raw_sql(raw_sql)
-
+        # Materialize
         self._check_names(task, tables, blobs)
         self._store_task_transaction(
             task,
@@ -269,9 +266,9 @@ class PipeDAGStore(Disposable):
             raw_sqls,
             blobs,
             store_table,
-            store_raw_sql,
-            lambda blob: self.blob_store.store_blob(blob),
-            lambda _: self.table_store.store_task_metadata(metadata, stage),
+            lambda raw_sql: self.table_store.store_raw_sql(raw_sql, task),
+            self.blob_store.store_blob,
+            lambda: self.table_store.store_task_metadata(metadata, stage),
         )
 
         return m_value
@@ -321,7 +318,7 @@ class PipeDAGStore(Disposable):
         store_table: Callable[[Table], None],
         store_raw_sql: Callable[[RawSql], None],
         store_blob: Callable[[Blob], None],
-        store_metadata: Callable[[MaterializingTask], None],
+        store_metadata: Callable[[], None],
     ):
         stage = task.stage
         ctx = RunContext.get()
@@ -343,7 +340,7 @@ class PipeDAGStore(Disposable):
                 store_raw_sql(raw_sql)
 
             ctx.validate_stage_lock(task.stage)
-            store_metadata(task)
+            store_metadata()
 
         except Exception as e:
             # Failed - Roll back everything
@@ -357,43 +354,14 @@ class PipeDAGStore(Disposable):
 
     # ### Cache ### #
 
-    @staticmethod
-    def compute_task_cache_key(
-        task: MaterializingTask,
-        input_json: str,
-    ) -> str:
-        """Compute the cache key for a task
-
-        Used by materializing task to create a unique fingerprint to determine
-        if the same task has been executed in a previous run with the same
-        inputs.
-
-        This task cache key is based on the following values:
-
-        - Task Name
-        - Task Version
-        - Inputs
-
-        This is currently independent of RunContext.get_cache_key_type().
-
-        :param task: The task
-        :param input_json: The inputs provided to the task serialized as a json
-        """
-        return compute_cache_key(
-            "TASK",
-            task.name,
-            task.version or "None",
-            input_json,
-        )
-
     def retrieve_cached_output(
         self,
         task: MaterializingTask,
-    ) -> Materializable:
+    ) -> (Materializable, TaskMetadata):
         """Try to retrieve the cached outputs for a task
 
         :param task: The materializing task for which to retrieve
-            the cached output. Must have the `cache_keys` attribute set.
+            the cached output. Must have the `cache_key` attribute set.
         :raises CacheError: if no matching task exists in the cache
         """
 
@@ -401,11 +369,12 @@ class PipeDAGStore(Disposable):
             raise StageError(f"Stage already committed.")
 
         metadata = self.table_store.retrieve_task_metadata(task)
-        return self.json_decode(metadata.output_json)
+        return self.json_decode(metadata.output_json), metadata
 
     def copy_cached_output_to_transaction_stage(
         self,
         output: Materializable,
+        original_metadata: TaskMetadata,
         task: MaterializingTask,
     ):
         """Copy the (non-lazy) outputs from a cached task into the transaction stage
@@ -434,6 +403,9 @@ class PipeDAGStore(Disposable):
 
         deep_map(output, visitor)
 
+        def store_raw_sql(raw_sql):
+            raise Exception("raw sql scripts cannot be part of a non-lazy task")
+
         # Materialize
         self._check_names(task, tables, blobs)
         self._store_task_transaction(
@@ -441,10 +413,10 @@ class PipeDAGStore(Disposable):
             tables,
             raw_sqls,
             blobs,
-            lambda table: self.table_store.copy_table_to_transaction(table),
-            lambda raw_sql: None,  # raw sql scripts cannot be part of a non-lazy task
-            lambda blob: self.blob_store.copy_blob_to_transaction(blob),
-            lambda _task: self.table_store.copy_task_metadata_to_transaction(_task),
+            self.table_store.copy_table_to_transaction,
+            store_raw_sql,
+            self.blob_store.copy_blob_to_transaction,
+            lambda: self.table_store.store_task_metadata(original_metadata, task.stage),
         )
 
     # ### Utils ### #

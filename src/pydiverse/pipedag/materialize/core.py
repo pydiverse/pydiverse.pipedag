@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import functools
 import inspect
-import json
 from functools import partial
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from pydiverse.pipedag._typing import CallableT
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.container import Blob, Table
+from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.util import deep_map
+
+if TYPE_CHECKING:
+    from pydiverse.pipedag.materialize.metadata import TaskMetadata
 
 
 def materialize(
@@ -109,9 +112,56 @@ class MaterializingTask(Task):
         self.cache = cache
         self.lazy = lazy
 
-        # TODO: Remove cache keys from instance
-        #       Inside a task instance there should be *no* state
-        self.cache_keys = {}
+    # The following properties are all just convenient ways to access the state
+    # stored in TaskContext. The reason these properties aren't stored inside the
+    # task object itself is because tasks shouldn't have state, because they get
+    # reused between different flow runs.
+
+    @property
+    def input_hash(self) -> str:
+        return TaskContext.get().input_hash
+
+    @input_hash.setter
+    def input_hash(self, value):
+        TaskContext.get().input_hash = value
+
+    @property
+    def cache_fn_hash(self) -> str | None:
+        return TaskContext.get().cache_fn_hash
+
+    @cache_fn_hash.setter
+    def cache_fn_hash(self, value):
+        TaskContext.get().cache_fn_hash = value
+
+    @property
+    def cache_metadata(self) -> TaskMetadata:
+        return TaskContext.get().cache_metadata
+
+    @cache_metadata.setter
+    def cache_metadata(self, value):
+        TaskContext.get().cache_metadata = value
+
+    def combined_cache_key(self, from_cache_metadata=False):
+        from pydiverse.pipedag.materialize.util.cache import compute_cache_key
+
+        if from_cache_metadata and (cache_metadata := self.cache_metadata) is not None:
+            name = cache_metadata.name
+            version = cache_metadata.version
+            input_hash = cache_metadata.input_hash
+            cache_fn_hash = cache_metadata.cache_fn_hash
+        else:
+            name = self.name
+            version = self.version
+            input_hash = self.input_hash
+            cache_fn_hash = self.cache_fn_hash
+
+        return compute_cache_key(
+            "TASK",
+            name,
+            version,
+            input_hash,
+            cache_fn_hash,
+        )
 
 
 class MaterializationWrapper:
@@ -137,7 +187,7 @@ class MaterializationWrapper:
             with some additional metadata.
         """
 
-        task = TaskContext.get().task
+        task: MaterializingTask = TaskContext.get().task  # type: ignore
         store = ConfigContext.get().store
         bound = self.fn_signature.bind(*args, **kwargs)
 
@@ -149,24 +199,22 @@ class MaterializationWrapper:
         store.ensure_stage_is_ready(task.stage)
 
         # Compute the cache key for the task inputs
-        input_json_tasks_only = store.json_encode(bound.arguments)
-        input_json = input_json_tasks_only
+        input_json = store.json_encode(bound.arguments)
+        input_hash = compute_cache_key("INPUT", input_json)
+
+        cache_fn_hash = ""
         if task.cache is not None:
-            input_json += store.json_encode(task.cache(*args, **kwargs))
-        input_jsons = {name: input_json for name in RunContext.get_cache_key_types()}
-        assert "tasks_only" in input_jsons
-        if task.cache is not None:
-            input_jsons["tasks_only"] = input_json_tasks_only
-        # task-cache_key is currently independent of RunContext.get_cache_key_type(), but this might change
-        task.cache_keys = {
-            name: store.compute_task_cache_key(task, input_json)
-            for name, input_json in input_jsons.items()
-        }
+            cache_fn_output = store.json_encode(task.cache(*args, **kwargs))
+            cache_fn_hash = compute_cache_key("CACHE_FN", cache_fn_output)
+
+        task.input_hash = input_hash
+        task.cache_fn_hash = cache_fn_hash
+        combined_cache_key = task.combined_cache_key()
 
         # Check if this task has already been run with the same inputs
         # If yes, return memoized result. This prevents DuplicateNameExceptions
         ctx = RunContext.get()
-        with ctx.task_memo(task, task.cache_keys) as (success, memo):
+        with ctx.task_memo(task, combined_cache_key) as (success, memo):
             if success:
                 task.logger.info(
                     "Task has already been run with the same inputs."
@@ -175,20 +223,23 @@ class MaterializationWrapper:
 
                 return memo
 
-            # If task is not lazy, check the cache
-            if not task.lazy:
-                try:
-                    cached_output = store.retrieve_cached_output(task)
-                    store.copy_cached_output_to_transaction_stage(cached_output, task)
-                    ctx.store_task_memo(task, task.cache_keys, cached_output)
+            # Check the cache
+            try:
+                cached_output, cache_metadata = store.retrieve_cached_output(task)
+                task.cache_metadata = cache_metadata
+                if not task.lazy:
+                    # Task isn't lazy -> copy cache to transaction stage
+                    store.copy_cached_output_to_transaction_stage(
+                        cached_output, cache_metadata, task
+                    )
+                    ctx.store_task_memo(task, combined_cache_key, cached_output)
                     task.logger.info(f"Found task in cache. Using cached result.")
                     return cached_output
-                except CacheError as e:
-                    task.logger.info(
-                        "There is no cached output for this task, yet.",
-                        exception=str(e),
-                    )
-                    pass
+            except CacheError as e:
+                task.logger.info(
+                    "Failed to retrieve task from cache.",
+                    exception=str(e),
+                )
 
             # Not found in cache / lazy -> Evaluate Function
             args, kwargs = store.dematerialize_task_inputs(
@@ -205,7 +256,7 @@ class MaterializationWrapper:
                 return x
 
             result = deep_map(result, obj_del_mutator)
-            ctx.store_task_memo(task, task.cache_keys, result)
+            ctx.store_task_memo(task, combined_cache_key, result)
             self.value = result
 
             return result

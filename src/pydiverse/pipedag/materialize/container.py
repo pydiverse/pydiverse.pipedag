@@ -19,10 +19,9 @@ class Table(Generic[T]):
     :param name: Optional name. If no name is provided, an automatically
         generated name will be used. To prevent name collisions, you can
         add '%%' at the end of the name to enable automatic name mangling.
-    :param stage: Stage in which the result was emitted
     :param primary_key: Optional name of the primary key that should be
         used when materializing this table
-    :param cache_keys: Optional dictionary of keys used for cache invalidation (manual use is discouraged)
+    :param cache_key: Optional key used for cache invalidation (manual use is discouraged)
     """
 
     def __init__(
@@ -31,7 +30,8 @@ class Table(Generic[T]):
         name: str | None = None,
         stage: Stage | None = None,
         primary_key: str | None = None,
-        cache_keys: dict[str, str] | None = None,
+        *,
+        cache_key: str | None = None,
     ):
         self._name = None
 
@@ -40,7 +40,7 @@ class Table(Generic[T]):
         self.stage = stage
         self.primary_key = primary_key
 
-        self.cache_keys = cache_keys
+        self.cache_key = cache_key
 
     def __str__(self):
         return f"<Table: {self.name} ({self.stage.name})>"
@@ -59,12 +59,11 @@ class Table(Generic[T]):
 class RawSql:
     """Container for raw sql strings
 
-    This allows wrapping legacy sql code with pipedag before it is converted to proper tasks that allow tracing tables.
+    This allows wrapping legacy sql code with pipedag before it is converted
+    to proper tasks that allow tracing tables.
 
     :param sql: The table object to wrap
-    :param name: A name that allows humans to reference the sql
-    :param stage: Stage in which the result was emitted
-    :param cache_keys: Optional dictionary of keys used for cache invalidation (manual use is discouraged)
+    :param cache_key: Optional key used for cache invalidation (manual use is discouraged)
     """
 
     def __init__(
@@ -72,7 +71,8 @@ class RawSql:
         sql: str | None = None,
         name: str | None = None,
         stage: Stage | None = None,
-        cache_keys: dict[str, str] | None = None,
+        *,
+        cache_key: str | None = None,
     ):
         self._name = None
 
@@ -80,7 +80,7 @@ class RawSql:
         self.name = name
         self.stage = stage
 
-        self.cache_keys = cache_keys
+        self.cache_key = cache_key
 
     def __str__(self):
         sql_short = self.sql.strip()[0:40].replace("\n", "").strip()
@@ -107,8 +107,6 @@ class Blob(Generic[T]):
     :param name: Optional name. If no name is provided, an automatically
         generated name will be used. To prevent name collisions, you can
         add '%%' at the end of the name to enable automatic name mangling.
-    :param stage: Stage in which the result was emitted
-    :param cache_keys: Optional dictionary of keys used for cache invalidation (manual use is discouraged)
     """
 
     def __init__(
@@ -116,7 +114,8 @@ class Blob(Generic[T]):
         obj: T | None = None,
         name: str | None = None,
         stage: Stage | None = None,
-        cache_keys: dict[str, str] | None = None,
+        *,
+        cache_key: str | None = None,
     ):
         self._name = None
 
@@ -124,7 +123,7 @@ class Blob(Generic[T]):
         self.name = name
         self.stage = stage
 
-        self.cache_keys = cache_keys
+        self.cache_key = cache_key
 
     def __str__(self):
         return f"<Blob: {self.name} ({self.stage.name})>"
