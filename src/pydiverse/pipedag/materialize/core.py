@@ -142,6 +142,15 @@ class MaterializingTask(Task):
         TaskContext.get().cache_metadata = value
 
     def combined_cache_key(self, from_cache_metadata=False):
+        """
+        Return a hash used for judging cache validity of the current task output (except for lazy objects).
+
+        Attention: the hash is sometimes recovered from cache and is not guaranteed to be a hash
+        of the current input_hash, version, and cache_fn_hash situation of this task execution. It rather
+        serves as a unique ID for what is currently stored in the task output.
+        :param from_cache_metadata: if true, the hash is loaded from cached metadata if possible
+        :return: hash
+        """
         from pydiverse.pipedag.materialize.util.cache import compute_cache_key
 
         if from_cache_metadata and (cache_metadata := self.cache_metadata) is not None:
@@ -225,6 +234,9 @@ class MaterializationWrapper:
 
             # Check the cache
             try:
+                # Attention: cache_fn_hash is not used for cache retrieval with ignore_fresh_input=True
+                # Thus cache_metadata.cache_fn_hash may diverge from task.cache_fn_hash. The former is
+                # used for downstream task input_hash based cache invalidation.
                 cached_output, cache_metadata = store.retrieve_cached_output(task)
                 task.cache_metadata = cache_metadata
                 if not task.lazy:

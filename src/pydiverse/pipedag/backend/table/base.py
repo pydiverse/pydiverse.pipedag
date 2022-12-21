@@ -216,6 +216,13 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             return self.store_table(table)
 
         def compute_table_cache_key():
+            """
+            Return combined hash that is only the same if both task is cache valid and query is identical.
+
+            Attention: the task_hash is sometimes recovered from cache and is not guaranteed to be a hash
+            of the current input_hash, version, and cache_fn_hash situation of this task execution. It rather
+            serves as a unique ID for what is currently stored in the task output.
+            """
             assert query_hash is not None
             assert task_hash is not None
             return compute_cache_key(query_hash, task_hash)
@@ -265,6 +272,13 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         query_hash = compute_cache_key("RAW-SQL", raw_sql.sql)
 
         def compute_raw_sql_cache_key():
+            """
+            Return combined hash that is only the same if both task is cache valid and query is identical.
+
+            Attention: the task_hash is sometimes recovered from cache and is not guaranteed to be a hash
+            of the current input_hash, version, and cache_fn_hash situation of this task execution. It rather
+            serves as a unique ID for what is currently stored in the task output.
+            """
             assert query_hash is not None
             assert task_hash is not None
             return compute_cache_key(query_hash, task_hash)
