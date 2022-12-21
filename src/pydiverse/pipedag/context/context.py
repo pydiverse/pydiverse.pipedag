@@ -12,9 +12,9 @@ from pydiverse.pipedag.util.import_ import import_object
 if TYPE_CHECKING:
     from pydiverse.pipedag._typing import T
     from pydiverse.pipedag.backend import BaseLockManager
-    from pydiverse.pipedag.engine.base import OrchestrationEngine
-    from pydiverse.pipedag.core import Flow, Stage, Task
     from pydiverse.pipedag.context.run_context import StageLockStateHandler
+    from pydiverse.pipedag.core import Flow, Stage, Task
+    from pydiverse.pipedag.engine.base import OrchestrationEngine
     from pydiverse.pipedag.materialize.metadata import TaskMetadata
 
 import structlog
@@ -107,13 +107,16 @@ class ConfigContext(BaseAttrsContext):
     """
     Configuration context for running a particular pipedag instance.
 
-    For the most part it holds serializable attributes. But it also offers access to blob_store and table_store as
-    well as lock manager and orchestration engine. Lock manager and orchestration engine are managed full cycle by
-    exactly one caller (ServerRunContext / Flow.run()). So this class just offers a way to create a disposable object.
-    Blob_store and table_store on the other hand might be accessed by multi-threaded / multi-processed / multi-node
-    way of orchestrating functions in the pipedag. Since they don't keep real state, they can be thrown away while
-    pickling and will be reloaded on first access of the @cached_property store. Calling ConfigContext.dispose() will
-    close all connections and render this object unusable afterwards.
+    For the most part it holds serializable attributes. But it also offers access
+    to blob_store and table_store as well as lock manager and orchestration engine.
+    Lock manager and orchestration engine are managed full cycle by exactly one
+    caller (ServerRunContext / Flow.run()). So this class just offers a way to create
+    a disposable object. Blob_store and table_store on the other hand might be
+    accessed by multi-threaded / multi-processed / multi-node way of orchestrating
+    functions in the pipedag. Since they don't keep real state, they can be
+    thrown away while pickling and will be reloaded on first access of the
+    @cached_property store. Calling ConfigContext.dispose() will close all
+    connections and render this object unusable afterwards.
     """
 
     config_dict: dict
@@ -166,7 +169,8 @@ class ConfigContext(BaseAttrsContext):
 
     def __getstate__(self):
         state = super().__getstate__()
-        # store is not serializable. But @cached_property will reload it from config_dict
+        # store is not serializable, but @cached_property will reload
+        # it from config_dict
         state.pop("store", None)
         state.pop("auto_table", None)
         state.pop("auto_blob", None)

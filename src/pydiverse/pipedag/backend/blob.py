@@ -139,7 +139,7 @@ class FileBlobStore(BaseBlobStore):
             raise CacheError(
                 f"Can't copy blob '{blob.name}' (stage: '{blob.stage.name}')"
                 " to working transaction because no such blob exists."
-            )
+            ) from None
 
     def delete_blob_from_transaction(self, blob: Blob):
         try:

@@ -57,7 +57,7 @@ class DictTableStore(BaseTableStore):
         except KeyError:
             raise CacheError(
                 f"No table with name '{table.name}' found in '{stage.name}' stage"
-            )
+            ) from None
 
     def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, stage: Stage):
         if stage.did_commit:
@@ -72,7 +72,7 @@ class DictTableStore(BaseTableStore):
         except KeyError:
             raise CacheError(
                 f"No table with name '{metadata.name}' found in '{stage.name}' stage"
-            )
+            ) from None
 
     def delete_table_from_transaction(self, table: Table):
         try:
@@ -92,7 +92,7 @@ class DictTableStore(BaseTableStore):
             raise CacheError(
                 "There is no metadata for task "
                 f"'{task.name}' with cache key '{task.input_hash}', yet"
-            )
+            ) from None
 
     def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
         cache_key = metadata.query_hash + metadata.task_hash
@@ -105,7 +105,7 @@ class DictTableStore(BaseTableStore):
             cache_key = query_hash + task_hash
             return self.lazy_table_metadata[stage.name][cache_key]
         except (TypeError, KeyError):
-            raise CacheError
+            raise CacheError("Couldn't find metadata for lazy table") from None
 
     def list_tables(self, stage):
         return self.store[stage.transaction_name].keys()

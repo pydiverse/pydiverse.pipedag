@@ -38,14 +38,12 @@ class Schema:
         return self.prefix + self.name + self.suffix
 
 
-# noinspection PyAbstractClass
 class CreateSchema(DDLElement):
     def __init__(self, schema: Schema, if_not_exists=False):
         self.schema = schema
         self.if_not_exists = if_not_exists
 
 
-# noinspection PyAbstractClass
 class DropSchema(DDLElement):
     def __init__(self, schema: Schema, if_exists=False, cascade=False):
         self.schema = schema
@@ -53,21 +51,18 @@ class DropSchema(DDLElement):
         self.cascade = cascade
 
 
-# noinspection PyAbstractClass
 class RenameSchema(DDLElement):
     def __init__(self, from_: Schema, to: Schema):
         self.from_ = from_
         self.to = to
 
 
-# noinspection PyAbstractClass
 class CreateDatabase(DDLElement):
     def __init__(self, database: str, if_not_exists=False):
         self.database = database
         self.if_not_exists = if_not_exists
 
 
-# noinspection PyAbstractClass
 class DropDatabase(DDLElement):
     def __init__(self, database: str, if_exists=False, cascade=False):
         self.database = database
@@ -75,7 +70,6 @@ class DropDatabase(DDLElement):
         self.cascade = cascade
 
 
-# noinspection PyAbstractClass
 class CreateTableAsSelect(DDLElement):
     def __init__(self, name: str, schema: Schema, query: Select | TextClause | sa.Text):
         self.name = name
@@ -83,7 +77,6 @@ class CreateTableAsSelect(DDLElement):
         self.query = query
 
 
-# noinspection PyAbstractClass
 class PrepareCreateTableAsSelect(DDLElement):
     """Prepare a CreateTableAsSelect statement for DB2."""
 
@@ -93,7 +86,6 @@ class PrepareCreateTableAsSelect(DDLElement):
         self.query = query
 
 
-# noinspection PyAbstractClass
 class CreateViewAsSelect(DDLElement):
     def __init__(self, name: str, schema: Schema, query: Select | TextClause | sa.Text):
         self.name = name
@@ -101,7 +93,6 @@ class CreateViewAsSelect(DDLElement):
         self.query = query
 
 
-# noinspection PyAbstractClass
 class CopyTable(DDLElement):
     def __init__(
         self,
@@ -118,7 +109,6 @@ class CopyTable(DDLElement):
         self.if_not_exists = if_not_exists
 
 
-# noinspection PyAbstractClass
 class DropTable(DDLElement):
     def __init__(self, name, schema: Schema, if_exists=False):
         self.name = name
@@ -126,28 +116,37 @@ class DropTable(DDLElement):
         self.if_exists = if_exists
 
 
-# noinspection PyAbstractClass
 class DropView(DDLElement):
+    """
+    Attention: For mssql, this statement must be prefixed with
+               a 'USE <database>' statement.
+    """
+
     def __init__(self, name, schema: Schema, if_exists=False):
-        # attention: for mssql, this statement must be prefixed with a 'USE <database>' statement
         self.name = name
         self.schema = schema
         self.if_exists = if_exists
 
 
-# noinspection PyAbstractClass
 class DropProcedure(DDLElement):
+    """
+    Attention: For mssql, this statement must be prefixed with
+               a 'USE <database>' statement.
+    """
+
     def __init__(self, name, schema: Schema, if_exists=False):
-        # attention: for mssql, this statement must be prefixed with a 'USE <database>' statement
         self.name = name
         self.schema = schema
         self.if_exists = if_exists
 
 
-# noinspection PyAbstractClass
 class DropFunction(DDLElement):
+    """
+    Attention: For mssql, this statement must be prefixed with
+               a 'USE <database>' statement.
+    """
+
     def __init__(self, name, schema: Schema, if_exists=False):
-        # attention: for mssql, this statement must be prefixed with a 'USE <database>' statement
         self.name = name
         self.schema = schema
         self.if_exists = if_exists
@@ -164,16 +163,15 @@ def visit_create_schema(create: CreateSchema, compiler, **kw):
     return " ".join(text)
 
 
-# noinspection SqlDialectInspection
 @compiles(CreateSchema, "mssql")
 def visit_create_schema(create: CreateSchema, compiler, **kw):
-    """For SQL Server we support two modes: using databases as schemas or schemas as schemas.
-    """
+    # For SQL Server we support two modes:  using databases as schemas,
+    # or schemas as schemas.
     _ = kw
     if "." in create.schema.name:
         raise AttributeError(
-            f"We currently do not support dots in schema names when working with mssql"
-            f" database"
+            "We currently do not support dots in schema names "
+            " when working with mssql database"
         )
     full_name = create.schema.get()
     # it was already checked that there is exactly one dot in schema prefix + suffix
@@ -183,18 +181,21 @@ def visit_create_schema(create: CreateSchema, compiler, **kw):
     create_schema = f"CREATE SCHEMA {schema}"
     create_database = f"CREATE DATABASE {database}"
     if create.if_not_exists:
-        create_database = (
-            f"""IF NOT EXISTS ( SELECT * FROM sys.databases WHERE name = N'{database_name}') """
-            f"""BEGIN {create_database} END"""
-        )
-        create_schema = (
-            f"""IF NOT EXISTS ( SELECT * FROM sys.schema WHERE name = N'{schema_name}') """
-            f"""BEGIN {create_schema} END"""
-        )
+        create_database = f"""
+            IF NOT EXISTS ( 
+                SELECT * FROM sys.databases WHERE name = N'{database_name}'
+            )
+            BEGIN {create_database} END"""
+        create_schema = f"""
+            IF NOT EXISTS (
+                SELECT * FROM sys.schema WHERE name = N'{schema_name}'
+            )
+            BEGIN {create_schema} END"""
 
     if "." in create.schema.prefix:
         # With prefix like "my_db." we create our stages as schemas
-        # Attention: we have to rely on a preceding USE statement for correct prefix database
+        # Attention: we have to rely on a preceding USE statement
+        #            for correct prefix database
         return create_schema
     else:
         # With suffix like ".dbo" we create our stages as databases
@@ -237,7 +238,8 @@ def visit_drop_schema(drop: DropSchema, compiler, **kw):
     database_name, schema_name = full_name.split(".")
     if "." in drop.schema.prefix:
         # With prefix like "my_db." we create our stages as schemas
-        # Attention: we have to rely on a preceding USE statement for correct prefix database
+        # Attention: we have to rely on a preceding USE statement
+        #            for correct prefix database
         text = ["DROP SCHEMA"]
         name = compiler.preparer.format_schema(schema_name)
     else:
@@ -278,7 +280,7 @@ def visit_rename_schema(rename: RenameSchema, compiler, **kw):
     _ = kw
     if rename.from_.prefix != rename.to.prefix:
         raise AttributeError(
-            f"We currently do not support varying schema prefixes for mssql database"
+            "We currently do not support varying schema prefixes for mssql database"
         )
     from_full_name = rename.from_.get()
     to_full_name = rename.to.get()
@@ -396,7 +398,8 @@ def visit_create_view_as_select(create: CreateViewAsSelect, compiler, **kw):
 def insert_into_in_query(select_sql, database, schema, table):
     into = f"INTO {database}.{schema}.{table}"
     into_point = None
-    # insert INTO before first FROM, WHERE, GROUP BY, WINDOW, HAVING, ORDER BY, UNION, EXCEPT, INTERSECT
+    # insert INTO before first FROM, WHERE, GROUP BY, WINDOW, HAVING,
+    #                          ORDER BY, UNION, EXCEPT, INTERSECT
     for marker in [
         "FROM",
         "WHERE",

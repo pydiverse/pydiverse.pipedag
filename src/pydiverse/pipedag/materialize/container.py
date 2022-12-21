@@ -21,7 +21,7 @@ class Table(Generic[T]):
         add '%%' at the end of the name to enable automatic name mangling.
     :param primary_key: Optional name of the primary key that should be
         used when materializing this table
-    :param cache_key: Optional key used for cache invalidation (manual use is discouraged)
+    :param cache_key: Optional key used for cache invalidation.
     """
 
     def __init__(
@@ -63,7 +63,7 @@ class RawSql:
     to proper tasks that allow tracing tables.
 
     :param sql: The table object to wrap
-    :param cache_key: Optional key used for cache invalidation (manual use is discouraged)
+    :param cache_key: Optional key used for cache invalidation.
     """
 
     def __init__(

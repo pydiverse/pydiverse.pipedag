@@ -10,7 +10,7 @@ from typing import Callable
 _nil = []
 
 
-def deep_map(x, callable: Callable, memo=None):
+def deep_map(x, fn: Callable, memo=None):
     if memo is None:
         memo = {}
 
@@ -22,13 +22,13 @@ def deep_map(x, callable: Callable, memo=None):
     cls = type(x)
 
     if cls == list:
-        y = _deep_map_list(x, callable, memo)
+        y = _deep_map_list(x, fn, memo)
     elif cls == tuple:
-        y = _deep_map_tuple(x, callable, memo)
+        y = _deep_map_tuple(x, fn, memo)
     elif cls == dict:
-        y = _deep_map_dict(x, callable, memo)
+        y = _deep_map_dict(x, fn, memo)
     else:
-        y = callable(x)
+        y = fn(x)
 
     # If is its own copy, don't memoize.
     if y is not x:
@@ -38,16 +38,16 @@ def deep_map(x, callable: Callable, memo=None):
     return y
 
 
-def _deep_map_list(x, callable, memo):
+def _deep_map_list(x, fn, memo):
     y = []
     append = y.append
     for a in x:
-        append(deep_map(a, callable, memo))
-    return callable(y)
+        append(deep_map(a, fn, memo))
+    return fn(y)
 
 
-def _deep_map_tuple(x, callable, memo):
-    y = [deep_map(a, callable, memo) for a in x]
+def _deep_map_tuple(x, fn, memo):
+    y = [deep_map(a, fn, memo) for a in x]
     # We're not going to put the tuple in the memo, but it's still important we
     # check for it, in case the tuple contains recursive mutable structures.
     try:
@@ -60,15 +60,15 @@ def _deep_map_tuple(x, callable, memo):
             break
     else:
         y = x
-    return callable(y)
+    return fn(y)
 
 
-def _deep_map_dict(x, callable, memo):
+def _deep_map_dict(x, fn, memo):
     y = {}
     memo[id(x)] = y
     for key, value in x.items():
-        y[deep_map(key, callable, memo)] = deep_map(value, callable, memo)
-    return callable(y)
+        y[deep_map(key, fn, memo)] = deep_map(value, fn, memo)
+    return fn(y)
 
 
 def _keep_alive(x, memo):

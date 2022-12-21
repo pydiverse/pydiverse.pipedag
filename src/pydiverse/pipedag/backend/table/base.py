@@ -256,8 +256,8 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
     def store_raw_sql(self, raw_sql: RawSql, task: MaterializingTask):
         """Lazily stores a table in the associated commit stage
 
-        The same as `store_table()`, with the difference being that the store first checks
-        if the same query with the same input (based on `raw_sql.cache_key`)
+        The same as `store_table()`, with the difference being that the store first
+        checks if the same query with the same input (based on `raw_sql.cache_key`)
         has already been executed before. If yes, instead of evaluating
         the query, it just copies the previous result to the commit stage.
         """
@@ -294,7 +294,8 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             self.execute_raw_sql(raw_sql)
 
         # Store metadata
-        # Attention: Raw SQL statements may only be executed sequentially within stage for store.list_tables to work
+        # Attention: Raw SQL statements may only be executed sequentially within
+        #            stage for store.list_tables to work
         self.store_raw_sql_metadata(
             RawSqlMetadata(
                 prev_tables=prev_tables,

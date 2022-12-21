@@ -85,12 +85,13 @@ class IPCServer(threading.Thread):
         """
         Run main loop for responding to client requests to this server process.
 
-        We rely on a fixed request-response pattern of pynng library (Req0/Rep0) which requires us to open
-        a context for every request-response pair. We create threads for determining and sending responses
-        and we keep 10 such threads in-flight. At the end we join all 10 threads even though some threads
-        might actually already have completed and may even share the same ident number. We log thread IDs
-        as hash(thread.ident) % 100 for receiving human processable numbers.
-        :return:
+        We rely on a fixed request-response pattern of pynng library (Req0/Rep0)
+        which requires us to open a context for every request-response pair.
+        We create threads for determining and sending responses and we keep 10
+        such threads in-flight. At the end we join all 10 threads even though
+        some threads might actually already have completed and may even share the
+        same ident number. We log thread IDs as hash(thread.ident) % 100 for
+        receiving human processable numbers.
         """
         max_threads_in_flight = 10  # keep up to 10 threads in flight
 

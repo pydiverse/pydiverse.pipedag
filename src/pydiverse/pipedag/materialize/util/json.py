@@ -93,8 +93,9 @@ def json_object_hook(d: dict):
         elif pipedag_type == PIPEDAG_TYPE_STAGE:
             return stages[d["name"]]
         elif pipedag_type == PIPEDAG_TYPE_PIPEDAG_CONFIG:
-            # PipedagConfig objects are allowed as input to @materialize tasks, but it is not allowed
-            # as output since this might cause trouble for cache-invalidation
+            # PipedagConfig objects are allowed as input to @materialize tasks,
+            # but it is not allowed as output since this might cause trouble
+            # for cache-invalidation
             raise TypeError("PipedagConfig can't be deserialized.")
         elif pipedag_type == PIPEDAG_TYPE_PATH:
             return Path(d["path"])
