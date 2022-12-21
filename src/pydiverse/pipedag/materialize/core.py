@@ -233,7 +233,7 @@ class MaterializationWrapper:
                         cached_output, cache_metadata, task
                     )
                     ctx.store_task_memo(task, combined_cache_key, cached_output)
-                    task.logger.info(f"Found task in cache. Using cached result.")
+                    task.logger.info("Found task in cache. Using cached result.")
                     return cached_output
             except CacheError as e:
                 task.logger.info(

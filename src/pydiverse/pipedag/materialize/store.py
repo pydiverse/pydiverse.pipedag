@@ -15,7 +15,6 @@ from pydiverse.pipedag.errors import DuplicateNameError, StageError
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import TaskMetadata
-from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.materialize.util import json as json_util
 from pydiverse.pipedag.util import Disposable, deep_map
 from pydiverse.pipedag.util.config import PipedagConfig
@@ -182,8 +181,9 @@ class PipeDAGStore(Disposable):
 
         config = ConfigContext.get()
         combined_cache_key = task.combined_cache_key()
+        auto_suffix_counter = itertools.count()
 
-        def materialize_mutator(x, counter=itertools.count()):
+        def materialize_mutator(x):
             # Automatically convert an object to a table / blob if its
             # type is inside either `config.auto_table` or `.auto_blob`.
             if isinstance(x, config.auto_table):
@@ -196,7 +196,8 @@ class PipeDAGStore(Disposable):
                 x = Blob(x)
 
             if isinstance(x, PipedagConfig):
-                # Config objects are not an allowed return type, because they might mess up caching.
+                # Config objects are not an allowed return type,
+                # because they might mess up caching.
                 raise TypeError(
                     "You can't return a PipedagConfig object from a materializing task."
                 )
@@ -210,7 +211,8 @@ class PipeDAGStore(Disposable):
                     # Update name:
                     # - If no name has been provided, generate on automatically
                     # - If the provided name ends with %%, perform name mangling
-                    auto_suffix = f"{combined_cache_key}_{next(counter):04d}"
+                    object_number = next(auto_suffix_counter)
+                    auto_suffix = f"{combined_cache_key}_{object_number:04d}"
                     if x.name is None:
                         x.name = task.name + "_" + auto_suffix
                     elif x.name.endswith("%%"):
@@ -366,7 +368,7 @@ class PipeDAGStore(Disposable):
         """
 
         if task.stage.did_commit:
-            raise StageError(f"Stage already committed.")
+            raise StageError(f"Stage ({task.stage}) already committed.")
 
         metadata = self.table_store.retrieve_task_metadata(task)
         return self.json_decode(metadata.output_json), metadata

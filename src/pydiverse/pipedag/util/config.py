@@ -52,26 +52,22 @@ class PipedagConfig:
         config = copy.deepcopy(raw_config)
 
         # Expand all references
-        for instance, instance_dict in _get(config, "instances", default={}).items():
+        for instance_dict in _get(config, "instances", default={}).values():
             self.__expand_references(instance_dict)
 
-        for flow, flow_dict in _get(config, "flows", default={}).items():
+        for flow_dict in _get(config, "flows", default={}).values():
             self.__expand_references(flow_dict)
-            for instance, instance_dict in _get(
-                flow_dict, "instances", default={}
-            ).items():
+            for instance_dict in _get(flow_dict, "instances", default={}).values():
                 self.__expand_references(instance_dict)
 
         return config
 
     def __expand_references(self, config):
-        # fmt: off
         references = [
             (None, "technical_setup", "technical_setups"),
             ("table_store", "table_store_connection", "table_store_connections"),
             ("blob_store", "blob_store_connection", "blob_store_connections"),
         ]
-        # fmt: on
 
         for expand_path, ref_name_path, ref_src_path in references:
             ref_name = _get(config, expand_path, ref_name_path, default=None)
@@ -113,7 +109,8 @@ class PipedagConfig:
         )
 
         # check enums
-        # Alternative: could be a feature of __get_merged_config_dict in case default value is set to Enum
+        # Alternative: could be a feature of __get_merged_config_dict
+        # in case default value is set to Enum
         from pydiverse.pipedag.context.context import StageCommitTechnique
 
         config["stage_commit_technique"] = (
@@ -129,9 +126,10 @@ class PipedagConfig:
             StageCommitTechnique, config["stage_commit_technique"]
         )
 
-        # TODO: Delegate selecting where variables can be expanded to the corresponding classes.
-        #       eg. SQLTableStore._expand_env_vars = ["url", "url_attrs_file"]
-        #       eg. SQLTableStore._expand_vars = ["url", "schema_prefix", "schema_suffix"]
+        # TODO: Delegate selecting where variables can be expanded to the
+        #  corresponding classes.
+        #    eg. SQLTableStore._expand_env_vars = ["url", "url_attrs_file"]
+        #    eg. SQLTableStore._expand_vars = ["url", "schema_prefix", "schema_suffix"]
 
         # First expand all environment variables
         self.__expand_environment_variables(inout_config=config)
@@ -379,7 +377,7 @@ def load_object(config_dict: dict):
     cls = import_object(config_dict.pop("class"))
 
     try:
-        init_conf = getattr(cls, "_init_conf_")
+        init_conf = cls._init_conf_
         return init_conf(config_dict)
     except AttributeError:
         return cls(**config_dict)

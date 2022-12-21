@@ -39,8 +39,9 @@ class Flow:
         else:
             raise RuntimeError("DAG Context already exists. Flows can't be nested.")
 
-        # Initialize context (both Flow and Stage use DAGContext to transport information to @materialize annotations
-        #   within the flow and to support nesting of stages)
+        # Initialize context (both Flow and Stage use DAGContext to transport
+        # information to @materialize annotations within the flow and to
+        # support nesting of stages)
         self._ctx = DAGContext(flow=self, stage=None)
         self._ctx.__enter__()
         return self
@@ -219,15 +220,18 @@ class Flow:
         """Execute a flow
 
         You can provide an engine to execute the flow with using the `engine`
-        keyword. If no engine is provided, the engine specified in the condig
+        keyword. If no engine is provided, the engine specified in the config
         file is used.
 
-        :param config_context: A configuration context with information about the pipe-DAG instance
+        :param config_context: A configuration context with information about
+            the pipe-DAG instance.
         :param orchestration_engine: The orchestration engine to use.
-        :param fail_fast: True means that errors should be raised as exceptions out of this function
-        :param ignore_fresh_input: whether cache functions should be disabled that check for fresh input into pipe-DAG
-        :param kwargs: Other keyword arguments. They get passed on directly to the orchestration
-            engine's `.run` method and thus are engine dependant.
+        :param fail_fast: True means that errors should be raised as exceptions
+            out of this function.
+        :param ignore_fresh_input: whether cache functions should be disabled that
+            check for fresh input into pipe-DAG
+        :param kwargs: Other keyword arguments. They get passed on directly to the
+            orchestration engine's `.run` method and thus are engine dependant.
         :return:
             Result object that gives information whether run was successful
         """

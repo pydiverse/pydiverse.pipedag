@@ -80,7 +80,7 @@ class Task:
         try:
             ctx = DAGContext.get()
         except LookupError:
-            raise FlowError("Can't call pipedag task outside of a flow.")
+            raise FlowError("Can't call pipedag task outside of a flow.") from None
 
         if ctx.stage is None:
             raise StageError("Can't call pipedag task outside of a stage.")

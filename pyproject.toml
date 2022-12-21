@@ -57,12 +57,13 @@ mssql = ["pyodbc", "pytsql"]
 ibm_db2 = ["ibm-db", "ibm-db-sa"]
 prefect = ["prefect", "docker-compose"]
 
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
 pytest = "^7.2.0"
 pytest-mock = "^3.10.0"
 pytest-timeout = "^2.1.0"
 pytest-xdist = "^3.1.0"
 black = "^22.6.0"
+ruff = "^0.0.189"
 pre-commit = "^2.20.0"
 kazoo = "^2.8.0"
 psycopg2 = "^2.9.3"
@@ -80,14 +81,28 @@ exclude = '''
 '''
 preview = true
 
-[tool.isort]
-multi_line_output = 3
-include_trailing_comma = true
-ensure_newline_before_comments = true
-line_length = 88
-known_first_party = "pydiverse.transform"
-skip_glob = '\.eggs/*,\.git/*,\.venv/*,build/*,dist/*'
-default_section = 'THIRDPARTY'
+[tool.ruff]
+select = [
+    "F",
+    "E",
+    "UP",
+    "W",
+    "I001",
+    "B",
+    "A",
+]
+force-exclude = true
+extend-exclude = ["tests/*", "docs/*"]
+ignore-init-module-imports = true
+fix = true
+target-version = "py38"
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+"src/pydiverse/pipedag/backend/table/util/sql_ddl.py" = ["F811"]
+
+[tool.ruff.isort]
+known-first-party = ["pydiverse"]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

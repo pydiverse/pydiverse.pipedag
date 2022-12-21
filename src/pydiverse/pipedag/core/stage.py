@@ -105,18 +105,20 @@ class Stage:
             )
         self._did_enter = True
 
-        # Capture information from surrounding Flow or Stage block and link this stage with it
+        # Capture information from surrounding Flow or Stage block
+        # and link this stage with it
         try:
             outer_ctx = DAGContext.get()
         except LookupError as e:
-            raise StageError(f"Stage can't be defined outside of a flow") from e
+            raise StageError("Stage can't be defined outside of a flow") from e
 
         outer_ctx.flow.add_stage(self)
         if outer_ctx.stage is not None:
             self.outer_stage = outer_ctx.stage
 
-        # Initialize new context (both Flow and Stage use DAGContext to transport information to @materialize
-        #   annotations within the flow and to support nesting of stages)
+        # Initialize new context (both Flow and Stage use DAGContext to transport
+        # information to @materialize annotations within the flow and to support
+        # nesting of stages)
         self._ctx = DAGContext(
             flow=outer_ctx.flow,
             stage=self,
@@ -151,7 +153,8 @@ class Stage:
         return state
 
     def set_transaction_name(self, new_transaction_name):
-        # used by stage_commit_technique=READ_VIEWS to change odd/even transaction schemas
+        # used by stage_commit_technique=READ_VIEWS to change odd/even
+        # transaction schemas
         self._transaction_name = new_transaction_name
 
 
