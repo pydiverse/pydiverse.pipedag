@@ -37,9 +37,9 @@ class LazyTableMetadata:
     The `name` and `stage` values are used to retrieve the appropriate
     table from the cache.
 
-    Attention: `task_hash` is sometimes recovered from cache and is not guaranteed to be a hash
-    of the current input_hash, version, and cache_fn_hash situation of this task execution. It
-    rather serves as a unique ID for what is currently stored in the task output.
+    Attention: `task_hash` is sometimes taken from cache and thus is not guaranteed
+    to refer to the `task_hash` that corresponds to the currently executed task.
+    Instead, it refers to the task that originally produced this object.
     """
 
     name: str
@@ -58,9 +58,9 @@ class RawSqlMetadata:
     The `tables` and `stage` values are used to retrieve the appropriate
     tables from the cache.
 
-    Attention: `task_hash` is sometimes recovered from cache and is not guaranteed to be a hash
-    of the current input_hash, version, and cache_fn_hash situation of this task execution. It
-    rather serves as a unique ID for what is currently stored in the task output.
+    Attention: `task_hash` is sometimes taken from cache and thus is not guaranteed
+    to refer to the `task_hash` that corresponds to the currently executed task.
+    Instead, it refers to the task that originally produced this object.
     """
 
     prev_tables: list[str]

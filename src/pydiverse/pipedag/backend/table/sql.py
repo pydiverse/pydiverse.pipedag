@@ -562,14 +562,16 @@ class SQLTableStore(BaseTableStore):
         """
         List all views that are present in a schema.
 
-        It may also include other objects database objects like stored procedures, functions, etc. which makes
-        the name `get_view_names` too specific. But the sqlalchemy only allows reading views for all dialects thus
-        the storyline of dialect agnostic callers is much nicer to read. In the end we might need everything to recover
-        the full cache output which was produced by a RawSQL statement (we want to be compatible with legacy sql code
-        as a starting point).
+        It may also include other database objects like stored procedures, functions,
+        etc. which makes the name `get_view_names` too specific. But sqlalchemy
+        only allows reading views for all dialects thus the storyline of dialect
+        agnostic callers is much nicer to read. In the end we might need everything
+        to recover the full cache output which was produced by a RawSQL statement
+        (we want to be compatible with legacy sql code as a starting point).
         :param schema: the schema
-        :param include_everything: If true, we might include stored procedures, functions and other database objects
-            that have a schema associated name. Currently, this only makes a difference for dialect=mssql.
+        :param include_everything: If true, we might include stored procedures,
+            functions and other database objects that have a schema associated name.
+            Currently, this only makes a difference for dialect=mssql.
         :return: list of view names [and other objects]
         """
         inspector = sa.inspect(self.engine)
@@ -732,9 +734,6 @@ class SQLTableStore(BaseTableStore):
                         self.lazy_cache_table.select()
                         .where(self.lazy_cache_table.c.stage == stage.name)
                         .where(self.lazy_cache_table.c.query_hash == query_hash)
-                        # Attention: the task_hash is sometimes recovered from cache and is not guaranteed to be a hash
-                        # of the current input_hash, version, and cache_fn_hash situation of this task execution. It
-                        # rather serves as a unique ID for what is currently stored in the task output.
                         .where(self.lazy_cache_table.c.task_hash == task_hash)
                         .where(
                             self.lazy_cache_table.c.in_transaction_schema.in_([False])
@@ -781,9 +780,6 @@ class SQLTableStore(BaseTableStore):
                         self.raw_sql_cache_table.select()
                         .where(self.raw_sql_cache_table.c.stage == stage.name)
                         .where(self.raw_sql_cache_table.c.query_hash == query_hash)
-                        # Attention: the task_hash is sometimes recovered from cache and is not guaranteed to be a hash
-                        # of the current input_hash, version, and cache_fn_hash situation of this task execution. It
-                        # rather serves as a unique ID for what is currently stored in the task output.
                         .where(self.raw_sql_cache_table.c.task_hash == task_hash)
                         .where(
                             self.raw_sql_cache_table.c.in_transaction_schema.in_(
@@ -812,14 +808,16 @@ class SQLTableStore(BaseTableStore):
         """
         List all tables that were generated in a stage.
 
-        It may also include other objects database objects like views, stored procedures, functions, etc. which makes
-        the name `list_tables` too specific. But the predominant idea is that tasks produce tables in stages and thus
-        the storyline of callers is much nicer to read. In the end we might need everything to recover the full cache
-        output which was produced by a RawSQL statement (we want to be compatible with legacy sql code as a starting
-        point).
+        It may also include other objects database objects like views, stored
+        procedures, functions, etc. which makes the name `list_tables` too specific.
+        But the predominant idea is that tasks produce tables in stages and thus the
+        storyline of callers is much nicer to read. In the end we might need everything
+        to recover the full cache output which was produced by a RawSQL statement
+        (we want to be compatible with legacy sql code as a starting point).
+
         :param stage: the stage
-        :param include_everything: If true, we might include stored procedures, functions and other database objects
-            that have a schema associated name.
+        :param include_everything: If true, we might include stored procedures,
+            functions and other database objects that have a schema associated name.
         :return: list of tables [and other objects]
         """
         inspector = sa.inspect(self.engine)
@@ -830,15 +828,11 @@ class SQLTableStore(BaseTableStore):
 
         return table_names + view_names
 
-    def get_stage_hash(self, stage: Stage):
-        """
-        Return a hash that represents the complete output of a stage based on metadata information.
-
-        :param stage: the stage
-        :return: hash
-        """
-        # We only need to look in tasks_table since the output_json column is updated after evaluating lazy output
-        # objects for cache validity. This is the same information we use for producing input_hash of downstream tasks.
+    def get_stage_hash(self, stage: Stage) -> str:
+        """Compute hash that represents entire stage's output metadata."""
+        # We only need to look in tasks_table since the output_json column is updated
+        # after evaluating lazy output objects for cache validity. This is the same
+        # information we use for producing input_hash of downstream tasks.
         with self.engine.connect() as conn:
             result = conn.execute(
                 sa.select([self.tasks_table.c.output_json])

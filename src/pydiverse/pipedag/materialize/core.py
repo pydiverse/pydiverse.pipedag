@@ -142,14 +142,20 @@ class MaterializingTask(Task):
         TaskContext.get().cache_metadata = value
 
     def combined_cache_key(self, from_cache_metadata=False):
-        """
-        Return a hash used for judging cache validity of the current task output (except for lazy objects).
+        """Cache key used to judge cache validity of the current task output.
 
-        Attention: the hash is sometimes recovered from cache and is not guaranteed to be a hash
-        of the current input_hash, version, and cache_fn_hash situation of this task execution. It rather
-        serves as a unique ID for what is currently stored in the task output.
-        :param from_cache_metadata: if true, the hash is loaded from cached metadata if possible
-        :return: hash
+        Also referred to as `task_hash`.
+
+        For lazy objects, this hash isn't used to judge cache validity, instead it
+        serves as an identifier to reference a specific task run. This can be the case
+        if a task is determined to be cache-valid and the lazy query string is also
+        the same, but the task_hash is different from a previous run. Then we can
+        compute this combined_cache_key from the task's cache metadata to determine
+        which lazy object to use as cache.
+
+        :param from_cache_metadata: If set to True, the combined cache key is
+            calculated using the cached metadata (if possible).
+        :return: The hash / cache key (str).
         """
         from pydiverse.pipedag.materialize.util.cache import compute_cache_key
 
@@ -234,9 +240,9 @@ class MaterializationWrapper:
 
             # Check the cache
             try:
-                # Attention: cache_fn_hash is not used for cache retrieval with ignore_fresh_input=True
-                # Thus cache_metadata.cache_fn_hash may diverge from task.cache_fn_hash. The former is
-                # used for downstream task input_hash based cache invalidation.
+                # `cache_fn_hash` is not used for cache retrieval if ignore_fresh_input
+                # is set to True. In that case, cache_metadata.cache_fn_hash may be
+                # different form the cache_fn_hash of the current task run.
                 cached_output, cache_metadata = store.retrieve_cached_output(task)
                 task.cache_metadata = cache_metadata
                 if not task.lazy:
