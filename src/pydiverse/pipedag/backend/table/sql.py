@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import warnings
 from typing import Any
@@ -558,8 +559,21 @@ class SQLTableStore(BaseTableStore):
         )
 
     def get_view_names(self, schema: str, *, include_everything=False) -> list[str]:
-        # TODO: Document what this function does @windiana42
-        #       Especially the include_everything argument
+        """
+        List all views that are present in a schema.
+
+        It may also include other database objects like stored procedures, functions,
+        etc. which makes the name `get_view_names` too specific. But sqlalchemy
+        only allows reading views for all dialects thus the storyline of dialect
+        agnostic callers is much nicer to read. In the end we might need everything
+        to recover the full cache output which was produced by a RawSQL statement
+        (we want to be compatible with legacy sql code as a starting point).
+        :param schema: the schema
+        :param include_everything: If true, we might include stored procedures,
+            functions and other database objects that have a schema associated name.
+            Currently, this only makes a difference for dialect=mssql.
+        :return: list of view names [and other objects]
+        """
         inspector = sa.inspect(self.engine)
         if include_everything and self.engine.dialect.name == "mssql":
             return list(self.get_mssql_sql_modules(schema).keys())
@@ -747,9 +761,8 @@ class SQLTableStore(BaseTableStore):
         with self.engine.connect() as conn:
             conn.execute(
                 self.raw_sql_cache_table.insert().values(
-                    # ToDo: consider quoting or array column
-                    prev_tables=";".join(metadata.prev_tables),
-                    tables=";".join(metadata.tables),
+                    prev_tables=json.dumps(metadata.prev_tables),
+                    tables=json.dumps(metadata.tables),
                     stage=metadata.stage,
                     query_hash=metadata.query_hash,
                     task_hash=metadata.task_hash,
@@ -784,15 +797,29 @@ class SQLTableStore(BaseTableStore):
             raise CacheError("No result found for raw sql cache key")
 
         return RawSqlMetadata(
-            prev_tables=result.prev_tables.split(";"),
-            tables=result.tables.split(";"),
+            prev_tables=json.loads(result.prev_tables),
+            tables=json.loads(result.tables),
             stage=result.stage,
             query_hash=result.query_hash,
             task_hash=result.task_hash,
         )
 
     def list_tables(self, stage, *, include_everything=False):
-        # TODO: Document what include_everything does.
+        """
+        List all tables that were generated in a stage.
+
+        It may also include other objects database objects like views, stored
+        procedures, functions, etc. which makes the name `list_tables` too specific.
+        But the predominant idea is that tasks produce tables in stages and thus the
+        storyline of callers is much nicer to read. In the end we might need everything
+        to recover the full cache output which was produced by a RawSQL statement
+        (we want to be compatible with legacy sql code as a starting point).
+
+        :param stage: the stage
+        :param include_everything: If true, we might include stored procedures,
+            functions and other database objects that have a schema associated name.
+        :return: list of tables [and other objects]
+        """
         inspector = sa.inspect(self.engine)
         schema = self.get_schema(stage.transaction_name).get()
 
@@ -801,7 +828,11 @@ class SQLTableStore(BaseTableStore):
 
         return table_names + view_names
 
-    def get_stage_hash(self, stage: Stage):
+    def get_stage_hash(self, stage: Stage) -> str:
+        """Compute hash that represents entire stage's output metadata."""
+        # We only need to look in tasks_table since the output_json column is updated
+        # after evaluating lazy output objects for cache validity. This is the same
+        # information we use for producing input_hash of downstream tasks.
         with self.engine.connect() as conn:
             result = conn.execute(
                 sa.select([self.tasks_table.c.output_json])

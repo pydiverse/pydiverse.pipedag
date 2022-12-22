@@ -395,8 +395,15 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
     ) -> LazyTableMetadata:
         """Retrieve a lazy table's metadata from the store
 
-        :raises CacheError: if not metadata that matches the provided cache_key
-            and stage was found
+        :param query_hash: A hash of the query that produced this lazy table
+        :param task_hash: The hash of the task for which we want to retrieve this
+            metadata. This can be used to retrieve the lazy table metadata produced
+            by the same task in a previous run, if the current task is still cache
+            valid.
+        :param stage: The stage in which this lazy table should be.
+        :return: The metadata.
+
+        :raises CacheError: if not metadata that matches the provided inputs was found.
         """
 
     def store_raw_sql_metadata(self, metadata: RawSqlMetadata):
@@ -415,8 +422,15 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
     ) -> RawSqlMetadata:
         """Retrieve raw SQL metadata from the store
 
-        :raises CacheError: if not metadata that matches the provided cache_key
-            and stage was found
+        :param query_hash: A hash of the query that produced this raw sql object
+        :param task_hash: The hash of the task for which we want to retrieve this
+            metadata. This can be used to retrieve the raw sql metadata produced
+            by the same task in a previous run, if the current task is still cache
+            valid.
+        :param stage: The stage associated with the raw sql object.
+        :return: The metadata.
+
+        :raises CacheError: if not metadata that matches the provided inputs was found.
         """
         raise NotImplementedError(
             "This table store does not support executing raw sql statements"
