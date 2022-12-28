@@ -78,15 +78,24 @@ jobs:
           compose-file: ./docker-compose.yaml
 
       - name: Wait for Docker Servers
+        timeout-minutes: 1
         shell: bash
-        run: sleep 2
+        run: |
+          until bash ./.github/workflows/resources/docker_compose_ready.sh; do
+            sleep 2
+          done
+
 
       - name: Wait for DB/2
         timeout-minutes: 2
-        run: until docker logs "${{ job.services.ibm_db2.id }}" 2>&1 | grep -q "Setup has completed"; do sleep 10; echo Waiting; done
+        run: |
+          until docker logs "${{ job.services.ibm_db2.id }}" 2>&1 | grep -q "Setup has completed"; do 
+            sleep 10
+            echo Waiting
+          done
 
       - name: Test
         shell: bash
         run: |
-          poetry run pytest -q tests --ibm_db2
+          poetry run pytest -q tests --mssql --ibm_db2
           # poetry run pytest -s tests  # interactive log output
