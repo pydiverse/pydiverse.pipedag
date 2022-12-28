@@ -63,6 +63,9 @@ jobs:
           virtualenvs-in-project: true
           installer-parallel: true
 
+      - name: Install Microsoft ODBC
+        run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
@@ -84,7 +87,6 @@ jobs:
           until bash ./.github/workflows/resources/docker_compose_ready.sh; do
             sleep 2
           done
-
 
       - name: Wait for DB/2
         timeout-minutes: 2
