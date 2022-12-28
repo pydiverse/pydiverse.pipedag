@@ -10,7 +10,7 @@ services:
       # keep port 5432 free since prefect 1 UI also spins up a postgres database on this port
       - 6543:5432
   mssql:
-    image: mcr.microsoft.com/mssql/server:2019-latest
+    image: mcr.microsoft.com/azure-sql-edge
     environment:
       ACCEPT_EULA: Y
       SA_PASSWORD: PidyQuant27
@@ -18,5 +18,7 @@ services:
       - 1433:1433
   zoo:
     image: zookeeper
+    environment:
+      ZOO_4LW_COMMANDS_WHITELIST: ruok
     ports:
       - 2181:2181
