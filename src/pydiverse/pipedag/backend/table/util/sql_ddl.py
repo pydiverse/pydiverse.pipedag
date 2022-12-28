@@ -362,7 +362,6 @@ def visit_drop_database(drop: DropDatabase, compiler, **kw):
     raise NotImplementedError(
         f"Disable for now for safety reasons (not yet needed): {ret}"
     )
-    # return ret
 
 
 def _visit_create_obj_as_select(create, compiler, _type, kw, *, prefix="", suffix=""):

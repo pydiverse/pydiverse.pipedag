@@ -3,6 +3,7 @@ from __future__ import annotations
 import itertools
 import json
 import re
+import textwrap
 import warnings
 from typing import Any
 
@@ -171,9 +172,9 @@ class SQLTableStore(BaseTableStore):
         if not create_database_if_not_exists:
             return
 
-        try_engine = sa.create_engine(engine_url)
-        if try_engine.dialect.name in ["mssql", "ibm_db_sa"]:
-            try_engine.dispose()
+        engine = sa.create_engine(engine_url)
+        if engine.dialect.name in ["mssql", "ibm_db_sa"]:
+            engine.dispose()
             return
 
         # Attention: This is a really hacky way to create a generic engine for
@@ -182,9 +183,9 @@ class SQLTableStore(BaseTableStore):
         #            if the database does not exist
         url = sa.engine.make_url(engine_url)
 
-        if try_engine.dialect.name == "postgresql":
+        if engine.dialect.name == "postgresql":
             try:
-                with try_engine.connect() as conn:
+                with engine.connect() as conn:
                     # try whether connection with database in connect string works
                     conn.execute("SELECT 1")
             except sa.exc.DBAPIError:
@@ -197,14 +198,14 @@ class SQLTableStore(BaseTableStore):
                 except sa.exc.DBAPIError:
                     # This happens if multiple instances try to create the database
                     # at the same time.
-                    with try_engine.connect() as conn:
+                    with engine.connect() as conn:
                         # Verify database actually exists
                         conn.execute("SELECT 1")
         else:
             raise NotImplementedError(
                 "create_database_if_not_exists is only implemented for postgres, yet"
             )
-        try_engine.dispose()
+        engine.dispose()
 
     @staticmethod
     def _connect(engine_url, schema_prefix, schema_suffix):
@@ -249,8 +250,13 @@ class SQLTableStore(BaseTableStore):
                 if isinstance(query, str)
                 else SQLAlchemyTableHook.lazy_query_str(self, query)
             )
+            query_str = self.format_sql_string(query_str)
             self.logger.info(f"Executing sql:\n{query_str}")
         return conn.execute(query)
+
+    @staticmethod
+    def format_sql_string(query_str: str) -> str:
+        return textwrap.dedent(query_str).strip()
 
     @engine_dispatch
     def execute_raw_sql(self, raw_sql: RawSql):
@@ -292,9 +298,11 @@ class SQLTableStore(BaseTableStore):
 
         sql_string = raw_sql.sql
         if self.print_sql:
-            max_len = 50000  # consider making an option in ConfigContext
-            opt_end = "\n..." if len(sql_string) > max_len else ""
-            self.logger.info(f"Executing raw sql:\n{sql_string[0:max_len]}{opt_end}")
+            print_query_string = self.format_sql_string(sql_string)
+            max_length = 5000
+            if len(print_query_string) >= max_length:
+                print_query_string = print_query_string[:max_length] + " [...]"
+            self.logger.info(f"Executing sql:\n{print_query_string}")
 
         pytsql.executes(
             sql_string,
@@ -883,23 +891,12 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         obj = table.obj
         if isinstance(table.obj, sa.Table):
             obj = sa.select(table.obj)
-        if store.print_materialize:
-            query_str = cls.lazy_query_str(store, obj)
-            store.logger.info(
-                f"Executing CREATE TABLE AS SELECT ({table}):\n{query_str}"
-            )
-        else:
-            store.logger.info(f"Executing CREATE TABLE AS SELECT ({table})")
+
+        schema = store.get_schema(stage_name)
         if store.engine.dialect.name == "ibm_db_sa":
             # DB2 needs CREATE TABLE & INSERT INTO statements
-            store.execute(
-                PrepareCreateTableAsSelect(
-                    table.name, store.get_schema(stage_name), obj
-                )
-            )
-        store.execute(
-            CreateTableAsSelect(table.name, store.get_schema(stage_name), obj)
-        )
+            store.execute(PrepareCreateTableAsSelect(table.name, schema, obj))
+        store.execute(CreateTableAsSelect(table.name, schema, obj))
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
@@ -939,10 +936,9 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
+        schema = store.get_schema(stage_name).get()
         with store.engine.connect() as conn:
-            df = pd.read_sql_table(
-                table.name, conn, schema=store.get_schema(stage_name).get()
-            )
+            df = pd.read_sql_table(table.name, conn, schema=schema)
             return df
 
     @classmethod
@@ -959,7 +955,7 @@ except ImportError as e:
     pdt = None
 
 
-# noinspection PyUnresolvedReferences,PyProtectedMember
+# noinspection PyUnresolvedReferences, PyProtectedMember
 @SQLTableStore.register_table(pdt)
 class PydiverseTransformTableHook(TableHook[SQLTableStore]):
     @classmethod
@@ -983,11 +979,9 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             from pydiverse.transform.core.verbs import collect
 
             table.obj = t >> collect()
-            # noinspection PyTypeChecker
             return PandasTableHook.materialize(store, table, stage_name)
         if isinstance(t._impl, SQLTableImpl):
             table.obj = t._impl.build_select()
-            # noinspection PyTypeChecker
             return SQLAlchemyTableHook.materialize(store, table, stage_name)
         raise NotImplementedError
 
