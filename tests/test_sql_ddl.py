@@ -1,7 +1,6 @@
 from pydiverse.pipedag.backend.table.util.sql_ddl import insert_into_in_query
 
 
-# noinspection SqlDialectInspection
 def test_insert_into():
     test_pairs = {
         "Select 1": "Select 1 INTO a.b.c",
