@@ -88,5 +88,5 @@ jobs:
       - name: Test
         shell: bash
         run: |
-          poetry run pytest -q tests --workers 4 --ibm_db2
+          poetry run pytest tests -ra --workers 4 --ibm_db2
           # poetry run pytest -s tests  # interactive log output
