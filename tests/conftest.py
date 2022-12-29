@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -11,6 +12,9 @@ import structlog
 
 if TYPE_CHECKING:
     from _pytest.python import Session, Parser
+
+
+pytest_plugins = ["tests.parallelize.plugin"]
 
 
 # Setup
@@ -84,3 +88,17 @@ def pytest_collection_modifyitems(config: pytest.Config, items):
         for item in items:
             if "ibm_db2" in item.keywords:
                 item.add_marker(skip_ibm_db2)
+
+
+@pytest.hookimpl
+def pytest_parallelize_group_items(config, items):
+    groups = defaultdict(list)
+    for item in items:
+        group = "DEFAULT"
+
+        if callspec := getattr(item, "callspec", None):
+            if instance := callspec.params.get("instance"):
+                group = instance
+
+        groups[group].append(item)
+    return groups

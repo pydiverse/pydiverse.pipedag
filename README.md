@@ -65,6 +65,8 @@ You can inspect the contents of the PipeDAT Postgres database at `postgresql://p
 To reset the state of the docker containers you can run `docker compose down`.
 This might be necessary if the database cache gets corrupted.
 
+To run tests in parallel, pass the `--workers auto` flag to pytest.
+
 ## Testing db2 functionality
 
 For running @pytest.mark.ibm_db2 tests, you need to spin up a docker container without `docker compose` since it needs
