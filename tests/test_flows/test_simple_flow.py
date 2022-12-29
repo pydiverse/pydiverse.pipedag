@@ -8,23 +8,23 @@ from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.util.config import PipedagConfig
 
 
-# noinspection PyPep8Naming
 @materialize(nout=2, version="1.0")
+@pytest.mark.skipif()
 def inputs():
-    dfA = pd.DataFrame(
+    df_a = pd.DataFrame(
         {
             "a": [0, 1, 2, 4],
             "b": [9, 8, 7, 6],
         }
     )
 
-    dfB = pd.DataFrame(
+    df_b = pd.DataFrame(
         {
             "a": [2, 1, 0, 1],
             "x": [1, 1, 2, 2],
         }
     )
-    return Table(dfA, "dfA"), Table(dfB, "dfB")
+    return Table(df_a, "dfA"), Table(df_b, "dfB")
 
 
 @materialize(input_type=pd.DataFrame, version="1.0")

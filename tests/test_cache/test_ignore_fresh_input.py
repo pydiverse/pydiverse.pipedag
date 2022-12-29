@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Blob, Flow, Stage, Table
@@ -8,8 +9,8 @@ from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import materialize
 
-from ..pipedag_test import tasks_library as m
-from .spy import spy_task
+from tests.util import tasks_library as m
+from tests.util.spy import spy_task
 
 # Test that running a flow that contains a task with an invalid cache function
 # doesn't trigger that task when run with ignore_fresh_input=True, and it is
@@ -74,7 +75,7 @@ def test_table(mocker):
 
     @materialize(cache=cache)
     def return_cache_table():
-        return Table(sa.text(f"SELECT {cache_value} as X"))
+        return Table(sa.text(f"SELECT {cache_value} as x"))
 
     @materialize(input_type=pd.DataFrame)
     def get_first(table, col):
@@ -235,6 +236,7 @@ def test_blob(mocker):
         child_spy.assert_called_once()
 
 
+@pytest.mark.skip_instance("mssql", "mssql_pytsql")
 def test_raw_sql(mocker):
     cache_value = 0
     raw_value = 0

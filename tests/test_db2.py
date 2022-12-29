@@ -2,20 +2,16 @@ import pandas as pd
 import pytest
 import sqlalchemy as sa
 import structlog
+from typing import TYPE_CHECKING
 
-try:
+
+ibm_db = pytest.importorskip("ibm_db")
+if TYPE_CHECKING:
     import ibm_db
-except ImportError as e:
-    import warnings
-
-    warnings.warn(str(e), ImportWarning)
-    ibm_db = None
 
 
 @pytest.mark.ibm_db2
 def test_db2():
-    import ibm_db
-
     logger = structlog.getLogger(module=__name__)
     conn = ibm_db.connect(
         "DATABASE=testdb;HOSTNAME=localhost;PORT=50000;PROTOCOL=TCPIP;UID=db2inst1;PWD=password;",

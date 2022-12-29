@@ -8,7 +8,8 @@ from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import RunContext, StageLockContext
 from pydiverse.pipedag.util.config import PipedagConfig
 
-from .pipedag_test import tasks_library as m
+from tests.util import tasks_library as m
+from tests.fixtures.instance import *
 
 
 def test_materialize_literals():

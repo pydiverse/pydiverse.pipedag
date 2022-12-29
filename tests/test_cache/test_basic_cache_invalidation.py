@@ -8,8 +8,9 @@ from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import materialize
 
-from ..pipedag_test import tasks_library as m
-from .spy import spy_task
+from tests.util import tasks_library as m
+from tests.util.spy import spy_task
+
 
 # Test Basic Cache Invalidation Behaviour
 
@@ -97,7 +98,7 @@ def test_change_cache_fn_table(mocker):
 
     @materialize(cache=cache)
     def return_cache_table():
-        return Table(sa.text(f"SELECT {cache_value} as X"))
+        return Table(sa.text(f"SELECT {cache_value} as x"))
 
     @materialize(input_type=pd.DataFrame)
     def get_first(table, col):
