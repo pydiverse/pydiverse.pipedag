@@ -47,6 +47,14 @@ def test_change_bound_argument(mocker):
         out_spy.assert_called_once()
         child_spy.assert_called_once()
 
+    # Calling flow.run again shouldn't call the task
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(out)[0] == 2
+        assert result.get(child)[0] == 2
+        out_spy.assert_called_once()  # counter should stay at 1
+        child_spy.assert_called_once()  # counter should stay at 1
+
 
 def test_changed_cache_fn_literal(mocker):
     cache_value = 0
@@ -87,6 +95,14 @@ def test_changed_cache_fn_literal(mocker):
         assert result.get(child) == 1
         out_spy.assert_called_once()
         child_spy.assert_called_once()
+
+    # Calling flow.run again shouldn't call the task
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(out) == 1
+        assert result.get(child) == 1
+        out_spy.assert_called_once()  # counter should stay at 1
+        child_spy.assert_called_once()  # counter should stay at 1
 
 
 def test_change_cache_fn_table(mocker):
@@ -129,6 +145,13 @@ def test_change_cache_fn_table(mocker):
         assert result.get(child) == 1
         out_spy.assert_called_once()
         child_spy.assert_called_once()
+
+    # Calling flow.run again shouldn't call the task
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(child) == 1
+        out_spy.assert_called_once()  # counter should stay at 1
+        child_spy.assert_called_once()  # counter should stay at 1
 
 
 def test_change_cache_fn_blob(mocker):
@@ -176,8 +199,8 @@ def test_change_cache_fn_blob(mocker):
         result = flow.run()
         assert result.get(out) == 1
         assert result.get(child) == 1
-        out_spy.assert_not_called()
-        child_spy.assert_not_called()
+        out_spy.assert_called_once()  # counter should stay at 1
+        child_spy.assert_called_once()  # counter should stay at 1
 
 
 def test_change_task_version_literal(mocker):
@@ -206,8 +229,8 @@ def test_change_task_version_literal(mocker):
 
     # Fourth call (Should be cached)
     assert flow.run().successful
-    out_spy.assert_not_called()
-    child_spy.assert_not_called()
+    out_spy.assert_called_once()  # counter should stay at 1
+    child_spy.assert_not_called()  # counter should stay at 0
 
 
 def test_change_task_version_table(mocker):
@@ -236,8 +259,8 @@ def test_change_task_version_table(mocker):
 
     # Fourth call (Should be cached)
     assert flow.run().successful
-    out_spy.assert_not_called()
-    child_spy.assert_not_called()
+    out_spy.assert_called_once()  # counter should stay at 1
+    child_spy.assert_called_once()  # counter should stay at 1
 
 
 def test_change_task_version_blob(mocker):
@@ -266,8 +289,8 @@ def test_change_task_version_blob(mocker):
 
     # Fourth call (Should be cached)
     assert flow.run().successful
-    out_spy.assert_not_called()
-    child_spy.assert_not_called()
+    out_spy.assert_called_once()  # counter should stay at 1
+    child_spy.assert_called_once()  # counter should stay at 1
 
 
 def test_change_lazy_query(mocker):
@@ -324,8 +347,8 @@ def test_change_lazy_query(mocker):
         assert result.successful
         assert result.get(value) == 2
         assert lazy_spy.call_count == 4
-        value_spy.assert_not_called()
-        const_spy.assert_not_called()
+        value_spy.assert_called_once()  # counter should stay at 1
+        const_spy.assert_not_called()  # counter should stay at 0
 
 
 def test_change_raw_sql(mocker):
@@ -382,8 +405,8 @@ def test_change_raw_sql(mocker):
         assert result.successful
         assert result.get(child) == "SELECT 2 as x"
         assert raw_spy.call_count == 4
-        child_spy.assert_not_called()
-        const_spy.assert_not_called()
+        child_spy.assert_called_once()  # counter should stay at 1
+        const_spy.assert_not_called()  # counter should stay at 0
 
 
 def test_change_task_stage_literal(mocker):
