@@ -290,20 +290,6 @@ def visit_drop_schema(drop: DropSchema, compiler, **kw):
     return ";\n".join(statements)
 
 
-@compiles(DropSchema, "ibm_db_sa")
-def visit_drop_schema(drop: DropSchema, compiler, **_):
-    schema = compiler.preparer.format_schema(drop.schema.get())
-    if drop.if_exists:
-        # Add error handler to cache the case that the schema doesn't exist
-        return f"""
-            BEGIN
-                declare continue handler for sqlstate '42704' begin end;
-                execute immediate 'DROP SCHEMA {schema} RESTRICT';
-            END
-            """.strip()
-    return f"DROP SCHEMA {schema} RESTRICT"
-
-
 @compiles(RenameSchema)
 def visit_rename_schema(rename: RenameSchema, compiler, **kw):
     _ = kw
