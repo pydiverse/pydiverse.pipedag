@@ -150,7 +150,7 @@ def test_lazy_table(mocker):
         result = flow.run()
         assert result.get(child) == 0
         assert result.get(cache_child) == 0
-        assert out_spy.call_count == 1
+        out_spy.assert_called_once()
         child_spy.assert_not_called()
         cache_spy.assert_not_called()
 
@@ -161,7 +161,7 @@ def test_lazy_table(mocker):
         result = flow.run(ignore_fresh_input=True)
         assert result.get(child) == 0
         assert result.get(cache_child) == 1
-        assert out_spy.call_count == 2
+        out_spy.assert_called_once()
         child_spy.assert_not_called()
         cache_spy.assert_called_once()
 
@@ -171,18 +171,18 @@ def test_lazy_table(mocker):
         result = flow.run(ignore_fresh_input=True)
         assert result.get(child) == 1
         assert result.get(cache_child) == 1
-        assert out_spy.call_count == 3
+        out_spy.assert_called_once()
         child_spy.assert_called_once()
-        cache_spy.assert_called_once()
+        cache_spy.assert_not_called()
 
     # The child task shouldn't get called again, because the lazy sql didn't change
     with StageLockContext():
         result = flow.run()
         assert result.get(child) == 1
         assert result.get(cache_child) == 1
-        assert out_spy.call_count == 4
-        child_spy.assert_called_once()
-        cache_spy.assert_called_once()
+        out_spy.assert_called_once()
+        child_spy.assert_not_called()
+        cache_spy.assert_not_called()
 
 
 def test_blob(mocker):
@@ -273,7 +273,7 @@ def test_raw_sql(mocker):
     with StageLockContext():
         result = flow.run()
         assert result.get(child, as_type=pd.DataFrame)["x"][0] == 0
-        assert out_spy.call_count == 1
+        out_spy.assert_called_once()
         child_spy.assert_not_called()
 
     # Changing the cache value while setting ignore_fresh_input=True should
@@ -282,7 +282,7 @@ def test_raw_sql(mocker):
     with StageLockContext():
         result = flow.run(ignore_fresh_input=True)
         assert result.get(child, as_type=pd.DataFrame)["x"][0] == 0
-        assert out_spy.call_count == 2
+        out_spy.assert_called_once()
         child_spy.assert_not_called()
 
     # Only changing the raw_value should cause the child task to get called
@@ -290,15 +290,15 @@ def test_raw_sql(mocker):
     with StageLockContext():
         result = flow.run(ignore_fresh_input=True)
         assert result.get(child, as_type=pd.DataFrame)["x"][0] == 1
-        assert out_spy.call_count == 3
+        out_spy.assert_called_once()
         child_spy.assert_called_once()
 
     # The child task shouldn't get called again, because the raw sql didn't change
     with StageLockContext():
         result = flow.run()
         assert result.get(child, as_type=pd.DataFrame)["x"][0] == 1
-        assert out_spy.call_count == 4
-        child_spy.assert_called_once()
+        out_spy.assert_called_once()
+        child_spy.assert_not_called()
 
 
 # Some more complicated tests that validate the behaviour of
@@ -331,7 +331,7 @@ def test_input_invalid(mocker):
         result = flow.run(ignore_fresh_input=True)
         assert result.get(out) == 0
         assert result.get(child) == 0
-        assert out_spy.call_count == 1
+        out_spy.assert_called_once()
         child_spy.assert_not_called()
 
     # Despite ignore_fresh_input=True, the child tasks should still run
@@ -341,7 +341,7 @@ def test_input_invalid(mocker):
         result = flow.run(ignore_fresh_input=True)
         assert result.get(out) == 1
         assert result.get(child) == 1
-        assert out_spy.call_count == 2
+        out_spy.assert_called_once()
         child_spy.assert_called_once()
 
 
