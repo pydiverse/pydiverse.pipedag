@@ -241,18 +241,35 @@ class PipeDAGStore(Disposable):
 
         m_value = deep_map(value, materialize_mutator)
 
-        # Metadata
-        output_json = self.json_encode(m_value)
-        metadata = TaskMetadata(
-            name=task.name,
-            stage=stage.name,
-            version=task.version,
-            timestamp=datetime.datetime.now(),
-            run_id=ctx.run_id,
-            input_hash=task.input_hash,
-            cache_fn_hash=task.cache_fn_hash,
-            output_json=output_json,
-        )
+        def get_cache_fn_hash():
+            """
+            If a task is cache valid, we must use the cache_fn_hash
+            from the previous run.
+            """
+            if not ctx.ignore_fresh_input:
+                return task.cache_fn_hash
+            if not task.cache_metadata:
+                return task.cache_fn_hash
+            return task.cache_metadata.cache_fn_hash
+
+        def store_metadata():
+            """
+            Metadata must be generated after everything else has been materialized,
+            because during materialization the cache_info of the different objects
+            can get changed.
+            """
+            output_json = self.json_encode(m_value)
+            metadata = TaskMetadata(
+                name=task.name,
+                stage=stage.name,
+                version=task.version,
+                timestamp=datetime.datetime.now(),
+                run_id=ctx.run_id,
+                input_hash=task.input_hash,
+                cache_fn_hash=get_cache_fn_hash(),
+                output_json=output_json,
+            )
+            self.table_store.store_task_metadata(metadata, stage)
 
         def store_table(table: Table):
             if task.lazy:
@@ -270,7 +287,7 @@ class PipeDAGStore(Disposable):
             store_table,
             lambda raw_sql: self.table_store.store_raw_sql(raw_sql, task),
             self.blob_store.store_blob,
-            lambda: self.table_store.store_task_metadata(metadata, stage),
+            store_metadata,
         )
 
         return m_value
