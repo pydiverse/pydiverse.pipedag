@@ -75,6 +75,11 @@ class Stage:
     def transaction_name(self) -> str:
         return self._transaction_name
 
+    def set_transaction_name(self, new_transaction_name):
+        # used by stage_commit_technique=READ_VIEWS to change odd/even
+        # transaction schemas
+        self._transaction_name = new_transaction_name
+
     @property
     def current_name(self) -> str:
         """The name of the stage where the data currently lives
@@ -151,11 +156,6 @@ class Stage:
         state.pop("outer_stage", None)
         state.pop("logger", None)
         return state
-
-    def set_transaction_name(self, new_transaction_name):
-        # used by stage_commit_technique=READ_VIEWS to change odd/even
-        # transaction schemas
-        self._transaction_name = new_transaction_name
 
 
 class CommitStageTask(Task):

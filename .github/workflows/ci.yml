@@ -63,6 +63,9 @@ jobs:
           virtualenvs-in-project: true
           installer-parallel: true
 
+      - name: Install Microsoft ODBC
+        run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
@@ -78,15 +81,23 @@ jobs:
           compose-file: ./docker-compose.yaml
 
       - name: Wait for Docker Servers
+        timeout-minutes: 1
         shell: bash
-        run: sleep 2
+        run: |
+          until bash ./.github/workflows/resources/docker_compose_ready.sh; do
+            sleep 2
+          done
 
       - name: Wait for DB/2
         timeout-minutes: 2
-        run: until docker logs "${{ job.services.ibm_db2.id }}" 2>&1 | grep -q "Setup has completed"; do sleep 10; echo Waiting; done
+        run: |
+          until docker logs "${{ job.services.ibm_db2.id }}" 2>&1 | grep -q "Setup has completed"; do 
+            sleep 10
+            echo Waiting
+          done
 
       - name: Test
         shell: bash
         run: |
-          poetry run pytest -q tests --ibm_db2
+          poetry run pytest -q tests --mssql --ibm_db2
           # poetry run pytest -s tests  # interactive log output
