@@ -171,6 +171,14 @@ def test_change_cache_fn_blob(mocker):
         out_spy.assert_called_once()
         child_spy.assert_called_once()
 
+    # Calling flow.run again shouldn't call the task
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(out) == 1
+        assert result.get(child) == 1
+        out_spy.assert_not_called()
+        child_spy.assert_not_called()
+
 
 def test_change_task_version_literal(mocker):
     with Flow() as flow:
@@ -178,11 +186,11 @@ def test_change_task_version_literal(mocker):
             out = m.one()
             child = m.noop(out)
 
-    # Initial Call
+    # Initial call
     out.version = "VERSION 0"
     assert flow.run().successful
 
-    # Second Call (Should be cached)
+    # Second call (Should be cached)
     out_spy = spy_task(mocker, out)
     child_spy = spy_task(mocker, child)
     assert flow.run().successful
@@ -196,6 +204,11 @@ def test_change_task_version_literal(mocker):
     out_spy.assert_called_once()
     child_spy.assert_not_called()
 
+    # Fourth call (Should be cached)
+    assert flow.run().successful
+    out_spy.assert_not_called()
+    child_spy.assert_not_called()
+
 
 def test_change_task_version_table(mocker):
     with Flow() as flow:
@@ -203,7 +216,7 @@ def test_change_task_version_table(mocker):
             out = m.simple_dataframe()
             child = m.noop(out)
 
-    # Initial Call
+    # Initial call
     out.version = "VERSION 0"
     assert flow.run().successful
 
@@ -220,6 +233,11 @@ def test_change_task_version_table(mocker):
     assert flow.run().successful
     out_spy.assert_called_once()
     child_spy.assert_called_once()
+
+    # Fourth call (Should be cached)
+    assert flow.run().successful
+    out_spy.assert_not_called()
+    child_spy.assert_not_called()
 
 
 def test_change_task_version_blob(mocker):
@@ -245,6 +263,11 @@ def test_change_task_version_blob(mocker):
     assert flow.run().successful
     out_spy.assert_called_once()
     child_spy.assert_called_once()
+
+    # Fourth call (Should be cached)
+    assert flow.run().successful
+    out_spy.assert_not_called()
+    child_spy.assert_not_called()
 
 
 def test_change_lazy_query(mocker):
@@ -294,6 +317,16 @@ def test_change_lazy_query(mocker):
         value_spy.assert_called_once()
         const_spy.assert_not_called()
 
+    # Fourth run, because the task is lazy, it should always get called.
+    # The value task however shouldn't get called.
+    with StageLockContext():
+        result = flow.run()
+        assert result.successful
+        assert result.get(value) == 2
+        assert lazy_spy.call_count == 4
+        value_spy.assert_not_called()
+        const_spy.assert_not_called()
+
 
 def test_change_raw_sql(mocker):
     raw_sql = "SELECT 1 as x"
@@ -340,6 +373,16 @@ def test_change_raw_sql(mocker):
         assert result.get(child) == "SELECT 2 as x"
         assert raw_spy.call_count == 3
         child_spy.assert_called_once()
+        const_spy.assert_not_called()
+
+    # Fourth run, because the task is lazy, it should always get called.
+    # The value task however shouldn't get called.
+    with StageLockContext():
+        result = flow.run()
+        assert result.successful
+        assert result.get(child) == "SELECT 2 as x"
+        assert raw_spy.call_count == 4
+        child_spy.assert_not_called()
         const_spy.assert_not_called()
 
 
