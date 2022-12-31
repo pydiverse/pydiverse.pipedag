@@ -271,7 +271,7 @@ def test_change_lazy_query(mocker):
         result = flow.run()
         assert result.successful
         assert result.get(value) == 1
-        assert lazy_spy.call_count == 1
+        lazy_spy.assert_called_once()
 
     # Second run, because the task is lazy, it should always get called.
     # The value task however shouldn't get called.
@@ -281,7 +281,7 @@ def test_change_lazy_query(mocker):
         result = flow.run()
         assert result.successful
         assert result.get(value) == 1
-        assert lazy_spy.call_count == 2
+        lazy_spy.assert_called_once()
         value_spy.assert_not_called()
         const_spy.assert_not_called()
 
@@ -291,7 +291,7 @@ def test_change_lazy_query(mocker):
         result = flow.run()
         assert result.successful
         assert result.get(value) == 2
-        assert lazy_spy.call_count == 3
+        lazy_spy.assert_called_once()
         value_spy.assert_called_once()
         const_spy.assert_not_called()
 
@@ -319,7 +319,7 @@ def test_change_raw_sql(mocker):
         result = flow.run()
         assert result.successful
         assert result.get(child) == "SELECT 1 as x"
-        assert raw_spy.call_count == 1
+        raw_spy.assert_called_once()
 
     # Second run, because the task is lazy, it should always get called.
     # The value task however shouldn't get called.
@@ -329,7 +329,7 @@ def test_change_raw_sql(mocker):
         result = flow.run()
         assert result.successful
         assert result.get(child) == "SELECT 1 as x"
-        assert raw_spy.call_count == 2
+        raw_spy.assert_called_once()
         child_spy.assert_not_called()
         const_spy.assert_not_called()
 
@@ -339,7 +339,7 @@ def test_change_raw_sql(mocker):
         result = flow.run()
         assert result.successful
         assert result.get(child) == "SELECT 2 as x"
-        assert raw_spy.call_count == 3
+        raw_spy.assert_called_once()
         child_spy.assert_called_once()
         const_spy.assert_not_called()
 

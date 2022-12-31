@@ -45,10 +45,15 @@ class CreateSchema(DDLElement):
 
 
 class DropSchema(DDLElement):
-    def __init__(self, schema: Schema, if_exists=False, cascade=False):
+    def __init__(self, schema: Schema, if_exists=False, cascade=False, *, engine=None):
+        """
+        :param engine: Used if cascade=True but the database doesn't support cascade.
+        """
         self.schema = schema
         self.if_exists = if_exists
         self.cascade = cascade
+
+        self.engine = engine
 
 
 class RenameSchema(DDLElement):
@@ -202,7 +207,6 @@ def visit_create_schema(create: CreateSchema, compiler, **kw):
         return create_database
 
 
-# noinspection SqlDialectInspection
 @compiles(CreateSchema, "ibm_db_sa")
 def visit_create_schema(create: CreateSchema, compiler, **kw):
     """For IBM DB2 we need to jump through extra hoops for if_exists=True."""
@@ -252,19 +256,52 @@ def visit_drop_schema(drop: DropSchema, compiler, **kw):
     return " ".join(text)
 
 
-# noinspection SqlDialectInspection
 @compiles(DropSchema, "ibm_db_sa")
 def visit_drop_schema(drop: DropSchema, compiler, **kw):
-    """For IBM DB2 we need to jump through extra hoops for if_exists=True."""
-    _ = kw
+    """
+    Because IBM DB2 doesn't support CASCADE, we must manually drop all tables in
+    the schema first.
+    """
+    statements = []
+    if drop.cascade:
+        if drop.engine is None:
+            raise ValueError(
+                "Using DropSchema with cascade=True for ibm_db2 requires passing"
+                " the engine kwarg to DropSchema."
+            )
+
+        with drop.engine.connect() as conn:
+            meta = sa.MetaData()
+            meta.reflect(bind=conn, schema=drop.schema.get())
+
+        kw["literal_binds"] = True
+        for table in meta.tables.values():
+            drop_table = compiler.process(DropTable(table.name, drop.schema), **kw)
+            statements.append(drop_table)
+
+    # Compile DROP SCHEMA statement
+    schema = compiler.preparer.format_schema(drop.schema.get())
+    text = ["DROP SCHEMA"]
+    if drop.if_exists:
+        text.append("IF EXISTS")
+    text.append(schema)
+    statements.append(" ".join(text))
+
+    return ";\n".join(statements)
+
+
+@compiles(DropSchema, "ibm_db_sa")
+def visit_drop_schema(drop: DropSchema, compiler, **_):
     schema = compiler.preparer.format_schema(drop.schema.get())
     if drop.if_exists:
-        return (
-            "BEGIN\ndeclare continue handler for sqlstate '42704' begin end;\n"
-            f"execute immediate 'DROP SCHEMA {schema} RESTRICT';\nEND"
-        )
-    else:
-        return f"DROP SCHEMA {schema} RESTRICT"
+        # Add error handler to cache the case that the schema doesn't exist
+        return f"""
+            BEGIN
+                declare continue handler for sqlstate '42704' begin end;
+                execute immediate 'DROP SCHEMA {schema} RESTRICT';
+            END
+            """.strip()
+    return f"DROP SCHEMA {schema} RESTRICT"
 
 
 @compiles(RenameSchema)
@@ -325,13 +362,11 @@ def visit_drop_database(drop: DropDatabase, compiler, **kw):
     raise NotImplementedError(
         f"Disable for now for safety reasons (not yet needed): {ret}"
     )
-    # return ret
 
 
 def _visit_create_obj_as_select(create, compiler, _type, kw, *, prefix="", suffix=""):
     name = compiler.preparer.quote_identifier(create.name)
     schema = compiler.preparer.format_schema(create.schema.get())
-    kw = kw.copy()
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(create.query, **kw)
     return f"CREATE {_type} {schema}.{name} AS\n{prefix}{select}{suffix}"
@@ -351,7 +386,6 @@ def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
     database = compiler.preparer.format_schema(database_name)
     schema = compiler.preparer.format_schema(schema_name)
 
-    kw = kw.copy()
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(create.query, **kw)
 
@@ -365,7 +399,6 @@ def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
 
     name = compiler.preparer.quote_identifier(create_name)
     schema = compiler.preparer.format_schema(create.schema.get())
-    kw = kw.copy()
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(create.query, **kw)
     return f"INSERT INTO {schema}.{name}\n{select}"
@@ -428,17 +461,15 @@ def insert_into_in_query(select_sql, database, schema, table):
     )
 
 
-# noinspection SqlDialectInspection
 @compiles(CopyTable)
 def visit_copy_table(copy_table: CopyTable, compiler, **kw):
     from_name = compiler.preparer.quote_identifier(copy_table.from_name)
     from_schema = compiler.preparer.format_schema(copy_table.from_schema.get())
-    query = sa.text(f"SELECT * FROM {from_schema}.{from_name}")
+    query = sa.select("*").select_from(sa.text(f"{from_schema}.{from_name}"))
     create = CreateTableAsSelect(copy_table.to_name, copy_table.to_schema, query)
     return compiler.process(create, **kw)
 
 
-# noinspection SqlDialectInspection
 @compiles(CopyTable, "mssql")
 def visit_copy_table(copy_table: CopyTable, compiler, **kw):
     from_name = compiler.preparer.quote_identifier(copy_table.from_name)
@@ -551,4 +582,4 @@ def _visit_drop_anything_mssql(
 
 def ibm_db_sa_fix_name(name):
     # DB2 seems to create tables uppercase if all lowercase given
-    return name.upper() if all(c.lower() == c for c in name) else name
+    return name.upper() if name.islower() else name

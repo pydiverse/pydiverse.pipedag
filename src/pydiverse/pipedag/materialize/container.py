@@ -156,6 +156,9 @@ class CacheInfo:
         self.task_hash = None
         self.query_hash = None
 
+    def __repr__(self):
+        return f"<CacheInfo: task_hash={self.task_hash} query_hash={self.query_hash}>"
+
     @property
     def cache_key(self):
         if self.__cache_key is not None:
