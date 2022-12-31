@@ -281,11 +281,18 @@ def visit_drop_schema(drop: DropSchema, compiler, **kw):
 
     # Compile DROP SCHEMA statement
     schema = compiler.preparer.format_schema(drop.schema.get())
-    text = ["DROP SCHEMA"]
     if drop.if_exists:
-        text.append("IF EXISTS")
-    text.append(schema)
-    statements.append(" ".join(text))
+        # Add error handler to cache the case that the schema doesn't exist
+        statements.append(
+            f"""
+            BEGIN
+                declare continue handler for sqlstate '42704' begin end;
+                execute immediate 'DROP SCHEMA {schema} RESTRICT';
+            END
+            """.strip()
+        )
+    else:
+        statements.append(f"DROP SCHEMA {schema} RESTRICT")
 
     return ";\n".join(statements)
 
