@@ -77,6 +77,7 @@ class Worker:
             group_name, node_ids = args
             items = [self.session_items[node_id] for node_id in node_ids]
 
+            self.send("DEBUG_start_group", group_name=group_name)
             for i, item in enumerate(items):
                 next_item = items[i + 1] if i + 1 < len(items) else None
                 self.run_one_test(session, item, next_item)
@@ -84,6 +85,7 @@ class Worker:
         return False
 
     def run_one_test(self, session, item, next_item):
+        self.send("DEBUG_start_test", nodeid=item.nodeid)
         item.ihook.pytest_runtest_protocol(item=item, nextitem=next_item)
         if session.shouldfail:
             raise session.Failed(session.shouldfail)
