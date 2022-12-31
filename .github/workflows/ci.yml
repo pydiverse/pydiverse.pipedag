@@ -98,6 +98,7 @@ jobs:
 
       - name: Test
         shell: bash
+        env:
+          DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
         run: |
-          poetry run pytest tests -ra --workers 4 --mssql --ibm_db2
-          # poetry run pytest -s tests  # interactive log output
+          poetry run pytest tests -ra ${DEBUG:+-s} --workers 4 --mssql --ibm_db2
