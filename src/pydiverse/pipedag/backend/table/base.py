@@ -7,9 +7,8 @@ import structlog
 from typing_extensions import Self
 
 from pydiverse.pipedag._typing import StoreT, T
-from pydiverse.pipedag.errors import CacheError
+from pydiverse.pipedag.materialize.cache import CacheManager, TaskCacheInfo
 from pydiverse.pipedag.materialize.container import RawSql, Table
-from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import (
     LazyTableMetadata,
     RawSqlMetadata,
@@ -20,6 +19,7 @@ from pydiverse.pipedag.util import Disposable, requires
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Stage
+    from pydiverse.pipedag.materialize.core import MaterializingTask
 
 
 class _TableStoreMeta(ABCMeta):
@@ -194,7 +194,9 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             "This table store does not support executing raw sql statements"
         )
 
-    def store_table_lazy(self, table: Table, task: MaterializingTask):
+    def store_table_lazy(
+        self, table: Table, task: MaterializingTask, task_cache_info: TaskCacheInfo
+    ):
         """Lazily stores a table in the associated commit stage
 
         The same as `store_table()`, with the difference being that if the
@@ -205,7 +207,7 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
 
         Used when `lazy = True` is set for a materializing task.
         """
-
+        _ = task
         try:
             hook = self.get_m_table_hook(type(table.obj))
             query_str = hook.lazy_query_str(self, table.obj)
@@ -215,40 +217,21 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             # -> Fallback to default implementation
             return self.store_table(table)
 
-        # Store table
-        try:
-            # Try retrieving the table from the cache and then copying it
-            # to the transaction stage
-            task_hash = task.combined_cache_key(from_cache_metadata=True)
-            metadata = self.retrieve_lazy_table_metadata(
-                query_hash, task_hash, table.stage
-            )
-            self.copy_lazy_table_to_transaction(metadata, table.stage)
-            self.logger.info(f"Lazy cache of table '{table.name}' found")
-            table.name = metadata.name
-        except CacheError as e:
-            # Either not found in cache, or copying failed
-            # -> Store using default method
-            self.logger.warning("cache miss", exception=str(e))
-            task_hash = task.combined_cache_key()
+        table_cache_info = CacheManager.lazy_table_cache_lookup(
+            self, task_cache_info, table, query_hash
+        )
+        if not table_cache_info.is_cache_valid():
             self.store_table(table)
 
         # At this point we MUST also update the cache info, so that any downstream
-        # tasks get invalidated if the query string changed.
-        table.cache_info.query_hash = query_hash
-        table.cache_info.task_hash = task_hash
-
-        # Store metadata
-        self.store_lazy_table_metadata(
-            LazyTableMetadata(
-                name=table.name,
-                stage=table.stage.name,
-                query_hash=query_hash,
-                task_hash=task_hash,
-            )
+        # tasks get invalidated if the sql query string changed.
+        table.cache_key = CacheManager.lazy_table_cache_key(
+            task_cache_info.get_task_cache_key(), query_hash
         )
 
-    def store_raw_sql(self, raw_sql: RawSql, task: MaterializingTask):
+    def store_raw_sql(
+        self, raw_sql: RawSql, task: MaterializingTask, task_cache_info: TaskCacheInfo
+    ):
         """Lazily stores a table in the associated commit stage
 
         The same as `store_table()`, with the difference being that the store first
@@ -256,43 +239,22 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         has already been executed before. If yes, instead of evaluating
         the query, it just copies the previous result to the commit stage.
         """
-
+        _ = task
         query_hash = compute_cache_key("RAW-SQL", raw_sql.sql)
-        prev_tables = self.list_tables(raw_sql.stage, include_everything=True)
 
-        # Store tables
-        try:
-            # Try retrieving the table from the cache and then copying it
-            # to the transaction stage
-            task_hash = task.combined_cache_key(from_cache_metadata=True)
-            metadata = self.retrieve_raw_sql_metadata(
-                query_hash, task_hash, raw_sql.stage
-            )
-            self.copy_raw_sql_tables_to_transaction(metadata, raw_sql.stage)
-            self.logger.info(f"Lazy cache of stage '{raw_sql.stage}' found")
-        except CacheError as e:
-            # Either not found in cache, or copying failed
-            # -> Store using default method
-            self.logger.warning("cache miss", exception=str(e))
-            task_hash = task.combined_cache_key()
+        table_cache_info = CacheManager.raw_sql_cache_lookup(
+            self, task_cache_info, raw_sql, query_hash
+        )
+        if not table_cache_info.is_cache_valid():
+            prev_tables = self.list_tables(raw_sql.stage, include_everything=True)
             self.execute_raw_sql(raw_sql)
+            post_tables = self.list_tables(raw_sql.stage, include_everything=True)
+            table_cache_info.store_raw_sql_metadata(self, prev_tables, post_tables)
 
         # At this point we MUST also update the cache info, so that any downstream
         # tasks get invalidated if the sql query string changed.
-        raw_sql.cache_info.query_hash = query_hash
-        raw_sql.cache_info.task_hash = task_hash
-
-        # Store metadata
-        # Attention: Raw SQL statements may only be executed sequentially within
-        #            stage for store.list_tables to work
-        self.store_raw_sql_metadata(
-            RawSqlMetadata(
-                prev_tables=prev_tables,
-                tables=self.list_tables(raw_sql.stage, include_everything=True),
-                stage=raw_sql.stage.name,
-                query_hash=query_hash,
-                task_hash=task_hash,
-            )
+        raw_sql.cache_key = CacheManager.lazy_table_cache_key(
+            task_cache_info.get_task_cache_key(), query_hash
         )
 
     @abstractmethod
@@ -372,7 +334,9 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         """
 
     @abstractmethod
-    def retrieve_task_metadata(self, task: MaterializingTask) -> TaskMetadata:
+    def retrieve_task_metadata(
+        self, task: MaterializingTask, input_hash: str, cache_fn_hash: str
+    ) -> TaskMetadata:
         """Retrieve a task's metadata from the store
 
         :raises CacheError: if no metadata for this task can be found.
@@ -439,9 +403,22 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
     # Utility
 
     @abstractmethod
-    def list_tables(self, stage: Stage) -> list[str]:
-        # TODO: Document what this function does @windiana42
-        pass
+    def list_tables(self, stage: Stage, *, include_everything=False) -> list[str]:
+        """
+        List all tables that were generated in a stage.
+
+        It may also include other objects database objects like views, stored
+        procedures, functions, etc. which makes the name `list_tables` too specific.
+        But the predominant idea is that tasks produce tables in stages and thus the
+        storyline of callers is much nicer to read. In the end we might need everything
+        to recover the full cache output which was produced by a RawSQL statement
+        (we want to be compatible with legacy sql code as a starting point).
+
+        :param stage: the stage
+        :param include_everything: If True, we might include stored procedures,
+            functions and other database objects that have a schema associated name.
+        :return: list of tables [and other objects]
+        """
 
 
 class TableHook(Generic[StoreT], ABC):

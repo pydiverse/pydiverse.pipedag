@@ -84,8 +84,10 @@ class DictTableStore(BaseTableStore):
         cache_key = metadata.input_hash + str(metadata.cache_fn_hash)
         self.t_metadata[stage][cache_key] = metadata
 
-    def retrieve_task_metadata(self, task: MaterializingTask) -> TaskMetadata:
-        cache_key = task.input_hash + str(task.cache_fn_hash)
+    def retrieve_task_metadata(
+        self, task: MaterializingTask, input_hash: str, cache_fn_hash: str
+    ) -> TaskMetadata:
+        cache_key = input_hash + str(cache_fn_hash)
         try:
             return self.metadata[task.stage][cache_key]
         except KeyError:
@@ -107,7 +109,22 @@ class DictTableStore(BaseTableStore):
         except (TypeError, KeyError):
             raise CacheError("Couldn't find metadata for lazy table") from None
 
-    def list_tables(self, stage):
+    def list_tables(self, stage, *, include_everything=False):
+        """
+        List all tables that were generated in a stage.
+
+        It may also include other objects database objects like views, stored
+        procedures, functions, etc. which makes the name `list_tables` too specific.
+        But the predominant idea is that tasks produce tables in stages and thus the
+        storyline of callers is much nicer to read. In the end we might need everything
+        to recover the full cache output which was produced by a RawSQL statement
+        (we want to be compatible with legacy sql code as a starting point).
+
+        :param stage: the stage
+        :param include_everything: If True, we might include stored procedures,
+            functions and other database objects that have a schema associated name.
+        :return: list of tables [and other objects]
+        """
         return self.store[stage.transaction_name].keys()
 
 

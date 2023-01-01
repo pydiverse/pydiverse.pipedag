@@ -577,7 +577,7 @@ class SQLTableStore(BaseTableStore):
         to recover the full cache output which was produced by a RawSQL statement
         (we want to be compatible with legacy sql code as a starting point).
         :param schema: the schema
-        :param include_everything: If true, we might include stored procedures,
+        :param include_everything: If True, we might include stored procedures,
             functions and other database objects that have a schema associated name.
             Currently, this only makes a difference for dialect=mssql.
         :return: list of view names [and other objects]
@@ -701,7 +701,9 @@ class SQLTableStore(BaseTableStore):
                 )
             )
 
-    def retrieve_task_metadata(self, task: MaterializingTask) -> TaskMetadata:
+    def retrieve_task_metadata(
+        self, task: MaterializingTask, input_hash: str, cache_fn_hash: str
+    ) -> TaskMetadata:
         ignore_fresh_input = RunContext.get().ignore_fresh_input
         try:
             with self.engine.connect() as conn:
@@ -711,9 +713,9 @@ class SQLTableStore(BaseTableStore):
                         .where(self.tasks_table.c.name == task.name)
                         .where(self.tasks_table.c.stage == task.stage.name)
                         .where(self.tasks_table.c.version == task.version)
-                        .where(self.tasks_table.c.input_hash == task.input_hash)
+                        .where(self.tasks_table.c.input_hash == input_hash)
                         .where(
-                            self.tasks_table.c.cache_fn_hash == task.cache_fn_hash
+                            self.tasks_table.c.cache_fn_hash == cache_fn_hash
                             if not ignore_fresh_input
                             else sa.literal(True)
                         )
@@ -831,7 +833,7 @@ class SQLTableStore(BaseTableStore):
             task_hash=result.task_hash,
         )
 
-    def list_tables(self, stage, *, include_everything=False):
+    def list_tables(self, stage: Stage, *, include_everything=False):
         """
         List all tables that were generated in a stage.
 
@@ -843,7 +845,7 @@ class SQLTableStore(BaseTableStore):
         (we want to be compatible with legacy sql code as a starting point).
 
         :param stage: the stage
-        :param include_everything: If true, we might include stored procedures,
+        :param include_everything: If True, we might include stored procedures,
             functions and other database objects that have a schema associated name.
         :return: list of tables [and other objects]
         """

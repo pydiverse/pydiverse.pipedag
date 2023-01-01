@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import datetime
 import itertools
 import json
 from typing import Any, Callable
@@ -12,6 +11,7 @@ from pydiverse.pipedag._typing import Materializable
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.errors import DuplicateNameError, StageError
+from pydiverse.pipedag.materialize.cache import TaskCacheInfo
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import TaskMetadata
@@ -148,6 +148,7 @@ class PipeDAGStore(Disposable):
     def materialize_task(
         self,
         task: MaterializingTask,
+        task_cache_info: TaskCacheInfo,
         value: Materializable,
     ) -> Materializable:
         """Stores the output of a task in the backend
@@ -158,6 +159,8 @@ class PipeDAGStore(Disposable):
 
         :param task: The task instance which produced `value`. Must have
             the correct `cache_key` attribute set.
+        :param task_cache_info: Information about task carried through materialization
+            for CacheManager
         :param value: The output of the task. Must be materializable; this
             means it can only contain the following object types:
             `dict`, `list`, `tuple`,
@@ -180,7 +183,6 @@ class PipeDAGStore(Disposable):
         blobs = []
 
         config = ConfigContext.get()
-        combined_cache_key = task.combined_cache_key()
         auto_suffix_counter = itertools.count()
 
         def materialize_mutator(x):
@@ -204,7 +206,9 @@ class PipeDAGStore(Disposable):
 
             # Do the materialization
             if isinstance(x, (Table, RawSql, Blob)):
-                x.cache_info.task_hash = combined_cache_key
+                if not task.lazy:
+                    # task cache_key is output cache_key for eager tables
+                    x.cache_key = task_cache_info.get_task_cache_key()
 
                 if isinstance(x, (Table, Blob)):
                     x.stage = stage
@@ -212,7 +216,9 @@ class PipeDAGStore(Disposable):
                     # - If no name has been provided, generate on automatically
                     # - If the provided name ends with %%, perform name mangling
                     object_number = next(auto_suffix_counter)
-                    auto_suffix = f"{combined_cache_key}_{object_number:04d}"
+                    auto_suffix = (
+                        f"{task_cache_info.get_task_cache_key()}_{object_number:04d}"
+                    )
                     if x.name is None:
                         x.name = task.name + "_" + auto_suffix
                     elif x.name.endswith("%%"):
@@ -241,39 +247,18 @@ class PipeDAGStore(Disposable):
 
         m_value = deep_map(value, materialize_mutator)
 
-        def get_cache_fn_hash():
-            """
-            If a task is cache valid, we must use the cache_fn_hash
-            from the previous run.
-            """
-            if not ctx.ignore_fresh_input:
-                return task.cache_fn_hash
-            if not task.cache_metadata:
-                return task.cache_fn_hash
-            return task.cache_metadata.cache_fn_hash
-
         def store_metadata():
             """
             Metadata must be generated after everything else has been materialized,
-            because during materialization the cache_info of the different objects
+            because during materialization the cache_key of the different objects
             can get changed.
             """
             output_json = self.json_encode(m_value)
-            metadata = TaskMetadata(
-                name=task.name,
-                stage=stage.name,
-                version=task.version,
-                timestamp=datetime.datetime.now(),
-                run_id=ctx.run_id,
-                input_hash=task.input_hash,
-                cache_fn_hash=get_cache_fn_hash(),
-                output_json=output_json,
-            )
-            self.table_store.store_task_metadata(metadata, stage)
+            task_cache_info.store_task_metadata(output_json, self.table_store, stage)
 
         def store_table(table: Table):
             if task.lazy:
-                self.table_store.store_table_lazy(table, task)
+                self.table_store.store_table_lazy(table, task, task_cache_info)
             else:
                 self.table_store.store_table(table)
 
@@ -285,7 +270,9 @@ class PipeDAGStore(Disposable):
             raw_sqls,
             blobs,
             store_table,
-            lambda raw_sql: self.table_store.store_raw_sql(raw_sql, task),
+            lambda raw_sql: self.table_store.store_raw_sql(
+                raw_sql, task, task_cache_info
+            ),
             self.blob_store.store_blob,
             store_metadata,
         )
@@ -376,6 +363,8 @@ class PipeDAGStore(Disposable):
     def retrieve_cached_output(
         self,
         task: MaterializingTask,
+        input_hash: str,
+        cache_fn_hash: str,
     ) -> (Materializable, TaskMetadata):
         """Try to retrieve the cached outputs for a task
 
@@ -387,7 +376,9 @@ class PipeDAGStore(Disposable):
         if task.stage.did_commit:
             raise StageError(f"Stage ({task.stage}) already committed.")
 
-        metadata = self.table_store.retrieve_task_metadata(task)
+        metadata = self.table_store.retrieve_task_metadata(
+            task, input_hash, cache_fn_hash
+        )
         return self.json_decode(metadata.output_json), metadata
 
     def copy_cached_output_to_transaction_stage(

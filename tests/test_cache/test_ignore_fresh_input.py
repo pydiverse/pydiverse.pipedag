@@ -178,6 +178,17 @@ def test_lazy_table(mocker):
         child_spy.assert_called_once()
         cache_spy.assert_not_called()
 
+    # We can't avoid the cache invalidation of get_first here since we do
+    # ignore_fresh_input based cache_fn_hash filtering on task level and
+    # not on lazy table level.
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(child) == 1
+        assert result.get(cache_child) == 1
+        out_spy.assert_called_once()
+        child_spy.assert_called_once()
+        cache_spy.assert_not_called()
+
     # The child task shouldn't get called again, because the lazy sql didn't change
     for _ in range(3):
         with StageLockContext():
@@ -295,6 +306,15 @@ def test_raw_sql(mocker):
     raw_value = 1
     with StageLockContext():
         result = flow.run(ignore_fresh_input=True)
+        assert result.get(child, as_type=pd.DataFrame)["x"][0] == 1
+        out_spy.assert_called_once()
+        child_spy.assert_called_once()
+
+    # We can't avoid the cache invalidation of get_first here since we do
+    # ignore_fresh_input based cache_fn_hash filtering on task level and
+    # not on lazy table level.
+    with StageLockContext():
+        result = flow.run()
         assert result.get(child, as_type=pd.DataFrame)["x"][0] == 1
         out_spy.assert_called_once()
         child_spy.assert_called_once()

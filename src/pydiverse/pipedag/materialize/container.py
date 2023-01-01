@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Generic
 
 from pydiverse.pipedag._typing import T
-from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.util import normalize_name
 
 if TYPE_CHECKING:
@@ -22,8 +21,6 @@ class Table(Generic[T]):
         add '%%' at the end of the name to enable automatic name mangling.
     :param primary_key: Optional name of the primary key that should be
         used when materializing this table
-    :param cache_key: Internal cache_key used when retreiving an object
-        from the database cache.
     """
 
     def __init__(
@@ -32,8 +29,6 @@ class Table(Generic[T]):
         name: str | None = None,
         stage: Stage | None = None,
         primary_key: str | None = None,
-        *,
-        cache_key: str | None = None,
     ):
         self._name = None
 
@@ -42,7 +37,10 @@ class Table(Generic[T]):
         self.stage = stage
         self.primary_key = primary_key
 
-        self.cache_info = CacheInfo(cache_key)
+        # cache_key will be overridden shortly before handing over to downstream tasks
+        # that use it to compute their input_hash for cache_invalidation due to input
+        # change
+        self.cache_key = None
 
     def __str__(self):
         return f"<Table: {self.name} ({self.stage.name})>"
@@ -74,8 +72,6 @@ class RawSql:
         sql: str | None = None,
         name: str | None = None,
         stage: Stage | None = None,
-        *,
-        cache_key: str | None = None,
     ):
         self._name = None
 
@@ -83,7 +79,10 @@ class RawSql:
         self.name = name
         self.stage = stage
 
-        self.cache_info = CacheInfo(cache_key)
+        # cache_key will be overridden shortly before handing over to downstream tasks
+        # that use it to compute their input_hash for cache_invalidation due to input
+        # change
+        self.cache_key = None
 
     def __str__(self):
         sql_short = self.sql.strip()[0:40].replace("\n", "").strip()
@@ -119,8 +118,6 @@ class Blob(Generic[T]):
         obj: T | None = None,
         name: str | None = None,
         stage: Stage | None = None,
-        *,
-        cache_key: str | None = None,
     ):
         self._name = None
 
@@ -128,7 +125,10 @@ class Blob(Generic[T]):
         self.name = name
         self.stage = stage
 
-        self.cache_info = CacheInfo(cache_key)
+        # cache_key will be overridden shortly before handing over to downstream tasks
+        # that use it to compute their input_hash for cache_invalidation due to input
+        # change
+        self.cache_key = None
 
     def __str__(self):
         return f"<Blob: {self.name} ({self.stage.name})>"
@@ -140,35 +140,3 @@ class Blob(Generic[T]):
     @name.setter
     def name(self, value):
         self._name = normalize_name(value)
-
-
-class CacheInfo:
-    """Object that stores different pieces of cache information
-
-    If `cache_key` is set manually or `deserialized_cache_key` is set during
-    initialization, this cache key will be used. Otherwise, the `cache_key` parameter
-    will be the combination of all provided pieces of cache information.
-    """
-
-    def __init__(self, deserialized_cache_key: str = None):
-        self.__cache_key = deserialized_cache_key
-
-        self.task_hash = None
-        self.query_hash = None
-
-    def __repr__(self):
-        return f"<CacheInfo: task_hash={self.task_hash} query_hash={self.query_hash}>"
-
-    @property
-    def cache_key(self):
-        if self.__cache_key is not None:
-            return self.__cache_key
-
-        return compute_cache_key(
-            self.task_hash,
-            self.query_hash,
-        )
-
-    @cache_key.setter
-    def cache_key(self, value):
-        self.__cache_key = value
