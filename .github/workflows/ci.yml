@@ -122,5 +122,5 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/test
         with:
-          arguments: --workers 4 --mssql --ibm_db2
+          arguments: --workers 1 --mssql --ibm_db2
 
