@@ -12,32 +12,68 @@ on:
     branches:
       - '**'
 
-jobs:
+env:
+  DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
 
-  Linting:
+jobs:
+  lint:
     name: "Linting - pre-commit hooks - Python 3.8"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout branch
         uses: actions/checkout@v3
-        with:
-          ref: ${{ github.head_ref }}
+
       - name: Install Python 3.8
         uses: actions/setup-python@v4
         with:
           python-version: 3.8
+
       - name: Linting - Run pre-commit checks
         uses: pre-commit/action@v3.0.0
 
-  Tests:
-    name: "${{ matrix.os }} / ${{ matrix.python-version }}"
+  smoke_test:
+    name: 'Smoke Test - Python 3.11 - postgres'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+        with:
+          python-version: 3.11
+
+      - name: Start Docker Compose
+        uses: isbang/compose-action@v1.4.1
+        with:
+          compose-file: ./docker-compose.yaml
+          services: |
+            postgres
+            zoo
+
+      - name: Wait for Docker Servers
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          until bash ./.github/workflows/resources/docker_compose_ready.sh; do
+            sleep 2
+          done
+
+      - name: Run Tests
+        uses: ./.github/actions/test
+        with:
+          arguments: --workers 2
+
+  full_test:
+    name: "Full Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    needs: [smoke_test]
     runs-on: ${{ matrix.os }}-latest
     timeout-minutes: 30
     strategy:
       matrix:
         os: [Ubuntu]
-        python-version: ['3.8', '3.9', '3.10']
+        python-version: ['3.8', '3.11']
     services:
       ibm_db2:
         image: ibmcom/db2:11.5.5.1
@@ -51,29 +87,16 @@ jobs:
         ports:
           - 50000:50000
     steps:
-      - name: Checkout branch
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ github.head_ref }}
+      - uses: actions/checkout@v3
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
+      - name: Setup Environment
+        uses: ./.github/actions/setup
         with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-          installer-parallel: true
+          python-version: ${{ matrix.python-version }}
+          poetry-flags: -E mssql -E ibm_db2
 
       - name: Install Microsoft ODBC
         run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: 'poetry'
-
-      - name: Install dependencies
-        run: poetry install -vvv -E mssql -E ibm_db2 --no-interaction
 
       - name: Start Docker Compose
         uses: isbang/compose-action@v1.4.1
@@ -96,9 +119,8 @@ jobs:
             echo Waiting
           done
 
-      - name: Test
-        shell: bash
-        env:
-          DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
-        run: |
-          poetry run pytest tests -ra ${DEBUG:+-s} --workers 4 --mssql --ibm_db2
+      - name: Run Tests
+        uses: ./.github/actions/test
+        with:
+          arguments: --workers 4 --mssql --ibm_db2
+
