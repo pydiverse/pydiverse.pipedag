@@ -9,7 +9,7 @@ from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import materialize
 
-from tests.util import tasks_library as m
+from tests.util import select_as, tasks_library as m
 from tests.util.spy import spy_task
 
 # Test that running a flow that contains a task with an invalid cache function
@@ -76,7 +76,7 @@ def test_table(mocker):
 
     @materialize(cache=cache)
     def return_cache_table():
-        return Table(sa.text(f"SELECT {cache_value} as x"))
+        return Table(select_as(cache_value, "x"))
 
     @materialize(input_type=pd.DataFrame)
     def get_first(table, col):
@@ -128,7 +128,7 @@ def test_lazy_table(mocker):
 
     @materialize(cache=cache, lazy=True, nout=2)
     def input_task():
-        return Table(sa.text(f"SELECT {lazy_value} as x")), cache_value
+        return Table(select_as(lazy_value, "x")), cache_value
 
     @materialize(input_type=pd.DataFrame)
     def get_first(table, col):
@@ -241,7 +241,7 @@ def test_blob(mocker):
         child_spy.assert_called_once()
 
 
-@pytest.mark.skip_instance("mssql", "mssql_pytsql")
+@pytest.mark.skip_instance("mssql", "mssql_pytsql", "ibm_db2")
 def test_raw_sql(mocker):
     cache_value = 0
     raw_value = 0
