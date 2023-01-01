@@ -471,7 +471,7 @@ class SQLTableStore(BaseTableStore):
         dest_schema = self.get_schema(stage.name)
         src_schema = self.get_schema(stage.transaction_name)
 
-        with self.engine.connect() as conn, conn.begin():
+        with self.engine.connect() as conn:
             # Delete all read views in visible (destination) schema
             views = self.get_view_names(dest_schema.get())
             for view in views:
