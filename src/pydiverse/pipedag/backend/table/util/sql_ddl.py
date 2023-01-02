@@ -8,6 +8,7 @@ from attr import frozen
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.schema import DDLElement
 from sqlalchemy.sql import Select
+from sqlalchemy.sql.elements import TextClause
 
 __all__ = [
     "Schema",
@@ -15,7 +16,6 @@ __all__ = [
     "DropSchema",
     "RenameSchema",
     "CreateTableAsSelect",
-    "PrepareCreateTableAsSelect",
     "CreateViewAsSelect",
     "CopyTable",
     "DropTable",
@@ -23,9 +23,8 @@ __all__ = [
     "DropFunction",
     "DropProcedure",
     "DropView",
+    "split_ddl_statement",
 ]
-
-from sqlalchemy.sql.elements import TextClause
 
 
 @frozen
@@ -76,15 +75,6 @@ class DropDatabase(DDLElement):
 
 
 class CreateTableAsSelect(DDLElement):
-    def __init__(self, name: str, schema: Schema, query: Select | TextClause | sa.Text):
-        self.name = name
-        self.schema = schema
-        self.query = query
-
-
-class PrepareCreateTableAsSelect(DDLElement):
-    """Prepare a CreateTableAsSelect statement for DB2."""
-
     def __init__(self, name: str, schema: Schema, query: Select | TextClause | sa.Text):
         self.name = name
         self.schema = schema
@@ -169,7 +159,7 @@ def visit_create_schema(create: CreateSchema, compiler, **kw):
 
 
 @compiles(CreateSchema, "mssql")
-def visit_create_schema(create: CreateSchema, compiler, **kw):
+def visit_create_schema_mssql(create: CreateSchema, compiler, **kw):
     # For SQL Server we support two modes:  using databases as schemas,
     # or schemas as schemas.
     _ = kw
@@ -208,7 +198,7 @@ def visit_create_schema(create: CreateSchema, compiler, **kw):
 
 
 @compiles(CreateSchema, "ibm_db_sa")
-def visit_create_schema(create: CreateSchema, compiler, **kw):
+def visit_create_schema_ibm_db_sa(create: CreateSchema, compiler, **kw):
     """For IBM DB2 we need to jump through extra hoops for if_exists=True."""
     _ = kw
     schema = compiler.preparer.format_schema(create.schema.get())
@@ -235,7 +225,7 @@ def visit_drop_schema(drop: DropSchema, compiler, **kw):
 
 
 @compiles(DropSchema, "mssql")
-def visit_drop_schema(drop: DropSchema, compiler, **kw):
+def visit_drop_schema_mssql(drop: DropSchema, compiler, **kw):
     _ = kw
     full_name = drop.schema.get()
     # it was already checked that there is exactly one dot in schema prefix + suffix
@@ -257,7 +247,7 @@ def visit_drop_schema(drop: DropSchema, compiler, **kw):
 
 
 @compiles(DropSchema, "ibm_db_sa")
-def visit_drop_schema(drop: DropSchema, compiler, **kw):
+def visit_drop_schema_ibm_db_sa(drop: DropSchema, compiler, **kw):
     """
     Because IBM DB2 doesn't support CASCADE, we must manually drop all tables in
     the schema first.
@@ -274,10 +264,8 @@ def visit_drop_schema(drop: DropSchema, compiler, **kw):
             meta = sa.MetaData()
             meta.reflect(bind=conn, schema=drop.schema.get())
 
-        kw["literal_binds"] = True
         for table in meta.tables.values():
-            drop_table = compiler.process(DropTable(table.name, drop.schema), **kw)
-            statements.append(drop_table)
+            statements.append(DropTable(table.name, drop.schema))
 
     # Compile DROP SCHEMA statement
     schema = compiler.preparer.format_schema(drop.schema.get())
@@ -289,12 +277,12 @@ def visit_drop_schema(drop: DropSchema, compiler, **kw):
                 declare continue handler for sqlstate '42704' begin end;
                 execute immediate 'DROP SCHEMA {schema} RESTRICT';
             END
-            """.strip()
+            """
         )
     else:
         statements.append(f"DROP SCHEMA {schema} RESTRICT")
 
-    return ";\n".join(statements)
+    return join_ddl_statements(statements, compiler, **kw)
 
 
 @compiles(RenameSchema)
@@ -306,7 +294,7 @@ def visit_rename_schema(rename: RenameSchema, compiler, **kw):
 
 
 @compiles(RenameSchema, "mssql")
-def visit_rename_schema(rename: RenameSchema, compiler, **kw):
+def visit_rename_schema_mssql(rename: RenameSchema, compiler, **kw):
     _ = kw
     if rename.from_.prefix != rename.to.prefix:
         raise AttributeError(
@@ -371,7 +359,7 @@ def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
 
 
 @compiles(CreateTableAsSelect, "mssql")
-def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
+def visit_create_table_as_select_mssql(create: CreateTableAsSelect, compiler, **kw):
     name = compiler.preparer.quote_identifier(create.name)
     full_name = create.schema.get()
     # it was already checked that there is exactly one dot in schema prefix + suffix
@@ -386,35 +374,31 @@ def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
 
 
 @compiles(CreateTableAsSelect, "ibm_db_sa")
-def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
-    create_name = ibm_db_sa_fix_name(create.name)
-
-    name = compiler.preparer.quote_identifier(create_name)
-    schema = compiler.preparer.format_schema(create.schema.get())
-    kw["literal_binds"] = True
-    select = compiler.sql_compiler.process(create.query, **kw)
-    return f"INSERT INTO {schema}.{name}\n{select}"
-
-
-@compiles(PrepareCreateTableAsSelect, "ibm_db_sa")
-def visit_prepare_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
+def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler, **kw):
     # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     create = copy.deepcopy(create)
     create.name = ibm_db_sa_fix_name(create.name)
-    return _visit_create_obj_as_select(
+
+    prepare_statement = _visit_create_obj_as_select(
         create, compiler, "TABLE", kw, prefix="(", suffix=") DEFINITION ONLY"
     )
 
+    name = compiler.preparer.quote_identifier(create.name)
+    schema = compiler.preparer.format_schema(create.schema.get())
+    kw["literal_binds"] = True
+    select = compiler.sql_compiler.process(create.query, **kw)
+    create_statement = f"INSERT INTO {schema}.{name}\n{select}"
 
-# noinspection DuplicatedCode
+    return join_ddl_statements([prepare_statement, create_statement], compiler, **kw)
+
+
 @compiles(CreateViewAsSelect)
 def visit_create_view_as_select(create: CreateViewAsSelect, compiler, **kw):
     return _visit_create_obj_as_select(create, compiler, "VIEW", kw)
 
 
 @compiles(CreateViewAsSelect, "ibm_db_sa")
-def visit_create_view_as_select(create: CreateViewAsSelect, compiler, **kw):
+def visit_create_view_as_select_ibm_db_sa(create: CreateViewAsSelect, compiler, **kw):
     # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     create = copy.deepcopy(create)
     create.name = ibm_db_sa_fix_name(create.name)
@@ -464,7 +448,7 @@ def visit_copy_table(copy_table: CopyTable, compiler, **kw):
 
 
 @compiles(CopyTable, "mssql")
-def visit_copy_table(copy_table: CopyTable, compiler, **kw):
+def visit_copy_table_mssql(copy_table: CopyTable, compiler, **kw):
     from_name = compiler.preparer.quote_identifier(copy_table.from_name)
     full_name = copy_table.from_schema.get()
     # it was already checked that there is exactly one dot in schema prefix + suffix
@@ -476,18 +460,26 @@ def visit_copy_table(copy_table: CopyTable, compiler, **kw):
     return compiler.process(create, **kw)
 
 
+@compiles(CopyTable, "ibm_db_sa")
+def visit_copy_table_ibm_db_sa(copy_table: CopyTable, compiler, **kw):
+    copy_table = copy.deepcopy(copy_table)
+    copy_table.from_name = ibm_db_sa_fix_name(copy_table.from_name)
+    copy_table.to_name = ibm_db_sa_fix_name(copy_table.to_name)
+    return visit_copy_table(copy_table, compiler, **kw)
+
+
 @compiles(DropTable)
 def visit_drop_table(drop: DropTable, compiler, **kw):
     return _visit_drop_anything(drop, "TABLE", compiler, **kw)
 
 
 @compiles(DropTable, "mssql")
-def visit_drop_table(drop: DropTable, compiler, **kw):
+def visit_drop_table_mssql(drop: DropTable, compiler, **kw):
     return _visit_drop_anything_mssql(drop, "TABLE", compiler, **kw)
 
 
 @compiles(DropTable, "ibm_db_sa")
-def visit_drop_table(drop: DropTable, compiler, **kw):
+def visit_drop_table_ibm_db_sa(drop: DropTable, compiler, **kw):
     # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     drop = copy.deepcopy(drop)
     drop.name = ibm_db_sa_fix_name(drop.name)
@@ -500,12 +492,12 @@ def visit_drop_view(drop: DropView, compiler, **kw):
 
 
 @compiles(DropView, "mssql")
-def visit_drop_view(drop: DropView, compiler, **kw):
+def visit_drop_view_mssql(drop: DropView, compiler, **kw):
     return _visit_drop_anything_mssql(drop, "VIEW", compiler, **kw)
 
 
 @compiles(DropView, "ibm_db_sa")
-def visit_drop_view(drop: DropView, compiler, **kw):
+def visit_drop_view_ibm_db_sa(drop: DropView, compiler, **kw):
     # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     drop = copy.deepcopy(drop)
     drop.name = ibm_db_sa_fix_name(drop.name)
@@ -518,7 +510,7 @@ def visit_drop_table(drop: DropProcedure, compiler, **kw):
 
 
 @compiles(DropProcedure, "mssql")
-def visit_drop_table(drop: DropProcedure, compiler, **kw):
+def visit_drop_table_mssql(drop: DropProcedure, compiler, **kw):
     return _visit_drop_anything_mssql(drop, "PROCEDURE", compiler, **kw)
 
 
@@ -528,7 +520,7 @@ def visit_drop_table(drop: DropFunction, compiler, **kw):
 
 
 @compiles(DropFunction, "mssql")
-def visit_drop_table(drop: DropProcedure, compiler, **kw):
+def visit_drop_table_mssql(drop: DropProcedure, compiler, **kw):
     return _visit_drop_anything_mssql(drop, "FUNCTION", compiler, **kw)
 
 
@@ -576,3 +568,23 @@ def _visit_drop_anything_mssql(
 def ibm_db_sa_fix_name(name):
     # DB2 seems to create tables uppercase if all lowercase given
     return name.upper() if name.islower() else name
+
+
+STATEMENT_SEPERATOR = "; -- PYDIVERSE-PIPEDAG-SPLIT\n"
+
+
+def join_ddl_statements(statements, compiler, **kw):
+    """Mechanism to combine multiple DDL statements into one."""
+    statement_strings = []
+    kw["literal_binds"] = True
+    for statement in statements:
+        if isinstance(statement, str):
+            statement_strings.append(statement)
+        else:
+            statement_strings.append(compiler.process(statement, **kw))
+    return STATEMENT_SEPERATOR.join(statement_strings)
+
+
+def split_ddl_statement(statement: str):
+    """Split previously combined DDL statements apart"""
+    return statement.split(STATEMENT_SEPERATOR)

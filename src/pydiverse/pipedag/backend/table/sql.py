@@ -26,9 +26,9 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     DropSchema,
     DropTable,
     DropView,
-    PrepareCreateTableAsSelect,
     RenameSchema,
     Schema,
+    split_ddl_statement,
 )
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.context.context import ConfigContext, StageCommitTechnique
@@ -235,24 +235,35 @@ class SQLTableStore(BaseTableStore):
     def get_schema(self, name):
         return Schema(name, self.schema_prefix, self.schema_suffix)
 
+    def _execute(self, query, conn: sa.engine.Connection):
+        if self.print_sql:
+            if isinstance(query, str):
+                query_str = query
+            else:
+                query_str = str(
+                    query.compile(self.engine, compile_kwargs={"literal_binds": True})
+                )
+            pretty_query_str = self.format_sql_string(query_str)
+            self.logger.info(f"Executing sql:\n{pretty_query_str}")
+
+        return conn.execute(query)
+
     def execute(self, query, *, conn: sa.engine.Connection = None):
         if conn is None:
-            # TODO: also replace engine.connect() with own context manager
-            #       that can be used in other places
             with self.engine.connect() as conn:
-                # if self.engine.dialect.name == "mssql" and self.no_db_locking:
-                #     conn.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED")
                 return self.execute(query, conn=conn)
 
-        if self.print_sql:
-            query_str = (
-                query
-                if isinstance(query, str)
-                else SQLAlchemyTableHook.lazy_query_str(self, query)
+        if isinstance(query, sa.schema.DDLElement):
+            # Some custom DDL statements contain multiple statements.
+            # They are all seperated using a special seperator.
+            query_str = str(
+                query.compile(self.engine, compile_kwargs={"literal_binds": True})
             )
-            query_str = self.format_sql_string(query_str)
-            self.logger.info(f"Executing sql:\n{query_str}")
-        return conn.execute(query)
+            for part in split_ddl_statement(query_str):
+                self._execute(part, conn)
+            return
+
+        return self._execute(query, conn)
 
     @staticmethod
     def format_sql_string(query_str: str) -> str:
@@ -471,7 +482,7 @@ class SQLTableStore(BaseTableStore):
         dest_schema = self.get_schema(stage.name)
         src_schema = self.get_schema(stage.transaction_name)
 
-        with self.engine.connect() as conn, conn.begin():
+        with self.engine.connect() as conn:
             # Delete all read views in visible (destination) schema
             views = self.get_view_names(dest_schema.get())
             for view in views:
@@ -537,14 +548,21 @@ class SQLTableStore(BaseTableStore):
                 " to transaction because no such table exists."
             )
 
-        self.execute(
-            CopyTable(
-                table.name,
-                self.get_schema(stage.name),
-                table.name,
-                self.get_schema(stage.transaction_name),
+        try:
+            self.execute(
+                CopyTable(
+                    table.name,
+                    self.get_schema(stage.name),
+                    table.name,
+                    self.get_schema(stage.transaction_name),
+                )
             )
-        )
+        except Exception as e:
+            msg = (
+                f"Failed to copy table '{table.name}' (schema: '{stage.name}')"
+                " to transaction."
+            )
+            raise CacheError(msg) from e
 
     def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, stage: Stage):
         schema_name = self.get_schema(metadata.stage).get()
@@ -556,14 +574,21 @@ class SQLTableStore(BaseTableStore):
                 " exists."
             )
 
-        self.execute(
-            CopyTable(
-                metadata.name,
-                self.get_schema(metadata.stage),
-                metadata.name,
-                self.get_schema(stage.transaction_name),
+        try:
+            self.execute(
+                CopyTable(
+                    metadata.name,
+                    self.get_schema(metadata.stage),
+                    metadata.name,
+                    self.get_schema(stage.transaction_name),
+                )
             )
-        )
+        except Exception as e:
+            msg = (
+                f"Failed to copy lazy table {metadata.name} (schema:"
+                f" '{metadata.stage}') to transaction."
+            )
+            raise CacheError(msg) from e
 
     @engine_dispatch
     def get_view_names(self, schema: str, *, include_everything=False) -> list[str]:
@@ -619,14 +644,21 @@ class SQLTableStore(BaseTableStore):
 
         tables_to_copy = new_tables - set(views)
         for table_name in tables_to_copy:
-            self.execute(
-                CopyTable(
-                    table_name,
-                    src_schema,
-                    table_name,
-                    dest_schema,
+            try:
+                self.execute(
+                    CopyTable(
+                        table_name,
+                        src_schema,
+                        table_name,
+                        dest_schema,
+                    )
                 )
-            )
+            except Exception as e:
+                msg = (
+                    f"Failed to copy table {table_name} (schema:"
+                    f" '{src_schema}') to transaction."
+                )
+                raise CacheError(msg) from e
 
         views_to_copy = new_tables & set(views)
         for view_name in views_to_copy:
@@ -893,9 +925,6 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
             obj = sa.select(table.obj)
 
         schema = store.get_schema(stage_name)
-        if store.engine.dialect.name == "ibm_db_sa":
-            # DB2 needs CREATE TABLE & INSERT INTO statements
-            store.execute(PrepareCreateTableAsSelect(table.name, schema, obj))
         store.execute(CreateTableAsSelect(table.name, schema, obj))
 
     @classmethod

@@ -33,9 +33,6 @@ instances:
       table_store_connection: postgres
       create_database_if_not_exists: True
 
-      ## SQL Server: this can be used after running `docker-compose up`
-      #table_store_connection: mssql
-
       # print select statements before being encapsualted in materialize expressions and tables before writing to
       # database
       print_materialize: true
@@ -52,25 +49,29 @@ instances:
 
     orchestration:
       class: "pydiverse.pipedag.engine.SequentialEngine"
-      ## Activate this class to work either with prefect 1.x or prefect 2.x
-      # class: "pydiverse.pipedag.engine.PrefectEngine"
+
+  # Instances used by pytest
+
+  postgres:
+    instance_id: pd_postgres
+    table_store:
+      table_store_connection: postgres
+
   mssql:
-    # Full dataset is using default database connection and schemas
+    instance_id: pd_mssql
     table_store:
       table_store_connection: mssql
       disable_pytsql: True
+
   mssql_pytsql:
+    instance_id: pd_mssql_pytsql
     table_store:
       table_store_connection: mssql
-      disable_pytsql: False  # is already default
-      pytsql_isolate_top_level_statements: False
-  mssql_pytsql_isolate:
-    table_store:
-      table_store_connection: mssql
-      disable_pytsql: False  # is already default
-      pytsql_isolate_top_level_statements: True  # is already default
+      disable_pytsql: False
+      pytsql_isolate_top_level_statements: True
+
   ibm_db2:
-    # Full dataset is using default database connection and schemas
+    instance_id: pd_ibm_db2
     stage_commit_technique: READ_VIEWS
     table_store:
       table_store_connection: ibm_db2
