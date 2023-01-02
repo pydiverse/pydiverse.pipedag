@@ -460,6 +460,14 @@ def visit_copy_table_mssql(copy_table: CopyTable, compiler, **kw):
     return compiler.process(create, **kw)
 
 
+@compiles(CopyTable, "ibm_db_sa")
+def visit_copy_table_ibm_db_sa(copy_table: CopyTable, compiler, **kw):
+    copy_table = copy.deepcopy(copy_table)
+    copy_table.from_name = ibm_db_sa_fix_name(copy_table.from_name)
+    copy_table.to_name = ibm_db_sa_fix_name(copy_table.to_name)
+    return visit_copy_table(copy_table, compiler, **kw)
+
+
 @compiles(DropTable)
 def visit_drop_table(drop: DropTable, compiler, **kw):
     return _visit_drop_anything(drop, "TABLE", compiler, **kw)
