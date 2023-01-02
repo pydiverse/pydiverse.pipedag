@@ -548,14 +548,21 @@ class SQLTableStore(BaseTableStore):
                 " to transaction because no such table exists."
             )
 
-        self.execute(
-            CopyTable(
-                table.name,
-                self.get_schema(stage.name),
-                table.name,
-                self.get_schema(stage.transaction_name),
+        try:
+            self.execute(
+                CopyTable(
+                    table.name,
+                    self.get_schema(stage.name),
+                    table.name,
+                    self.get_schema(stage.transaction_name),
+                )
             )
-        )
+        except Exception as e:
+            msg = (
+                f"Failed to copy table '{table.name}' (schema: '{stage.name}')"
+                " to transaction."
+            )
+            raise CacheError(msg) from e
 
     def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, stage: Stage):
         schema_name = self.get_schema(metadata.stage).get()
@@ -567,14 +574,21 @@ class SQLTableStore(BaseTableStore):
                 " exists."
             )
 
-        self.execute(
-            CopyTable(
-                metadata.name,
-                self.get_schema(metadata.stage),
-                metadata.name,
-                self.get_schema(stage.transaction_name),
+        try:
+            self.execute(
+                CopyTable(
+                    metadata.name,
+                    self.get_schema(metadata.stage),
+                    metadata.name,
+                    self.get_schema(stage.transaction_name),
+                )
             )
-        )
+        except Exception as e:
+            msg = (
+                f"Failed to copy lazy table {metadata.name} (schema:"
+                f" '{metadata.stage}') to transaction."
+            )
+            raise CacheError(msg) from e
 
     @engine_dispatch
     def get_view_names(self, schema: str, *, include_everything=False) -> list[str]:
@@ -630,14 +644,21 @@ class SQLTableStore(BaseTableStore):
 
         tables_to_copy = new_tables - set(views)
         for table_name in tables_to_copy:
-            self.execute(
-                CopyTable(
-                    table_name,
-                    src_schema,
-                    table_name,
-                    dest_schema,
+            try:
+                self.execute(
+                    CopyTable(
+                        table_name,
+                        src_schema,
+                        table_name,
+                        dest_schema,
+                    )
                 )
-            )
+            except Exception as e:
+                msg = (
+                    f"Failed to copy table {table_name} (schema:"
+                    f" '{src_schema}') to transaction."
+                )
+                raise CacheError(msg) from e
 
         views_to_copy = new_tables & set(views)
         for view_name in views_to_copy:
