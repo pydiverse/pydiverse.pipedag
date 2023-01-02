@@ -21,7 +21,8 @@ pytest_plugins = ["tests.parallelize.plugin"]
 
 
 def setup_environ():
-    os.environ["PIPEDAG_CONFIG"] = str(Path(__file__).parent / "resources")
+    if "PIPEDAG_CONFIG" not in os.environ:
+        os.environ["PIPEDAG_CONFIG"] = str(Path(__file__).parent / "resources")
     os.environ["POSTGRES_USERNAME"] = "sa"
     os.environ["POSTGRES_PASSWORD"] = "Pydiverse23"
     os.environ["MSSQL_USERNAME"] = "sa"
