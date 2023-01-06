@@ -8,7 +8,8 @@ from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import RunContext, StageLockContext
 from pydiverse.pipedag.util.config import PipedagConfig
 
-from .pipedag_test import tasks_library as m
+from tests.util import select_as, tasks_library as m
+from tests.fixtures.instance import *
 
 
 def test_materialize_literals():
@@ -288,11 +289,11 @@ def test_name_mangling_tables():
 def test_name_mangling_lazy_tables():
     @materialize(lazy=True)
     def lazy_task_1():
-        return Table(sa.text("SELECT 1 as x"), name="table_%%")
+        return Table(select_as(1, "x"), name="table_%%")
 
     @materialize(lazy=True)
     def lazy_task_2():
-        return Table(sa.text("SELECT 2 as x"), name="table_%%")
+        return Table(select_as(2, "x"), name="table_%%")
 
     with Flow() as f:
         with Stage("stage_1"):
@@ -309,11 +310,11 @@ def test_name_mangling_lazy_table_cache_fn():
     # Only the cache fn output of these two tasks is different
     @materialize(lazy=True, cache=lambda: 1, name="lazy_task")
     def lazy_task_1():
-        return Table(sa.text("SELECT 1 as x"))
+        return Table(select_as(1, "x"))
 
     @materialize(lazy=True, cache=lambda: 2, name="lazy_task")
     def lazy_task_2():
-        return Table(sa.text("SELECT 2 as x"))
+        return Table(select_as(2, "x"))
 
     with Flow() as f:
         with Stage("stage_1"):
