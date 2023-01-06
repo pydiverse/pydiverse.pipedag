@@ -97,7 +97,6 @@ class CacheManager:
         input_hash: str,
         cache_fn_hash: str,
     ):
-        memo_cache_key = CacheManager.task_cache_key(task, input_hash, cache_fn_hash)
         # Check the cache
         try:
             # `cache_fn_hash` is not used for cache retrieval if ignore_fresh_input
@@ -106,14 +105,11 @@ class CacheManager:
             cached_output, cache_metadata = store.retrieve_cached_output(
                 task, input_hash, cache_fn_hash
             )
-            task.cache_metadata = cache_metadata
             if not task.lazy:
                 # Task isn't lazy -> copy cache to transaction stage
                 store.copy_cached_output_to_transaction_stage(
                     cached_output, cache_metadata, task
                 )
-                ctx = RunContext.get()
-                ctx.store_task_memo(task, memo_cache_key, cached_output)
                 task.logger.info("Found task in cache. Using cached result.")
             task_cache_key = CacheManager.task_cache_key(
                 task, cache_metadata.input_hash, cache_metadata.cache_fn_hash
@@ -132,11 +128,14 @@ class CacheManager:
                 "Failed to retrieve task from cache.",
                 exception=str(e),
             )
+        new_task_cache_key = CacheManager.task_cache_key(
+            task, input_hash, cache_fn_hash
+        )
         return TaskCacheInfo(
             task,
             input_hash,
             cache_fn_hash,
-            memo_cache_key,
+            new_task_cache_key,
             _cached_output=None,
             _cached_metadata=None,
             _is_cache_valid=False,
