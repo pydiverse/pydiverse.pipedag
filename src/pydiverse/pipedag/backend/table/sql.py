@@ -1007,7 +1007,9 @@ class SQLTableStore(BaseTableStore):
 class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @classmethod
     def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, (sa.Table, sa.sql.Select, sa.sql.elements.TextClause))
+        return issubclass(
+            type_, (sa.sql.elements.TextClause, sa.sql.selectable.Selectable)
+        )
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:

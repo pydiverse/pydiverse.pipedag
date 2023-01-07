@@ -15,10 +15,16 @@ from tests.fixtures.instance import *
 @pytest.mark.parametrize(
     "task",
     [
+        m.simple_dataframe,
         m.simple_dataframe_with_pk,
         m.simple_dataframe_with_pk2,
         m.simple_dataframe_with_index,
         m.simple_dataframe_with_indexes,
+        m.simple_lazy_table,
+        m.simple_lazy_table_with_pk,
+        m.simple_lazy_table_with_pk2,
+        m.simple_lazy_table_with_index,
+        m.simple_lazy_table_with_indexes,
     ],
 )
 def test_materialize_table_with_indexes(task):
