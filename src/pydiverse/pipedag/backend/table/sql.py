@@ -318,37 +318,38 @@ class SQLTableStore(BaseTableStore):
                     )
                 self.execute(AddIndex(table.name, schema, index))
 
-    @add_indexes.dialect("ibm_db_sa")
-    def _add_indexes(self, table: Table, schema: Schema):
-        if table.primary_key is not None:
-            key = table.primary_key
-            if isinstance(key, str):
-                key = [key]
-            # # Failed to make this work: (Database hangs when creating index on
-            # # altered column)
-            # sql_types = self.reflect_sql_types(key, table, schema)
-            # if any([isinstance(_type, sa.String) and (_type.length is None or
-            #           _type.length > 256) for _type in sql_types]):
-            #     # impose some varchar length limit to allow use in primary key
-            #     # / index
-            #     self.execute(ChangeColumnTypes(table.name, schema, key,
-            #           sql_types, nullable=False, cap_varchar_max=256))
-            # else:
-            self.execute(ChangeColumnNullable(table.name, schema, key, nullable=False))
-            self.execute(AddPrimaryKey(table.name, schema, key))
-        if table.indexes is not None:
-            for index in table.indexes:
-                # # Failed to make this work: (Database hangs when creating index on
-                # # altered column)
-                # sql_types = self.reflect_sql_types(index, table, schema)
-                # if any([isinstance(_type, sa.String) and (_type.length is None or
-                #       _type.length > 256) for _type in sql_types]):
-                #     # impose some varchar(max) limit to allow use in primary key
-                #     # / index
-                #     self.execute(
-                #         ChangeColumnTypes(table.name, schema, index, sql_types,
-                #               cap_varchar_max=256))
-                self.execute(AddIndex(table.name, schema, index))
+    # @add_indexes.dialect("ibm_db_sa")
+    # def _add_indexes(self, table: Table, schema: Schema):
+    #     if table.primary_key is not None:
+    #         key = table.primary_key
+    #         if isinstance(key, str):
+    #             key = [key]
+    #         # # Failed to make this work: (Database hangs when creating index on
+    #         # # altered column)
+    #         # sql_types = self.reflect_sql_types(key, table, schema)
+    #         # if any([isinstance(_type, sa.String) and (_type.length is None or
+    #         #           _type.length > 256) for _type in sql_types]):
+    #         #     # impose some varchar length limit to allow use in primary key
+    #         #     # / index
+    #         #     self.execute(ChangeColumnTypes(table.name, schema, key,
+    #         #           sql_types, nullable=False, cap_varchar_max=256))
+    #         # else:
+    #         self.execute(ChangeColumnNullable(table.name, schema, key,
+    #               nullable=False))
+    #         self.execute(AddPrimaryKey(table.name, schema, key))
+    #     if table.indexes is not None:
+    #         for index in table.indexes:
+    #             # # Failed to make this work: (Database hangs when creating index on
+    #             # # altered column)
+    #             # sql_types = self.reflect_sql_types(index, table, schema)
+    #             # if any([isinstance(_type, sa.String) and (_type.length is None or
+    #             #       _type.length > 256) for _type in sql_types]):
+    #             #     # impose some varchar(max) limit to allow use in primary key
+    #             #     # / index
+    #             #     self.execute(
+    #             #         ChangeColumnTypes(table.name, schema, index, sql_types,
+    #             #               cap_varchar_max=256))
+    #             self.execute(AddIndex(table.name, schema, index))
 
     def reflect_sql_types(self, col_names, table, schema):
         meta = sa.MetaData()
@@ -396,7 +397,7 @@ class SQLTableStore(BaseTableStore):
 
     def _execute_raw_sql_mssql_pytsql(self, raw_sql: RawSql):
         """Use pytsql for executing T-SQL scripts containing many GO statements."""
-        # noinspection PyUnresolvedReferences
+        # noinspection PyUnresolvedReferences,PyPackageRequirements
         import pytsql
 
         sql_string = raw_sql.sql
@@ -649,12 +650,12 @@ class SQLTableStore(BaseTableStore):
                     self.get_schema(stage.transaction_name),
                 )
             )
-        except Exception as e:
+        except Exception as _e:
             msg = (
                 f"Failed to copy table '{table.name}' (schema: '{stage.name}')"
                 " to transaction."
             )
-            raise CacheError(msg) from e
+            raise CacheError(msg) from _e
 
     def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, stage: Stage):
         schema_name = self.get_schema(metadata.stage).get()
@@ -675,12 +676,12 @@ class SQLTableStore(BaseTableStore):
                     self.get_schema(stage.transaction_name),
                 )
             )
-        except Exception as e:
+        except Exception as _e:
             msg = (
                 f"Failed to copy lazy table {metadata.name} (schema:"
                 f" '{metadata.stage}') to transaction."
             )
-            raise CacheError(msg) from e
+            raise CacheError(msg) from _e
 
     @engine_dispatch
     def get_view_names(self, schema: str, *, include_everything=False) -> list[str]:
@@ -699,6 +700,7 @@ class SQLTableStore(BaseTableStore):
             Currently, this only makes a difference for dialect=mssql.
         :return: list of view names [and other objects]
         """
+        _ = include_everything  # not used in this implementation
         inspector = sa.inspect(self.engine)
         return inspector.get_view_names(schema)
 
@@ -710,6 +712,7 @@ class SQLTableStore(BaseTableStore):
             )
         return list(self._get_mssql_sql_modules(schema).keys())
 
+    # noinspection SqlDialectInspection
     def _get_mssql_sql_modules(self, schema: str):
         with self.engine.connect() as conn:
             database, schema_only = schema.split(".")
@@ -745,12 +748,12 @@ class SQLTableStore(BaseTableStore):
                         dest_schema,
                     )
                 )
-            except Exception as e:
+            except Exception as _e:
                 msg = (
                     f"Failed to copy table {table_name} (schema:"
                     f" '{src_schema}') to transaction."
                 )
-                raise CacheError(msg) from e
+                raise CacheError(msg) from _e
 
         views_to_copy = new_tables & set(views)
         for view_name in views_to_copy:
@@ -762,6 +765,7 @@ class SQLTableStore(BaseTableStore):
     ):
         raise NotImplementedError("Only implemented for mssql.")
 
+    # noinspection SqlDialectInspection
     @_copy_view_to_transaction.dialect("mssql")
     def _copy_view_to_transaction_mssql(
         self, view_name: str, src_schema: Schema, dest_schema: Schema
@@ -875,6 +879,7 @@ class SQLTableStore(BaseTableStore):
                 )
             )
 
+    # noinspection DuplicatedCode
     def retrieve_lazy_table_metadata(
         self, query_hash: str, task_hash: str, stage: Stage
     ) -> LazyTableMetadata:
@@ -921,6 +926,7 @@ class SQLTableStore(BaseTableStore):
                 )
             )
 
+    # noinspection DuplicatedCode
     def retrieve_raw_sql_metadata(
         self, query_hash: str, task_hash: str, stage: Stage
     ) -> RawSqlMetadata:

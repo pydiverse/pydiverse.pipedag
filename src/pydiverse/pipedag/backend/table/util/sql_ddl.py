@@ -25,6 +25,8 @@ __all__ = [
     "DropView",
     "AddPrimaryKey",
     "AddIndex",
+    "ChangeColumnNullable",
+    "ChangeColumnTypes",
     "split_ddl_statement",
 ]
 
