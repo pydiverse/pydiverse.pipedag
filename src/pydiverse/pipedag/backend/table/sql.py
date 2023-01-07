@@ -658,7 +658,8 @@ class SQLTableStore(BaseTableStore):
             raise CacheError(msg) from _e
         self.add_indexes(table, self.get_schema(stage.transaction_name))
 
-    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, stage: Stage):
+    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
+        stage = table.stage
         schema_name = self.get_schema(metadata.stage).get()
         has_table = sa.inspect(self.engine).has_table(metadata.name, schema=schema_name)
         if not has_table:
@@ -683,7 +684,7 @@ class SQLTableStore(BaseTableStore):
                 f" '{metadata.stage}') to transaction."
             )
             raise CacheError(msg) from _e
-        # self.add_indexes(table, self.get_schema(stage.transaction_name))
+        self.add_indexes(table, self.get_schema(stage.transaction_name))
 
     @engine_dispatch
     def get_view_names(self, schema: str, *, include_everything=False) -> list[str]:
