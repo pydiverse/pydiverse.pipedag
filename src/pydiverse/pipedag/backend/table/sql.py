@@ -16,6 +16,10 @@ from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
 from pydiverse.pipedag.backend.table.util import engine_dispatch
 from pydiverse.pipedag.backend.table.util.sql_ddl import (
+    AddIndex,
+    AddPrimaryKey,
+    ChangeColumnNullable,
+    ChangeColumnTypes,
     CopyTable,
     CreateDatabase,
     CreateSchema,
@@ -264,6 +268,94 @@ class SQLTableStore(BaseTableStore):
             return
 
         return self._execute(query, conn)
+
+    @engine_dispatch
+    def add_indexes(self, table: Table, schema: Schema):
+        if table.primary_key is not None:
+            key = table.primary_key
+            if isinstance(key, str):
+                key = [key]
+            self.execute(ChangeColumnNullable(table.name, schema, key, nullable=False))
+            self.execute(AddPrimaryKey(table.name, schema, key))
+        if table.indexes is not None:
+            for index in table.indexes:
+                self.execute(AddIndex(table.name, schema, index))
+
+    @add_indexes.dialect("mssql")
+    def _add_indexes(self, table: Table, schema: Schema):
+        if table.primary_key is not None:
+            key = table.primary_key
+            if isinstance(key, str):
+                key = [key]
+            sql_types = self.reflect_sql_types(key, table, schema)
+            # impose some varchar(max) limit to allow use in primary key / index
+            # TODO: consider making cap_varchar_max a config option
+            self.execute(
+                ChangeColumnTypes(
+                    table.name,
+                    schema,
+                    key,
+                    sql_types,
+                    nullable=False,
+                    cap_varchar_max=1024,
+                )
+            )
+            self.execute(AddPrimaryKey(table.name, schema, key))
+        if table.indexes is not None:
+            for index in table.indexes:
+                sql_types = self.reflect_sql_types(index, table, schema)
+                if any(
+                    [
+                        isinstance(_type, sa.String) and _type.length is None
+                        for _type in sql_types
+                    ]
+                ):
+                    # impose some varchar(max) limit to allow use in primary key / index
+                    self.execute(
+                        ChangeColumnTypes(
+                            table.name, schema, index, sql_types, cap_varchar_max=1024
+                        )
+                    )
+                self.execute(AddIndex(table.name, schema, index))
+
+    @add_indexes.dialect("ibm_db_sa")
+    def _add_indexes(self, table: Table, schema: Schema):
+        if table.primary_key is not None:
+            key = table.primary_key
+            if isinstance(key, str):
+                key = [key]
+            # # Failed to make this work: (Database hangs when creating index on
+            # # altered column)
+            # sql_types = self.reflect_sql_types(key, table, schema)
+            # if any([isinstance(_type, sa.String) and (_type.length is None or
+            #           _type.length > 256) for _type in sql_types]):
+            #     # impose some varchar length limit to allow use in primary key
+            #     # / index
+            #     self.execute(ChangeColumnTypes(table.name, schema, key,
+            #           sql_types, nullable=False, cap_varchar_max=256))
+            # else:
+            self.execute(ChangeColumnNullable(table.name, schema, key, nullable=False))
+            self.execute(AddPrimaryKey(table.name, schema, key))
+        if table.indexes is not None:
+            for index in table.indexes:
+                # # Failed to make this work: (Database hangs when creating index on
+                # # altered column)
+                # sql_types = self.reflect_sql_types(index, table, schema)
+                # if any([isinstance(_type, sa.String) and (_type.length is None or
+                #       _type.length > 256) for _type in sql_types]):
+                #     # impose some varchar(max) limit to allow use in primary key
+                #     # / index
+                #     self.execute(
+                #         ChangeColumnTypes(table.name, schema, index, sql_types,
+                #               cap_varchar_max=256))
+                self.execute(AddIndex(table.name, schema, index))
+
+    def reflect_sql_types(self, col_names, table, schema):
+        meta = sa.MetaData()
+        meta.reflect(bind=self.engine, schema=schema.get())
+        tables = {table.name: table for table in meta.tables.values()}
+        sql_types = [tables[table.name].c[col].type for col in col_names]
+        return sql_types
 
     @staticmethod
     def format_sql_string(query_str: str) -> str:
@@ -926,6 +1018,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
         schema = store.get_schema(stage_name)
         store.execute(CreateTableAsSelect(table.name, schema, obj))
+        store.add_indexes(table, schema)
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
@@ -953,15 +1046,28 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def materialize(cls, store, table: Table[pd.DataFrame], stage_name):
-        schema = store.get_schema(stage_name).get()
+        schema = store.get_schema(stage_name)
         if store.print_materialize:
-            store.logger.info(f"Writing table '{schema}.{table.name}':\n{table.obj}")
+            store.logger.info(
+                f"Writing table '{schema.get()}.{table.name}':\n{table.obj}"
+            )
+        dtype_map = {}
+        if store.engine.dialect.name == "ibm_db_sa":
+            # Default string target is CLOB which can't be used for indexing.
+            # We could use VARCHAR(32000), but if we change this to VARCHAR(256)
+            # for indexed columns, DB2 hangs.
+            dtype_map = {
+                col: sa.VARCHAR(256)
+                for col in table.obj.dtypes.loc[lambda x: x == object].index
+            }
         table.obj.to_sql(
             table.name,
             store.engine,
-            schema=schema,
+            schema=schema.get(),
             index=False,
+            dtype=dtype_map,
         )
+        store.add_indexes(table, schema)
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):

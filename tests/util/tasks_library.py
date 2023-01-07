@@ -58,6 +58,50 @@ def simple_dataframe():
 
 
 @materialize
+def simple_dataframe_with_pk():
+    df = pd.DataFrame(
+        {
+            "col1": [0, 1, 2, 3],
+            "col2": ["0", "1", "2", "3"],
+        }
+    )
+    return Table(df, primary_key="col1")
+
+
+@materialize
+def simple_dataframe_with_pk2():
+    df = pd.DataFrame(
+        {
+            "col1": [0, 1, 2, 3],
+            "col2": ["0", "1", "2", "3"],
+        }
+    )
+    return Table(df, primary_key=["col1", "col2"])
+
+
+@materialize
+def simple_dataframe_with_index():
+    df = pd.DataFrame(
+        {
+            "col1": [0, 1, 2, 3],
+            "col2": ["0", "1", "2", "3"],
+        }
+    )
+    return Table(df, primary_key=["col1"], indexes=[["col2"]])
+
+
+@materialize
+def simple_dataframe_with_indexes():
+    df = pd.DataFrame(
+        {
+            "col1": [0, 1, 2, 3],
+            "col2": ["0", "1", "2", "3"],
+        }
+    )
+    return Table(df, primary_key=["col1"], indexes=[["col2"], ["col2", "col1"]])
+
+
+@materialize
 def pd_dataframe(data: dict[str, list]):
     df = pd.DataFrame(data)
     return Table(df)
