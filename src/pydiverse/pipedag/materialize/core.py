@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING, Callable
 from pydiverse.pipedag._typing import CallableT
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.core.task import Task
-from pydiverse.pipedag.errors import CacheError
+from pydiverse.pipedag.materialize.cache import CacheManager
 from pydiverse.pipedag.materialize.container import Blob, Table
 from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.util import deep_map
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag.materialize.metadata import TaskMetadata
+    pass
 
 
 def materialize(
@@ -112,72 +112,6 @@ class MaterializingTask(Task):
         self.cache = cache
         self.lazy = lazy
 
-    # The following properties are all just convenient ways to access the state
-    # stored in TaskContext. The reason these properties aren't stored inside the
-    # task object itself is because tasks shouldn't have state, because they get
-    # reused between different flow runs.
-
-    @property
-    def input_hash(self) -> str:
-        return TaskContext.get().input_hash
-
-    @input_hash.setter
-    def input_hash(self, value):
-        TaskContext.get().input_hash = value
-
-    @property
-    def cache_fn_hash(self) -> str | None:
-        return TaskContext.get().cache_fn_hash
-
-    @cache_fn_hash.setter
-    def cache_fn_hash(self, value):
-        TaskContext.get().cache_fn_hash = value
-
-    @property
-    def cache_metadata(self) -> TaskMetadata:
-        return TaskContext.get().cache_metadata
-
-    @cache_metadata.setter
-    def cache_metadata(self, value):
-        TaskContext.get().cache_metadata = value
-
-    def combined_cache_key(self, from_cache_metadata=False):
-        """Cache key used to judge cache validity of the current task output.
-
-        Also referred to as `task_hash`.
-
-        For lazy objects, this hash isn't used to judge cache validity, instead it
-        serves as an identifier to reference a specific task run. This can be the case
-        if a task is determined to be cache-valid and the lazy query string is also
-        the same, but the task_hash is different from a previous run. Then we can
-        compute this combined_cache_key from the task's cache metadata to determine
-        which lazy object to use as cache.
-
-        :param from_cache_metadata: If set to True, the combined cache key is
-            calculated using the cached metadata (if possible).
-        :return: The hash / cache key (str).
-        """
-        from pydiverse.pipedag.materialize.util.cache import compute_cache_key
-
-        if from_cache_metadata and (cache_metadata := self.cache_metadata) is not None:
-            name = cache_metadata.name
-            version = cache_metadata.version
-            input_hash = cache_metadata.input_hash
-            cache_fn_hash = cache_metadata.cache_fn_hash
-        else:
-            name = self.name
-            version = self.version
-            input_hash = self.input_hash
-            cache_fn_hash = self.cache_fn_hash
-
-        return compute_cache_key(
-            "TASK",
-            name,
-            version,
-            input_hash,
-            cache_fn_hash,
-        )
-
 
 class MaterializationWrapper:
     """Function wrapper that contains all high level materialization logic
@@ -222,14 +156,12 @@ class MaterializationWrapper:
             cache_fn_output = store.json_encode(task.cache(*args, **kwargs))
             cache_fn_hash = compute_cache_key("CACHE_FN", cache_fn_output)
 
-        task.input_hash = input_hash
-        task.cache_fn_hash = cache_fn_hash
-        combined_cache_key = task.combined_cache_key()
+        memo_cache_key = CacheManager.task_cache_key(task, input_hash, cache_fn_hash)
 
         # Check if this task has already been run with the same inputs
         # If yes, return memoized result. This prevents DuplicateNameExceptions
         ctx = RunContext.get()
-        with ctx.task_memo(task, combined_cache_key) as (success, memo):
+        with ctx.task_memo(task, memo_cache_key) as (success, memo):
             if success:
                 task.logger.info(
                     "Task has already been run with the same inputs."
@@ -238,26 +170,17 @@ class MaterializationWrapper:
 
                 return memo
 
-            # Check the cache
-            try:
-                # `cache_fn_hash` is not used for cache retrieval if ignore_fresh_input
-                # is set to True. In that case, cache_metadata.cache_fn_hash may be
-                # different form the cache_fn_hash of the current task run.
-                cached_output, cache_metadata = store.retrieve_cached_output(task)
-                task.cache_metadata = cache_metadata
+            task_cache_info = CacheManager.cache_lookup(
+                store, task, input_hash, cache_fn_hash
+            )
+            if task_cache_info.is_cache_valid():
                 if not task.lazy:
-                    # Task isn't lazy -> copy cache to transaction stage
-                    store.copy_cached_output_to_transaction_stage(
-                        cached_output, cache_metadata, task
+                    ctx = RunContext.get()
+                    ctx.store_task_memo(
+                        task, memo_cache_key, task_cache_info.get_cached_output()
                     )
-                    ctx.store_task_memo(task, combined_cache_key, cached_output)
-                    task.logger.info("Found task in cache. Using cached result.")
-                    return cached_output
-            except CacheError as e:
-                task.logger.info(
-                    "Failed to retrieve task from cache.",
-                    exception=str(e),
-                )
+                    # Task isn't lazy -> copy cache to transaction stage
+                    return task_cache_info.get_cached_output()
 
             # Not found in cache / lazy -> Evaluate Function
             args, kwargs = store.dematerialize_task_inputs(
@@ -265,7 +188,7 @@ class MaterializationWrapper:
             )
 
             result = self.fn(*args, **kwargs)
-            result = store.materialize_task(task, result)
+            result = store.materialize_task(task, task_cache_info, result)
 
             # Delete underlying objects from result (after materializing them)
             def obj_del_mutator(x):
@@ -274,7 +197,7 @@ class MaterializationWrapper:
                 return x
 
             result = deep_map(result, obj_del_mutator)
-            ctx.store_task_memo(task, combined_cache_key, result)
+            ctx.store_task_memo(task, memo_cache_key, result)
             self.value = result
 
             return result

@@ -117,6 +117,29 @@ class SQLTableStore(BaseTableStore):
 
         self.sql_metadata = sa.MetaData()
 
+        # Stage Table is unique for stage
+        # (we currently cannot version changes of this metadata table when using
+        # stage_commit_tequnique=read_views)
+        self.stage_table = sa.Table(
+            "stages",
+            self.sql_metadata,
+            Column("id", BigInteger, primary_key=True, autoincrement=True),
+            Column("stage", String(64)),
+            Column("cur_transaction_name", String(256)),
+            schema=self.metadata_schema.get(),
+        )
+
+        # Store version number for metadata table schema evolution.
+        # We disable caching in case of version mismatch.
+        self.disable_caching = False
+        self.metadata_version = "0.2.0"  # Increase version if metadata table changes
+        self.version_table = sa.Table(
+            "metadata_version",
+            self.sql_metadata,
+            Column("version", String(32)),
+            schema=self.metadata_schema.get(),
+        )
+
         # Task Table is unique for stage * in_transaction_schema
         self.tasks_table = sa.Table(
             "tasks",
@@ -158,16 +181,6 @@ class SQLTableStore(BaseTableStore):
             Column("query_hash", String(32)),
             Column("task_hash", String(32)),
             Column("in_transaction_schema", Boolean),
-            schema=self.metadata_schema.get(),
-        )
-
-        # Stage Table is unique for stage
-        self.stage_table = sa.Table(
-            "stages",
-            self.sql_metadata,
-            Column("id", BigInteger, primary_key=True, autoincrement=True),
-            Column("stage", String(64)),
-            Column("cur_transaction_name", String(256)),
             schema=self.metadata_schema.get(),
         )
 
@@ -480,7 +493,34 @@ class SQLTableStore(BaseTableStore):
         super().setup()
         self.execute(CreateSchema(self.metadata_schema, if_not_exists=True))
         with self.engine.connect() as conn:
-            self.sql_metadata.create_all(conn)
+            try:
+                version = conn.execute(
+                    sa.select(self.version_table.c.version)
+                ).scalar_one_or_none()
+            except sa.exc.ProgrammingError:
+                # table metadata_version does not yet exist
+                version = None
+            if version is None:
+                with conn.begin():
+                    self.sql_metadata.create_all(conn)
+                    version = conn.execute(
+                        sa.select(self.version_table.c.version)
+                    ).scalar_one_or_none()
+                    assert version is None  # detect race condition
+                    conn.execute(
+                        self.version_table.insert().values(
+                            version=self.metadata_version,
+                        )
+                    )
+            elif version != self.metadata_version:
+                # disable caching due to incompatible metadata table schemas
+                # (in future versions, consider automatic metadata schema upgrade)
+                self.disable_caching = True
+                self.logger.warning(
+                    "Disabled caching due to metadata version mismatch",
+                    version=version,
+                    expected_version=self.metadata_version,
+                )
 
     def dispose(self):
         self.engine.dispose()
@@ -510,11 +550,12 @@ class SQLTableStore(BaseTableStore):
             self.execute(ds_trans, conn=conn)
             self.execute(cs_trans, conn=conn)
 
-            conn.execute(
-                self.tasks_table.delete()
-                .where(self.tasks_table.c.stage == stage.name)
-                .where(self.tasks_table.c.in_transaction_schema.in_([True]))
-            )
+            if not self.disable_caching:
+                conn.execute(
+                    self.tasks_table.delete()
+                    .where(self.tasks_table.c.stage == stage.name)
+                    .where(self.tasks_table.c.in_transaction_schema.in_([True]))
+                )
 
     @_init_stage_schema_swap.dialect("mssql")
     def _init_stage_schema_swap_mssql(self, stage: Stage):
@@ -569,11 +610,12 @@ class SQLTableStore(BaseTableStore):
                     )
 
             # Clear metadata
-            conn.execute(
-                self.tasks_table.delete()
-                .where(self.tasks_table.c.stage == stage.name)
-                .where(self.tasks_table.c.in_transaction_schema.in_([True]))
-            )
+            if not self.disable_caching:
+                conn.execute(
+                    self.tasks_table.delete()
+                    .where(self.tasks_table.c.stage == stage.name)
+                    .where(self.tasks_table.c.in_transaction_schema.in_([True]))
+                )
 
     def _init_stage_read_views(self, stage: Stage):
         try:
@@ -677,21 +719,22 @@ class SQLTableStore(BaseTableStore):
             self._commit_stage_update_metadata(stage, conn=conn)
 
     def _commit_stage_update_metadata(self, stage: Stage, conn: sa.engine.Connection):
-        for table in [
-            self.tasks_table,
-            self.lazy_cache_table,
-            self.raw_sql_cache_table,
-        ]:
-            conn.execute(
-                table.delete()
-                .where(table.c.stage == stage.name)
-                .where(table.c.in_transaction_schema.in_([False]))
-            )
-            conn.execute(
-                table.update()
-                .where(table.c.stage == stage.name)
-                .values(in_transaction_schema=False)
-            )
+        if not self.disable_caching:
+            for table in [
+                self.tasks_table,
+                self.lazy_cache_table,
+                self.raw_sql_cache_table,
+            ]:
+                conn.execute(
+                    table.delete()
+                    .where(table.c.stage == stage.name)
+                    .where(table.c.in_transaction_schema.in_([False]))
+                )
+                conn.execute(
+                    table.update()
+                    .where(table.c.stage == stage.name)
+                    .values(in_transaction_schema=False)
+                )
 
     def copy_table_to_transaction(self, table: Table):
         stage = table.stage
@@ -760,7 +803,7 @@ class SQLTableStore(BaseTableStore):
         to recover the full cache output which was produced by a RawSQL statement
         (we want to be compatible with legacy sql code as a starting point).
         :param schema: the schema
-        :param include_everything: If true, we might include stored procedures,
+        :param include_everything: If True, we might include stored procedures,
             functions and other database objects that have a schema associated name.
             Currently, this only makes a difference for dialect=mssql.
         :return: list of view names [and other objects]
@@ -885,22 +928,31 @@ class SQLTableStore(BaseTableStore):
         )
 
     def store_task_metadata(self, metadata: TaskMetadata, stage: Stage):
-        with self.engine.connect() as conn:
-            conn.execute(
-                self.tasks_table.insert().values(
-                    name=metadata.name,
-                    stage=metadata.stage,
-                    version=metadata.version,
-                    timestamp=metadata.timestamp,
-                    run_id=metadata.run_id,
-                    input_hash=metadata.input_hash,
-                    cache_fn_hash=metadata.cache_fn_hash,
-                    output_json=metadata.output_json,
-                    in_transaction_schema=True,
+        if not self.disable_caching:
+            with self.engine.connect() as conn:
+                conn.execute(
+                    self.tasks_table.insert().values(
+                        name=metadata.name,
+                        stage=metadata.stage,
+                        version=metadata.version,
+                        timestamp=metadata.timestamp,
+                        run_id=metadata.run_id,
+                        input_hash=metadata.input_hash,
+                        cache_fn_hash=metadata.cache_fn_hash,
+                        output_json=metadata.output_json,
+                        in_transaction_schema=True,
+                    )
                 )
+
+    def retrieve_task_metadata(
+        self, task: MaterializingTask, input_hash: str, cache_fn_hash: str
+    ) -> TaskMetadata:
+        if self.disable_caching:
+            raise CacheError(
+                "Caching is disabled, so we also don't even try to retrieve task"
+                f" cache: {task}"
             )
 
-    def retrieve_task_metadata(self, task: MaterializingTask) -> TaskMetadata:
         ignore_fresh_input = RunContext.get().ignore_fresh_input
         try:
             with self.engine.connect() as conn:
@@ -910,9 +962,9 @@ class SQLTableStore(BaseTableStore):
                         .where(self.tasks_table.c.name == task.name)
                         .where(self.tasks_table.c.stage == task.stage.name)
                         .where(self.tasks_table.c.version == task.version)
-                        .where(self.tasks_table.c.input_hash == task.input_hash)
+                        .where(self.tasks_table.c.input_hash == input_hash)
                         .where(
-                            self.tasks_table.c.cache_fn_hash == task.cache_fn_hash
+                            self.tasks_table.c.cache_fn_hash == cache_fn_hash
                             if not ignore_fresh_input
                             else sa.literal(True)
                         )
@@ -939,21 +991,28 @@ class SQLTableStore(BaseTableStore):
         )
 
     def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
-        with self.engine.connect() as conn:
-            conn.execute(
-                self.lazy_cache_table.insert().values(
-                    name=metadata.name,
-                    stage=metadata.stage,
-                    query_hash=metadata.query_hash,
-                    task_hash=metadata.task_hash,
-                    in_transaction_schema=True,
+        if not self.disable_caching:
+            with self.engine.connect() as conn:
+                conn.execute(
+                    self.lazy_cache_table.insert().values(
+                        name=metadata.name,
+                        stage=metadata.stage,
+                        query_hash=metadata.query_hash,
+                        task_hash=metadata.task_hash,
+                        in_transaction_schema=True,
+                    )
                 )
-            )
 
     # noinspection DuplicatedCode
     def retrieve_lazy_table_metadata(
         self, query_hash: str, task_hash: str, stage: Stage
     ) -> LazyTableMetadata:
+        if self.disable_caching:
+            raise CacheError(
+                "Caching is disabled, so we also don't even try to retrieve lazy table"
+                " cache"
+            )
+
         try:
             with self.engine.connect() as conn:
                 result = (
@@ -985,22 +1044,29 @@ class SQLTableStore(BaseTableStore):
         )
 
     def store_raw_sql_metadata(self, metadata: RawSqlMetadata):
-        with self.engine.connect() as conn:
-            conn.execute(
-                self.raw_sql_cache_table.insert().values(
-                    prev_tables=json.dumps(metadata.prev_tables),
-                    tables=json.dumps(metadata.tables),
-                    stage=metadata.stage,
-                    query_hash=metadata.query_hash,
-                    task_hash=metadata.task_hash,
-                    in_transaction_schema=True,
+        if not self.disable_caching:
+            with self.engine.connect() as conn:
+                conn.execute(
+                    self.raw_sql_cache_table.insert().values(
+                        prev_tables=json.dumps(metadata.prev_tables),
+                        tables=json.dumps(metadata.tables),
+                        stage=metadata.stage,
+                        query_hash=metadata.query_hash,
+                        task_hash=metadata.task_hash,
+                        in_transaction_schema=True,
+                    )
                 )
-            )
 
     # noinspection DuplicatedCode
     def retrieve_raw_sql_metadata(
         self, query_hash: str, task_hash: str, stage: Stage
     ) -> RawSqlMetadata:
+        if self.disable_caching:
+            raise CacheError(
+                "Caching is disabled, so we also don't even try to retrieve raw sql"
+                " cache"
+            )
+
         try:
             with self.engine.connect() as conn:
                 result = (
@@ -1032,7 +1098,7 @@ class SQLTableStore(BaseTableStore):
             task_hash=result.task_hash,
         )
 
-    def list_tables(self, stage, *, include_everything=False):
+    def list_tables(self, stage: Stage, *, include_everything=False):
         """
         List all tables that were generated in a stage.
 
@@ -1044,7 +1110,7 @@ class SQLTableStore(BaseTableStore):
         (we want to be compatible with legacy sql code as a starting point).
 
         :param stage: the stage
-        :param include_everything: If true, we might include stored procedures,
+        :param include_everything: If True, we might include stored procedures,
             functions and other database objects that have a schema associated name.
         :return: list of tables [and other objects]
         """
@@ -1061,6 +1127,10 @@ class SQLTableStore(BaseTableStore):
         # We only need to look in tasks_table since the output_json column is updated
         # after evaluating lazy output objects for cache validity. This is the same
         # information we use for producing input_hash of downstream tasks.
+        if self.disable_caching:
+            raise NotImplementedError(
+                "computing stage hash with disabled caching is currently not supported"
+            )
         with self.engine.connect() as conn:
             result = conn.execute(
                 sa.select([self.tasks_table.c.output_json])
