@@ -44,7 +44,7 @@ git clone https://github.com/pydiverse/pydiverse.pipedag.git
 cd pydiverse.pipedag
 
 # Create the environment, activate it and install the pre-commit hooks
-poetry install
+poetry install --all-extras
 poetry shell
 pre-commit install
 ```
