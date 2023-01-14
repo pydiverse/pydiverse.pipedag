@@ -152,17 +152,31 @@ class DropFunction(DDLElement):
 
 
 class AddPrimaryKey(DDLElement):
-    def __init__(self, table_name: str, schema: Schema, key: list[str]):
+    def __init__(
+        self,
+        table_name: str,
+        schema: Schema,
+        key_columns: list[str],
+        name: str | None = None,
+    ):
         self.table_name = table_name
         self.schema = schema
-        self.key = key
+        self.key = key_columns
+        self.name = name
 
 
 class AddIndex(DDLElement):
-    def __init__(self, table_name: str, schema: Schema, index: list[str]):
+    def __init__(
+        self,
+        table_name: str,
+        schema: Schema,
+        index_columns: list[str],
+        name: str | None = None,
+    ):
         self.table_name = table_name
         self.schema = schema
-        self.index = index
+        self.index = index_columns
+        self.name = name
 
 
 class ChangeColumnTypes(DDLElement):
@@ -621,7 +635,11 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
     _ = kw
     table = compiler.preparer.quote_identifier(add_primary_key.table_name)
     schema = compiler.preparer.format_schema(add_primary_key.schema.get())
-    pk_name = compiler.preparer.quote_identifier("pk_" + "_".join(add_primary_key.key))
+    pk_name = compiler.preparer.quote_identifier(
+        add_primary_key.name
+        if add_primary_key.name is not None
+        else "pk_" + "_".join(add_primary_key.key)
+    )
     cols = ",".join(
         [compiler.preparer.quote_identifier(col) for col in add_primary_key.key]
     )
@@ -635,7 +653,11 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
     database, schema = _get_mssql_database_schema(add_primary_key.schema, compiler)
 
     table = compiler.preparer.quote_identifier(add_primary_key.table_name)
-    pk_name = compiler.preparer.quote_identifier("pk_" + "_".join(add_primary_key.key))
+    pk_name = compiler.preparer.quote_identifier(
+        add_primary_key.name
+        if add_primary_key.name is not None
+        else "pk_" + "_".join(add_primary_key.key)
+    )
     cols = ",".join(
         [compiler.preparer.quote_identifier(col) for col in add_primary_key.key]
     )
@@ -655,7 +677,11 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
 
     table = compiler.preparer.quote_identifier(add_primary_key.table_name)
     schema = compiler.preparer.format_schema(add_primary_key.schema.get())
-    pk_name = compiler.preparer.quote_identifier("pk_" + "_".join(add_primary_key.key))
+    pk_name = compiler.preparer.quote_identifier(
+        add_primary_key.name
+        if add_primary_key.name is not None
+        else "pk_" + "_".join(add_primary_key.key)
+    )
     cols = ",".join(
         [
             compiler.preparer.quote_identifier(ibm_db_sa_fix_name(col))
@@ -671,7 +697,11 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
     _ = kw
     table = compiler.preparer.quote_identifier(add_index.table_name)
     schema = compiler.preparer.format_schema(add_index.schema.get())
-    index_name = compiler.preparer.quote_identifier("idx_" + "_".join(add_index.index))
+    index_name = compiler.preparer.quote_identifier(
+        add_index.name
+        if add_index.name is not None
+        else "idx_" + "_".join(add_index.index)
+    )
     cols = ",".join(
         [compiler.preparer.quote_identifier(col) for col in add_index.index]
     )
@@ -685,7 +715,11 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
     database, schema = _get_mssql_database_schema(add_index.schema, compiler)
 
     table = compiler.preparer.quote_identifier(add_index.table_name)
-    index_name = compiler.preparer.quote_identifier("idx_" + "_".join(add_index.index))
+    index_name = compiler.preparer.quote_identifier(
+        add_index.name
+        if add_index.name is not None
+        else "idx_" + "_".join(add_index.index)
+    )
     cols = ",".join(
         [compiler.preparer.quote_identifier(col) for col in add_index.index]
     )
@@ -702,7 +736,11 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
 
     table = compiler.preparer.quote_identifier(add_index.table_name)
     schema = compiler.preparer.format_schema(add_index.schema.get())
-    index_name = compiler.preparer.quote_identifier("idx_" + "_".join(add_index.index))
+    index_name = compiler.preparer.quote_identifier(
+        add_index.name
+        if add_index.name is not None
+        else "idx_" + "_".join(add_index.index)
+    )
     cols = ",".join(
         [
             compiler.preparer.quote_identifier(ibm_db_sa_fix_name(col))

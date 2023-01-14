@@ -5,7 +5,7 @@ import json
 import re
 import textwrap
 import warnings
-from typing import Any
+from typing import Any, Iterable
 
 import pandas as pd
 import sqlalchemy as sa
@@ -269,93 +269,155 @@ class SQLTableStore(BaseTableStore):
 
         return self._execute(query, conn)
 
-    @engine_dispatch
     def add_indexes(self, table: Table, schema: Schema):
         if table.primary_key is not None:
             key = table.primary_key
             if isinstance(key, str):
                 key = [key]
-            self.execute(ChangeColumnNullable(table.name, schema, key, nullable=False))
-            self.execute(AddPrimaryKey(table.name, schema, key))
+            self.add_primary_key(table.name, schema, key)
         if table.indexes is not None:
             for index in table.indexes:
-                self.execute(AddIndex(table.name, schema, index))
+                self.add_index(table.name, schema, index)
 
-    @add_indexes.dialect("mssql")
-    def _add_indexes(self, table: Table, schema: Schema):
-        if table.primary_key is not None:
-            key = table.primary_key
-            if isinstance(key, str):
-                key = [key]
-            sql_types = self.reflect_sql_types(key, table, schema)
+    @engine_dispatch
+    def add_primary_key(
+        self,
+        table_name: str,
+        schema: Schema,
+        key_columns: list[str],
+        name: str | None = None,
+    ):
+        self.execute(
+            ChangeColumnNullable(table_name, schema, key_columns, nullable=False)
+        )
+        self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
+
+    @engine_dispatch
+    def add_index(
+        self,
+        table_name: str,
+        schema: Schema,
+        index_columns: list[str],
+        name: str | None = None,
+    ):
+        self.execute(AddIndex(table_name, schema, index_columns, name))
+
+    @add_primary_key.dialect("mssql")
+    def _add_primary_key_mssql(
+        self,
+        table_name: str,
+        schema: Schema,
+        key_columns: list[str],
+        name: str | None = None,
+    ):
+        sql_types = self.reflect_sql_types(key_columns, table_name, schema)
+        # impose some varchar(max) limit to allow use in primary key / index
+        # TODO: consider making cap_varchar_max a config option
+        self.execute(
+            ChangeColumnTypes(
+                table_name,
+                schema,
+                key_columns,
+                sql_types,
+                nullable=False,
+                cap_varchar_max=1024,
+            )
+        )
+        self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
+
+    @add_index.dialect("mssql")
+    def _add_index_mssql(
+        self, table_name: str, schema: Schema, index: list[str], name: str | None = None
+    ):
+        sql_types = self.reflect_sql_types(index, table_name, schema)
+        if any(
+            [
+                isinstance(_type, sa.String) and _type.length is None
+                for _type in sql_types
+            ]
+        ):
             # impose some varchar(max) limit to allow use in primary key / index
-            # TODO: consider making cap_varchar_max a config option
             self.execute(
                 ChangeColumnTypes(
-                    table.name,
-                    schema,
-                    key,
-                    sql_types,
-                    nullable=False,
-                    cap_varchar_max=1024,
+                    table_name, schema, index, sql_types, cap_varchar_max=1024
                 )
             )
-            self.execute(AddPrimaryKey(table.name, schema, key))
-        if table.indexes is not None:
-            for index in table.indexes:
-                sql_types = self.reflect_sql_types(index, table, schema)
-                if any(
-                    [
-                        isinstance(_type, sa.String) and _type.length is None
-                        for _type in sql_types
-                    ]
-                ):
-                    # impose some varchar(max) limit to allow use in primary key / index
-                    self.execute(
-                        ChangeColumnTypes(
-                            table.name, schema, index, sql_types, cap_varchar_max=1024
-                        )
-                    )
-                self.execute(AddIndex(table.name, schema, index))
+        self.execute(AddIndex(table_name, schema, index, name))
 
-    # @add_indexes.dialect("ibm_db_sa")
-    # def _add_indexes(self, table: Table, schema: Schema):
-    #     if table.primary_key is not None:
-    #         key = table.primary_key
-    #         if isinstance(key, str):
-    #             key = [key]
-    #         # # Failed to make this work: (Database hangs when creating index on
-    #         # # altered column)
-    #         # sql_types = self.reflect_sql_types(key, table, schema)
-    #         # if any([isinstance(_type, sa.String) and (_type.length is None or
-    #         #           _type.length > 256) for _type in sql_types]):
-    #         #     # impose some varchar length limit to allow use in primary key
-    #         #     # / index
-    #         #     self.execute(ChangeColumnTypes(table.name, schema, key,
-    #         #           sql_types, nullable=False, cap_varchar_max=256))
-    #         # else:
-    #         self.execute(ChangeColumnNullable(table.name, schema, key,
-    #               nullable=False))
-    #         self.execute(AddPrimaryKey(table.name, schema, key))
-    #     if table.indexes is not None:
-    #         for index in table.indexes:
-    #             # # Failed to make this work: (Database hangs when creating index on
-    #             # # altered column)
-    #             # sql_types = self.reflect_sql_types(index, table, schema)
-    #             # if any([isinstance(_type, sa.String) and (_type.length is None or
-    #             #       _type.length > 256) for _type in sql_types]):
-    #             #     # impose some varchar(max) limit to allow use in primary key
-    #             #     # / index
-    #             #     self.execute(
-    #             #         ChangeColumnTypes(table.name, schema, index, sql_types,
-    #             #               cap_varchar_max=256))
-    #             self.execute(AddIndex(table.name, schema, index))
+    # @add_primary_key.dialect("ibm_db_sa")
+    # def _add_primary_key_ibm_db_sa(self, table_name: str, schema: Schema,
+    #         key_columns: list[str], name: str | None = None):
+    #     # # Failed to make this work: (Database hangs when creating index on
+    #     # # altered column)
+    #     # sql_types = self.reflect_sql_types(key, table, schema)
+    #     # if any([isinstance(_type, sa.String) and (_type.length is None or
+    #     #           _type.length > 256) for _type in sql_types]):
+    #     #     # impose some varchar length limit to allow use in primary key
+    #     #     # / index
+    #     #     self.execute(ChangeColumnTypes(table.name, schema, key,
+    #     #           sql_types, nullable=False, cap_varchar_max=256))
+    #     # else:
+    #     self.execute(ChangeColumnNullable(table_name, schema, key_columns,
+    #           nullable=False))
+    #     self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
+    #
+    # @add_index.dialect("mssql")
+    # def _add_index_ibm_db_sa(self, table_name: str, schema: Schema,
+    #         index: list[str], name: str | None = None):
+    #     # # Failed to make this work: (Database hangs when creating index on
+    #     # # altered column)
+    #     # sql_types = self.reflect_sql_types(index, table, schema)
+    #     # if any([isinstance(_type, sa.String) and (_type.length is None or
+    #     #       _type.length > 256) for _type in sql_types]):
+    #     #     # impose some varchar(max) limit to allow use in primary key
+    #     #     # / index
+    #     #     self.execute(
+    #     #         ChangeColumnTypes(table.name, schema, index, sql_types,
+    #     #               cap_varchar_max=256))
+    #     self.execute(AddIndex(table_name, schema, index, name))
 
-    def reflect_sql_types(self, col_names, table, schema):
+    def copy_indexes(
+        self, src_table: str, src_schema: Schema, dest_table: str, dest_schema: Schema
+    ):
+        inspector = sa.inspect(self.engine)
+        pk_constraint = inspector.get_pk_constraint(src_table, schema=src_schema.get())
+        if len(pk_constraint["constrained_columns"]) > 0:
+            self.add_primary_key(
+                dest_table,
+                dest_schema,
+                pk_constraint["constrained_columns"],
+                pk_constraint["name"],
+            )
+        indexes = inspector.get_indexes(src_table, schema=src_schema.get())
+        for index in indexes:
+            if len(index["include_columns"]) > 0:
+                self.logger.warning(
+                    "Perfect index recreation in caching is not net implemented",
+                    table=dest_table,
+                    schema=dest_schema.get(),
+                    include_columns=index["include_columns"],
+                )
+            if any(
+                not isinstance(val, list) or len(val) > 0
+                for val in index["dialect_options"].values()
+            ):
+                self.logger.warning(
+                    "Perfect index recreation in caching is not net implemented",
+                    table=dest_table,
+                    schema=dest_schema.get(),
+                    dialect_options=index["dialect_options"],
+                )
+            self.add_index(
+                dest_table, dest_schema, index["column_names"], index["name"]
+            )
+
+    def reflect_sql_types(
+        self, col_names: Iterable[str], table_name: str, schema: Schema
+    ):
         meta = sa.MetaData()
         meta.reflect(bind=self.engine, schema=schema.get())
         tables = {table.name: table for table in meta.tables.values()}
-        sql_types = [tables[table.name].c[col].type for col in col_names]
+        sql_types = [tables[table_name].c[col].type for col in col_names]
         return sql_types
 
     @staticmethod
@@ -750,6 +812,12 @@ class SQLTableStore(BaseTableStore):
                         table_name,
                         dest_schema,
                     )
+                )
+                self.copy_indexes(
+                    table_name,
+                    src_schema,
+                    table_name,
+                    dest_schema,
                 )
             except Exception as _e:
                 msg = (
