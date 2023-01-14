@@ -3,11 +3,14 @@ from __future__ import annotations
 import copy
 import getpass
 import itertools
+import logging
 import os
 import re
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable
 
+import structlog
 import yaml
 from box import Box
 
@@ -428,3 +431,25 @@ def _pop(d, *path, default=_nil) -> Any:
         if default == _nil:
             raise e
         return default
+
+
+def setup_structlog(_log_level=logging.INFO, _log_stream=sys.stderr):
+    logging.basicConfig(
+        stream=_log_stream,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        level=_log_level,
+    )
+    structlog.configure(
+        processors=[
+            structlog.contextvars.merge_contextvars,
+            structlog.processors.add_log_level,
+            structlog.processors.StackInfoRenderer(),
+            structlog.dev.set_exc_info,
+            structlog.processors.TimeStamper(),
+            structlog.dev.ConsoleRenderer(),
+        ],
+        wrapper_class=structlog.make_filtering_bound_logger(_log_level),
+        context_class=dict,
+        logger_factory=structlog.PrintLoggerFactory(_log_stream),
+        cache_logger_on_first_use=True,
+    )
