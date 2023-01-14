@@ -11,6 +11,7 @@ Changelog
 ------------------
 
 - SQLTableStore: support for Microsoft SQL Server and IBM DB2 (Linux) database connection strings
+- Support primary keys and indexes (can be configured with Table object and used in custom RawSql code)
 - RawSql: support additional return type for @materialize tasks which allows to emit raw SQL string including multiple
    create statements (currently, views/functions/procedures are only supported for dialect mssql). This feature should
    only be used for getting legacy code running in pipedag before converting it to programatically generated or manual
