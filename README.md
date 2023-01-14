@@ -136,7 +136,7 @@ def eager_inputs():
             "x": [1, 1, 2, 2],
         }
     )
-    return Table(dfA, "dfA"), Table(dfB, "dfA_%%")
+    return Table(dfA, "dfA"), Table(dfB, "dfB_%%")
 
 
 @materialize(version="1.0.0", input_type=pd.DataFrame)
