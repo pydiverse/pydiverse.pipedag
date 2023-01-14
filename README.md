@@ -304,4 +304,10 @@ Packages are first released on test.pypi.org:
 
 Finally, they are published via:
 
+- `git tag `\<version>
+- `git push --tags`
 - `poetry publish`
+
+Conda-forge packages are updated via:
+
+- https://github.com/conda-forge/pydiverse-pipedag-feedstock#updating-pydiverse-pipedag-feedstock
