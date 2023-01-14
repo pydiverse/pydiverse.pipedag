@@ -27,7 +27,7 @@ def inputs():
     import time
 
     time.sleep(1)
-    return Table(dfA, "dfA"), Table(dfB, "dfA_%%")
+    return Table(dfA, "dfA"), Table(dfB, "dfB_%%")
 
 
 @materialize(input_type=pd.DataFrame)

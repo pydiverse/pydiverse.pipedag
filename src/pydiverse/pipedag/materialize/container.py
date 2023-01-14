@@ -28,7 +28,7 @@ class Table(Generic[T]):
         obj: T | None = None,
         name: str | None = None,
         stage: Stage | None = None,
-        primary_key: str | None = None,
+        primary_key: str | list[str] | None = None,
         indexes: list[list[str]] | None = None,
     ):
         self._name = None

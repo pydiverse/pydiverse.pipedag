@@ -4,17 +4,6 @@ table_store_connections:
     # Postgres: this can be used after running `docker-compose up`
     url: "postgresql://{$POSTGRES_USERNAME}:{$POSTGRES_PASSWORD}@127.0.0.1:6543/{instance_id}"
 
-  mssql:
-    # SQL Server: this can be used after running `docker-compose up`
-    url: "mssql+pyodbc://{$MSSQL_USERNAME}:{$MSSQL_PASSWORD}@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
-    schema_prefix: "{instance_id}_"  # SQL Server needs database.schema
-    schema_suffix: ".dbo"   # Alternatively SQL Server databases can be used as schemas with .dbo default schema
-
-  ibm_db2:
-    # SQL Server: this can be used after running `docker-compose up`
-    url: "db2+ibm_db://db2inst1:password@localhost:50000/testdb"
-    schema_prefix: "{instance_id}_"
-
 instances:
   __any__:
     # listen-interface for pipedag context server which synchronizes some task state during DAG execution
@@ -22,7 +11,6 @@ instances:
     # classes to be materialized to table store even without pipedag Table wrapper (we have loose coupling between
     # pipedag and pydiverse.transform, so consider adding 'pydiverse.transform.Table' in your config)
     auto_table: ["pandas.DataFrame", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable"]
-    # abort as fast a possible on task failure and print most readable stack trace
     fail_fast: true
 
     instance_id: pipedag_default
@@ -49,29 +37,3 @@ instances:
 
     orchestration:
       class: "pydiverse.pipedag.engine.SequentialEngine"
-
-  # Instances used by pytest
-
-  postgres:
-    instance_id: pd_postgres
-    table_store:
-      table_store_connection: postgres
-
-  mssql:
-    instance_id: pd_mssql
-    table_store:
-      table_store_connection: mssql
-      disable_pytsql: True
-
-  mssql_pytsql:
-    instance_id: pd_mssql_pytsql
-    table_store:
-      table_store_connection: mssql
-      disable_pytsql: False
-      pytsql_isolate_top_level_statements: True
-
-  ibm_db2:
-    instance_id: pd_ibm_db2
-    stage_commit_technique: READ_VIEWS
-    table_store:
-      table_store_connection: ibm_db2

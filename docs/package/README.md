@@ -10,85 +10,14 @@ This is an early stage version 0.x which lacks documentation. Please contact
 https://github.com/orgs/pydiverse/teams/code-owners if you like to become an early adopter
 or to contribute early stage usage examples.
 
-## Preparing installation
+## Usage
 
-To install the package locally in development mode, you first have to install
-[Poetry](https://python-poetry.org/docs/#installation).
-
-When installing poetry using conda(I know this sounds odd), it is recommended to install
-also compilers, so source packages can be built on `poetry install`. Since we use psycopg2,
-it also helps to install psycopg2 in conda to have pg_config available:
-
-```bash
-conda install -n poetry -c poetry conda-forge compilers cmake make psycopg2
-conda activate poetry  # only needed for poetry install
-```
-
-On OSX, a way to install pg_config (needed for source building psycopg2 by `poetry install`) is
-
-```bash
-brew install postgresql
-```
-
-## Installation
-
-> Currently, development on pipedag is not possible with Windows. The current setup of installing prefect and running
-> tests with docker (to spin up Postgres and Zookeeper) fail in poetry dependency resolution. It would be a nice
-> contribution to find drop-in replacements for both that run as simple python dependency without docker and moving
-> docker based tests to github actions (multi-DB target tests will be moved to cloud anyways).
-
-After that, install pydiverse pipedag like this:
-
-```bash
-git clone https://github.com/pydiverse/pydiverse.pipedag.git
-cd pydiverse.pipedag
-
-# Create the environment, activate it and install the pre-commit hooks
-poetry install --all-extras
-poetry shell
-pre-commit install
-```
-
-## Pre-commit install with conda and python 3.8
-
-We currently have some pre-commit hooks bound to python=3.8. So pre-commit install may fail when running with
-python=3.10 python environment. However, the pre-commit environment does not need to be the same as the environment
-used for testing pipedag code. When using conda, you may try:
-
-```bash
-conda install -n python38 -c python=3.8 pre_commit
-conda activate python38
-pre-commit install
-```
-
-## Testing
-
-To facilitate easy testing, we provide a Docker Compose file to start all required servers.
-Just run `docker compose up` in the root directory of the project to start everything, and then run `pytest` in a new
-tab.
-
-You can inspect the contents of the PipeDAT Postgres database at `postgresql://postgres:pipedag@127.0.0.1/pipedag`.
-To reset the state of the docker containers you can run `docker compose down`.
-This might be necessary if the database cache gets corrupted.
-
-To run tests in parallel, pass the `--workers auto` flag to pytest.
-
-## Testing db2 functionality
-
-For running @pytest.mark.ibm_db2 tests, you need to spin up a docker container without `docker compose` since it needs
-the `--priviledged` option which `docker compose` does not offer.
-
-```bash
-docker run -h db2server --name db2server --restart=always --detach --privileged=true -p 50000:50000 --env-file docker_db2.env_list -v /Docker:/database ibmcom/db2
-```
-
-Then check `docker logs db2server | grep -i completed` until you see `(*) Setup has completed.`.
-
-Afterwards you can run `pytest --ibm_db2`.
+pydiverse.pipedag can either be installed via pypi with `pip install pydiverse-pipedag` or via conda-forge
+with `conda install pydiverse-pipedag -c conda-forge`.
 
 ## Example
 
-A flow can look like this (see `example/run_pipeline.py`):
+A flow can look like this (i.e. put this in a file named `run_pipeline.py`):
 
 ```python
 from pydiverse.pipedag import materialize, Table, Flow, Stage
@@ -176,7 +105,7 @@ if __name__ == "__main__":
     main()
 ```
 
-You also need a file called `pipedag.yaml` in the same directory (see `example/pipedag.yaml`):
+Create a file called `pipedag.yaml` in the same directory:
 
 ```yaml
 name: pipedag_tests
@@ -220,7 +149,8 @@ instances:
       class: "pydiverse.pipedag.engine.SequentialEngine"
 ```
 
-If you don't have a postgres, Microsoft SQL Server, or IBM DB2 database at hand, you can start a postgres database, you can use a file like `example/docker-compose.yaml`:
+If you don't have a postgres, Microsoft SQL Server, or IBM DB2 database at hand, you can
+start a postgres database with the following `docker-compose.yaml` file:
 
 ```yaml
 version: "3.9"
@@ -241,20 +171,14 @@ services:
       - 2181:2181
 ```
 
-You can run the example with `bash` as follows:
+Run `docker-compose up` in the directory of your `docker-compose.yaml` and then execute
+the flow script as follows with a shell like `bash` and a python environment that
+includes `pydiverse-pipedag`, `pandas`, and `sqlalchemy`:
 
 ```bash
-cd example
-docker-compose up
-```
-
-and in another terminal
-
-```bash
-cd example
 export POSTGRES_USERNAME=sa
 export POSTGRES_PASSWORD=Pydiverse23
-poetry run python run_pipeline.py
+python run_pipeline.py
 ```
 
 Finally, you may connect to your localhost postgres database `pipedag_default` and
@@ -288,26 +212,3 @@ But `odbcinst -j` revealed that it installed the configuration in `/etc/unixODBC
 its own `odbcinst` executable and that shows odbc config files are expected in `/etc/*`. Symlinks were enough to fix the
 problem. Try `python -c 'import pyodbc;print(pyodbc.drivers())'` and see whether you get more than an empty list.
 Furthermore, make sure you use 127.0.0.1 instead of localhost. It seems that /etc/hosts is ignored.
-
-## Packaging
-
-For publishing with poetry to pypi, see:
-https://www.digitalocean.com/community/tutorials/how-to-publish-python-packages-to-pypi-using-poetry-on-ubuntu-22-04
-
-Packages are first released on test.pypi.org:
-
-- see https://stackoverflow.com/questions/68882603/using-python-poetry-to-publish-to-test-pypi-org
-- `poetry version prerelease` or `poetry version patch`
-- `poetry build`
-- `poetry publish -r test-pypi`
-- verify with https://test.pypi.org/search/?q=pydiverse.pipedag
-
-Finally, they are published via:
-
-- `git tag `\<version>
-- `git push --tags`
-- `poetry publish`
-
-Conda-forge packages are updated via:
-
-- https://github.com/conda-forge/pydiverse-pipedag-feedstock#updating-pydiverse-pipedag-feedstock

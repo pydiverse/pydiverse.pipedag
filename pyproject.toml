@@ -1,13 +1,14 @@
 [tool.poetry]
 name = "pydiverse-pipedag"
-version = "0.1.0"
-description = "A pipeline orchestration layer built on top of prefect for caching and cache invalidation to SQL and blob store targets."
+version = "0.2.0"
+description = "A pipeline orchestration library executing tasks within one python session. It takes care of SQL table (de)materialization, caching and cache invalidation. Blob storage is supported as well for example for storing model files."
 authors = [
   "QuantCo, Inc.",
   "Nicolas Camenisch <garnele007@gmail.com>",
+  "Martin Trautmann <windiana@users.sf.net>",
 ]
 license = "BSD-3-Clause"
-readme = "README.md"
+readme = "docs/package/README.md"
 packages = [
 	{ include = "pydiverse", from = "src" },
 ]
@@ -24,27 +25,27 @@ python = "^3.8"
 pandas = "^1.4.3"
 SQLAlchemy = "^1.4.39"
 typing-extensions = "<5, >=4.1.0"
-networkx = "^2.8.5"
-attrs = "^22.1.0"
-structlog = "^22.1.0"
-tomli = "^2.0.1"
-pynng = "^0.7.1"
-msgpack = "^1.0.4"
-packaging = "^21.3"
-contextvars = "^2.4"
+networkx = ">=2.8"
+attrs = ">=22.1.0"
+structlog = ">=22.1.0"
+tomli = ">=2.0.1"
+pynng = ">=0.7.1"
+msgpack = ">=1.0.4"
+packaging = ">=21.3"
+contextvars = ">=2.4"
 
-filelock = { version = "^3.7.1", optional = true }
-kazoo = { version = "^2.8.0", optional = true }
+filelock = { version = ">=3.7.1", optional = true }
+kazoo = { version = ">=2.8.0", optional = true }
 
-Sphinx = { version = "^5.1.1", optional = true }
-sphinx-rtd-theme = { version = "^1.0.0", optional = true }
-sphinxcontrib-apidoc = { version="^0.3.0", optional = true }
-python-box = "^6.1.0"
+Sphinx = { version = ">=5.1.1", optional = true }
+sphinx-rtd-theme = { version = ">=1.0.0", optional = true }
+sphinxcontrib-apidoc = { version=">=0.3.0", optional = true }
+python-box = ">=6.1.0"
 
-pyodbc = { version = "^4.0.35", optional = true }
-pytsql = { version = "^1.1.4", optional = true }
-ibm-db = { version = "^3.1.4", optional = true }
-ibm-db-sa = { version = "^0.3.8", optional = true }
+pyodbc = { version = ">=4.0.35", optional = true }
+pytsql = { version = ">=1.1.4", optional = true }
+ibm-db = { version = ">=3.1.4", optional = true }
+ibm-db-sa = { version = ">=0.3.8", optional = true }
 prefect = { version = ">=1.3,<2", optional = true }
 # for prefect 2 (radical change of paradigmns especially in task graph display => not ideal for rather linear pipeline)
 # prefect = { version = "prefect>=2.0,<3", optional = true }
@@ -58,16 +59,16 @@ ibm_db2 = ["ibm-db", "ibm-db-sa"]
 prefect = ["prefect", "docker-compose"]
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.2.0"
-pytest-mock = "^3.10.0"
-pytest-timeout = "^2.1.0"
-black = "^22.6.0"
-ruff = "^0.0.189"
-pre-commit = "^2.20.0"
-kazoo = "^2.8.0"
-psycopg2 = "^2.9.3"
-pydot = "^1.4.2"
-setuptools = "^65.6.3"
+pytest = ">=7.2.0"
+pytest-mock = ">=3.10.0"
+pytest-timeout = ">=2.1.0"
+black = ">=22.6.0"
+ruff = ">=0.0.189"
+pre-commit = ">=2.20.0"
+kazoo = ">=2.8.0"
+psycopg2 = ">=2.9.3"
+pydot = ">=1.4.2"
+setuptools = ">=65.6.3"
 
 [tool.black]
 exclude = '''

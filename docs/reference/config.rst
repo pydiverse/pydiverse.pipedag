@@ -69,7 +69,7 @@ simple example configuration
 
     instances:
       __any__:
-        auto_table: ["pandas.DataFrame", "sqlalchemy.Table"]
+        auto_table: ["pandas.DataFrame", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable"]
 
         instance_id: pipedag_default
         table_store:
@@ -238,7 +238,7 @@ For example, if you want to store all pandas dataframes and pydiverse transform 
 
 .. code-block:: yaml
 
-    auto_table: ["pandas.DataFrame", "sqlalchemy.Table", "pydiverse.transform.Table",]
+    auto_table: ["pandas.DataFrame", "pydiverse.transform.Table", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable"]
 
 
 auto_blob
@@ -586,7 +586,7 @@ example configuration
     technical_setups:
       default:
         network_interface: "127.0.0.1"
-        auto_table: ["pandas.DataFrame", "sqlalchemy.Table"]
+        auto_table: ["pandas.DataFrame", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable"]
         fail_fast: true
 
         instance_id: pipedag_default
@@ -705,7 +705,7 @@ which then can be later referenced
     _technical_setups:
       default: &technical_setup_default
         network_interface: "127.0.0.1"
-        auto_table: ["pandas.DataFrame", "sqlalchemy.Table"]
+        auto_table: ["pandas.DataFrame", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable"]
         fail_fast: true
 
         instance_id: pipedag_default
