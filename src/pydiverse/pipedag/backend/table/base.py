@@ -268,8 +268,9 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         """
 
     @abstractmethod
-    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, stage: Stage):
-        """Copy the lazy table identified by the metadata to the transaction stage.
+    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
+        """Copy the lazy table identified by the metadata to the transaction stage of
+        table.
 
         This operation MUST not remove the table from the base stage or modify
         it in any way.

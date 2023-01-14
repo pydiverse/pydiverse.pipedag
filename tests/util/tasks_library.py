@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from pydiverse.pipedag import Blob, Table, materialize
+import sqlalchemy as sa
 
 
 @materialize(input_type=pd.DataFrame)
@@ -55,6 +56,88 @@ def simple_dataframe():
         }
     )
     return Table(df)
+
+
+@materialize
+def simple_dataframe_with_pk():
+    df = pd.DataFrame(
+        {
+            "col1": [0, 1, 2, 3],
+            "col2": ["0", "1", "2", "3"],
+        }
+    )
+    return Table(df, primary_key="col1")
+
+
+@materialize
+def simple_dataframe_with_pk2():
+    df = pd.DataFrame(
+        {
+            "col1": [0, 1, 2, 3],
+            "col2": ["0", "1", "2", "3"],
+        }
+    )
+    return Table(df, primary_key=["col1", "col2"])
+
+
+@materialize
+def simple_dataframe_with_index():
+    df = pd.DataFrame(
+        {
+            "col1": [0, 1, 2, 3],
+            "col2": ["0", "1", "2", "3"],
+        }
+    )
+    return Table(df, primary_key=["col1"], indexes=[["col2"]])
+
+
+@materialize
+def simple_dataframe_with_indexes():
+    df = pd.DataFrame(
+        {
+            "col1": [0, 1, 2, 3],
+            "col2": ["0", "1", "2", "3"],
+        }
+    )
+    return Table(df, primary_key=["col1"], indexes=[["col2"], ["col2", "col1"]])
+
+
+def _get_df_query():
+    unions = [
+        sa.select([sa.literal(i).label("col1"), sa.literal(str(i)).label("col2")])
+        for i in range(4)
+    ]
+    return unions[0].union_all(*unions[1:])
+
+
+@materialize(lazy=True)
+def simple_lazy_table():
+    query = _get_df_query()
+    return Table(query)
+
+
+@materialize(lazy=True)
+def simple_lazy_table_with_pk():
+    query = _get_df_query()
+    return Table(query, primary_key="col1")
+
+
+@materialize(lazy=True)
+def simple_lazy_table_with_pk2():
+    query = _get_df_query()
+    return Table(query, primary_key=["col1", "col2"])
+
+
+@materialize(lazy=True)
+def simple_lazy_table_with_index():
+    query = _get_df_query()
+    return Table(query, primary_key=["col1"], indexes=[["col2"]])
+
+
+@materialize(lazy=True)
+def simple_lazy_table_with_indexes():
+    query = _get_df_query()
+    return Table(query, indexes=[["col2"], ["col2", "col1"]])
 
 
 @materialize

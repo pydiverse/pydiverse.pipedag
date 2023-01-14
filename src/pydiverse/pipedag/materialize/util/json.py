@@ -30,6 +30,8 @@ def json_default(o):
             PIPEDAG_TYPE: PIPEDAG_TYPE_TABLE,
             "stage": o.stage.name,
             "name": o.name,
+            "primary_key": o.primary_key,
+            "indexes": o.indexes,
             "cache_key": o.cache_key,
         }
     if isinstance(o, RawSql):
@@ -76,6 +78,8 @@ def json_object_hook(d: dict):
             tbl = Table(
                 name=d["name"],
                 stage=stages[d["stage"]],
+                primary_key=d["primary_key"],
+                indexes=d["indexes"],
             )
             tbl.cache_key = d["cache_key"]
             return tbl

@@ -29,6 +29,7 @@ class Table(Generic[T]):
         name: str | None = None,
         stage: Stage | None = None,
         primary_key: str | None = None,
+        indexes: list[list[str]] | None = None,
     ):
         self._name = None
 
@@ -36,6 +37,7 @@ class Table(Generic[T]):
         self.name = name
         self.stage = stage
         self.primary_key = primary_key
+        self.indexes = indexes
 
         # cache_key will be overridden shortly before handing over to downstream tasks
         # that use it to compute their input_hash for cache_invalidation due to input

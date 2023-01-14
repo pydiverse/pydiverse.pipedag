@@ -5,7 +5,7 @@ import json
 import re
 import textwrap
 import warnings
-from typing import Any
+from typing import Any, Iterable
 
 import pandas as pd
 import sqlalchemy as sa
@@ -16,6 +16,10 @@ from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
 from pydiverse.pipedag.backend.table.util import engine_dispatch
 from pydiverse.pipedag.backend.table.util.sql_ddl import (
+    AddIndex,
+    AddPrimaryKey,
+    ChangeColumnNullable,
+    ChangeColumnTypes,
     CopyTable,
     CreateDatabase,
     CreateSchema,
@@ -278,6 +282,157 @@ class SQLTableStore(BaseTableStore):
 
         return self._execute(query, conn)
 
+    def add_indexes(self, table: Table, schema: Schema):
+        if table.primary_key is not None:
+            key = table.primary_key
+            if isinstance(key, str):
+                key = [key]
+            self.add_primary_key(table.name, schema, key)
+        if table.indexes is not None:
+            for index in table.indexes:
+                self.add_index(table.name, schema, index)
+
+    @engine_dispatch
+    def add_primary_key(
+        self,
+        table_name: str,
+        schema: Schema,
+        key_columns: list[str],
+        name: str | None = None,
+    ):
+        self.execute(
+            ChangeColumnNullable(table_name, schema, key_columns, nullable=False)
+        )
+        self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
+
+    @engine_dispatch
+    def add_index(
+        self,
+        table_name: str,
+        schema: Schema,
+        index_columns: list[str],
+        name: str | None = None,
+    ):
+        self.execute(AddIndex(table_name, schema, index_columns, name))
+
+    @add_primary_key.dialect("mssql")
+    def _add_primary_key_mssql(
+        self,
+        table_name: str,
+        schema: Schema,
+        key_columns: list[str],
+        name: str | None = None,
+    ):
+        sql_types = self.reflect_sql_types(key_columns, table_name, schema)
+        # impose some varchar(max) limit to allow use in primary key / index
+        # TODO: consider making cap_varchar_max a config option
+        self.execute(
+            ChangeColumnTypes(
+                table_name,
+                schema,
+                key_columns,
+                sql_types,
+                nullable=False,
+                cap_varchar_max=1024,
+            )
+        )
+        self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
+
+    @add_index.dialect("mssql")
+    def _add_index_mssql(
+        self, table_name: str, schema: Schema, index: list[str], name: str | None = None
+    ):
+        sql_types = self.reflect_sql_types(index, table_name, schema)
+        if any(
+            [
+                isinstance(_type, sa.String) and _type.length is None
+                for _type in sql_types
+            ]
+        ):
+            # impose some varchar(max) limit to allow use in primary key / index
+            self.execute(
+                ChangeColumnTypes(
+                    table_name, schema, index, sql_types, cap_varchar_max=1024
+                )
+            )
+        self.execute(AddIndex(table_name, schema, index, name))
+
+    # @add_primary_key.dialect("ibm_db_sa")
+    # def _add_primary_key_ibm_db_sa(self, table_name: str, schema: Schema,
+    #         key_columns: list[str], name: str | None = None):
+    #     # # Failed to make this work: (Database hangs when creating index on
+    #     # # altered column)
+    #     # sql_types = self.reflect_sql_types(key, table, schema)
+    #     # if any([isinstance(_type, sa.String) and (_type.length is None or
+    #     #           _type.length > 256) for _type in sql_types]):
+    #     #     # impose some varchar length limit to allow use in primary key
+    #     #     # / index
+    #     #     self.execute(ChangeColumnTypes(table.name, schema, key,
+    #     #           sql_types, nullable=False, cap_varchar_max=256))
+    #     # else:
+    #     self.execute(ChangeColumnNullable(table_name, schema, key_columns,
+    #           nullable=False))
+    #     self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
+    #
+    # @add_index.dialect("mssql")
+    # def _add_index_ibm_db_sa(self, table_name: str, schema: Schema,
+    #         index: list[str], name: str | None = None):
+    #     # # Failed to make this work: (Database hangs when creating index on
+    #     # # altered column)
+    #     # sql_types = self.reflect_sql_types(index, table, schema)
+    #     # if any([isinstance(_type, sa.String) and (_type.length is None or
+    #     #       _type.length > 256) for _type in sql_types]):
+    #     #     # impose some varchar(max) limit to allow use in primary key
+    #     #     # / index
+    #     #     self.execute(
+    #     #         ChangeColumnTypes(table.name, schema, index, sql_types,
+    #     #               cap_varchar_max=256))
+    #     self.execute(AddIndex(table_name, schema, index, name))
+
+    def copy_indexes(
+        self, src_table: str, src_schema: Schema, dest_table: str, dest_schema: Schema
+    ):
+        inspector = sa.inspect(self.engine)
+        pk_constraint = inspector.get_pk_constraint(src_table, schema=src_schema.get())
+        if len(pk_constraint["constrained_columns"]) > 0:
+            self.add_primary_key(
+                dest_table,
+                dest_schema,
+                pk_constraint["constrained_columns"],
+                pk_constraint["name"],
+            )
+        indexes = inspector.get_indexes(src_table, schema=src_schema.get())
+        for index in indexes:
+            if len(index["include_columns"]) > 0:
+                self.logger.warning(
+                    "Perfect index recreation in caching is not net implemented",
+                    table=dest_table,
+                    schema=dest_schema.get(),
+                    include_columns=index["include_columns"],
+                )
+            if any(
+                not isinstance(val, list) or len(val) > 0
+                for val in index["dialect_options"].values()
+            ):
+                self.logger.warning(
+                    "Perfect index recreation in caching is not net implemented",
+                    table=dest_table,
+                    schema=dest_schema.get(),
+                    dialect_options=index["dialect_options"],
+                )
+            self.add_index(
+                dest_table, dest_schema, index["column_names"], index["name"]
+            )
+
+    def reflect_sql_types(
+        self, col_names: Iterable[str], table_name: str, schema: Schema
+    ):
+        meta = sa.MetaData()
+        meta.reflect(bind=self.engine, schema=schema.get())
+        tables = {table.name: table for table in meta.tables.values()}
+        sql_types = [tables[table_name].c[col].type for col in col_names]
+        return sql_types
+
     @staticmethod
     def format_sql_string(query_str: str) -> str:
         return textwrap.dedent(query_str).strip()
@@ -317,7 +472,7 @@ class SQLTableStore(BaseTableStore):
 
     def _execute_raw_sql_mssql_pytsql(self, raw_sql: RawSql):
         """Use pytsql for executing T-SQL scripts containing many GO statements."""
-        # noinspection PyUnresolvedReferences
+        # noinspection PyUnresolvedReferences,PyPackageRequirements
         import pytsql
 
         sql_string = raw_sql.sql
@@ -600,14 +755,16 @@ class SQLTableStore(BaseTableStore):
                     self.get_schema(stage.transaction_name),
                 )
             )
-        except Exception as e:
+        except Exception as _e:
             msg = (
                 f"Failed to copy table '{table.name}' (schema: '{stage.name}')"
                 " to transaction."
             )
-            raise CacheError(msg) from e
+            raise CacheError(msg) from _e
+        self.add_indexes(table, self.get_schema(stage.transaction_name))
 
-    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, stage: Stage):
+    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
+        stage = table.stage
         schema_name = self.get_schema(metadata.stage).get()
         has_table = sa.inspect(self.engine).has_table(metadata.name, schema=schema_name)
         if not has_table:
@@ -626,12 +783,13 @@ class SQLTableStore(BaseTableStore):
                     self.get_schema(stage.transaction_name),
                 )
             )
-        except Exception as e:
+        except Exception as _e:
             msg = (
                 f"Failed to copy lazy table {metadata.name} (schema:"
                 f" '{metadata.stage}') to transaction."
             )
-            raise CacheError(msg) from e
+            raise CacheError(msg) from _e
+        self.add_indexes(table, self.get_schema(stage.transaction_name))
 
     @engine_dispatch
     def get_view_names(self, schema: str, *, include_everything=False) -> list[str]:
@@ -650,6 +808,7 @@ class SQLTableStore(BaseTableStore):
             Currently, this only makes a difference for dialect=mssql.
         :return: list of view names [and other objects]
         """
+        _ = include_everything  # not used in this implementation
         inspector = sa.inspect(self.engine)
         return inspector.get_view_names(schema)
 
@@ -661,6 +820,7 @@ class SQLTableStore(BaseTableStore):
             )
         return list(self._get_mssql_sql_modules(schema).keys())
 
+    # noinspection SqlDialectInspection
     def _get_mssql_sql_modules(self, schema: str):
         with self.engine.connect() as conn:
             database, schema_only = schema.split(".")
@@ -696,12 +856,18 @@ class SQLTableStore(BaseTableStore):
                         dest_schema,
                     )
                 )
-            except Exception as e:
+                self.copy_indexes(
+                    table_name,
+                    src_schema,
+                    table_name,
+                    dest_schema,
+                )
+            except Exception as _e:
                 msg = (
                     f"Failed to copy table {table_name} (schema:"
                     f" '{src_schema}') to transaction."
                 )
-                raise CacheError(msg) from e
+                raise CacheError(msg) from _e
 
         views_to_copy = new_tables & set(views)
         for view_name in views_to_copy:
@@ -713,6 +879,7 @@ class SQLTableStore(BaseTableStore):
     ):
         raise NotImplementedError("Only implemented for mssql.")
 
+    # noinspection SqlDialectInspection
     @_copy_view_to_transaction.dialect("mssql")
     def _copy_view_to_transaction_mssql(
         self, view_name: str, src_schema: Schema, dest_schema: Schema
@@ -836,6 +1003,7 @@ class SQLTableStore(BaseTableStore):
                     )
                 )
 
+    # noinspection DuplicatedCode
     def retrieve_lazy_table_metadata(
         self, query_hash: str, task_hash: str, stage: Stage
     ) -> LazyTableMetadata:
@@ -889,6 +1057,7 @@ class SQLTableStore(BaseTableStore):
                     )
                 )
 
+    # noinspection DuplicatedCode
     def retrieve_raw_sql_metadata(
         self, query_hash: str, task_hash: str, stage: Stage
     ) -> RawSqlMetadata:
@@ -977,7 +1146,9 @@ class SQLTableStore(BaseTableStore):
 class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @classmethod
     def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, (sa.Table, sa.sql.Select, sa.sql.elements.TextClause))
+        return issubclass(
+            type_, (sa.sql.elements.TextClause, sa.sql.selectable.Selectable)
+        )
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -996,6 +1167,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
         schema = store.get_schema(stage_name)
         store.execute(CreateTableAsSelect(table.name, schema, obj))
+        store.add_indexes(table, schema)
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
@@ -1023,15 +1195,28 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def materialize(cls, store, table: Table[pd.DataFrame], stage_name):
-        schema = store.get_schema(stage_name).get()
+        schema = store.get_schema(stage_name)
         if store.print_materialize:
-            store.logger.info(f"Writing table '{schema}.{table.name}':\n{table.obj}")
+            store.logger.info(
+                f"Writing table '{schema.get()}.{table.name}':\n{table.obj}"
+            )
+        dtype_map = {}
+        if store.engine.dialect.name == "ibm_db_sa":
+            # Default string target is CLOB which can't be used for indexing.
+            # We could use VARCHAR(32000), but if we change this to VARCHAR(256)
+            # for indexed columns, DB2 hangs.
+            dtype_map = {
+                col: sa.VARCHAR(256)
+                for col in table.obj.dtypes.loc[lambda x: x == object].index
+            }
         table.obj.to_sql(
             table.name,
             store.engine,
-            schema=schema,
+            schema=schema.get(),
             index=False,
+            dtype=dtype_map,
         )
+        store.add_indexes(table, schema)
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):

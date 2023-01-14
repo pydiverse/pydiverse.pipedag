@@ -1,16 +1,17 @@
 .. Versioning follows semantic versioning, see also
 https://semver.org/spec/v2.0.0.html. The most important bits are:
-* Update the major if you break the public API
+* Update the major if you break the public API and major > 0
 * Update the minor if you add new functionality
 * Update the patch if you fixed a bug
 
 Changelog
 =========
 
-0.2.0 (2022-MM-DD)
+0.2.0 (2022-01-14)
 ------------------
 
 - SQLTableStore: support for Microsoft SQL Server and IBM DB2 (Linux) database connection strings
+- Support primary keys and indexes (can be configured with Table object and used in custom RawSql code)
 - RawSql: support additional return type for @materialize tasks which allows to emit raw SQL string including multiple
    create statements (currently, views/functions/procedures are only supported for dialect mssql). This feature should
    only be used for getting legacy code running in pipedag before converting it to programatically generated or manual
