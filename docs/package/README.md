@@ -12,11 +12,12 @@ or to contribute early stage usage examples.
 
 ## Usage
 
-pydiverse.pipedag can either be installed via pypi with `pip install pydiverse-pipedag` or via conda-forge with `conda install pydiverse-pipedag -c conda-forge`.
+pydiverse.pipedag can either be installed via pypi with `pip install pydiverse-pipedag` or via conda-forge
+with `conda install pydiverse-pipedag -c conda-forge`.
 
 ## Example
 
-A flow can look like this (i.e. name this file `run_pipeline.py`):
+A flow can look like this (i.e. put this in a file named `run_pipeline.py`):
 
 ```python
 from pydiverse.pipedag import materialize, Table, Flow, Stage
@@ -148,7 +149,8 @@ instances:
       class: "pydiverse.pipedag.engine.SequentialEngine"
 ```
 
-If you don't have a postgres, Microsoft SQL Server, or IBM DB2 database at hand, you can start a postgres database with the following `docker-compose.yaml` file:
+If you don't have a postgres, Microsoft SQL Server, or IBM DB2 database at hand, you can
+start a postgres database with the following `docker-compose.yaml` file:
 
 ```yaml
 version: "3.9"
@@ -169,12 +171,34 @@ services:
       - 2181:2181
 ```
 
-Run `docker compose up` in the directory of your `docker-compose.yaml` and then execute the flow script as follows with a shell like `bash`:
+Run `docker-compose up` in the directory of your `docker-compose.yaml` and then execute
+the flow script as follows with a shell like `bash` and a python environment that
+includes `pydiverse-pipedag`, `pandas`, and `sqlalchemy`:
 
 ```bash
 export POSTGRES_USERNAME=sa
 export POSTGRES_PASSWORD=Pydiverse23
 python run_pipeline.py
+```
+
+Finally, you may connect to your localhost postgres database `pipedag_default` and
+look at tables in schemas `stage_1`..`stage_3`.
+
+If you don't have a SQL UI at hand, you may use `psql` command line tool inside the docker container.
+Check out the `NAMES` column in `docker ps` output. If the name of your postgres container is
+`example_postgres_1`, then you can look at output tables like this:
+
+```bash
+docker exec example_postgres_1 psql --username=sa --dbname=pipedag_default -c 'select * from stage_1.dfa;'
+```
+
+Or more interactively:
+
+```bash
+docker exec -t -i example_postgres_1 bash
+psql --username=sa --dbname=pipedag_default
+\dt stage_*.*
+select * from stage_2.task_2_out;
 ```
 
 ## Troubleshooting

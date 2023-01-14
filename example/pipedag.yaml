@@ -1,0 +1,39 @@
+name: pipedag_tests
+table_store_connections:
+  postgres:
+    # Postgres: this can be used after running `docker-compose up`
+    url: "postgresql://{$POSTGRES_USERNAME}:{$POSTGRES_PASSWORD}@127.0.0.1:6543/{instance_id}"
+
+instances:
+  __any__:
+    # listen-interface for pipedag context server which synchronizes some task state during DAG execution
+    network_interface: "127.0.0.1"
+    # classes to be materialized to table store even without pipedag Table wrapper (we have loose coupling between
+    # pipedag and pydiverse.transform, so consider adding 'pydiverse.transform.Table' in your config)
+    auto_table: ["pandas.DataFrame", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable"]
+    fail_fast: true
+
+    instance_id: pipedag_default
+    table_store:
+      class: "pydiverse.pipedag.backend.table.SQLTableStore"
+
+      # Postgres: this can be used after running `docker-compose up`
+      table_store_connection: postgres
+      create_database_if_not_exists: True
+
+      # print select statements before being encapsualted in materialize expressions and tables before writing to
+      # database
+      print_materialize: true
+      # print final sql statements
+      print_sql: true
+
+    blob_store:
+      class: "pydiverse.pipedag.backend.blob.FileBlobStore"
+      base_path: "/tmp/pipedag/blobs"
+
+    lock_manager:
+      class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
+      hosts: "localhost:2181"
+
+    orchestration:
+      class: "pydiverse.pipedag.engine.SequentialEngine"
