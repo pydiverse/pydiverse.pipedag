@@ -1,13 +1,13 @@
 .. Versioning follows semantic versioning, see also
 https://semver.org/spec/v2.0.0.html. The most important bits are:
-* Update the major if you break the public API
+* Update the major if you break the public API and major > 0
 * Update the minor if you add new functionality
 * Update the patch if you fixed a bug
 
 Changelog
 =========
 
-0.2.0 (2022-MM-DD)
+0.2.0 (2022-01-14)
 ------------------
 
 - SQLTableStore: support for Microsoft SQL Server and IBM DB2 (Linux) database connection strings
