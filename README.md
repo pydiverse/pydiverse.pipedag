@@ -288,3 +288,20 @@ But `odbcinst -j` revealed that it installed the configuration in `/etc/unixODBC
 its own `odbcinst` executable and that shows odbc config files are expected in `/etc/*`. Symlinks were enough to fix the
 problem. Try `python -c 'import pyodbc;print(pyodbc.drivers())'` and see whether you get more than an empty list.
 Furthermore, make sure you use 127.0.0.1 instead of localhost. It seems that /etc/hosts is ignored.
+
+## Packaging
+
+For publishing with poetry to pypi, see:
+https://www.digitalocean.com/community/tutorials/how-to-publish-python-packages-to-pypi-using-poetry-on-ubuntu-22-04
+
+Packages are first released on test.pypi.org:
+
+- see https://stackoverflow.com/questions/68882603/using-python-poetry-to-publish-to-test-pypi-org
+- `poetry version prerelease` or `poetry version patch`
+- `poetry build`
+- `poetry publish -r test-pypi`
+- verify with https://test.pypi.org/search/?q=pydiverse.pipedag
+
+Finally, they are published via:
+
+- `poetry publish`
