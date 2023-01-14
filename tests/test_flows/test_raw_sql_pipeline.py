@@ -7,7 +7,7 @@ import pytest
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
-from pydiverse.pipedag.context import ConfigContext
+from pydiverse.pipedag.context import ConfigContext, StageLockContext
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.util.config import PipedagConfig
 
@@ -67,18 +67,47 @@ def _test_raw_sql(instance):
         #     _dir = parent_dir / "ref"
         #     ref = tsql("reference_claim_statistics.sql", _dir, in_sql=raw, out_stage=out_stage)
         #     ref = tsql("reference_tables.sql", _dir, in_sql=raw, out_stage=out_stage, depend=ref)
-        with Stage("prep") as out_stage:
+        with Stage("prep") as prep_stage:
             _dir = parent_dir / "prep"
             prep = tsql(
-                "entity_checks.sql", _dir, in_sql=raw, out_stage=out_stage, depend=raw
+                "entity_checks.sql", _dir, in_sql=raw, out_stage=prep_stage, depend=raw
             )
             # prep = tsql("entity_checks.sql", _dir, in_sql=raw, out_stage=out_stage, depend=ref)
             prep = tsql(
-                "more_tables.sql", _dir, in_sql=raw, out_stage=out_stage, depend=prep
+                "more_tables.sql", _dir, in_sql=raw, out_stage=prep_stage, depend=prep
             )
             _ = prep
-    flow_result = flow.run(cfg)
-    assert flow_result.successful
+    # on a fresh database, this will create indexes with Raw-SQL
+    _run_and_check(cfg, flow, prep_stage)
+    # make sure cached execution creates the same indexes
+    _run_and_check(cfg, flow, prep_stage)
+
+
+def _run_and_check(cfg, flow, prep_stage):
+    with StageLockContext():
+        flow_result = flow.run(cfg)
+        assert flow_result.successful
+        with flow_result.config_context as config_ctx:
+            schema = config_ctx.store.table_store.get_schema(prep_stage.name).get()
+            inspector = sa.inspect(config_ctx.store.table_store.engine)
+            # these constraints might be a bit too harsh in case this test is extended
+            # to more databases
+            assert set(inspector.get_table_names(schema=schema)) == {
+                "raw01A",
+                "table01",
+            }
+            pk = inspector.get_pk_constraint("raw01A", schema=schema)
+            assert pk["constrained_columns"] == ["entity", "start_date"]
+            assert pk["name"].startswith("PK__raw01A__")
+            pk = inspector.get_pk_constraint("table01", schema=schema)
+            assert pk["constrained_columns"] == ["entity", "reason"]
+            assert pk["name"].startswith("PK__table01__")
+            assert len(inspector.get_indexes("table01", schema=schema)) == 0
+            indexes = inspector.get_indexes("raw01A", schema=schema)
+            assert indexes[0]["name"] == "raw_start_date"
+            assert indexes[0]["column_names"] == ["start_date"]
+            assert indexes[1]["name"] == "raw_start_date_end_date"
+            assert indexes[1]["column_names"] == ["end_date", "start_date"]
 
 
 @pytest.mark.mssql

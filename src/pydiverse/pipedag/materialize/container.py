@@ -31,7 +31,8 @@ class Table(Generic[T]):
         obj: T | None = None,
         name: str | None = None,
         stage: Stage | None = None,
-        primary_key: str | None = None,
+        primary_key: str | list[str] | None = None,
+        indexes: list[list[str]] | None = None,
         *,
         cache_key: str | None = None,
     ):
@@ -41,6 +42,7 @@ class Table(Generic[T]):
         self.name = name
         self.stage = stage
         self.primary_key = primary_key
+        self.indexes = indexes
 
         self.cache_info = CacheInfo(cache_key)
 

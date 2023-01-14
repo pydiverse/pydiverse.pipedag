@@ -223,7 +223,7 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             metadata = self.retrieve_lazy_table_metadata(
                 query_hash, task_hash, table.stage
             )
-            self.copy_lazy_table_to_transaction(metadata, table.stage)
+            self.copy_lazy_table_to_transaction(metadata, table)
             self.logger.info(f"Lazy cache of table '{table.name}' found")
             table.name = metadata.name
         except CacheError as e:
@@ -306,8 +306,9 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         """
 
     @abstractmethod
-    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, stage: Stage):
-        """Copy the lazy table identified by the metadata to the transaction stage.
+    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
+        """Copy the lazy table identified by the metadata to the transaction stage of
+        table.
 
         This operation MUST not remove the table from the base stage or modify
         it in any way.

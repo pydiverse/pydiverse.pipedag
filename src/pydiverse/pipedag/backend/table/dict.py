@@ -59,7 +59,8 @@ class DictTableStore(BaseTableStore):
                 f"No table with name '{table.name}' found in '{stage.name}' stage"
             ) from None
 
-    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, stage: Stage):
+    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
+        stage = table.stage
         if stage.did_commit:
             raise StageError(
                 f"Can't copy table '{metadata.name}' to transaction."
