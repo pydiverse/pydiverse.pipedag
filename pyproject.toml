@@ -1,10 +1,11 @@
 [tool.poetry]
 name = "pydiverse-pipedag"
-version = "0.1.0"
-description = "A pipeline orchestration layer built on top of prefect for caching and cache invalidation to SQL and blob store targets."
+version = "0.2.0"
+description = "A pipeline orchestration library executing tasks within one python session. It takes care of SQL table (de)materialization, caching and cache invalidation. Blob storage is supported as well for example for storing model files."
 authors = [
   "QuantCo, Inc.",
   "Nicolas Camenisch <garnele007@gmail.com>",
+  "Martin Trautmann <windiana@users.sf.net>",
 ]
 license = "BSD-3-Clause"
 readme = "docs/package/README.md"
