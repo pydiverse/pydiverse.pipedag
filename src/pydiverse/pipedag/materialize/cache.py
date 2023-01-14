@@ -156,7 +156,7 @@ class CacheManager:
             metadata = store.retrieve_lazy_table_metadata(
                 query_hash, task_hash, table.stage
             )
-            store.copy_lazy_table_to_transaction(metadata, table.stage)
+            store.copy_lazy_table_to_transaction(metadata, table)
             store.logger.info(f"Lazy cache of table '{table.name}' found")
             table.name = metadata.name
             is_cache_valid = True
