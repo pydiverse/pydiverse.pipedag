@@ -7,6 +7,11 @@ https://semver.org/spec/v2.0.0.html. The most important bits are:
 Changelog
 =========
 
+0.2.1 (2022-01-15)
+------------------
+
+- removed contextvars dependency (not needed for python >= 3.7 and broke conda-forge build)
+
 0.2.0 (2022-01-14)
 ------------------
 

@@ -298,6 +298,7 @@ Packages are first released on test.pypi.org:
 
 - see https://stackoverflow.com/questions/68882603/using-python-poetry-to-publish-to-test-pypi-org
 - `poetry version prerelease` or `poetry version patch`
+- push increased version number to `main` branch
 - `poetry build`
 - `poetry publish -r test-pypi`
 - verify with https://test.pypi.org/search/?q=pydiverse.pipedag
