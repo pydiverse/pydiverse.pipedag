@@ -32,6 +32,7 @@ tomli = ">=2.0.1"
 pynng = ">=0.7.1"
 msgpack = ">=1.0.4"
 packaging = ">=21.3"
+python-box = ">=6.1.0"
 
 filelock = { version = ">=3.7.1", optional = true }
 kazoo = { version = ">=2.8.0", optional = true }
@@ -39,7 +40,6 @@ kazoo = { version = ">=2.8.0", optional = true }
 Sphinx = { version = ">=5.1.1", optional = true }
 sphinx-rtd-theme = { version = ">=1.0.0", optional = true }
 sphinxcontrib-apidoc = { version=">=0.3.0", optional = true }
-python-box = ">=6.1.0"
 
 pyodbc = { version = ">=4.0.35", optional = true }
 pytsql = { version = ">=1.1.4", optional = true }
