@@ -312,3 +312,6 @@ Finally, they are published via:
 Conda-forge packages are updated via:
 
 - https://github.com/conda-forge/pydiverse-pipedag-feedstock#updating-pydiverse-pipedag-feedstock
+- update `recipe/meta.yaml`
+- test meta.yaml in pipedag repo: `conda-build build ../pydiverse-pipedag-feedstock/recipe/meta.yaml`
+- commit `recipe/meta.yaml` to branch of fork and submit PR
