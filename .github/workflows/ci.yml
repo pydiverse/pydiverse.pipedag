@@ -93,7 +93,7 @@ jobs:
         uses: ./.github/actions/setup
         with:
           python-version: ${{ matrix.python-version }}
-          poetry-flags: -E mssql -E ibm_db2
+          poetry-flags: -E mssql -E ibm_db2 -E pdtransform
 
       - name: Install Microsoft ODBC
         run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
@@ -122,5 +122,5 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/test
         with:
-          arguments: --workers 4 --mssql --ibm_db2
+          arguments: --workers 4 --mssql --ibm_db2 --pdtransform
 
