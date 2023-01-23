@@ -61,19 +61,11 @@ class SQLTableStore(BaseTableStore):
     @classmethod
     def _init_conf_(cls, config: dict[str, Any]):
         engine_url = config.pop("url")
-        # TODO :we might need user support or SQL-URL library support to do this
-        #  reliably:
-        re_pw = r"([^:]*://[/]*[^:/@]*:)([^@/]+)(@|/)(.*)"
-        groups = re.match(re_pw, engine_url)
-        engine_url_no_pw = "<unknown URL pattern>"
-        if len(groups.groups()) == 4 and len(groups.groups()[1]) > 0:
-            engine_url_no_pw = groups[1] + "***" + groups[3] + groups[4]
-        return cls(engine_url, engine_url_no_pw, **config)
+        return cls(engine_url, **config)
 
     def __init__(
         self,
         engine_url: str,
-        engine_url_no_pw: str,
         create_database_if_not_exists: bool = False,
         schema_prefix: str = "",
         schema_suffix: str = "",
@@ -88,8 +80,6 @@ class SQLTableStore(BaseTableStore):
 
         :param engine_url:
             URL for SQLAlchemy engine
-        :param engine_url_no_pw:
-            URL for SQLAlchemy engine (without password)
         :param create_database_if_not_exists:
             whether to create database if it does not exist
         :param schema_prefix:
@@ -120,7 +110,7 @@ class SQLTableStore(BaseTableStore):
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
 
         self._init_database(engine_url, create_database_if_not_exists)
-        self.engine_url_no_pw = engine_url_no_pw
+        self.engine_url_no_pw = repr(sa.engine.make_url(engine_url))
         self.engine = self._connect(engine_url, self.schema_prefix, self.schema_suffix)
 
         # Set up metadata tables and schema
@@ -197,7 +187,7 @@ class SQLTableStore(BaseTableStore):
 
         self.logger.info(
             "Initialized SQL Table Store",
-            engine_url=engine_url_no_pw,
+            engine_url=self.engine_url_no_pw,
             schema_prefix=self.schema_prefix,
             schema_suffix=self.schema_suffix,
         )
