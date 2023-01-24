@@ -31,7 +31,7 @@ instances:
 
       # Postgres: this can be used after running `docker-compose up`
       table_store_connection: postgres
-      create_database_if_not_exists: True
+      create_database_if_not_exists: true
 
       # print select statements before being encapsualted in materialize expressions and tables before writing to
       # database
@@ -61,17 +61,24 @@ instances:
     instance_id: pd_mssql
     table_store:
       table_store_connection: mssql
-      disable_pytsql: True
+      disable_pytsql: true
 
   mssql_pytsql:
     instance_id: pd_mssql_pytsql
     table_store:
       table_store_connection: mssql
-      disable_pytsql: False
-      pytsql_isolate_top_level_statements: True
+      disable_pytsql: false
+      pytsql_isolate_top_level_statements: true
 
   ibm_db2:
     instance_id: pd_ibm_db2
     stage_commit_technique: READ_VIEWS
     table_store:
       table_store_connection: ibm_db2
+
+  ibm_db2_avoid_schema:
+    instance_id: pd_ibm_db2
+    stage_commit_technique: READ_VIEWS
+    table_store:
+      table_store_connection: ibm_db2
+      avoid_drop_create_schema: true

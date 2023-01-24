@@ -6,12 +6,12 @@ from pydiverse.pipedag import Blob, Table, materialize
 import sqlalchemy as sa
 
 
-@materialize(input_type=pd.DataFrame)
+@materialize(input_type=pd.DataFrame, version="1.0")
 def noop(x):
     return x
 
 
-@materialize(input_type=pd.DataFrame)
+@materialize(input_type=pd.DataFrame, version="1.0")
 def noop2(x):
     return x
 
