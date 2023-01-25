@@ -77,7 +77,7 @@ instances:
       table_store_connection: ibm_db2
 
   ibm_db2_avoid_schema:
-    instance_id: pd_ibm_db2
+    instance_id: pd_ibm_db2_avoid_schema
     stage_commit_technique: READ_VIEWS
     table_store:
       table_store_connection: ibm_db2
