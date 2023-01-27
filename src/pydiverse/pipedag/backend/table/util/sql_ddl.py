@@ -79,10 +79,20 @@ class DropDatabase(DDLElement):
 
 
 class CreateTableAsSelect(DDLElement):
-    def __init__(self, name: str, schema: Schema, query: Select | TextClause | sa.Text):
+    def __init__(
+        self,
+        name: str,
+        schema: Schema,
+        query: Select | TextClause | sa.Text,
+        *,
+        early_not_null: None | str | list[str] = None,
+    ):
         self.name = name
         self.schema = schema
         self.query = query
+        # some dialects may choose to set NOT-NULL constraint in the middle of
+        # create table as select
+        self.early_not_null = early_not_null
 
 
 class CreateViewAsSelect(DDLElement):
@@ -100,12 +110,14 @@ class CopyTable(DDLElement):
         to_name,
         to_schema: Schema,
         if_not_exists=False,
+        early_not_null: None | str | list[str] = None,
     ):
         self.from_name = from_name
         self.from_schema = from_schema
         self.to_name = to_name
         self.to_schema = to_schema
         self.if_not_exists = if_not_exists
+        self.early_not_null = early_not_null
 
 
 class DropTable(DDLElement):
@@ -454,13 +466,31 @@ def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler
         create, compiler, "TABLE", kw, prefix="(", suffix=") DEFINITION ONLY"
     )
 
+    if create.early_not_null is not None:
+        not_null_cols = create.early_not_null
+        if isinstance(not_null_cols, str):
+            not_null_cols = [not_null_cols]
+        not_null_statements = _get_nullable_change_statements(
+            ChangeColumnNullable(
+                create.name,
+                create.schema,
+                column_names=not_null_cols,
+                nullable=False,
+            ),
+            compiler,
+        )
+    else:
+        not_null_statements = []
+
     name = compiler.preparer.quote_identifier(create.name)
     schema = compiler.preparer.format_schema(create.schema.get())
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(create.query, **kw)
     create_statement = f"INSERT INTO {schema}.{name}\n{select}"
 
-    return join_ddl_statements([prepare_statement, create_statement], compiler, **kw)
+    return join_ddl_statements(
+        [prepare_statement] + not_null_statements + [create_statement], compiler, **kw
+    )
 
 
 @compiles(CreateViewAsSelect)
@@ -514,7 +544,12 @@ def visit_copy_table(copy_table: CopyTable, compiler, **kw):
     from_name = compiler.preparer.quote_identifier(copy_table.from_name)
     from_schema = compiler.preparer.format_schema(copy_table.from_schema.get())
     query = sa.select("*").select_from(sa.text(f"{from_schema}.{from_name}"))
-    create = CreateTableAsSelect(copy_table.to_name, copy_table.to_schema, query)
+    create = CreateTableAsSelect(
+        copy_table.to_name,
+        copy_table.to_schema,
+        query,
+        early_not_null=copy_table.early_not_null,
+    )
     return compiler.process(create, **kw)
 
 
@@ -524,7 +559,12 @@ def visit_copy_table_mssql(copy_table: CopyTable, compiler, **kw):
     from_name = compiler.preparer.quote_identifier(copy_table.from_name)
     database, schema = _get_mssql_database_schema(copy_table.from_schema, compiler)
     query = sa.text(f"SELECT * FROM {database}.{schema}.{from_name}")
-    create = CreateTableAsSelect(copy_table.to_name, copy_table.to_schema, query)
+    create = CreateTableAsSelect(
+        copy_table.to_name,
+        copy_table.to_schema,
+        query,
+        early_not_null=copy_table.early_not_null,
+    )
     return compiler.process(create, **kw)
 
 
@@ -879,12 +919,17 @@ def visit_change_column_types(change: ChangeColumnNullable, compiler, **kw):
 
 # noinspection SqlDialectInspection
 @compiles(ChangeColumnNullable, "ibm_db_sa")
-def visit_change_column_types(change: ChangeColumnNullable, compiler, **kw):
+def visit_change_column_types_db2(change: ChangeColumnNullable, compiler, **kw):
     _ = kw
     # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     change = copy.deepcopy(change)
     change.table_name = ibm_db_sa_fix_name(change.table_name)
 
+    statements = _get_nullable_change_statements(change, compiler)
+    return join_ddl_statements(statements, compiler, **kw)
+
+
+def _get_nullable_change_statements(change, compiler):
     table = compiler.preparer.quote_identifier(change.table_name)
     schema = compiler.preparer.format_schema(change.schema.get())
     statements = [
@@ -894,7 +939,7 @@ def visit_change_column_types(change: ChangeColumnNullable, compiler, **kw):
         for col, nullable in zip(change.column_names, change.nullable)
     ]
     statements.append(f"call sysproc.admin_cmd('REORG TABLE {schema}.{table}')")
-    return join_ddl_statements(statements, compiler, **kw)
+    return statements
 
 
 def ibm_db_sa_fix_name(name):

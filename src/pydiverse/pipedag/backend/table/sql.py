@@ -286,12 +286,16 @@ class SQLTableStore(BaseTableStore):
 
         return self._execute(query, conn)
 
-    def add_indexes(self, table: Table, schema: Schema):
+    def add_indexes(
+        self, table: Table, schema: Schema, *, early_not_null_possible: bool = False
+    ):
         if table.primary_key is not None:
             key = table.primary_key
             if isinstance(key, str):
                 key = [key]
-            self.add_primary_key(table.name, schema, key)
+            self.add_primary_key(
+                table.name, schema, key, early_not_null_possible=early_not_null_possible
+            )
         if table.indexes is not None:
             for index in table.indexes:
                 self.add_index(table.name, schema, index)
@@ -302,7 +306,9 @@ class SQLTableStore(BaseTableStore):
         table_name: str,
         schema: Schema,
         key_columns: list[str],
+        *,
         name: str | None = None,
+        early_not_null_possible: bool = False,
     ):
         self.execute(
             ChangeColumnNullable(table_name, schema, key_columns, nullable=False)
@@ -325,7 +331,9 @@ class SQLTableStore(BaseTableStore):
         table_name: str,
         schema: Schema,
         key_columns: list[str],
+        *,
         name: str | None = None,
+        early_not_null_possible: bool = False,
     ):
         sql_types = self.reflect_sql_types(key_columns, table_name, schema)
         # impose some varchar(max) limit to allow use in primary key / index
@@ -361,36 +369,27 @@ class SQLTableStore(BaseTableStore):
             )
         self.execute(AddIndex(table_name, schema, index, name))
 
-    # @add_primary_key.dialect("ibm_db_sa")
-    # def _add_primary_key_ibm_db_sa(self, table_name: str, schema: Schema,
-    #         key_columns: list[str], name: str | None = None):
-    #     # # Failed to make this work: (Database hangs when creating index on
-    #     # # altered column)
-    #     # sql_types = self.reflect_sql_types(key, table, schema)
-    #     # if any([isinstance(_type, sa.String) and (_type.length is None or
-    #     #           _type.length > 256) for _type in sql_types]):
-    #     #     # impose some varchar length limit to allow use in primary key
-    #     #     # / index
-    #     #     self.execute(ChangeColumnTypes(table.name, schema, key,
-    #     #           sql_types, nullable=False, cap_varchar_max=256))
-    #     # else:
-    #     self.execute(ChangeColumnNullable(table_name, schema, key_columns,
-    #           nullable=False))
-    #     self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
-    #
-    # @add_index.dialect("mssql")
-    # def _add_index_ibm_db_sa(self, table_name: str, schema: Schema,
-    #         index: list[str], name: str | None = None):
-    #     # # Failed to make this work: (Database hangs when creating index on
-    #     # # altered column)
-    #     # sql_types = self.reflect_sql_types(index, table, schema)
-    #     # if any([isinstance(_type, sa.String) and (_type.length is None or
-    #     #       _type.length > 256) for _type in sql_types]):
-    #     #     # impose some varchar(max) limit to allow use in primary key
-    #     #     # / index
-    #     #     self.execute(
-    #     #         ChangeColumnTypes(table.name, schema, index, sql_types,
-    #     #               cap_varchar_max=256))
+    @add_primary_key.dialect("ibm_db_sa")
+    def _add_primary_key_ibm_db_sa(
+        self,
+        table_name: str,
+        schema: Schema,
+        key_columns: list[str],
+        *,
+        name: str | None = None,
+        early_not_null_possible: bool = False,
+    ):
+        if not early_not_null_possible:
+            self.execute(
+                ChangeColumnNullable(table_name, schema, key_columns, nullable=False)
+            )
+        self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
+
+    # @add_index.dialect("ibm_db_sa")
+    # def _add_index_ibm_db_sa(
+    #     self, table_name: str, schema: Schema, index: list[str],
+    #     name: str | None = None
+    # ):
     #     self.execute(AddIndex(table_name, schema, index, name))
 
     def copy_indexes(
@@ -799,6 +798,7 @@ class SQLTableStore(BaseTableStore):
                     self.get_schema(metadata.stage),
                     metadata.name,
                     self.get_schema(stage.transaction_name),
+                    early_not_null=table.primary_key,
                 )
             )
         except Exception as _e:
@@ -807,7 +807,9 @@ class SQLTableStore(BaseTableStore):
                 f" '{metadata.stage}') to transaction."
             )
             raise CacheError(msg) from _e
-        self.add_indexes(table, self.get_schema(stage.transaction_name))
+        self.add_indexes(
+            table, self.get_schema(stage.transaction_name), early_not_null_possible=True
+        )
 
     @engine_dispatch
     def get_view_names(self, schema: str, *, include_everything=False) -> list[str]:
@@ -1184,8 +1186,12 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
             obj = sa.select(table.obj)
 
         schema = store.get_schema(stage_name)
-        store.execute(CreateTableAsSelect(table.name, schema, obj))
-        store.add_indexes(table, schema)
+        store.execute(
+            CreateTableAsSelect(
+                table.name, schema, obj, early_not_null=table.primary_key
+            )
+        )
+        store.add_indexes(table, schema, early_not_null_possible=True)
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
