@@ -86,6 +86,7 @@ class CreateTableAsSelect(DDLElement):
         query: Select | TextClause | sa.Text,
         *,
         early_not_null: None | str | list[str] = None,
+        source_tables: None | list[sa.Table] = None,
     ):
         self.name = name
         self.schema = schema
@@ -93,6 +94,8 @@ class CreateTableAsSelect(DDLElement):
         # some dialects may choose to set NOT-NULL constraint in the middle of
         # create table as select
         self.early_not_null = early_not_null
+        # some dialects may lock source and destimation tables
+        self.source_tables = source_tables
 
 
 class CreateViewAsSelect(DDLElement):
@@ -131,6 +134,17 @@ class DropView(DDLElement):
     """
     Attention: For mssql, this statement must be prefixed with
                a 'USE <database>' statement.
+    """
+
+    def __init__(self, name, schema: Schema, if_exists=False):
+        self.name = name
+        self.schema = schema
+        self.if_exists = if_exists
+
+
+class DropAlias(DDLElement):
+    """
+    This is used for dialect=ibm_sa_db
     """
 
     def __init__(self, name, schema: Schema, if_exists=False):
@@ -342,12 +356,26 @@ def visit_drop_schema_ibm_db_sa(drop: DropSchema, compiler, **kw):
                 " the engine kwarg to DropSchema."
             )
 
+        add_statements = []
+        # see SQLTableStore._init_stage_schema_swap()
+        inspector = sa.inspect(drop.engine)
+        for table in inspector.get_table_names(schema=drop.schema.get()):
+            add_statements.append(DropTable(table, schema=drop.schema))
+        for view in inspector.get_view_names(schema=drop.schema.get()):
+            add_statements.append(DropView(view, schema=drop.schema))
+        # see SQLTableStore.drop_all_dialect_specific()
         with drop.engine.connect() as conn:
-            meta = sa.MetaData()
-            meta.reflect(bind=conn, schema=drop.schema.get())
-
-        for table in meta.tables.values():
-            statements.append(DropTable(table.name, drop.schema))
+            alias_names = conn.execute(
+                (
+                    "SELECT NAME FROM SYSIBM.SYSTABLES WHERE CREATOR ="
+                    f" '{drop.schema.get()}' and TYPE='A'"
+                ),
+                conn=drop.engine,
+            ).all()
+        alias_names = [row[0] for row in alias_names]
+        for alias in alias_names:
+            add_statements.append(DropAlias(alias, drop.schema))
+        statements += [compiler.process(stmt) for stmt in add_statements]
 
     # Compile DROP SCHEMA statement
     schema = compiler.preparer.format_schema(drop.schema.get())
@@ -455,6 +483,13 @@ def visit_create_table_as_select_mssql(create: CreateTableAsSelect, compiler, **
     return insert_into_in_query(select, database, schema, name)
 
 
+def ref_ibm_db_sa(tbl: sa.Table, compiler):
+    return (
+        f"{compiler.preparer.quote_identifier(ibm_db_sa_fix_name(tbl.schema))}."
+        f"{compiler.preparer.quote_identifier(ibm_db_sa_fix_name(tbl.name))}"
+    )
+
+
 # noinspection SqlDialectInspection
 @compiles(CreateTableAsSelect, "ibm_db_sa")
 def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler, **kw):
@@ -484,12 +519,23 @@ def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler
 
     name = compiler.preparer.quote_identifier(create.name)
     schema = compiler.preparer.format_schema(create.schema.get())
+
+    lock_statements = [f"LOCK TABLE {schema}.{name} IN EXCLUSIVE MODE"]
+    if create.source_tables is not None:
+        src_tables = [f"{ref_ibm_db_sa(tbl, compiler)}" for tbl in create.source_tables]
+        lock_statements += [f"LOCK TABLE {ref} IN SHARE MODE" for ref in src_tables]
+
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(create.query, **kw)
     create_statement = f"INSERT INTO {schema}.{name}\n{select}"
 
     return join_ddl_statements(
-        [prepare_statement] + not_null_statements + [create_statement], compiler, **kw
+        [prepare_statement]
+        + not_null_statements
+        + lock_statements
+        + [create_statement],
+        compiler,
+        **kw,
     )
 
 
@@ -549,6 +595,8 @@ def visit_copy_table(copy_table: CopyTable, compiler, **kw):
         copy_table.to_schema,
         query,
         early_not_null=copy_table.early_not_null,
+        # source_tables=[sa.Table(copy_table.from_name, sa.MetaData(),
+        #   schema=copy_table.from_schema.get())]
     )
     return compiler.process(create, **kw)
 
@@ -612,6 +660,21 @@ def visit_drop_view_ibm_db_sa(drop: DropView, compiler, **kw):
     return _visit_drop_anything(drop, "VIEW", compiler, **kw)
 
 
+@compiles(DropAlias)
+def visit_drop_view(drop: DropAlias, compiler, **kw):
+    # This might not make sense for all dialects. But the syntax ibm_sa_db uses
+    # looks rather standard except for the term ALIAS
+    return _visit_drop_anything(drop, "ALIAS", compiler, **kw)
+
+
+@compiles(DropView, "ibm_db_sa")
+def visit_drop_view_ibm_db_sa(drop: DropView, compiler, **kw):
+    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
+    drop = copy.deepcopy(drop)
+    drop.name = ibm_db_sa_fix_name(drop.name)
+    return _visit_drop_anything(drop, "VIEW", compiler, **kw)
+
+
 @compiles(DropProcedure)
 def visit_drop_table(drop: DropProcedure, compiler, **kw):
     return _visit_drop_anything(drop, "PROCEDURE", compiler, **kw)
@@ -633,7 +696,7 @@ def visit_drop_table_mssql(drop: DropProcedure, compiler, **kw):
 
 
 def _visit_drop_anything(
-    drop: DropTable | DropView | DropProcedure | DropFunction,
+    drop: DropTable | DropView | DropProcedure | DropFunction | DropAlias,
     _type,
     compiler,
     dont_quote_table=False,

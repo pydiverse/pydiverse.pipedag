@@ -25,6 +25,7 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     CreateSchema,
     CreateTableAsSelect,
     CreateViewAsSelect,
+    DropAlias,
     DropFunction,
     DropProcedure,
     DropSchema,
@@ -280,8 +281,9 @@ class SQLTableStore(BaseTableStore):
             query_str = str(
                 query.compile(self.engine, compile_kwargs={"literal_binds": True})
             )
-            for part in split_ddl_statement(query_str):
-                self._execute(part, conn)
+            with conn.begin():
+                for part in split_ddl_statement(query_str):
+                    self._execute(part, conn)
             return
 
         return self._execute(query, conn)
@@ -539,6 +541,21 @@ class SQLTableStore(BaseTableStore):
         raise ValueError(f"Invalid stage commit technique: {stage_commit_technique}")
 
     @engine_dispatch
+    def drop_all_dialect_specific(self, schema: Schema):
+        pass
+
+    @drop_all_dialect_specific.dialect("ibm_db_sa")
+    def _drop_all_dialect_specific_ibm_db_sa(self, schema: Schema):
+        with self.engine.connect() as conn:
+            alias_names = conn.execute(
+                f"SELECT NAME FROM SYSIBM.SYSTABLES WHERE CREATOR = '{schema.get()}'"
+                " and TYPE='A'"
+            ).all()
+        alias_names = [row[0] for row in alias_names]
+        for alias in alias_names:
+            self.execute(DropAlias(alias, schema))
+
+    @engine_dispatch
     def _init_stage_schema_swap(self, stage: Stage):
         schema = self.get_schema(stage.name)
         transaction_schema = self.get_schema(stage.transaction_name)
@@ -552,11 +569,14 @@ class SQLTableStore(BaseTableStore):
         with self.engine.connect() as conn:
             if self.avoid_drop_create_schema:
                 # empty tansaction_schema by deleting all tables and views
+                # Attention: similar code in sql_ddl.py:visit_drop_schema_ibm_db_sa
+                # for drop.cascade=True
                 inspector = sa.inspect(self.engine)
                 for table in inspector.get_table_names(schema=transaction_schema.get()):
                     self.execute(DropTable(table, schema=transaction_schema))
                 for view in inspector.get_view_names(schema=transaction_schema.get()):
                     self.execute(DropView(view, schema=transaction_schema))
+                self.drop_all_dialect_specific(schema=transaction_schema)
             else:
                 self.execute(cs_base, conn=conn)
                 self.execute(ds_trans, conn=conn)
@@ -776,6 +796,12 @@ class SQLTableStore(BaseTableStore):
             msg = (
                 f"Failed to copy table '{table.name}' (schema: '{stage.name}')"
                 " to transaction."
+            )
+            self.logger.error(
+                msg
+                + " This error is treated as cache-lookup-failure and thus we can"
+                " continue.",
+                exception=_e,
             )
             raise CacheError(msg) from _e
         self.add_indexes(table, self.get_schema(stage.transaction_name))

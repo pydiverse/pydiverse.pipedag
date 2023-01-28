@@ -11,6 +11,7 @@ Changelog
 ------------------
 
 - added option avoid_drop_create_schema to table store configuration
+- improve performance when working with IBM DB2 dialect
 
 0.2.1 (2022-01-15)
 ------------------
