@@ -4,6 +4,7 @@ import itertools
 import json
 import re
 import textwrap
+import traceback
 import warnings
 from typing import Any, Iterable
 
@@ -312,6 +313,7 @@ class SQLTableStore(BaseTableStore):
         name: str | None = None,
         early_not_null_possible: bool = False,
     ):
+        _ = early_not_null_possible  # only used for some dialects
         self.execute(
             ChangeColumnNullable(table_name, schema, key_columns, nullable=False)
         )
@@ -404,7 +406,7 @@ class SQLTableStore(BaseTableStore):
                 dest_table,
                 dest_schema,
                 pk_constraint["constrained_columns"],
-                pk_constraint["name"],
+                name=pk_constraint["name"],
             )
         indexes = inspector.get_indexes(src_table, schema=src_schema.get())
         for index in indexes:
@@ -801,7 +803,7 @@ class SQLTableStore(BaseTableStore):
                 msg
                 + " This error is treated as cache-lookup-failure and thus we can"
                 " continue.",
-                exception=_e,
+                exception="\n".join(traceback.format_exception(_e)),
             )
             raise CacheError(msg) from _e
         self.add_indexes(table, self.get_schema(stage.transaction_name))
@@ -910,8 +912,14 @@ class SQLTableStore(BaseTableStore):
                 )
             except Exception as _e:
                 msg = (
-                    f"Failed to copy table {table_name} (schema:"
+                    f"Failed to copy raw sql generated table {table_name} (schema:"
                     f" '{src_schema}') to transaction."
+                )
+                self.logger.error(
+                    msg
+                    + " This error is treated as cache-lookup-failure and thus we can"
+                    " continue.",
+                    exception="\n".join(traceback.format_exception(_e)),
                 )
                 raise CacheError(msg) from _e
 
