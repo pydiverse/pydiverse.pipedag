@@ -1229,8 +1229,13 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
+        table_name = table.name
+        if store.engine.dialect.name == "ibm_db_sa":
+            # DB2 has uppercase as case-insensitive default
+            if table_name.islower():
+                table_name = table_name.upper()
         return sa.Table(
-            table.name,
+            table_name,
             sa.MetaData(bind=store.engine),
             schema=store.get_schema(stage_name).get(),
             autoload_with=store.engine,
@@ -1259,6 +1264,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
                 f"Writing table '{schema.get()}.{table.name}':\n{table.obj}"
             )
         dtype_map = {}
+        table_name = table.name
         if store.engine.dialect.name == "ibm_db_sa":
             # Default string target is CLOB which can't be used for indexing.
             # We could use VARCHAR(32000), but if we change this to VARCHAR(256)
@@ -1267,8 +1273,11 @@ class PandasTableHook(TableHook[SQLTableStore]):
                 col: sa.VARCHAR(256)
                 for col in table.obj.dtypes.loc[lambda x: x == object].index
             }
+            # DB2 has uppercase as case-insensitive default
+            if table_name.islower():
+                table_name = table_name.upper()
         table.obj.to_sql(
-            table.name,
+            table_name,
             store.engine,
             schema=schema.get(),
             index=False,
