@@ -435,7 +435,11 @@ def _pop(d, *path, default=_nil) -> Any:
         return default
 
 
-def setup_structlog(_log_level=logging.INFO, _log_stream=sys.stderr):
+def setup_structlog(
+    _log_level=logging.INFO,
+    _log_stream=sys.stderr,
+    timestamp_format="%Y-%m-%d %H:%M:%S.%f",
+):
     logging.basicConfig(
         stream=_log_stream,
         format="%(asctime)s [%(levelname)s] %(message)s",
@@ -447,7 +451,7 @@ def setup_structlog(_log_level=logging.INFO, _log_stream=sys.stderr):
             structlog.processors.add_log_level,
             structlog.processors.StackInfoRenderer(),
             structlog.dev.set_exc_info,
-            structlog.processors.TimeStamper(),
+            structlog.processors.TimeStamper(fmt=timestamp_format),
             structlog.dev.ConsoleRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(_log_level),
