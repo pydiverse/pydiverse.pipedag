@@ -22,6 +22,7 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     ChangeColumnNullable,
     ChangeColumnTypes,
     CopyTable,
+    CreateAlias,
     CreateDatabase,
     CreateSchema,
     CreateTableAsSelect,
@@ -34,6 +35,7 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     DropView,
     RenameSchema,
     Schema,
+    ibm_db_sa_fix_name,
     split_ddl_statement,
 )
 from pydiverse.pipedag.context import RunContext
@@ -550,8 +552,8 @@ class SQLTableStore(BaseTableStore):
     def _drop_all_dialect_specific_ibm_db_sa(self, schema: Schema):
         with self.engine.connect() as conn:
             alias_names = conn.execute(
-                f"SELECT NAME FROM SYSIBM.SYSTABLES WHERE CREATOR = '{schema.get()}'"
-                " and TYPE='A'"
+                "SELECT NAME FROM SYSIBM.SYSTABLES WHERE CREATOR ="
+                f" '{ibm_db_sa_fix_name(schema.get())}' and TYPE='A'"
             ).all()
         alias_names = [row[0] for row in alias_names]
         for alias in alias_names:
@@ -723,15 +725,14 @@ class SQLTableStore(BaseTableStore):
             views = self.get_view_names(dest_schema.get())
             for view in views:
                 self.execute(DropView(view, schema=dest_schema), conn=conn)
+            self.drop_all_dialect_specific(schema=dest_schema)
 
             # Create views for all tables in transaction schema
             src_meta = sa.MetaData()
             src_meta.reflect(bind=self.engine, schema=src_schema.get())
-            for table in src_meta.tables.values():
-                self.execute(
-                    CreateViewAsSelect(table.name, dest_schema, sa.select(table)),
-                    conn=conn,
-                )
+            self._create_read_views(
+                conn, dest_schema, src_schema, src_meta.tables.values()
+            )
 
             # Update metadata
             stage_metadata_exists = (
@@ -756,6 +757,33 @@ class SQLTableStore(BaseTableStore):
                 )
 
             self._commit_stage_update_metadata(stage, conn=conn)
+
+    @engine_dispatch
+    def _create_read_views(
+        self,
+        conn,
+        dest_schema: Schema,
+        src_schema: Schema,
+        src_tables: Iterable[sa.Table],
+    ):
+        _ = src_schema  # only needed by other dialects
+        for table in src_tables:
+            self.execute(
+                CreateViewAsSelect(table.name, dest_schema, sa.select(table)),
+                conn=conn,
+            )
+
+    @_create_read_views.dialect("ibm_db_sa")
+    def _create_read_views_ibm_db_sa(
+        self, conn, dest_schema, src_schema: Schema, src_tables: Iterable[sa.Table]
+    ):
+        # Instead of views create aliases which can be locked like tables and
+        # have primary keys
+        for table in src_tables:
+            self.execute(
+                CreateAlias(table.name, src_schema, table.name, dest_schema),
+                conn=conn,
+            )
 
     def _commit_stage_update_metadata(self, stage: Stage, conn: sa.engine.Connection):
         if not self.disable_caching:
@@ -1230,20 +1258,42 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
         table_name = table.name
+        schema = store.get_schema(stage_name).get()
         if store.engine.dialect.name == "ibm_db_sa":
-            # DB2 has uppercase as case-insensitive default
-            if table_name.islower():
-                table_name = table_name.upper()
+            with store.engine.connect() as conn:
+                table_name, schema = _resolve_alias_ibm_db_sa(conn, table_name, schema)
         return sa.Table(
             table_name,
             sa.MetaData(bind=store.engine),
-            schema=store.get_schema(stage_name).get(),
+            schema=schema,
             autoload_with=store.engine,
         )
 
     @classmethod
     def lazy_query_str(cls, store, obj) -> str:
         return str(obj.compile(store.engine, compile_kwargs={"literal_binds": True}))
+
+
+def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str):
+    # we need to resolve aliases since pandas.read_sql_table does not work for them
+    # and sa.Table does not auto-reflect columns
+    table_name = ibm_db_sa_fix_name(table_name)
+    schema = ibm_db_sa_fix_name(schema)
+    tbl = sa.Table("TABLES", sa.MetaData(), schema="SYSCAT", autoload_with=conn)
+    query = (
+        sa.select([tbl.c.base_tabname, tbl.c.base_tabschema])
+        .select_from(tbl)
+        .where(
+            (tbl.c.tabschema == schema)
+            & (tbl.c.tabname == table_name)
+            & (tbl.c.TYPE == "A")
+        )
+    )
+    row = conn.execute(query).mappings().one_or_none()
+    if row is not None:
+        table_name = row["base_tabname"]
+        schema = row["base_tabschema"]
+    return table_name, schema
 
 
 @SQLTableStore.register_table(pd)
@@ -1273,9 +1323,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
                 col: sa.VARCHAR(256)
                 for col in table.obj.dtypes.loc[lambda x: x == object].index
             }
-            # DB2 has uppercase as case-insensitive default
-            if table_name.islower():
-                table_name = table_name.upper()
+            table_name = ibm_db_sa_fix_name(table_name)
         table.obj.to_sql(
             table_name,
             store.engine,
@@ -1289,7 +1337,10 @@ class PandasTableHook(TableHook[SQLTableStore]):
     def retrieve(cls, store, table, stage_name, as_type):
         schema = store.get_schema(stage_name).get()
         with store.engine.connect() as conn:
-            df = pd.read_sql_table(table.name, conn, schema=schema)
+            table_name = table.name
+            if store.engine.dialect.name == "ibm_db_sa":
+                table_name, schema = _resolve_alias_ibm_db_sa(conn, table_name, schema)
+            df = pd.read_sql_table(table_name, conn, schema=schema)
             return df
 
     @classmethod

@@ -17,9 +17,11 @@ __all__ = [
     "RenameSchema",
     "CreateTableAsSelect",
     "CreateViewAsSelect",
+    "CreateAlias",
     "CopyTable",
     "DropTable",
     "CreateDatabase",
+    "DropAlias",
     "DropFunction",
     "DropProcedure",
     "DropView",
@@ -28,6 +30,7 @@ __all__ = [
     "ChangeColumnNullable",
     "ChangeColumnTypes",
     "split_ddl_statement",
+    "ibm_db_sa_fix_name",
 ]
 
 
@@ -86,7 +89,7 @@ class CreateTableAsSelect(DDLElement):
         query: Select | TextClause | sa.Text,
         *,
         early_not_null: None | str | list[str] = None,
-        source_tables: None | list[sa.Table] = None,
+        source_tables: None | list[dict[str, str]] = None,
     ):
         self.name = name
         self.schema = schema
@@ -103,6 +106,22 @@ class CreateViewAsSelect(DDLElement):
         self.name = name
         self.schema = schema
         self.query = query
+
+
+class CreateAlias(DDLElement):
+    def __init__(
+        self,
+        from_name,
+        from_schema: Schema,
+        to_name,
+        to_schema: Schema,
+        or_replace=False,
+    ):
+        self.from_name = from_name
+        self.from_schema = from_schema
+        self.to_name = to_name
+        self.to_schema = to_schema
+        self.or_replace = or_replace
 
 
 class CopyTable(DDLElement):
@@ -368,7 +387,7 @@ def visit_drop_schema_ibm_db_sa(drop: DropSchema, compiler, **kw):
             alias_names = conn.execute(
                 (
                     "SELECT NAME FROM SYSIBM.SYSTABLES WHERE CREATOR ="
-                    f" '{drop.schema.get()}' and TYPE='A'"
+                    f" '{ibm_db_sa_fix_name(drop.schema.get())}' and TYPE='A'"
                 ),
                 conn=drop.engine,
             ).all()
@@ -483,10 +502,10 @@ def visit_create_table_as_select_mssql(create: CreateTableAsSelect, compiler, **
     return insert_into_in_query(select, database, schema, name)
 
 
-def ref_ibm_db_sa(tbl: sa.Table, compiler):
+def ref_ibm_db_sa(tbl: dict[str, str], compiler):
     return (
-        f"{compiler.preparer.quote_identifier(ibm_db_sa_fix_name(tbl.schema))}."
-        f"{compiler.preparer.quote_identifier(ibm_db_sa_fix_name(tbl.name))}"
+        f"{compiler.preparer.quote_identifier(ibm_db_sa_fix_name(tbl['schema']))}."
+        f"{compiler.preparer.quote_identifier(ibm_db_sa_fix_name(tbl['name']))}"
     )
 
 
@@ -585,6 +604,27 @@ def insert_into_in_query(select_sql, database, schema, table):
     )
 
 
+@compiles(CreateAlias)
+def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
+    from_name = compiler.preparer.quote_identifier(
+        ibm_db_sa_fix_name(create_alias.from_name)
+    )
+    from_schema = compiler.preparer.format_schema(
+        ibm_db_sa_fix_name(create_alias.from_schema.get())
+    )
+    to_name = compiler.preparer.quote_identifier(
+        ibm_db_sa_fix_name(create_alias.to_name)
+    )
+    to_schema = compiler.preparer.format_schema(
+        ibm_db_sa_fix_name(create_alias.to_schema.get())
+    )
+    text = ["CREATE"]
+    if create_alias.or_replace:
+        text.append("OR REPLACE")
+    text.append(f"ALIAS {to_schema}.{to_name} FOR TABLE {from_schema}.{from_name}")
+    return " ".join(text)
+
+
 @compiles(CopyTable)
 def visit_copy_table(copy_table: CopyTable, compiler, **kw):
     from_name = compiler.preparer.quote_identifier(copy_table.from_name)
@@ -595,8 +635,9 @@ def visit_copy_table(copy_table: CopyTable, compiler, **kw):
         copy_table.to_schema,
         query,
         early_not_null=copy_table.early_not_null,
-        # source_tables=[sa.Table(copy_table.from_name, sa.MetaData(),
-        #   schema=copy_table.from_schema.get())]
+        source_tables=[
+            dict(name=copy_table.from_name, schema=copy_table.from_schema.get())
+        ],
     )
     return compiler.process(create, **kw)
 
