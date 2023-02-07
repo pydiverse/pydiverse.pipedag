@@ -69,6 +69,7 @@ class SQLTableStore(BaseTableStore):
         create_database_if_not_exists: bool = False,
         schema_prefix: str = "",
         schema_suffix: str = "",
+        avoid_drop_create_schema: bool = False,
         disable_pytsql: bool = False,
         pytsql_isolate_top_level_statements: bool = True,
         print_materialize: bool = False,
@@ -86,6 +87,8 @@ class SQLTableStore(BaseTableStore):
             prefix string for schemas (dot is interpreted as database.schema)
         :param schema_suffix:
             suffix string for schemas (dot is interpreted as database.schema)
+        :param avoid_drop_create_schema
+            avoid creating and dropping schemas
         :param disable_pytsql:
             whether to disable the use of pytsql (dialect mssql only)
         :param pytsql_isolate_top_level_statements:
@@ -103,6 +106,7 @@ class SQLTableStore(BaseTableStore):
         self.schema_prefix = schema_prefix
         self.schema_suffix = schema_suffix
         self.disable_pytsql = disable_pytsql
+        self.avoid_drop_create_schema = avoid_drop_create_schema
         self.pytsql_isolate_top_level_statements = pytsql_isolate_top_level_statements
         self.print_materialize = print_materialize
         self.print_sql = print_sql
@@ -491,7 +495,8 @@ class SQLTableStore(BaseTableStore):
 
     def setup(self):
         super().setup()
-        self.execute(CreateSchema(self.metadata_schema, if_not_exists=True))
+        if not self.avoid_drop_create_schema:
+            self.execute(CreateSchema(self.metadata_schema, if_not_exists=True))
         with self.engine.connect() as conn:
             try:
                 version = conn.execute(
@@ -546,9 +551,17 @@ class SQLTableStore(BaseTableStore):
         cs_trans = CreateSchema(transaction_schema, if_not_exists=False)
 
         with self.engine.connect() as conn:
-            self.execute(cs_base, conn=conn)
-            self.execute(ds_trans, conn=conn)
-            self.execute(cs_trans, conn=conn)
+            if self.avoid_drop_create_schema:
+                # empty tansaction_schema by deleting all tables and views
+                inspector = sa.inspect(self.engine)
+                for table in inspector.get_table_names(schema=transaction_schema.get()):
+                    self.execute(DropTable(table, schema=transaction_schema))
+                for view in inspector.get_view_names(schema=transaction_schema.get()):
+                    self.execute(DropView(view, schema=transaction_schema))
+            else:
+                self.execute(cs_base, conn=conn)
+                self.execute(ds_trans, conn=conn)
+                self.execute(cs_trans, conn=conn)
 
             if not self.disable_caching:
                 conn.execute(
@@ -575,8 +588,9 @@ class SQLTableStore(BaseTableStore):
         # don't drop/create databases, just replace the schema underneath
         # (files will keep name on renaming)
         with self.engine.connect() as conn:
-            self.execute(cs_base, conn=conn)
-            self.execute(cs_trans, conn=conn)
+            if not self.avoid_drop_create_schema:
+                self.execute(cs_base, conn=conn)
+                self.execute(cs_trans, conn=conn)
             self.execute(f"USE [{database}]", conn=conn)
             # clear tables in schema
             self.execute(
@@ -663,6 +677,10 @@ class SQLTableStore(BaseTableStore):
         with self.engine.connect() as conn, conn.begin():
             # TODO: for mssql try to find schema does not exist and then move
             #       the forgotten tmp schema there
+            assert not self.avoid_drop_create_schema, (
+                "The option avoid_drop_create_schema is currently not supported in "
+                "combination with dialect mssql"
+            )
             self.execute(
                 DropSchema(tmp_schema, if_exists=True, cascade=True), conn=conn
             )

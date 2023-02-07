@@ -17,6 +17,7 @@ __all__ = [
         pytest.param("mssql", marks=pytest.mark.mssql),
         pytest.param("mssql_pytsql", marks=pytest.mark.mssql),
         pytest.param("ibm_db2", marks=pytest.mark.ibm_db2),
+        pytest.param("ibm_db2_avoid_schema", marks=pytest.mark.ibm_db2),
     ],
 )
 def instance(request):
