@@ -102,6 +102,24 @@ def simple_dataframe_with_indexes():
     return Table(df, primary_key=["col1"], indexes=[["col2"], ["col2", "col1"]])
 
 
+@materialize(nout=2)
+def simple_dataframes_with_indexes_task():
+    df = pd.DataFrame(
+        {
+            "col1": [0, 1, 2, 3],
+            "col2": ["0", "1", "2", "3"],
+        }
+    )
+    return Table(
+        df, "dfA", primary_key=["col1"], indexes=[["col2"], ["col2", "col1"]]
+    ), Table(df, "dfB", primary_key=["col1"], indexes=[["col2"], ["col2", "col1"]])
+
+
+def simple_dataframes_with_indexes():
+    res, _ = simple_dataframes_with_indexes_task()
+    return res
+
+
 def _get_df_query():
     unions = [
         sa.select([sa.literal(i).label("col1"), sa.literal(str(i)).label("col2")])

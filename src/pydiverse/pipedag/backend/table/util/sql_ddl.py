@@ -638,7 +638,10 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
     pk_name = compiler.preparer.quote_identifier(
         add_primary_key.name
         if add_primary_key.name is not None
-        else "pk_" + "_".join(add_primary_key.key)
+        else "pk_"
+        + "_".join([c.lower() for c in add_primary_key.key])
+        + "_"
+        + add_primary_key.table_name.lower()
     )
     cols = ",".join(
         [compiler.preparer.quote_identifier(col) for col in add_primary_key.key]
@@ -656,7 +659,10 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
     pk_name = compiler.preparer.quote_identifier(
         add_primary_key.name
         if add_primary_key.name is not None
-        else "pk_" + "_".join(add_primary_key.key)
+        else "pk_"
+        + "_".join([c.lower() for c in add_primary_key.key])
+        + "_"
+        + add_primary_key.table_name.lower()
     )
     cols = ",".join(
         [compiler.preparer.quote_identifier(col) for col in add_primary_key.key]
@@ -680,7 +686,10 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
     pk_name = compiler.preparer.quote_identifier(
         add_primary_key.name
         if add_primary_key.name is not None
-        else "pk_" + "_".join(add_primary_key.key)
+        else "pk_"
+        + "_".join([c.lower() for c in add_primary_key.key])
+        + "_"
+        + add_primary_key.table_name.lower()
     )
     cols = ",".join(
         [
@@ -700,7 +709,10 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
     index_name = compiler.preparer.quote_identifier(
         add_index.name
         if add_index.name is not None
-        else "idx_" + "_".join(add_index.index)
+        else "idx_"
+        + "_".join([c.lower() for c in add_index.index])
+        + "_"
+        + add_index.table_name.lower()
     )
     cols = ",".join(
         [compiler.preparer.quote_identifier(col) for col in add_index.index]
@@ -718,7 +730,10 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
     index_name = compiler.preparer.quote_identifier(
         add_index.name
         if add_index.name is not None
-        else "idx_" + "_".join(add_index.index)
+        else "idx_"
+        + "_".join([c.lower() for c in add_index.index])
+        + "_"
+        + add_index.table_name.lower()
     )
     cols = ",".join(
         [compiler.preparer.quote_identifier(col) for col in add_index.index]
@@ -739,7 +754,10 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
     index_name = compiler.preparer.quote_identifier(
         add_index.name
         if add_index.name is not None
-        else "idx_" + "_".join(add_index.index)
+        else "idx_"
+        + "_".join([c.lower() for c in add_index.index])
+        + "_"
+        + add_index.table_name.lower()
     )
     cols = ",".join(
         [
