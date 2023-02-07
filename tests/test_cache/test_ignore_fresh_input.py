@@ -252,7 +252,7 @@ def test_blob(mocker):
         child_spy.assert_called_once()
 
 
-@pytest.mark.skip_instance("mssql", "mssql_pytsql", "ibm_db2")
+@pytest.mark.skip_instance("mssql", "mssql_pytsql", "ibm_db2", "ibm_db2_avoid_schema")
 def test_raw_sql(mocker):
     cache_value = 0
     raw_value = 0

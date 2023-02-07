@@ -6,13 +6,23 @@ from pydiverse.pipedag import Blob, Table, materialize
 import sqlalchemy as sa
 
 
-@materialize(input_type=pd.DataFrame)
+@materialize(input_type=pd.DataFrame, version="1.0")
 def noop(x):
     return x
 
 
-@materialize(input_type=pd.DataFrame)
+@materialize(input_type=pd.DataFrame, version="1.0")
 def noop2(x):
+    return x
+
+
+@materialize(input_type=sa.Table, version="1.0")
+def noop_sql(x):
+    return x
+
+
+@materialize(input_type=sa.Table, lazy=True)
+def noop_lazy(x):
     return x
 
 
@@ -100,6 +110,24 @@ def simple_dataframe_with_indexes():
         }
     )
     return Table(df, primary_key=["col1"], indexes=[["col2"], ["col2", "col1"]])
+
+
+@materialize(nout=2)
+def simple_dataframes_with_indexes_task():
+    df = pd.DataFrame(
+        {
+            "col1": [0, 1, 2, 3],
+            "col2": ["0", "1", "2", "3"],
+        }
+    )
+    return Table(
+        df, "dfA", primary_key=["col1"], indexes=[["col2"], ["col2", "col1"]]
+    ), Table(df, "dfB", primary_key=["col1"], indexes=[["col2"], ["col2", "col1"]])
+
+
+def simple_dataframes_with_indexes():
+    res, _ = simple_dataframes_with_indexes_task()
+    return res
 
 
 def _get_df_query():

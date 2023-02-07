@@ -4,6 +4,7 @@ import itertools
 import json
 import re
 import textwrap
+import traceback
 import warnings
 from typing import Any, Iterable
 
@@ -21,10 +22,12 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     ChangeColumnNullable,
     ChangeColumnTypes,
     CopyTable,
+    CreateAlias,
     CreateDatabase,
     CreateSchema,
     CreateTableAsSelect,
     CreateViewAsSelect,
+    DropAlias,
     DropFunction,
     DropProcedure,
     DropSchema,
@@ -32,13 +35,14 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     DropView,
     RenameSchema,
     Schema,
+    ibm_db_sa_fix_name,
     split_ddl_statement,
 )
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.context.context import ConfigContext, StageCommitTechnique
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.container import RawSql
-from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.core import MaterializingTask, TaskInfo
 from pydiverse.pipedag.materialize.metadata import (
     LazyTableMetadata,
     RawSqlMetadata,
@@ -69,6 +73,7 @@ class SQLTableStore(BaseTableStore):
         create_database_if_not_exists: bool = False,
         schema_prefix: str = "",
         schema_suffix: str = "",
+        avoid_drop_create_schema: bool = False,
         disable_pytsql: bool = False,
         pytsql_isolate_top_level_statements: bool = True,
         print_materialize: bool = False,
@@ -86,6 +91,8 @@ class SQLTableStore(BaseTableStore):
             prefix string for schemas (dot is interpreted as database.schema)
         :param schema_suffix:
             suffix string for schemas (dot is interpreted as database.schema)
+        :param avoid_drop_create_schema
+            avoid creating and dropping schemas
         :param disable_pytsql:
             whether to disable the use of pytsql (dialect mssql only)
         :param pytsql_isolate_top_level_statements:
@@ -103,6 +110,7 @@ class SQLTableStore(BaseTableStore):
         self.schema_prefix = schema_prefix
         self.schema_suffix = schema_suffix
         self.disable_pytsql = disable_pytsql
+        self.avoid_drop_create_schema = avoid_drop_create_schema
         self.pytsql_isolate_top_level_statements = pytsql_isolate_top_level_statements
         self.print_materialize = print_materialize
         self.print_sql = print_sql
@@ -284,18 +292,23 @@ class SQLTableStore(BaseTableStore):
             query_str = str(
                 query.compile(self.engine, compile_kwargs={"literal_binds": True})
             )
-            for part in split_ddl_statement(query_str):
-                self._execute(part, conn)
+            with conn.begin():
+                for part in split_ddl_statement(query_str):
+                    self._execute(part, conn)
             return
 
         return self._execute(query, conn)
 
-    def add_indexes(self, table: Table, schema: Schema):
+    def add_indexes(
+        self, table: Table, schema: Schema, *, early_not_null_possible: bool = False
+    ):
         if table.primary_key is not None:
             key = table.primary_key
             if isinstance(key, str):
                 key = [key]
-            self.add_primary_key(table.name, schema, key)
+            self.add_primary_key(
+                table.name, schema, key, early_not_null_possible=early_not_null_possible
+            )
         if table.indexes is not None:
             for index in table.indexes:
                 self.add_index(table.name, schema, index)
@@ -306,8 +319,11 @@ class SQLTableStore(BaseTableStore):
         table_name: str,
         schema: Schema,
         key_columns: list[str],
+        *,
         name: str | None = None,
+        early_not_null_possible: bool = False,
     ):
+        _ = early_not_null_possible  # only used for some dialects
         self.execute(
             ChangeColumnNullable(table_name, schema, key_columns, nullable=False)
         )
@@ -329,7 +345,9 @@ class SQLTableStore(BaseTableStore):
         table_name: str,
         schema: Schema,
         key_columns: list[str],
+        *,
         name: str | None = None,
+        early_not_null_possible: bool = False,
     ):
         sql_types = self.reflect_sql_types(key_columns, table_name, schema)
         # impose some varchar(max) limit to allow use in primary key / index
@@ -365,36 +383,27 @@ class SQLTableStore(BaseTableStore):
             )
         self.execute(AddIndex(table_name, schema, index, name))
 
-    # @add_primary_key.dialect("ibm_db_sa")
-    # def _add_primary_key_ibm_db_sa(self, table_name: str, schema: Schema,
-    #         key_columns: list[str], name: str | None = None):
-    #     # # Failed to make this work: (Database hangs when creating index on
-    #     # # altered column)
-    #     # sql_types = self.reflect_sql_types(key, table, schema)
-    #     # if any([isinstance(_type, sa.String) and (_type.length is None or
-    #     #           _type.length > 256) for _type in sql_types]):
-    #     #     # impose some varchar length limit to allow use in primary key
-    #     #     # / index
-    #     #     self.execute(ChangeColumnTypes(table.name, schema, key,
-    #     #           sql_types, nullable=False, cap_varchar_max=256))
-    #     # else:
-    #     self.execute(ChangeColumnNullable(table_name, schema, key_columns,
-    #           nullable=False))
-    #     self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
-    #
-    # @add_index.dialect("mssql")
-    # def _add_index_ibm_db_sa(self, table_name: str, schema: Schema,
-    #         index: list[str], name: str | None = None):
-    #     # # Failed to make this work: (Database hangs when creating index on
-    #     # # altered column)
-    #     # sql_types = self.reflect_sql_types(index, table, schema)
-    #     # if any([isinstance(_type, sa.String) and (_type.length is None or
-    #     #       _type.length > 256) for _type in sql_types]):
-    #     #     # impose some varchar(max) limit to allow use in primary key
-    #     #     # / index
-    #     #     self.execute(
-    #     #         ChangeColumnTypes(table.name, schema, index, sql_types,
-    #     #               cap_varchar_max=256))
+    @add_primary_key.dialect("ibm_db_sa")
+    def _add_primary_key_ibm_db_sa(
+        self,
+        table_name: str,
+        schema: Schema,
+        key_columns: list[str],
+        *,
+        name: str | None = None,
+        early_not_null_possible: bool = False,
+    ):
+        if not early_not_null_possible:
+            self.execute(
+                ChangeColumnNullable(table_name, schema, key_columns, nullable=False)
+            )
+        self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
+
+    # @add_index.dialect("ibm_db_sa")
+    # def _add_index_ibm_db_sa(
+    #     self, table_name: str, schema: Schema, index: list[str],
+    #     name: str | None = None
+    # ):
     #     self.execute(AddIndex(table_name, schema, index, name))
 
     def copy_indexes(
@@ -407,7 +416,7 @@ class SQLTableStore(BaseTableStore):
                 dest_table,
                 dest_schema,
                 pk_constraint["constrained_columns"],
-                pk_constraint["name"],
+                name=pk_constraint["name"],
             )
         indexes = inspector.get_indexes(src_table, schema=src_schema.get())
         for index in indexes:
@@ -499,7 +508,8 @@ class SQLTableStore(BaseTableStore):
 
     def setup(self):
         super().setup()
-        self.execute(CreateSchema(self.metadata_schema, if_not_exists=True))
+        if not self.avoid_drop_create_schema:
+            self.execute(CreateSchema(self.metadata_schema, if_not_exists=True))
         with self.engine.connect() as conn:
             try:
                 version = conn.execute(
@@ -543,6 +553,21 @@ class SQLTableStore(BaseTableStore):
         raise ValueError(f"Invalid stage commit technique: {stage_commit_technique}")
 
     @engine_dispatch
+    def drop_all_dialect_specific(self, schema: Schema):
+        pass
+
+    @drop_all_dialect_specific.dialect("ibm_db_sa")
+    def _drop_all_dialect_specific_ibm_db_sa(self, schema: Schema):
+        with self.engine.connect() as conn:
+            alias_names = conn.execute(
+                "SELECT NAME FROM SYSIBM.SYSTABLES WHERE CREATOR ="
+                f" '{ibm_db_sa_fix_name(schema.get())}' and TYPE='A'"
+            ).all()
+        alias_names = [row[0] for row in alias_names]
+        for alias in alias_names:
+            self.execute(DropAlias(alias, schema))
+
+    @engine_dispatch
     def _init_stage_schema_swap(self, stage: Stage):
         schema = self.get_schema(stage.name)
         transaction_schema = self.get_schema(stage.transaction_name)
@@ -554,9 +579,20 @@ class SQLTableStore(BaseTableStore):
         cs_trans = CreateSchema(transaction_schema, if_not_exists=False)
 
         with self.engine.connect() as conn:
-            self.execute(cs_base, conn=conn)
-            self.execute(ds_trans, conn=conn)
-            self.execute(cs_trans, conn=conn)
+            if self.avoid_drop_create_schema:
+                # empty tansaction_schema by deleting all tables and views
+                # Attention: similar code in sql_ddl.py:visit_drop_schema_ibm_db_sa
+                # for drop.cascade=True
+                inspector = sa.inspect(self.engine)
+                for table in inspector.get_table_names(schema=transaction_schema.get()):
+                    self.execute(DropTable(table, schema=transaction_schema))
+                for view in inspector.get_view_names(schema=transaction_schema.get()):
+                    self.execute(DropView(view, schema=transaction_schema))
+                self.drop_all_dialect_specific(schema=transaction_schema)
+            else:
+                self.execute(cs_base, conn=conn)
+                self.execute(ds_trans, conn=conn)
+                self.execute(cs_trans, conn=conn)
 
             if not self.disable_caching:
                 conn.execute(
@@ -583,8 +619,9 @@ class SQLTableStore(BaseTableStore):
         # don't drop/create databases, just replace the schema underneath
         # (files will keep name on renaming)
         with self.engine.connect() as conn:
-            self.execute(cs_base, conn=conn)
-            self.execute(cs_trans, conn=conn)
+            if not self.avoid_drop_create_schema:
+                self.execute(cs_base, conn=conn)
+                self.execute(cs_trans, conn=conn)
             self.execute(f"USE [{database}]", conn=conn)
             # clear tables in schema
             self.execute(
@@ -671,6 +708,10 @@ class SQLTableStore(BaseTableStore):
         with self.engine.connect() as conn, conn.begin():
             # TODO: for mssql try to find schema does not exist and then move
             #       the forgotten tmp schema there
+            assert not self.avoid_drop_create_schema, (
+                "The option avoid_drop_create_schema is currently not supported in "
+                "combination with dialect mssql"
+            )
             self.execute(
                 DropSchema(tmp_schema, if_exists=True, cascade=True), conn=conn
             )
@@ -692,15 +733,14 @@ class SQLTableStore(BaseTableStore):
             views = self.get_view_names(dest_schema.get())
             for view in views:
                 self.execute(DropView(view, schema=dest_schema), conn=conn)
+            self.drop_all_dialect_specific(schema=dest_schema)
 
             # Create views for all tables in transaction schema
             src_meta = sa.MetaData()
             src_meta.reflect(bind=self.engine, schema=src_schema.get())
-            for table in src_meta.tables.values():
-                self.execute(
-                    CreateViewAsSelect(table.name, dest_schema, sa.select(table)),
-                    conn=conn,
-                )
+            self._create_read_views(
+                conn, dest_schema, src_schema, src_meta.tables.values()
+            )
 
             # Update metadata
             stage_metadata_exists = (
@@ -725,6 +765,33 @@ class SQLTableStore(BaseTableStore):
                 )
 
             self._commit_stage_update_metadata(stage, conn=conn)
+
+    @engine_dispatch
+    def _create_read_views(
+        self,
+        conn,
+        dest_schema: Schema,
+        src_schema: Schema,
+        src_tables: Iterable[sa.Table],
+    ):
+        _ = src_schema  # only needed by other dialects
+        for table in src_tables:
+            self.execute(
+                CreateViewAsSelect(table.name, dest_schema, sa.select(table)),
+                conn=conn,
+            )
+
+    @_create_read_views.dialect("ibm_db_sa")
+    def _create_read_views_ibm_db_sa(
+        self, conn, dest_schema, src_schema: Schema, src_tables: Iterable[sa.Table]
+    ):
+        # Instead of views create aliases which can be locked like tables and
+        # have primary keys
+        for table in src_tables:
+            self.execute(
+                CreateAlias(table.name, src_schema, table.name, dest_schema),
+                conn=conn,
+            )
 
     def _commit_stage_update_metadata(self, stage: Stage, conn: sa.engine.Connection):
         if not self.disable_caching:
@@ -768,6 +835,12 @@ class SQLTableStore(BaseTableStore):
                 f"Failed to copy table '{table.name}' (schema: '{stage.name}')"
                 " to transaction."
             )
+            self.logger.error(
+                msg
+                + " This error is treated as cache-lookup-failure and thus we can"
+                " continue.",
+                exception="\n".join(traceback.format_exception(_e)),
+            )
             raise CacheError(msg) from _e
         self.add_indexes(table, self.get_schema(stage.transaction_name))
 
@@ -789,6 +862,7 @@ class SQLTableStore(BaseTableStore):
                     self.get_schema(metadata.stage),
                     metadata.name,
                     self.get_schema(stage.transaction_name),
+                    early_not_null=table.primary_key,
                 )
             )
         except Exception as _e:
@@ -797,7 +871,9 @@ class SQLTableStore(BaseTableStore):
                 f" '{metadata.stage}') to transaction."
             )
             raise CacheError(msg) from _e
-        self.add_indexes(table, self.get_schema(stage.transaction_name))
+        self.add_indexes(
+            table, self.get_schema(stage.transaction_name), early_not_null_possible=True
+        )
 
     @engine_dispatch
     def get_view_names(self, schema: str, *, include_everything=False) -> list[str]:
@@ -872,8 +948,14 @@ class SQLTableStore(BaseTableStore):
                 )
             except Exception as _e:
                 msg = (
-                    f"Failed to copy table {table_name} (schema:"
+                    f"Failed to copy raw sql generated table {table_name} (schema:"
                     f" '{src_schema}') to transaction."
+                )
+                self.logger.error(
+                    msg
+                    + " This error is treated as cache-lookup-failure and thus we can"
+                    " continue.",
+                    exception="\n".join(traceback.format_exception(_e)),
                 )
                 raise CacheError(msg) from _e
 
@@ -1168,27 +1250,74 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         store,
         table: Table[sa.sql.elements.TextClause | sa.Text],
         stage_name,
+        task_info: TaskInfo,
     ):
         obj = table.obj
         if isinstance(table.obj, sa.Table):
             obj = sa.select(table.obj)
 
+        source_tables = [
+            dict(
+                name=tbl.name,
+                schema=store.get_schema(
+                    tbl.stage.transaction_name
+                    if tbl.stage in task_info.open_stages
+                    else tbl.stage.name
+                ).get(),
+            )
+            for tbl in task_info.input_tables
+        ]
         schema = store.get_schema(stage_name)
-        store.execute(CreateTableAsSelect(table.name, schema, obj))
-        store.add_indexes(table, schema)
+        store.execute(
+            CreateTableAsSelect(
+                table.name,
+                schema,
+                obj,
+                early_not_null=table.primary_key,
+                source_tables=source_tables,
+            )
+        )
+        store.add_indexes(table, schema, early_not_null_possible=True)
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
+        table_name = table.name
+        schema = store.get_schema(stage_name).get()
+        if store.engine.dialect.name == "ibm_db_sa":
+            with store.engine.connect() as conn:
+                table_name, schema = _resolve_alias_ibm_db_sa(conn, table_name, schema)
         return sa.Table(
-            table.name,
+            table_name,
             sa.MetaData(bind=store.engine),
-            schema=store.get_schema(stage_name).get(),
+            schema=schema,
             autoload_with=store.engine,
         )
 
     @classmethod
     def lazy_query_str(cls, store, obj) -> str:
         return str(obj.compile(store.engine, compile_kwargs={"literal_binds": True}))
+
+
+def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str):
+    # we need to resolve aliases since pandas.read_sql_table does not work for them
+    # and sa.Table does not auto-reflect columns
+    table_name = ibm_db_sa_fix_name(table_name)
+    schema = ibm_db_sa_fix_name(schema)
+    tbl = sa.Table("TABLES", sa.MetaData(), schema="SYSCAT", autoload_with=conn)
+    query = (
+        sa.select([tbl.c.base_tabname, tbl.c.base_tabschema])
+        .select_from(tbl)
+        .where(
+            (tbl.c.tabschema == schema)
+            & (tbl.c.tabname == table_name)
+            & (tbl.c.TYPE == "A")
+        )
+    )
+    row = conn.execute(query).mappings().one_or_none()
+    if row is not None:
+        table_name = row["base_tabname"]
+        schema = row["base_tabschema"]
+    return table_name, schema
 
 
 @SQLTableStore.register_table(pd)
@@ -1202,13 +1331,20 @@ class PandasTableHook(TableHook[SQLTableStore]):
         return type_ == pd.DataFrame
 
     @classmethod
-    def materialize(cls, store, table: Table[pd.DataFrame], stage_name):
+    def materialize(
+        cls,
+        store,
+        table: Table[pd.DataFrame],
+        stage_name,
+        task_info: TaskInfo,
+    ):
         schema = store.get_schema(stage_name)
         if store.print_materialize:
             store.logger.info(
                 f"Writing table '{schema.get()}.{table.name}':\n{table.obj}"
             )
         dtype_map = {}
+        table_name = table.name
         if store.engine.dialect.name == "ibm_db_sa":
             # Default string target is CLOB which can't be used for indexing.
             # We could use VARCHAR(32000), but if we change this to VARCHAR(256)
@@ -1217,8 +1353,9 @@ class PandasTableHook(TableHook[SQLTableStore]):
                 col: sa.VARCHAR(256)
                 for col in table.obj.dtypes.loc[lambda x: x == object].index
             }
+            table_name = ibm_db_sa_fix_name(table_name)
         table.obj.to_sql(
-            table.name,
+            table_name,
             store.engine,
             schema=schema.get(),
             index=False,
@@ -1230,7 +1367,10 @@ class PandasTableHook(TableHook[SQLTableStore]):
     def retrieve(cls, store, table, stage_name, as_type):
         schema = store.get_schema(stage_name).get()
         with store.engine.connect() as conn:
-            df = pd.read_sql_table(table.name, conn, schema=schema)
+            table_name = table.name
+            if store.engine.dialect.name == "ibm_db_sa":
+                table_name, schema = _resolve_alias_ibm_db_sa(conn, table_name, schema)
+            df = pd.read_sql_table(table_name, conn, schema=schema)
             return df
 
     @classmethod
@@ -1262,7 +1402,9 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         return issubclass(type_, (PandasTableImpl, SQLTableImpl))
 
     @classmethod
-    def materialize(cls, store, table: Table[pdt.Table], stage_name):
+    def materialize(
+        cls, store, table: Table[pdt.Table], stage_name, task_info: TaskInfo
+    ):
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
 
@@ -1271,10 +1413,12 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             from pydiverse.transform.core.verbs import collect
 
             table.obj = t >> collect()
-            return PandasTableHook.materialize(store, table, stage_name)
+            # noinspection PyTypeChecker
+            return PandasTableHook.materialize(store, table, stage_name, task_info)
         if isinstance(t._impl, SQLTableImpl):
             table.obj = t._impl.build_select()
-            return SQLAlchemyTableHook.materialize(store, table, stage_name)
+            # noinspection PyTypeChecker
+            return SQLAlchemyTableHook.materialize(store, table, stage_name, task_info)
         raise NotImplementedError
 
     @classmethod

@@ -385,6 +385,14 @@ The parameter is ineffective for the following sqlalchemy dialects:
 - mssql: we use `database.schema` in schema swapping, so databases are automatically created when setting up a stage
 - ibm_db2: so far, we only use `instance_id`_ as schema prefix and don't (need to) know how to create a new database
 
+avoid_drop_create_schema
+""""""""""""""""""""""""
+
+default: false
+
+This option is designed for IBM DB2 since it offers automatic schema creation on object creation
+in schema. Thus we can work without the permission to create and drop schemas if `avoid_drop_create_schema: true`.
+
 disable_pytsql
 """"""""""""""
 

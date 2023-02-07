@@ -8,7 +8,7 @@ from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.util.config import PipedagConfig
 
 
-@materialize(nout=2, version="1.0")
+@materialize(nout=2, version="1.1")
 @pytest.mark.skipif()
 def inputs():
     df_a = pd.DataFrame(
@@ -24,7 +24,7 @@ def inputs():
             "x": [1, 1, 2, 2],
         }
     )
-    return Table(df_a, "dfA"), Table(df_b, "dfB")
+    return Table(df_a, "dfA", primary_key=["a"]), Table(df_b, "dfB")
 
 
 @materialize(input_type=pd.DataFrame, version="1.0")
