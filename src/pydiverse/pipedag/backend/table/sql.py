@@ -1242,15 +1242,24 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         store,
         table: Table[sa.sql.elements.TextClause | sa.Text],
         stage_name,
+        input_tables: list[Table],
     ):
         obj = table.obj
         if isinstance(table.obj, sa.Table):
             obj = sa.select(table.obj)
 
+        source_tables = [
+            dict(name=tbl.name, schema=store.get_schema(tbl.stage.name).get())
+            for tbl in input_tables
+        ]
         schema = store.get_schema(stage_name)
         store.execute(
             CreateTableAsSelect(
-                table.name, schema, obj, early_not_null=table.primary_key
+                table.name,
+                schema,
+                obj,
+                early_not_null=table.primary_key,
+                source_tables=source_tables,
             )
         )
         store.add_indexes(table, schema, early_not_null_possible=True)
@@ -1307,7 +1316,9 @@ class PandasTableHook(TableHook[SQLTableStore]):
         return type_ == pd.DataFrame
 
     @classmethod
-    def materialize(cls, store, table: Table[pd.DataFrame], stage_name):
+    def materialize(
+        cls, store, table: Table[pd.DataFrame], stage_name, input_tables: list[Table]
+    ):
         schema = store.get_schema(stage_name)
         if store.print_materialize:
             store.logger.info(
@@ -1372,7 +1383,9 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         return issubclass(type_, (PandasTableImpl, SQLTableImpl))
 
     @classmethod
-    def materialize(cls, store, table: Table[pdt.Table], stage_name):
+    def materialize(
+        cls, store, table: Table[pdt.Table], stage_name, input_tables: list[Table]
+    ):
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
 

@@ -137,19 +137,24 @@ class PipeDAGStore(Disposable):
 
         ctx = RunContext.get()
 
+        input_tables = []
+
         def dematerialize_mapper(x):
+            if isinstance(x, Table):
+                input_tables.append(x)
             return self.dematerialize_item(x, as_type=task.input_type, ctx=ctx)
 
         d_args = deep_map(args, dematerialize_mapper)
         d_kwargs = deep_map(kwargs, dematerialize_mapper)
 
-        return d_args, d_kwargs
+        return d_args, d_kwargs, input_tables
 
     def materialize_task(
         self,
         task: MaterializingTask,
         task_cache_info: TaskCacheInfo,
         value: Materializable,
+        input_tables: list[Table],
     ) -> Materializable:
         """Stores the output of a task in the backend
 
@@ -258,9 +263,11 @@ class PipeDAGStore(Disposable):
 
         def store_table(table: Table):
             if task.lazy:
-                self.table_store.store_table_lazy(table, task, task_cache_info)
+                self.table_store.store_table_lazy(
+                    table, task, task_cache_info, input_tables
+                )
             else:
-                self.table_store.store_table(table)
+                self.table_store.store_table(table, input_tables)
 
         # Materialize
         self._check_names(task, tables, blobs)

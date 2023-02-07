@@ -169,7 +169,7 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
 
     # Materialize
 
-    def store_table(self, table: Table):
+    def store_table(self, table: Table, input_tables: list[Table]):
         """Stores a table in the associated transaction stage
 
         The store must convert the table object (`table.obj`) to the correct
@@ -182,7 +182,7 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         """
 
         hook = self.get_m_table_hook(type(table.obj))
-        hook.materialize(self, table, table.stage.transaction_name)
+        hook.materialize(self, table, table.stage.transaction_name, input_tables)
 
     def execute_raw_sql(self, raw_sql: RawSql):
         """Executed raw SQL statements in the associated transaction stage
@@ -195,7 +195,11 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         )
 
     def store_table_lazy(
-        self, table: Table, task: MaterializingTask, task_cache_info: TaskCacheInfo
+        self,
+        table: Table,
+        task: MaterializingTask,
+        task_cache_info: TaskCacheInfo,
+        input_tables: list[Table],
     ):
         """Lazily stores a table in the associated commit stage
 
@@ -215,13 +219,13 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         except TypeError:
             # This table type doesn't provide a query string
             # -> Fallback to default implementation
-            return self.store_table(table)
+            return self.store_table(table, input_tables)
 
         table_cache_info = CacheManager.lazy_table_cache_lookup(
             self, task_cache_info, table, query_hash
         )
         if not table_cache_info.is_cache_valid():
-            self.store_table(table)
+            self.store_table(table, input_tables)
 
         # At this point we MUST also update the cache info, so that any downstream
         # tasks get invalidated if the sql query string changed.
@@ -451,7 +455,9 @@ class TableHook(Generic[StoreT], ABC):
 
     @classmethod
     @abstractmethod
-    def materialize(cls, store: StoreT, table: Table, stage_name: str) -> None:
+    def materialize(
+        cls, store: StoreT, table: Table, stage_name: str, input_tables: list[Table]
+    ) -> None:
         """Materialize a table object
 
         :param store: The store which called this method

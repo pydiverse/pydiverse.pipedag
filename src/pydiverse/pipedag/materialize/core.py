@@ -183,12 +183,12 @@ class MaterializationWrapper:
                     return task_cache_info.get_cached_output()
 
             # Not found in cache / lazy -> Evaluate Function
-            args, kwargs = store.dematerialize_task_inputs(
+            args, kwargs, input_tables = store.dematerialize_task_inputs(
                 task, bound.args, bound.kwargs
             )
 
             result = self.fn(*args, **kwargs)
-            result = store.materialize_task(task, task_cache_info, result)
+            result = store.materialize_task(task, task_cache_info, result, input_tables)
 
             # Delete underlying objects from result (after materializing them)
             def obj_del_mutator(x):
