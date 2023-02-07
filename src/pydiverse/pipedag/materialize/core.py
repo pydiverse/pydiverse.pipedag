@@ -2,19 +2,20 @@ from __future__ import annotations
 
 import functools
 import inspect
+from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Callable
 
 from pydiverse.pipedag._typing import CallableT
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.core.task import Task
-from pydiverse.pipedag.materialize.cache import CacheManager
+from pydiverse.pipedag.materialize.cache import CacheManager, TaskCacheInfo
 from pydiverse.pipedag.materialize.container import Blob, Table
 from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.util import deep_map
 
 if TYPE_CHECKING:
-    pass
+    from pydiverse.pipedag import Stage
 
 
 def materialize(
@@ -113,6 +114,13 @@ class MaterializingTask(Task):
         self.lazy = lazy
 
 
+@dataclass
+class TaskInfo:
+    task_cache_info: TaskCacheInfo
+    input_tables: list[Table]
+    open_stages: set[Stage]
+
+
 class MaterializationWrapper:
     """Function wrapper that contains all high level materialization logic
 
@@ -146,6 +154,11 @@ class MaterializationWrapper:
         # If this is the first task in this stage to be executed, ensure that
         # the stage has been initialized and locked.
         store.ensure_stage_is_ready(task.stage)
+        open_stages = {task.stage}
+        outer_stage = task.stage.outer_stage
+        while outer_stage is not None:
+            open_stages.add(outer_stage)
+            outer_stage = outer_stage.outer_stage
 
         # Compute the cache key for the task inputs
         input_json = store.json_encode(bound.arguments)
@@ -188,7 +201,9 @@ class MaterializationWrapper:
             )
 
             result = self.fn(*args, **kwargs)
-            result = store.materialize_task(task, task_cache_info, result, input_tables)
+            result = store.materialize_task(
+                task, TaskInfo(task_cache_info, input_tables, open_stages), result
+            )
 
             # Delete underlying objects from result (after materializing them)
             def obj_del_mutator(x):

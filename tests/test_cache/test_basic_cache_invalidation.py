@@ -203,6 +203,8 @@ def test_change_task_version_table(mocker):
         with Stage("stage_1"):
             out = m.simple_dataframe()
             child = m.noop(out)
+            child2 = m.noop_sql(out)  # lazy=False task
+            child_lazy = m.noop_lazy(out)  # lazy=True task
 
     # Initial Call
     out.version = "VERSION 0"
@@ -211,9 +213,13 @@ def test_change_task_version_table(mocker):
     # Second Call (Should be cached)
     out_spy = spy_task(mocker, out)
     child_spy = spy_task(mocker, child)
+    child2_spy = spy_task(mocker, child2)
+    child_lazy_spy = spy_task(mocker, child_lazy)
     assert flow.run().successful
     out_spy.assert_not_called()
     child_spy.assert_not_called()
+    child2_spy.assert_not_called()
+    child_lazy_spy.assert_called_once()
 
     # Changing the version should invalidate the cache. This should also invalidate
     # the child task because it receives the table as input.
@@ -221,6 +227,8 @@ def test_change_task_version_table(mocker):
     assert flow.run().successful
     out_spy.assert_called_once()
     child_spy.assert_called_once()
+    child2_spy.assert_called_once()
+    child_lazy_spy.assert_called_once()
 
 
 def test_change_task_version_blob(mocker):
@@ -263,7 +271,9 @@ def test_change_lazy_query(mocker):
         with Stage("stage_1"):
             const, lazy = lazy_task()
             value = get_first(lazy, "x")
-            const = m.noop(const)
+            const2 = m.noop(const)
+            lazy2 = m.noop_sql(lazy)  # lazy=False task
+            lazy3 = m.noop_lazy(lazy)
 
     # Initial Run
     lazy_spy = spy_task(mocker, lazy)
@@ -276,14 +286,18 @@ def test_change_lazy_query(mocker):
     # Second run, because the task is lazy, it should always get called.
     # The value task however shouldn't get called.
     value_spy = spy_task(mocker, value)
-    const_spy = spy_task(mocker, const)
+    const2_spy = spy_task(mocker, const2)
+    lazy2_spy = spy_task(mocker, lazy2)
+    lazy3_spy = spy_task(mocker, lazy3)
     with StageLockContext():
         result = flow.run()
         assert result.successful
         assert result.get(value) == 1
         lazy_spy.assert_called_once()
         value_spy.assert_not_called()
-        const_spy.assert_not_called()
+        const2_spy.assert_not_called()
+        lazy2_spy.assert_not_called()
+        lazy3_spy.assert_called_once()
 
     # Third run with changed query_value
     query_value = 2
@@ -293,7 +307,9 @@ def test_change_lazy_query(mocker):
         assert result.get(value) == 2
         lazy_spy.assert_called_once()
         value_spy.assert_called_once()
-        const_spy.assert_not_called()
+        const2_spy.assert_not_called()
+        lazy2_spy.assert_called_once()
+        lazy3_spy.assert_called_once()
 
 
 def test_change_raw_sql(mocker):

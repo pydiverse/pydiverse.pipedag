@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import sqlalchemy as sa
 import pytest
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
@@ -162,12 +163,24 @@ def test_materialize_memo_table():
             t_5 = m.noop(t_4)
             t_6 = m.noop(t_5)
             t_7 = m.noop(t_0)
+            t_8 = m.noop_sql(t_4)
+            t_9 = m.noop_sql(t_5)
+            t_10 = m.noop_sql(t_0)
+            t_11 = m.noop_lazy(t_4)
+            t_12 = m.noop_lazy(t_5)
+            t_13 = m.noop_lazy(t_0)
 
         with Stage("stage_2"):
             m.assert_table_equal(t_0, t_4)
             m.assert_table_equal(t_1, t_5)
             m.assert_table_equal(t_2, t_6)
             m.assert_table_equal(t_3, t_7)
+            m.assert_table_equal(t_1, t_8)
+            m.assert_table_equal(t_2, t_9)
+            m.assert_table_equal(t_3, t_10)
+            m.assert_table_equal(t_1, t_11)
+            m.assert_table_equal(t_2, t_12)
+            m.assert_table_equal(t_3, t_13)
 
     assert f.run().successful
 
@@ -326,3 +339,112 @@ def test_name_mangling_lazy_table_cache_fn():
         result = f.run()
         assert result.get(lazy_1, as_type=pd.DataFrame)["x"][0] == 1
         assert result.get(lazy_2, as_type=pd.DataFrame)["x"][0] == 2
+
+
+@materialize(lazy=True)
+def _lazy_task_1():
+    return Table(select_as(1, "x"), name="t1", primary_key="x")
+
+
+@materialize(lazy=True, nout=2)
+def _lazy_task_2():
+    return Table(select_as(1, "x"), name="t21", indexes=[["x"]]), Table(
+        select_as(2, "x"), name="t22", primary_key=["x"]
+    )
+
+
+@materialize(lazy=True, input_type=sa.Table)
+def _lazy_join(src1: sa.Table, src2: sa.Table):
+    query = sa.select([src1.c.x, src2.c.x.label("x2")]).select_from(
+        src1.outerjoin(src2, src1.c.x == src2.c.x)
+    )
+    return Table(query, "t3_%%", indexes=[["x2"], ["x", "x2"]])
+
+
+@materialize(version="1.0")
+def _sql_task_1():
+    return Table(select_as(1, "x"), name="t1", primary_key="x")
+
+
+@materialize(version="1.0", nout=2)
+def _sql_task_2():
+    return Table(select_as(1, "x"), name="t21", indexes=[["x"]]), Table(
+        select_as(2, "x"), name="t22", primary_key=["x"]
+    )
+
+
+@materialize(version="1.0", input_type=sa.Table)
+def _sql_join(src1: sa.Table, src2: sa.Table):
+    query = sa.select([src1.c.x, src2.c.x.label("x2")]).select_from(
+        src1.outerjoin(src2, src1.c.x == src2.c.x)
+    )
+    return Table(query, "t3_%%", indexes=[["x2"], ["x", "x2"]])
+
+
+@materialize(version="1.0")
+def _eager_task_1():
+    df = pd.DataFrame(dict(x=[1]))
+    return Table(df, name="t1", primary_key="x")
+
+
+@materialize(version="1.0", nout=2)
+def _eager_task_2():
+    df1 = pd.DataFrame(dict(x=[1]))
+    df2 = pd.DataFrame(dict(x=[2]))
+    return Table(df1, name="t21", indexes=[["x"]]), Table(
+        df2, name="t22", primary_key=["x"]
+    )
+
+
+@materialize(version="1.0", input_type=pd.DataFrame)
+def _eager_join(src1: pd.DataFrame, src2: pd.DataFrame):
+    src2["x2"] = src2["x"]
+    join = src1.merge(src2, on="x", how="left")
+    return Table(join, "t3_%%", indexes=[["x2"], ["x", "x2"]])
+
+
+@pytest.mark.parametrize(
+    "task_1,task_2,noop,join",
+    [
+        # communicate with same kind
+        (_lazy_task_1, _lazy_task_2, m.noop_lazy, _lazy_join),
+        (_sql_task_1, _sql_task_2, m.noop_sql, _sql_join),
+        (_eager_task_1, _eager_task_2, m.noop, _eager_join),
+        # communicate to sql
+        (_lazy_task_1, _lazy_task_2, m.noop_sql, _sql_join),
+        (_eager_task_1, _eager_task_2, m.noop_sql, _sql_join),
+        # communicate to lazy
+        (_sql_task_1, _sql_task_2, m.noop_lazy, _lazy_join),
+        (_eager_task_1, _eager_task_2, m.noop_lazy, _lazy_join),
+        # communicate to eager
+        (_lazy_task_1, _lazy_task_2, m.noop, _eager_join),
+        (_sql_task_1, _sql_task_2, m.noop, _eager_join),
+    ],
+)
+def test_task_and_stage_communication(task_1, task_2, noop, join):
+    with Flow() as f:
+        with Stage("stage_1"):
+            t1 = task_1()
+            t21, t22 = task_2()
+            same_stage = noop(t22)
+            same_stage2 = join(t1, t21)
+        with Stage("stage_2"):
+            next_stage = noop(t22)
+            next_stage2 = join(t1, t21)
+            next_same_stage = join(t1, next_stage)
+
+    for i in range(3):
+        with StageLockContext():
+            result = f.run()
+            assert result.successful
+            assert result.get(t1, as_type=pd.DataFrame)["x"][0] == 1
+            assert result.get(t21, as_type=pd.DataFrame)["x"][0] == 1
+            assert result.get(t22, as_type=pd.DataFrame)["x"][0] == 2
+            assert result.get(same_stage, as_type=pd.DataFrame)["x"][0] == 2
+            assert result.get(same_stage2, as_type=pd.DataFrame)["x"][0] == 1
+            assert result.get(same_stage2, as_type=pd.DataFrame)["x2"][0] == 1
+            assert result.get(next_stage, as_type=pd.DataFrame)["x"][0] == 2
+            assert result.get(next_stage2, as_type=pd.DataFrame)["x"][0] == 1
+            assert result.get(next_stage2, as_type=pd.DataFrame)["x2"][0] == 1
+            assert result.get(next_same_stage, as_type=pd.DataFrame)["x"][0] == 1
+            assert result.get(next_same_stage, as_type=pd.DataFrame)["x2"].isna().all()

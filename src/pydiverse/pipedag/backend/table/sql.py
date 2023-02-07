@@ -42,7 +42,7 @@ from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.context.context import ConfigContext, StageCommitTechnique
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.container import RawSql
-from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.core import MaterializingTask, TaskInfo
 from pydiverse.pipedag.materialize.metadata import (
     LazyTableMetadata,
     RawSqlMetadata,
@@ -1242,15 +1242,22 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         store,
         table: Table[sa.sql.elements.TextClause | sa.Text],
         stage_name,
-        input_tables: list[Table],
+        task_info: TaskInfo,
     ):
         obj = table.obj
         if isinstance(table.obj, sa.Table):
             obj = sa.select(table.obj)
 
         source_tables = [
-            dict(name=tbl.name, schema=store.get_schema(tbl.stage.name).get())
-            for tbl in input_tables
+            dict(
+                name=tbl.name,
+                schema=store.get_schema(
+                    tbl.stage.transaction_name
+                    if tbl.stage in task_info.open_stages
+                    else tbl.stage.name
+                ).get(),
+            )
+            for tbl in task_info.input_tables
         ]
         schema = store.get_schema(stage_name)
         store.execute(
@@ -1317,7 +1324,11 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def materialize(
-        cls, store, table: Table[pd.DataFrame], stage_name, input_tables: list[Table]
+        cls,
+        store,
+        table: Table[pd.DataFrame],
+        stage_name,
+        task_info: TaskInfo,
     ):
         schema = store.get_schema(stage_name)
         if store.print_materialize:
@@ -1384,7 +1395,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def materialize(
-        cls, store, table: Table[pdt.Table], stage_name, input_tables: list[Table]
+        cls, store, table: Table[pdt.Table], stage_name, task_info: TaskInfo
     ):
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
@@ -1394,10 +1405,12 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             from pydiverse.transform.core.verbs import collect
 
             table.obj = t >> collect()
-            return PandasTableHook.materialize(store, table, stage_name)
+            # noinspection PyTypeChecker
+            return PandasTableHook.materialize(store, table, stage_name, task_info)
         if isinstance(t._impl, SQLTableImpl):
             table.obj = t._impl.build_select()
-            return SQLAlchemyTableHook.materialize(store, table, stage_name)
+            # noinspection PyTypeChecker
+            return SQLAlchemyTableHook.materialize(store, table, stage_name, task_info)
         raise NotImplementedError
 
     @classmethod
