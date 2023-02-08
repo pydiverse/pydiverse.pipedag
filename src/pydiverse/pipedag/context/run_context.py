@@ -352,8 +352,8 @@ class RunContextServer(IPCServer):
             kwargs,
         ) in self._deferred_table_store_op_threads.get(stage_id, {}).values():
             if success:
-                commit_fn(fn_self, *args, **kwargs)
                 _ = future.result()  # this implies a thread join
+                commit_fn(fn_self, *args, **kwargs)
             else:
                 future.cancel()
 

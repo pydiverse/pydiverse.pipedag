@@ -4,6 +4,7 @@ import itertools
 import json
 import re
 import textwrap
+import threading
 import traceback
 import warnings
 from typing import Any, Iterable
@@ -50,6 +51,7 @@ from pydiverse.pipedag.materialize.metadata import (
     TaskMetadata,
 )
 from pydiverse.pipedag.materialize.util import compute_cache_key
+from pydiverse.pipedag.util.ipc import human_thread_id
 
 
 class SQLTableStore(BaseTableStore):
@@ -843,7 +845,15 @@ class SQLTableStore(BaseTableStore):
         stage = table.stage
         src_schema = self.get_schema(src_stage)
         dest_schema = self.get_schema(stage.transaction_name)
+        thread_id = human_thread_id(threading.get_ident())
         try:
+            self.logger.info(
+                "Running table copy in background",
+                thread=thread_id,
+                table=src_name,
+                src_schema=src_schema,
+                dest_schema=dest_schema,
+            )
             self.execute(
                 CopyTable(
                     src_name,
@@ -861,6 +871,13 @@ class SQLTableStore(BaseTableStore):
             raise RuntimeError(msg) from _e
         self.add_indexes(
             table, self.get_schema(stage.transaction_name), early_not_null_possible=True
+        )
+        self.logger.info(
+            "Completed table copy in background",
+            thread=thread_id,
+            table=src_name,
+            src_schema=src_schema,
+            dest_schema=dest_schema,
         )
 
     def swap_alias_and_copied_table(
@@ -1353,7 +1370,11 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         return str(obj.compile(store.engine, compile_kwargs={"literal_binds": True}))
 
 
-def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str):
+def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0):
+    # TODO: consider speeding this up by caching information for complete schemas
+    #  instead of running at least two queries per source table; Ultimately problem can
+    #  also be fixed by upstream contribution to ibm_db_sa
+
     # we need to resolve aliases since pandas.read_sql_table does not work for them
     # and sa.Table does not auto-reflect columns
     table_name = ibm_db_sa_fix_name(table_name)
@@ -1370,8 +1391,10 @@ def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str):
     )
     row = conn.execute(query).mappings().one_or_none()
     if row is not None:
-        table_name = row["base_tabname"]
-        schema = row["base_tabschema"]
+        assert _iteration < 3, f"Unexpected recursion looking up {schema}.{table_name}"
+        table_name, schema = _resolve_alias_ibm_db_sa(
+            conn, row["base_tabname"], row["base_tabschema"], _iteration=_iteration + 1
+        )
     return table_name, schema
 
 
