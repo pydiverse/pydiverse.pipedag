@@ -5,6 +5,7 @@ import pickle
 import time
 import uuid
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from contextvars import ContextVar
 from enum import Enum
@@ -91,11 +92,22 @@ class RunContextServer(IPCServer):
 
         self.task_memo: defaultdict[Any, Any] = defaultdict(lambda: MemoState.NONE)
 
+        # deferred table store operations
+        self._thread_pool = ThreadPoolExecutor(
+            max_workers=10  # TODO: make 10 configurable
+        )
+        self._deferred_table_store_ops: dict[
+            int, list[tuple[str, str, list, dict]]
+        ] = {}
+        self._any_stage_changes: dict[int, bool] = {}
+        self._deferred_table_store_op_threads: dict[int, dict[int, tuple]] = {}
+
         # STATE LOCKS
         self.ref_count_lock = Lock()
         self.stage_state_lock = Lock()
         self.names_lock = Lock()
         self.task_memo_lock = Lock()
+        self.deferred_ops = Lock()
 
         # LOCKING
         config_ctx = ConfigContext.get()
@@ -136,9 +148,12 @@ class RunContextServer(IPCServer):
 
         self.__context_proxy = RunContext(self)
         self.__context_proxy.__enter__()
+        self._thread_pool.__enter__()
         return self.__context_proxy
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        self._thread_pool.shutdown(wait=True, cancel_futures=True)
+        self._thread_pool.__exit__(exc_type, exc_val, exc_tb)
         self.__context_proxy.__exit__(exc_type, exc_val, exc_tb)
 
         if not self.keep_stages_locked:
@@ -149,9 +164,10 @@ class RunContextServer(IPCServer):
     def handle_request(self, request):
         try:
             op_name, args = request
+            assert isinstance(op_name, str)
             op = getattr(self, op_name)
-            if not callable(op):
-                raise TypeError(f"OP '{op_name}' is not callable")
+            if not callable(op) or op_name[0] == "_":
+                raise TypeError(f"OP '{op_name}' is not allowed on RunContextServer")
 
             result = op(*args)
             return [None, result]
@@ -196,6 +212,8 @@ class RunContextServer(IPCServer):
         )
 
     def exit_commit_stage(self, stage_id: int, success: bool):
+        stage_changed = self._any_stage_changes.get(stage_id, False)
+        self._join_deferred_table_store_ops(stage_id, success and stage_changed)
         self._exit_stage_state_transition(
             stage_id,
             success,
@@ -270,6 +288,74 @@ class RunContextServer(IPCServer):
     def validate_stage_lock(self, stage_id: int):
         stage = self.stages[stage_id]
         self.lock_handler.validate_stage_lock(stage)
+
+    # Deferred operations
+
+    @synchronized("deferred_ops")
+    def deferred_table_store_op_if_stage_invalid(
+        self, stage_id: int, op: str, commit_op: str, args, kwargs
+    ):
+        if stage_id not in self._deferred_table_store_ops:
+            self._deferred_table_store_ops[stage_id] = []
+        self._deferred_table_store_ops[stage_id].append((op, commit_op, args, kwargs))
+        if self._any_stage_changes.get(stage_id, False):
+            self._trigger_deferred_table_store_ops(stage_id)
+
+    @synchronized("deferred_ops")
+    def any_stage_changes(self, stage_id: int):
+        return self._any_stage_changes.get(stage_id, False)
+
+    @synchronized("deferred_ops")
+    def stage_output_cache_invalid(self, stage_id: int):
+        if not self._any_stage_changes.get(stage_id, False):
+            self._trigger_deferred_table_store_ops(stage_id)
+        self._any_stage_changes[stage_id] = True
+
+    def _trigger_deferred_table_store_ops(self, stage_id: int):
+        if (
+            stage_id in self._deferred_table_store_ops
+            and len(self._deferred_table_store_ops[stage_id]) > 0
+        ):
+            if stage_id not in self._deferred_table_store_op_threads:
+                self._deferred_table_store_op_threads[stage_id] = {}
+                started_ops_end = 0
+            else:
+                started_ops_end = max(
+                    self._deferred_table_store_op_threads[stage_id].keys()
+                )
+            store = ConfigContext.get().store
+            for i, (op, commit_op, args, kwargs) in enumerate(
+                self._deferred_table_store_ops[started_ops_end:]
+            ):
+                _id = started_ops_end + i
+                fn = getattr(store.table_store, op)
+                commit_fn = getattr(store.table_store, commit_op)
+                assert callable(fn) and callable(commit_fn)
+                fn_self = store.table_store
+                future = self._thread_pool.submit(
+                    _call_with_args, fn, fn_self, args, kwargs
+                )
+                self._deferred_table_store_op_threads[stage_id][_id] = (
+                    future,
+                    commit_fn,
+                    fn_self,
+                    args,
+                    kwargs,
+                )
+
+    def _join_deferred_table_store_ops(self, stage_id: int, success: bool):
+        for (
+            future,
+            commit_fn,
+            fn_self,
+            args,
+            kwargs,
+        ) in self._deferred_table_store_op_threads.get(stage_id, {}).values():
+            if success:
+                commit_fn(fn_self, *args, **kwargs)
+                _ = future.result()  # this implies a thread join
+            else:
+                future.cancel()
 
     # TASK
 
@@ -392,6 +478,10 @@ class RunContextServer(IPCServer):
             self.blob_names[stage_id].remove(blob)
 
 
+def _call_with_args(fn, fn_self, args, kwargs):
+    fn(fn_self, *args, **kwargs)
+
+
 class RunContext(BaseContext):
     _context_var = ContextVar("run_context_proxy")
 
@@ -508,6 +598,24 @@ class RunContext(BaseContext):
             [t.name for t in tables],
             [b.name for b in blobs],
         )
+
+    def deferred_table_store_op_if_stage_invalid(
+        self, stage: Stage, op: str, commit_op: str, *args, **kwargs
+    ):
+        self._request(
+            "deferred_table_store_op_if_stage_invalid",
+            stage.id,
+            op,
+            commit_op,
+            args,
+            kwargs,
+        )
+
+    def any_stage_changes(self, stage):
+        return self._request("any_stage_changes", stage.id)
+
+    def stage_output_cache_invalid(self, stage):
+        return self._request("stage_output_cache_invalid", stage.id)
 
 
 class DematerializeRunContext(BaseContext):

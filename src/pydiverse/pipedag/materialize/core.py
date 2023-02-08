@@ -186,14 +186,16 @@ class MaterializationWrapper:
             task_cache_info = CacheManager.cache_lookup(
                 store, task, input_hash, cache_fn_hash
             )
-            if task_cache_info.is_cache_valid():
-                if not task.lazy:
-                    ctx = RunContext.get()
+            if not task.lazy:
+                ctx = RunContext.get()
+                if task_cache_info.is_cache_valid():
                     ctx.store_task_memo(
                         task, memo_cache_key, task_cache_info.get_cached_output()
                     )
                     # Task isn't lazy -> copy cache to transaction stage
                     return task_cache_info.get_cached_output()
+                else:
+                    ctx.stage_output_cache_invalid(task.stage)
 
             # Not found in cache / lazy -> Evaluate Function
             args, kwargs, input_tables = store.dematerialize_task_inputs(

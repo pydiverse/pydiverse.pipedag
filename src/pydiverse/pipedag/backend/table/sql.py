@@ -34,6 +34,7 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     DropTable,
     DropView,
     RenameSchema,
+    RenameTable,
     Schema,
     ibm_db_sa_fix_name,
     split_ddl_statement,
@@ -836,36 +837,96 @@ class SQLTableStore(BaseTableStore):
             raise CacheError(msg) from _e
         self.add_indexes(table, self.get_schema(stage.transaction_name))
 
+    def deferred_copy_lazy_table_to_transaction(
+        self, src_name: str, src_stage: Stage, table: Table
+    ):
+        stage = table.stage
+        src_schema = self.get_schema(src_stage)
+        dest_schema = self.get_schema(stage.transaction_name)
+        try:
+            self.execute(
+                CopyTable(
+                    src_name,
+                    src_schema,
+                    "_cpy_" + src_name,
+                    dest_schema,
+                    early_not_null=table.primary_key,
+                )
+            )
+        except Exception as _e:
+            msg = (
+                f"Failed to copy lazy table {src_name} (schema:"
+                f" '{src_schema}' -> '{dest_schema}') to transaction."
+            )
+            raise RuntimeError(msg) from _e
+        self.add_indexes(
+            table, self.get_schema(stage.transaction_name), early_not_null_possible=True
+        )
+
+    def swap_alias_and_copied_table(
+        self, src_name: str, src_stage: Stage, table: Table
+    ):
+        stage = table.stage
+        dest_schema = self.get_schema(stage.transaction_name)
+        try:
+            self.execute(
+                DropAlias(
+                    src_name,
+                    dest_schema,
+                )
+            )
+            self.execute(
+                RenameTable(
+                    "_cpy_" + src_name,
+                    dest_schema,
+                    src_name,
+                    dest_schema,
+                )
+            )
+        except Exception as _e:
+            msg = (
+                f"Failed putting copied lazy table (__cpy_){src_name} (schema:"
+                f" '{dest_schema}') in place of alias."
+            )
+            raise RuntimeError(msg) from _e
+
     def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
         stage = table.stage
         schema_name = self.get_schema(metadata.stage).get()
         has_table = sa.inspect(self.engine).has_table(metadata.name, schema=schema_name)
         if not has_table:
-            raise CacheError(
+            msg = (
                 f"Can't copy lazy table '{metadata.name}' (schema:"
                 f" '{metadata.stage}') to transaction because no such table"
                 " exists."
             )
+            self.logger.error(msg)
+            raise CacheError(msg)
 
         try:
             self.execute(
-                CopyTable(
+                CreateAlias(
                     metadata.name,
                     self.get_schema(metadata.stage),
                     metadata.name,
                     self.get_schema(stage.transaction_name),
-                    early_not_null=table.primary_key,
                 )
+            )
+            RunContext.get().deferred_table_store_op_if_stage_invalid(
+                stage,
+                "deferred_copy_lazy_table_to_transaction",
+                "swap_alias_and_copied_table",
+                metadata.name,
+                metadata.stage,
+                table,
             )
         except Exception as _e:
             msg = (
                 f"Failed to copy lazy table {metadata.name} (schema:"
                 f" '{metadata.stage}') to transaction."
             )
+            self.logger.error(msg, exception="\n".join(traceback.format_exception(_e)))
             raise CacheError(msg) from _e
-        self.add_indexes(
-            table, self.get_schema(stage.transaction_name), early_not_null_possible=True
-        )
 
     @engine_dispatch
     def get_view_names(self, schema: str, *, include_everything=False) -> list[str]:
@@ -924,6 +985,8 @@ class SQLTableStore(BaseTableStore):
         tables_to_copy = new_tables - set(views)
         for table_name in tables_to_copy:
             try:
+                # TODO: implement deferred execution in RunContextServer so
+                # no data is copied if a stage is 100% cache valid
                 self.execute(
                     CopyTable(
                         table_name,
