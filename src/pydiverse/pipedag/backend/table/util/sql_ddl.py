@@ -750,7 +750,7 @@ def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     from_table = compiler.preparer.quote_identifier(rename_table.from_name)
     to_table = compiler.preparer.quote_identifier(rename_table.to_name)
     schema = compiler.preparer.format_schema(rename_table.schema.get())
-    return f"ALTER TABLE {schema}.{from_table} RENAME {to_table}"
+    return f"RENAME TABLE {schema}.{from_table} TO {to_table}"
 
 
 @compiles(DropTable)
@@ -796,12 +796,12 @@ def visit_drop_view(drop: DropAlias, compiler, **kw):
     return _visit_drop_anything(drop, "ALIAS", compiler, **kw)
 
 
-@compiles(DropView, "ibm_db_sa")
-def visit_drop_view_ibm_db_sa(drop: DropView, compiler, **kw):
+@compiles(DropAlias, "ibm_db_sa")
+def visit_drop_view_ibm_db_sa(drop: DropAlias, compiler, **kw):
     # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     drop = copy.deepcopy(drop)
     drop.name = ibm_db_sa_fix_name(drop.name)
-    return _visit_drop_anything(drop, "VIEW", compiler, **kw)
+    return _visit_drop_anything(drop, "ALIAS", compiler, **kw)
 
 
 @compiles(DropProcedure)

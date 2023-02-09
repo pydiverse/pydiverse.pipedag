@@ -851,14 +851,14 @@ class SQLTableStore(BaseTableStore):
                 "Running table copy in background",
                 thread=thread_id,
                 table=src_name,
-                src_schema=src_schema,
-                dest_schema=dest_schema,
+                src_schema=src_schema.get(),
+                dest_schema=dest_schema.get(),
             )
             self.execute(
                 CopyTable(
                     src_name,
                     src_schema,
-                    "_cpy_" + src_name,
+                    "__cpy_" + src_name,
                     dest_schema,
                     early_not_null=table.primary_key,
                 )
@@ -876,8 +876,8 @@ class SQLTableStore(BaseTableStore):
             "Completed table copy in background",
             thread=thread_id,
             table=src_name,
-            src_schema=src_schema,
-            dest_schema=dest_schema,
+            src_schema=src_schema.get(),
+            dest_schema=dest_schema.get(),
         )
 
     def swap_alias_and_copied_table(
@@ -894,8 +894,7 @@ class SQLTableStore(BaseTableStore):
             )
             self.execute(
                 RenameTable(
-                    "_cpy_" + src_name,
-                    dest_schema,
+                    "__cpy_" + src_name,
                     src_name,
                     dest_schema,
                 )
@@ -903,7 +902,7 @@ class SQLTableStore(BaseTableStore):
         except Exception as _e:
             msg = (
                 f"Failed putting copied lazy table (__cpy_){src_name} (schema:"
-                f" '{dest_schema}') in place of alias."
+                f" '{dest_schema.get()}') in place of alias."
             )
             raise RuntimeError(msg) from _e
 

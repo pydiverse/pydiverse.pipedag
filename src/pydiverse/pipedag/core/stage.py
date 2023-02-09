@@ -177,3 +177,5 @@ class CommitStageTask(Task):
         self.logger.info(f"Committing stage '{self.stage.name}'")
         if RunContext.get().any_stage_changes(self.stage):
             ConfigContext.get().store.commit_stage(self.stage)
+        else:
+            RunContext.get().abort_stage(self.stage)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import sqlalchemy as sa
 import pytest
+import structlog
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import RunContext, StageLockContext
@@ -422,6 +423,7 @@ def _eager_join(src1: pd.DataFrame, src2: pd.DataFrame):
     ],
 )
 def test_task_and_stage_communication(task_1, task_2, noop, join):
+    logger = structlog.getLogger("test_task_and_stage_communication")
     with Flow() as f:
         with Stage("stage_1"):
             t1 = task_1()
@@ -435,7 +437,9 @@ def test_task_and_stage_communication(task_1, task_2, noop, join):
 
     for i in range(3):
         with StageLockContext():
+            logger.info("## Running flow", iteration=i)
             result = f.run()
+            logger.info("#    checking flow", iteration=i)
             assert result.successful
             assert result.get(t1, as_type=pd.DataFrame)["x"][0] == 1
             assert result.get(t21, as_type=pd.DataFrame)["x"][0] == 1
