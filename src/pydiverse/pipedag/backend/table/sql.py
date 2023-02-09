@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import itertools
 import json
 import re
@@ -344,6 +345,7 @@ class SQLTableStore(BaseTableStore):
         name: str | None = None,
         early_not_null_possible: bool = False,
     ):
+        _ = early_not_null_possible  # not needed for this dialect
         sql_types = self.reflect_sql_types(key_columns, table_name, schema)
         # impose some varchar(max) limit to allow use in primary key / index
         # TODO: consider making cap_varchar_max a config option
@@ -629,7 +631,6 @@ class SQLTableStore(BaseTableStore):
             )
 
             # clear views and stored procedures
-            # the 'USE [{database}]' statement is important for these calls
             for view in self.get_view_names(transaction_schema.get()):
                 self.execute(
                     DropView(view, transaction_schema, if_exists=True), conn=conn
@@ -648,6 +649,13 @@ class SQLTableStore(BaseTableStore):
                         DropFunction(name, transaction_schema, if_exists=True),
                         conn=conn,
                     )
+
+            synonyms = self._get_mssql_sql_synonyms(transaction_schema.get())
+            for name in synonyms.keys():
+                self.execute(
+                    DropAlias(name, transaction_schema, if_exists=True),
+                    conn=conn,
+                )
 
             # Clear metadata
             if not self.disable_caching:
@@ -869,6 +877,8 @@ class SQLTableStore(BaseTableStore):
                 f" '{src_schema}' -> '{dest_schema}') to transaction."
             )
             raise RuntimeError(msg) from _e
+        table = copy.deepcopy(table)
+        table.name = "__cpy_" + src_name
         self.add_indexes(
             table, self.get_schema(stage.transaction_name), early_not_null_possible=True
         )
@@ -984,6 +994,21 @@ class SQLTableStore(BaseTableStore):
                 "select obj.name, obj.type from sys.sql_modules as mod "
                 "left join sys.objects as obj on mod.object_id=obj.object_id "
                 "left join sys.schemas as schem on schem.schema_id=obj.schema_id "
+                f"where schem.name='{schema_only}'"
+            )
+            rows = self.execute(sql, conn=conn).fetchall()
+        return {row[0]: row[1] for row in rows}
+
+    # noinspection SqlDialectInspection
+    def _get_mssql_sql_synonyms(self, schema: str):
+        with self.engine.connect() as conn:
+            database, schema_only = schema.split(".")
+            self.execute(f"USE {database}", conn=conn)
+            # include stored procedures in view names because they can also be recreated
+            # based on sys.sql_modules.description
+            sql = (
+                "select syn.name, syn.type from sys.synonyms as syn "
+                "left join sys.schemas as schem on schem.schema_id=syn.schema_id "
                 f"where schem.name='{schema_only}'"
             )
             rows = self.execute(sql, conn=conn).fetchall()
@@ -1259,6 +1284,20 @@ class SQLTableStore(BaseTableStore):
             task_hash=result.task_hash,
         )
 
+    @engine_dispatch
+    def resolve_aliases(self, table_name, schema):
+        return table_name, schema
+
+    @resolve_aliases.dialect("ibm_db_sa")
+    def resolve_aliases_ibm_db_sa(self, table_name, schema):
+        with self.engine.connect() as conn:
+            return _resolve_alias_ibm_db_sa(conn, table_name, schema)
+
+    @resolve_aliases.dialect("mssql")
+    def resolve_aliases_mssql(self, table_name, schema):
+        with self.engine.connect() as conn:
+            return _resolve_alias_mssql(conn, table_name, schema)
+
     def list_tables(self, stage: Stage, *, include_everything=False):
         """
         List all tables that were generated in a stage.
@@ -1354,9 +1393,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     def retrieve(cls, store, table, stage_name, as_type):
         table_name = table.name
         schema = store.get_schema(stage_name).get()
-        if store.engine.dialect.name == "ibm_db_sa":
-            with store.engine.connect() as conn:
-                table_name, schema = _resolve_alias_ibm_db_sa(conn, table_name, schema)
+        table_name, schema = store.resolve_aliases(table_name, schema)
         return sa.Table(
             table_name,
             sa.MetaData(bind=store.engine),
@@ -1393,6 +1430,42 @@ def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0
         assert _iteration < 3, f"Unexpected recursion looking up {schema}.{table_name}"
         table_name, schema = _resolve_alias_ibm_db_sa(
             conn, row["base_tabname"], row["base_tabschema"], _iteration=_iteration + 1
+        )
+    return table_name, schema
+
+
+def _resolve_alias_mssql(conn, table_name: str, schema: str, *, _iteration=0):
+    # TODO: consider speeding this up by caching information for complete schemas
+    #  instead of running at least two queries per source table; Ultimately problem can
+    #  also be fixed by upstream contribution to ibm_db_sa
+
+    # we need to resolve aliases since pandas.read_sql_table does not work for them
+    # and sa.Table does not auto-reflect columns
+    database, schema_only = schema.split(".")
+    conn.execute(f"USE [{database}]")
+    # include stored procedures in view names because they can also be recreated
+    # based on sys.sql_modules.description
+    sql = (
+        "select syn.base_object_name from sys.synonyms as syn left join sys.schemas as"
+        f" schem on schem.schema_id=syn.schema_id where schem.name='{schema_only}' and"
+        f" syn.name='{table_name}' and syn.type='SN'"
+    )
+    row = conn.execute(sql).mappings().one_or_none()
+    if row is not None:
+        parts = row["base_object_name"].split(".")
+        assert len(parts) == 3, (
+            "Unexpected number of '.' delimited parts when looking up synonym for "
+            f"{schema}.{table_name}: {row['base_object_name']}"
+        )
+        assert _iteration < 3, f"Unexpected recursion looking up {schema}.{table_name}"
+        parts = [
+            part[1:-1] if part.startswith("[") and part.endswith("]") else part
+            for part in parts
+        ]
+        schema = ".".join(parts[0:2])
+        table_name = parts[2]
+        table_name, schema = _resolve_alias_mssql(
+            conn, table_name, schema, _iteration=_iteration + 1
         )
     return table_name, schema
 

@@ -649,8 +649,7 @@ def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
     if create_alias.or_replace:
         text.append("OR REPLACE")
     text.append(
-        f"SYNONYM {to_schema}.{to_name} FOR TABLE"
-        f" {from_database}.{from_schema}.{from_name}"
+        f"SYNONYM {to_schema}.{to_name} FOR {from_database}.{from_schema}.{from_name}"
     )
     statements.append(" ".join(text))
     return join_ddl_statements(statements, compiler, **kw)
@@ -734,8 +733,12 @@ def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     database, schema = _get_mssql_database_schema(rename_table.schema, compiler)
 
     from_table = compiler.preparer.quote_identifier(rename_table.from_name)
-    to_table = compiler.preparer.quote_identifier(rename_table.to_name)
-    return f"ALTER TABLE {database}.{schema}.{from_table} RENAME {to_table}"
+    to_table = rename_table.to_name  # no quoting is intentional
+    statements = [
+        f"USE [{database}]",
+        f"EXEC sp_rename '{schema}.{from_table}', '{to_table}'",
+    ]
+    return join_ddl_statements(statements, compiler, **kw)
 
 
 # noinspection SqlDialectInspection
@@ -790,14 +793,21 @@ def visit_drop_view_ibm_db_sa(drop: DropView, compiler, **kw):
 
 
 @compiles(DropAlias)
-def visit_drop_view(drop: DropAlias, compiler, **kw):
+def visit_drop_alias(drop: DropAlias, compiler, **kw):
     # This might not make sense for all dialects. But the syntax ibm_sa_db uses
     # looks rather standard except for the term ALIAS
     return _visit_drop_anything(drop, "ALIAS", compiler, **kw)
 
 
+@compiles(DropAlias, "mssql")
+def visit_drop_alias_mssql(drop: DropAlias, compiler, **kw):
+    # This might not make sense for all dialects. But the syntax ibm_sa_db uses
+    # looks rather standard except for the term ALIAS
+    return _visit_drop_anything_mssql(drop, "SYNONYM", compiler, **kw)
+
+
 @compiles(DropAlias, "ibm_db_sa")
-def visit_drop_view_ibm_db_sa(drop: DropAlias, compiler, **kw):
+def visit_drop_alias_ibm_db_sa(drop: DropAlias, compiler, **kw):
     # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     drop = copy.deepcopy(drop)
     drop.name = ibm_db_sa_fix_name(drop.name)
@@ -845,20 +855,26 @@ def _visit_drop_anything(
 
 
 def _visit_drop_anything_mssql(
-    drop: DropTable | DropView | DropProcedure | DropFunction, _type, compiler, **kw
+    drop: DropTable | DropAlias | DropView | DropProcedure | DropFunction,
+    _type,
+    compiler,
+    **kw,
 ):
     _ = kw
     table = compiler.preparer.quote_identifier(drop.name)
     database, schema = _get_mssql_database_schema(drop.schema, compiler)
+    statements = []
     text = [f"DROP {_type}"]
     if drop.if_exists:
         text.append("IF EXISTS")
-    if isinstance(drop, (DropView, DropProcedure, DropFunction)):
+    if isinstance(drop, (DropAlias, DropView, DropProcedure, DropFunction)):
         # attention: this statement must be prefixed with a 'USE <database>' statement
         text.append(f"{schema}.{table}")
+        statements.append(f"USE {database}")
     else:
         text.append(f"{database}.{schema}.{table}")
-    return " ".join(text)
+    statements.append(" ".join(text))
+    return join_ddl_statements(statements, compiler, **kw)
 
 
 # noinspection SqlDialectInspection
