@@ -7,7 +7,7 @@ import pandas as pd
 from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
 from pydiverse.pipedag.errors import CacheError, StageError
-from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.core import MaterializingTask, TaskInfo
 from pydiverse.pipedag.materialize.metadata import LazyTableMetadata, TaskMetadata
 
 
@@ -140,7 +140,14 @@ class PandasTableHook(TableHook[DictTableStore]):
         return type_ == pd.DataFrame
 
     @classmethod
-    def materialize(cls, store, table: Table[pd.DataFrame], stage_name):
+    def materialize(
+        cls,
+        store,
+        table: Table[pd.DataFrame],
+        stage_name,
+        task_info: TaskInfo,
+    ):
+        _ = task_info
         if table.name is not None:
             table.obj.attrs["name"] = table.name
         store.store[stage_name][table.name] = table.obj
@@ -176,12 +183,19 @@ class PydiverseTransformTableHook(TableHook[DictTableStore]):
         return issubclass(type_, PandasTableImpl)
 
     @classmethod
-    def materialize(cls, store, table: Table[pdt.Table], stage_name):
+    def materialize(
+        cls,
+        store,
+        table: Table[pdt.Table],
+        stage_name,
+        task_info: TaskInfo,
+    ):
+        _ = task_info
         from pydiverse.transform.core.verbs import collect
 
         table.obj = table.obj >> collect()
         # noinspection PyTypeChecker
-        return PandasTableHook.materialize(store, table, stage_name)
+        return PandasTableHook.materialize(store, table, stage_name, task_info)
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):

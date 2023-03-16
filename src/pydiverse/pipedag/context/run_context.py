@@ -220,9 +220,11 @@ class RunContextServer(IPCServer):
                 self.stage_state[stage_id] = transition
                 return True
 
+        self.logger.debug("Waiting for stage transition...")
         # Wait until transition is over
         while self.stage_state[stage_id] == transition:
             time.sleep(0.01)
+        self.logger.debug("Waiting completed")
 
         # Check if transition was successful
         with self.stage_state_lock:

@@ -16,6 +16,16 @@ def noop2(x):
     return x
 
 
+@materialize(input_type=sa.Table, version="1.0")
+def noop_sql(x):
+    return x
+
+
+@materialize(input_type=sa.Table, lazy=True)
+def noop_lazy(x):
+    return x
+
+
 @materialize(nout=2)
 def create_tuple(x, y):
     return x, y

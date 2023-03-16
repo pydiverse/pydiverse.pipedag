@@ -11,9 +11,8 @@ from pydiverse.pipedag._typing import Materializable
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.errors import DuplicateNameError, StageError
-from pydiverse.pipedag.materialize.cache import TaskCacheInfo
 from pydiverse.pipedag.materialize.container import RawSql
-from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.core import MaterializingTask, TaskInfo
 from pydiverse.pipedag.materialize.metadata import TaskMetadata
 from pydiverse.pipedag.materialize.util import json as json_util
 from pydiverse.pipedag.util import Disposable, deep_map
@@ -123,7 +122,7 @@ class PipeDAGStore(Disposable):
         task: MaterializingTask,
         args: tuple[Materializable],
         kwargs: dict[str, Materializable],
-    ) -> tuple[tuple, dict]:
+    ) -> tuple[tuple, dict, list[Table]]:
         """Loads the inputs for a task from the storage backends
 
         Traverses the function arguments and replaces all `Table` and
@@ -137,18 +136,22 @@ class PipeDAGStore(Disposable):
 
         ctx = RunContext.get()
 
+        input_tables = []
+
         def dematerialize_mapper(x):
+            if isinstance(x, Table):
+                input_tables.append(x)
             return self.dematerialize_item(x, as_type=task.input_type, ctx=ctx)
 
         d_args = deep_map(args, dematerialize_mapper)
         d_kwargs = deep_map(kwargs, dematerialize_mapper)
 
-        return d_args, d_kwargs
+        return d_args, d_kwargs, input_tables
 
     def materialize_task(
         self,
         task: MaterializingTask,
-        task_cache_info: TaskCacheInfo,
+        task_info: TaskInfo,
         value: Materializable,
     ) -> Materializable:
         """Stores the output of a task in the backend
@@ -159,8 +162,7 @@ class PipeDAGStore(Disposable):
 
         :param task: The task instance which produced `value`. Must have
             the correct `cache_key` attribute set.
-        :param task_cache_info: Information about task carried through materialization
-            for CacheManager
+        :param task_info: Information about task carried through materialization
         :param value: The output of the task. Must be materializable; this
             means it can only contain the following object types:
             `dict`, `list`, `tuple`,
@@ -208,7 +210,7 @@ class PipeDAGStore(Disposable):
             if isinstance(x, (Table, RawSql, Blob)):
                 if not task.lazy:
                     # task cache_key is output cache_key for eager tables
-                    x.cache_key = task_cache_info.get_task_cache_key()
+                    x.cache_key = task_info.task_cache_info.get_task_cache_key()
 
                 if isinstance(x, (Table, Blob)):
                     x.stage = stage
@@ -217,7 +219,8 @@ class PipeDAGStore(Disposable):
                     # - If the provided name ends with %%, perform name mangling
                     object_number = next(auto_suffix_counter)
                     auto_suffix = (
-                        f"{task_cache_info.get_task_cache_key()}_{object_number:04d}"
+                        f"{task_info.task_cache_info.get_task_cache_key()}"
+                        f"_{object_number:04d}"
                     )
                     if x.name is None:
                         x.name = task.name + "_" + auto_suffix
@@ -254,13 +257,15 @@ class PipeDAGStore(Disposable):
             can get changed.
             """
             output_json = self.json_encode(m_value)
-            task_cache_info.store_task_metadata(output_json, self.table_store, stage)
+            task_info.task_cache_info.store_task_metadata(
+                output_json, self.table_store, stage
+            )
 
         def store_table(table: Table):
             if task.lazy:
-                self.table_store.store_table_lazy(table, task, task_cache_info)
+                self.table_store.store_table_lazy(table, task, task_info)
             else:
-                self.table_store.store_table(table)
+                self.table_store.store_table(table, task, task_info)
 
         # Materialize
         self._check_names(task, tables, blobs)
@@ -270,9 +275,7 @@ class PipeDAGStore(Disposable):
             raw_sqls,
             blobs,
             store_table,
-            lambda raw_sql: self.table_store.store_raw_sql(
-                raw_sql, task, task_cache_info
-            ),
+            lambda raw_sql: self.table_store.store_raw_sql(raw_sql, task, task_info),
             self.blob_store.store_blob,
             store_metadata,
         )
