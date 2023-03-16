@@ -285,7 +285,7 @@ class ZooKeeperLockManager(BaseLockManager):
 
     def acquire(self, lock: Lockable):
         zk_lock = self.client.Lock(self.lock_path(lock))
-        self.logger.info(f"Locking '{lock}'")
+        self.logger.info(f"Locking '{lock}'", base_path=self.base_path)
         if not zk_lock.acquire():
             raise LockError(f"Failed to acquire lock '{lock}'")
         self.locks[lock] = zk_lock
@@ -295,7 +295,7 @@ class ZooKeeperLockManager(BaseLockManager):
         if lock not in self.locks:
             raise LockError(f"No lock '{lock}' found.")
 
-        self.logger.info(f"Unlocking '{lock}'")
+        self.logger.info(f"Unlocking '{lock}'", base_path=self.base_path)
         self.locks[lock].release()
         del self.locks[lock]
         self.set_lock_state(lock, LockState.UNLOCKED)
