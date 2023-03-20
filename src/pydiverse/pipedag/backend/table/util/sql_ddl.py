@@ -620,7 +620,9 @@ def insert_into_in_query(select_sql, database, schema, table):
 @compiles(CreateAlias)
 def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
     query = sa.select("*").select_from(
-        sa.Table(create_alias.from_name, sa.MetaData(), schema=create_alias.from_schema)
+        sa.Table(
+            create_alias.from_name, sa.MetaData(), schema=create_alias.from_schema.get()
+        )
     )
     return visit_create_view_as_select(
         CreateViewAsSelect(create_alias.to_name, create_alias.to_schema, query),
