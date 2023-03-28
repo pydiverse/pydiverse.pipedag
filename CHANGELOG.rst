@@ -7,11 +7,12 @@ https://semver.org/spec/v2.0.0.html. The most important bits are:
 Changelog
 =========
 
-0.2.2 (YYYY-MM-DD)
+0.2.2 (2023-03-28)
 ------------------
 
 - added option avoid_drop_create_schema to table store configuration
-- improve performance when working with IBM DB2 dialect
+- improve performance when working with IBM DB2 dialect (i.e. table locking)
+- prevent table copying and schema swapping for 100% cache valid stages
 
 0.2.1 (2022-01-15)
 ------------------
