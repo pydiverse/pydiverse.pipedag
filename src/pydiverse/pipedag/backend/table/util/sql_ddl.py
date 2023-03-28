@@ -725,7 +725,7 @@ def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     from_table = compiler.preparer.quote_identifier(rename_table.from_name)
     to_table = compiler.preparer.quote_identifier(rename_table.to_name)
     schema = compiler.preparer.format_schema(rename_table.schema.get())
-    return f"ALTER TABLE {schema}.{from_table} RENAME {to_table}"
+    return f"ALTER TABLE {schema}.{from_table} RENAME TO {to_table}"
 
 
 # noinspection SqlDialectInspection
@@ -796,15 +796,14 @@ def visit_drop_view_ibm_db_sa(drop: DropView, compiler, **kw):
 
 @compiles(DropAlias)
 def visit_drop_alias(drop: DropAlias, compiler, **kw):
-    # This might not make sense for all dialects. But the syntax ibm_sa_db uses
-    # looks rather standard except for the term ALIAS
-    return _visit_drop_anything(drop, "ALIAS", compiler, **kw)
+    # Not all dialects support a table ALIAS as a first class object.
+    # For those that don't we just use views.
+    return _visit_drop_anything(drop, "VIEW", compiler, **kw)
 
 
 @compiles(DropAlias, "mssql")
 def visit_drop_alias_mssql(drop: DropAlias, compiler, **kw):
-    # This might not make sense for all dialects. But the syntax ibm_sa_db uses
-    # looks rather standard except for the term ALIAS
+    # What is called ALIAS for dialect ibm_db_sa is called SYNONYM for mssql
     return _visit_drop_anything_mssql(drop, "SYNONYM", compiler, **kw)
 
 
