@@ -20,7 +20,7 @@ also compilers, so source packages can be built on `poetry install`. Since we us
 it also helps to install psycopg2 in conda to have pg_config available:
 
 ```bash
-conda install -n poetry -c poetry conda-forge compilers cmake make psycopg2
+conda create -n poetry -c conda-forge poetry compilers cmake make psycopg2 docker-compose
 conda activate poetry  # only needed for poetry install
 ```
 

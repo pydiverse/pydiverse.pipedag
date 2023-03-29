@@ -7,7 +7,7 @@ https://semver.org/spec/v2.0.0.html. The most important bits are:
 Changelog
 =========
 
-0.2.2 (2023-03-28)
+0.2.2 (YYYY-MM-DD)
 ------------------
 
 - added option avoid_drop_create_schema to table store configuration
