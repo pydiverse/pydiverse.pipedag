@@ -17,17 +17,17 @@ env:
 
 jobs:
   lint:
-    name: "Linting - pre-commit hooks - Python 3.8"
+    name: "Linting - pre-commit hooks - Python 3.9"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout branch
         uses: actions/checkout@v3
 
-      - name: Install Python 3.8
+      - name: Install Python 3.9
         uses: actions/setup-python@v4
         with:
-          python-version: 3.8
+          python-version: 3.9
 
       - name: Linting - Run pre-commit checks
         uses: pre-commit/action@v3.0.0
@@ -73,7 +73,7 @@ jobs:
     strategy:
       matrix:
         os: [Ubuntu]
-        python-version: ['3.8', '3.9', '3.10', '3.11']
+        python-version: ['3.9', '3.10', '3.11']
     services:
       ibm_db2:
         image: ibmcom/db2:11.5.5.1
