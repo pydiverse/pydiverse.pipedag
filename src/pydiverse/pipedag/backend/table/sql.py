@@ -8,7 +8,8 @@ import textwrap
 import threading
 import traceback
 import warnings
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 import pandas as pd
 import sqlalchemy as sa

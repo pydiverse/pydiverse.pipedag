@@ -49,15 +49,15 @@ poetry shell
 pre-commit install
 ```
 
-## Pre-commit install with conda and python 3.8
+## Pre-commit install with conda and python 3.9
 
-We currently have some pre-commit hooks bound to python=3.8. So pre-commit install may fail when running with
+We currently have some pre-commit hooks bound to python=3.9. So pre-commit install may fail when running with
 python=3.10 python environment. However, the pre-commit environment does not need to be the same as the environment
 used for testing pipedag code. When using conda, you may try:
 
 ```bash
-conda install -n python38 -c python=3.8 pre_commit
-conda activate python38
+conda create -n python39 -c conda-forge python=3.9 pre-commit
+conda activate python39
 pre-commit install
 ```
 

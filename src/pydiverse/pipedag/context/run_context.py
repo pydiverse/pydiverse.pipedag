@@ -6,12 +6,13 @@ import time
 import traceback
 import uuid
 from collections import defaultdict
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from contextvars import ContextVar
 from enum import Enum
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Any
 
 import msgpack
 import structlog
