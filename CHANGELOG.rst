@@ -14,12 +14,12 @@ Changelog
 - improve performance when working with IBM DB2 dialect (i.e. table locking)
 - prevent table copying and schema swapping for 100% cache valid stages
 
-0.2.1 (2022-01-15)
+0.2.1 (2023-01-15)
 ------------------
 
 - removed contextvars dependency (not needed for python >= 3.7 and broke conda-forge build)
 
-0.2.0 (2022-01-14)
+0.2.0 (2023-01-14)
 ------------------
 
 - SQLTableStore: support for Microsoft SQL Server and IBM DB2 (Linux) database connection strings
