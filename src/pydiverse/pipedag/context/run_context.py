@@ -97,7 +97,7 @@ class RunContextServer(IPCServer):
 
         # deferred table store operations
         self._thread_pool = ThreadPoolExecutor(
-            max_workers=10  # TODO: make 10 configurable
+            max_workers=2  # TODO: make 2 configurable
         )
         self._deferred_table_store_ops: dict[
             int, list[tuple[str, str, Iterable, dict]]
