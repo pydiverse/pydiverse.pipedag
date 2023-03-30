@@ -73,7 +73,6 @@ jobs:
     strategy:
       matrix:
         os: [Ubuntu]
-        max-parallel: 1
         python-version: ['3.9', '3.10', '3.11']
     services:
       ibm_db2:
