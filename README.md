@@ -237,7 +237,7 @@ services:
     image: zookeeper
     environment:
       ZOO_4LW_COMMANDS_WHITELIST: ruok
-      ZOO_MAX_CLIENT_CNXNS: 100
+      ZOO_MAX_CLIENT_CNXNS: 60
     ports:
       - 2181:2181
 ```
