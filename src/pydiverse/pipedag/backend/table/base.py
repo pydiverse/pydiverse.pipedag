@@ -7,6 +7,7 @@ import structlog
 from typing_extensions import Self
 
 from pydiverse.pipedag._typing import StoreT, T
+from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.materialize.cache import CacheManager
 from pydiverse.pipedag.materialize.container import RawSql, Table
 from pydiverse.pipedag.materialize.metadata import (
@@ -224,6 +225,7 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             self, task_info.task_cache_info, table, query_hash
         )
         if not table_cache_info.is_cache_valid():
+            RunContext.get().stage_output_cache_invalid(task.stage)
             self.store_table(table, task, task_info)
 
         # At this point we MUST also update the cache info, so that any downstream
@@ -249,6 +251,7 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             self, task_info.task_cache_info, raw_sql, query_hash
         )
         if not table_cache_info.is_cache_valid():
+            RunContext.get().stage_output_cache_invalid(task.stage)
             prev_tables = self.list_tables(raw_sql.stage, include_everything=True)
             self.execute_raw_sql(raw_sql)
             post_tables = self.list_tables(raw_sql.stage, include_everything=True)

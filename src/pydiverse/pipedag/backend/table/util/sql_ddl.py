@@ -19,6 +19,7 @@ __all__ = [
     "CreateViewAsSelect",
     "CreateAlias",
     "CopyTable",
+    "RenameTable",
     "DropTable",
     "CreateDatabase",
     "DropAlias",
@@ -140,6 +141,18 @@ class CopyTable(DDLElement):
         self.to_schema = to_schema
         self.if_not_exists = if_not_exists
         self.early_not_null = early_not_null
+
+
+class RenameTable(DDLElement):
+    def __init__(
+        self,
+        from_name,
+        to_name,
+        schema: Schema,
+    ):
+        self.from_name = from_name
+        self.to_name = to_name
+        self.schema = schema
 
 
 class DropTable(DDLElement):
@@ -606,6 +619,46 @@ def insert_into_in_query(select_sql, database, schema, table):
 
 @compiles(CreateAlias)
 def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
+    query = sa.select("*").select_from(
+        sa.Table(
+            create_alias.from_name, sa.MetaData(), schema=create_alias.from_schema.get()
+        )
+    )
+    return visit_create_view_as_select(
+        CreateViewAsSelect(create_alias.to_name, create_alias.to_schema, query),
+        compiler,
+        **kw,
+    )
+
+
+@compiles(CreateAlias, "mssql")
+def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
+    from_name = compiler.preparer.quote_identifier(
+        ibm_db_sa_fix_name(create_alias.from_name)
+    )
+    from_database, from_schema = _get_mssql_database_schema(
+        create_alias.from_schema, compiler
+    )
+    to_name = compiler.preparer.quote_identifier(
+        ibm_db_sa_fix_name(create_alias.to_name)
+    )
+    to_database, to_schema = _get_mssql_database_schema(
+        create_alias.to_schema, compiler
+    )
+
+    statements = [f"USE {to_database}"]
+    text = ["CREATE"]
+    if create_alias.or_replace:
+        text.append("OR REPLACE")
+    text.append(
+        f"SYNONYM {to_schema}.{to_name} FOR {from_database}.{from_schema}.{from_name}"
+    )
+    statements.append(" ".join(text))
+    return join_ddl_statements(statements, compiler, **kw)
+
+
+@compiles(CreateAlias, "ibm_db_sa")
+def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
     from_name = compiler.preparer.quote_identifier(
         ibm_db_sa_fix_name(create_alias.from_name)
     )
@@ -665,6 +718,46 @@ def visit_copy_table_ibm_db_sa(copy_table: CopyTable, compiler, **kw):
     return visit_copy_table(copy_table, compiler, **kw)
 
 
+# noinspection SqlDialectInspection
+@compiles(RenameTable)
+def visit_rename_table(rename_table: RenameTable, compiler, **kw):
+    _ = kw
+    from_table = compiler.preparer.quote_identifier(rename_table.from_name)
+    to_table = compiler.preparer.quote_identifier(rename_table.to_name)
+    schema = compiler.preparer.format_schema(rename_table.schema.get())
+    return f"ALTER TABLE {schema}.{from_table} RENAME TO {to_table}"
+
+
+# noinspection SqlDialectInspection
+@compiles(RenameTable, "mssql")
+def visit_rename_table(rename_table: RenameTable, compiler, **kw):
+    _ = kw
+    database, schema = _get_mssql_database_schema(rename_table.schema, compiler)
+
+    from_table = compiler.preparer.quote_identifier(rename_table.from_name)
+    to_table = rename_table.to_name  # no quoting is intentional
+    statements = [
+        f"USE [{database}]",
+        f"EXEC sp_rename '{schema}.{from_table}', '{to_table}'",
+    ]
+    return join_ddl_statements(statements, compiler, **kw)
+
+
+# noinspection SqlDialectInspection
+@compiles(RenameTable, "ibm_db_sa")
+def visit_rename_table(rename_table: RenameTable, compiler, **kw):
+    _ = kw
+    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
+    rename_table = copy.deepcopy(rename_table)
+    rename_table.from_name = ibm_db_sa_fix_name(rename_table.from_name)
+    rename_table.to_name = ibm_db_sa_fix_name(rename_table.to_name)
+
+    from_table = compiler.preparer.quote_identifier(rename_table.from_name)
+    to_table = compiler.preparer.quote_identifier(rename_table.to_name)
+    schema = compiler.preparer.format_schema(rename_table.schema.get())
+    return f"RENAME TABLE {schema}.{from_table} TO {to_table}"
+
+
 @compiles(DropTable)
 def visit_drop_table(drop: DropTable, compiler, **kw):
     return _visit_drop_anything(drop, "TABLE", compiler, **kw)
@@ -702,18 +795,24 @@ def visit_drop_view_ibm_db_sa(drop: DropView, compiler, **kw):
 
 
 @compiles(DropAlias)
-def visit_drop_view(drop: DropAlias, compiler, **kw):
-    # This might not make sense for all dialects. But the syntax ibm_sa_db uses
-    # looks rather standard except for the term ALIAS
-    return _visit_drop_anything(drop, "ALIAS", compiler, **kw)
+def visit_drop_alias(drop: DropAlias, compiler, **kw):
+    # Not all dialects support a table ALIAS as a first class object.
+    # For those that don't we just use views.
+    return _visit_drop_anything(drop, "VIEW", compiler, **kw)
 
 
-@compiles(DropView, "ibm_db_sa")
-def visit_drop_view_ibm_db_sa(drop: DropView, compiler, **kw):
+@compiles(DropAlias, "mssql")
+def visit_drop_alias_mssql(drop: DropAlias, compiler, **kw):
+    # What is called ALIAS for dialect ibm_db_sa is called SYNONYM for mssql
+    return _visit_drop_anything_mssql(drop, "SYNONYM", compiler, **kw)
+
+
+@compiles(DropAlias, "ibm_db_sa")
+def visit_drop_alias_ibm_db_sa(drop: DropAlias, compiler, **kw):
     # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     drop = copy.deepcopy(drop)
     drop.name = ibm_db_sa_fix_name(drop.name)
-    return _visit_drop_anything(drop, "VIEW", compiler, **kw)
+    return _visit_drop_anything(drop, "ALIAS", compiler, **kw)
 
 
 @compiles(DropProcedure)
@@ -757,20 +856,26 @@ def _visit_drop_anything(
 
 
 def _visit_drop_anything_mssql(
-    drop: DropTable | DropView | DropProcedure | DropFunction, _type, compiler, **kw
+    drop: DropTable | DropAlias | DropView | DropProcedure | DropFunction,
+    _type,
+    compiler,
+    **kw,
 ):
     _ = kw
     table = compiler.preparer.quote_identifier(drop.name)
     database, schema = _get_mssql_database_schema(drop.schema, compiler)
+    statements = []
     text = [f"DROP {_type}"]
     if drop.if_exists:
         text.append("IF EXISTS")
-    if isinstance(drop, (DropView, DropProcedure, DropFunction)):
+    if isinstance(drop, (DropAlias, DropView, DropProcedure, DropFunction)):
         # attention: this statement must be prefixed with a 'USE <database>' statement
         text.append(f"{schema}.{table}")
+        statements.append(f"USE {database}")
     else:
         text.append(f"{database}.{schema}.{table}")
-    return " ".join(text)
+    statements.append(" ".join(text))
+    return join_ddl_statements(statements, compiler, **kw)
 
 
 # noinspection SqlDialectInspection

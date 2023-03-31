@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, Dict, List, Tuple, TypeVar, Union
+from typing import TYPE_CHECKING, Callable, TypeVar, Union
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Blob, Table
@@ -23,7 +23,7 @@ MTypes = Union["Table", "Blob"]
 BaseMaterializable = Union[MPrimitives, MTypes]
 Materializable = Union[
     BaseMaterializable,
-    Dict[str, "Materializable"],
-    List["Materializable"],
-    Tuple["Materializable", ...],
+    dict[str, "Materializable"],
+    list["Materializable"],
+    tuple["Materializable", ...],
 ]

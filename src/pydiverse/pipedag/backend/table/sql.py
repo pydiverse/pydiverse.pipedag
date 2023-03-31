@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import copy
 import itertools
 import json
 import re
 import textwrap
+import threading
 import traceback
 import warnings
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 import pandas as pd
 import sqlalchemy as sa
@@ -34,6 +37,7 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     DropTable,
     DropView,
     RenameSchema,
+    RenameTable,
     Schema,
     ibm_db_sa_fix_name,
     split_ddl_statement,
@@ -49,6 +53,7 @@ from pydiverse.pipedag.materialize.metadata import (
     TaskMetadata,
 )
 from pydiverse.pipedag.materialize.util import compute_cache_key
+from pydiverse.pipedag.util.ipc import human_thread_id
 
 
 class SQLTableStore(BaseTableStore):
@@ -341,6 +346,7 @@ class SQLTableStore(BaseTableStore):
         name: str | None = None,
         early_not_null_possible: bool = False,
     ):
+        _ = early_not_null_possible  # not needed for this dialect
         sql_types = self.reflect_sql_types(key_columns, table_name, schema)
         # impose some varchar(max) limit to allow use in primary key / index
         # TODO: consider making cap_varchar_max a config option
@@ -626,7 +632,6 @@ class SQLTableStore(BaseTableStore):
             )
 
             # clear views and stored procedures
-            # the 'USE [{database}]' statement is important for these calls
             for view in self.get_view_names(transaction_schema.get()):
                 self.execute(
                     DropView(view, transaction_schema, if_exists=True), conn=conn
@@ -645,6 +650,13 @@ class SQLTableStore(BaseTableStore):
                         DropFunction(name, transaction_schema, if_exists=True),
                         conn=conn,
                     )
+
+            synonyms = self._get_mssql_sql_synonyms(transaction_schema.get())
+            for name in synonyms.keys():
+                self.execute(
+                    DropAlias(name, transaction_schema, if_exists=True),
+                    conn=conn,
+                )
 
             # Clear metadata
             if not self.disable_caching:
@@ -836,36 +848,112 @@ class SQLTableStore(BaseTableStore):
             raise CacheError(msg) from _e
         self.add_indexes(table, self.get_schema(stage.transaction_name))
 
+    def deferred_copy_lazy_table_to_transaction(
+        self, src_name: str, src_stage: Stage, table: Table
+    ):
+        stage = table.stage
+        src_schema = self.get_schema(src_stage)
+        dest_schema = self.get_schema(stage.transaction_name)
+        thread_id = human_thread_id(threading.get_ident())
+        try:
+            self.logger.info(
+                "Running table copy in background",
+                thread=thread_id,
+                table=src_name,
+                src_schema=src_schema.get(),
+                dest_schema=dest_schema.get(),
+            )
+            self.execute(
+                CopyTable(
+                    src_name,
+                    src_schema,
+                    "__cpy_" + src_name,
+                    dest_schema,
+                    early_not_null=table.primary_key,
+                )
+            )
+        except Exception as _e:
+            msg = (
+                f"Failed to copy lazy table {src_name} (schema:"
+                f" '{src_schema}' -> '{dest_schema}') to transaction."
+            )
+            raise RuntimeError(msg) from _e
+        table = copy.deepcopy(table)
+        table.name = "__cpy_" + src_name
+        self.add_indexes(
+            table, self.get_schema(stage.transaction_name), early_not_null_possible=True
+        )
+        self.logger.info(
+            "Completed table copy in background",
+            thread=thread_id,
+            table=src_name,
+            src_schema=src_schema.get(),
+            dest_schema=dest_schema.get(),
+        )
+
+    def swap_alias_and_copied_table(
+        self, src_name: str, src_stage: Stage, table: Table
+    ):
+        stage = table.stage
+        dest_schema = self.get_schema(stage.transaction_name)
+        try:
+            self.execute(
+                DropAlias(
+                    src_name,
+                    dest_schema,
+                )
+            )
+            self.execute(
+                RenameTable(
+                    "__cpy_" + src_name,
+                    src_name,
+                    dest_schema,
+                )
+            )
+        except Exception as _e:
+            msg = (
+                f"Failed putting copied lazy table (__cpy_){src_name} (schema:"
+                f" '{dest_schema.get()}') in place of alias."
+            )
+            raise RuntimeError(msg) from _e
+
     def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
         stage = table.stage
         schema_name = self.get_schema(metadata.stage).get()
         has_table = sa.inspect(self.engine).has_table(metadata.name, schema=schema_name)
         if not has_table:
-            raise CacheError(
+            msg = (
                 f"Can't copy lazy table '{metadata.name}' (schema:"
                 f" '{metadata.stage}') to transaction because no such table"
                 " exists."
             )
+            self.logger.error(msg)
+            raise CacheError(msg)
 
         try:
             self.execute(
-                CopyTable(
+                CreateAlias(
                     metadata.name,
                     self.get_schema(metadata.stage),
                     metadata.name,
                     self.get_schema(stage.transaction_name),
-                    early_not_null=table.primary_key,
                 )
+            )
+            RunContext.get().deferred_table_store_op_if_stage_invalid(
+                stage,
+                "deferred_copy_lazy_table_to_transaction",
+                "swap_alias_and_copied_table",
+                metadata.name,
+                metadata.stage,
+                table,
             )
         except Exception as _e:
             msg = (
                 f"Failed to copy lazy table {metadata.name} (schema:"
                 f" '{metadata.stage}') to transaction."
             )
+            self.logger.error(msg, exception="\n".join(traceback.format_exception(_e)))
             raise CacheError(msg) from _e
-        self.add_indexes(
-            table, self.get_schema(stage.transaction_name), early_not_null_possible=True
-        )
 
     @engine_dispatch
     def get_view_names(self, schema: str, *, include_everything=False) -> list[str]:
@@ -912,6 +1000,21 @@ class SQLTableStore(BaseTableStore):
             rows = self.execute(sql, conn=conn).fetchall()
         return {row[0]: row[1] for row in rows}
 
+    # noinspection SqlDialectInspection
+    def _get_mssql_sql_synonyms(self, schema: str):
+        with self.engine.connect() as conn:
+            database, schema_only = schema.split(".")
+            self.execute(f"USE {database}", conn=conn)
+            # include stored procedures in view names because they can also be recreated
+            # based on sys.sql_modules.description
+            sql = (
+                "select syn.name, syn.type from sys.synonyms as syn "
+                "left join sys.schemas as schem on schem.schema_id=syn.schema_id "
+                f"where schem.name='{schema_only}'"
+            )
+            rows = self.execute(sql, conn=conn).fetchall()
+        return {row[0]: row[1] for row in rows}
+
     def copy_raw_sql_tables_to_transaction(
         self, metadata: RawSqlMetadata, target_stage: Stage
     ):
@@ -924,6 +1027,8 @@ class SQLTableStore(BaseTableStore):
         tables_to_copy = new_tables - set(views)
         for table_name in tables_to_copy:
             try:
+                # TODO: implement deferred execution in RunContextServer so
+                # no data is copied if a stage is 100% cache valid
                 self.execute(
                     CopyTable(
                         table_name,
@@ -1180,6 +1285,20 @@ class SQLTableStore(BaseTableStore):
             task_hash=result.task_hash,
         )
 
+    @engine_dispatch
+    def resolve_aliases(self, table_name, schema):
+        return table_name, schema
+
+    @resolve_aliases.dialect("ibm_db_sa")
+    def resolve_aliases_ibm_db_sa(self, table_name, schema):
+        with self.engine.connect() as conn:
+            return _resolve_alias_ibm_db_sa(conn, table_name, schema)
+
+    @resolve_aliases.dialect("mssql")
+    def resolve_aliases_mssql(self, table_name, schema):
+        with self.engine.connect() as conn:
+            return _resolve_alias_mssql(conn, table_name, schema)
+
     def list_tables(self, stage: Stage, *, include_everything=False):
         """
         List all tables that were generated in a stage.
@@ -1275,9 +1394,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     def retrieve(cls, store, table, stage_name, as_type):
         table_name = table.name
         schema = store.get_schema(stage_name).get()
-        if store.engine.dialect.name == "ibm_db_sa":
-            with store.engine.connect() as conn:
-                table_name, schema = _resolve_alias_ibm_db_sa(conn, table_name, schema)
+        table_name, schema = store.resolve_aliases(table_name, schema)
         return sa.Table(
             table_name,
             sa.MetaData(bind=store.engine),
@@ -1290,7 +1407,11 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         return str(obj.compile(store.engine, compile_kwargs={"literal_binds": True}))
 
 
-def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str):
+def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0):
+    # TODO: consider speeding this up by caching information for complete schemas
+    #  instead of running at least two queries per source table; Ultimately problem can
+    #  also be fixed by upstream contribution to ibm_db_sa
+
     # we need to resolve aliases since pandas.read_sql_table does not work for them
     # and sa.Table does not auto-reflect columns
     table_name = ibm_db_sa_fix_name(table_name)
@@ -1307,8 +1428,46 @@ def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str):
     )
     row = conn.execute(query).mappings().one_or_none()
     if row is not None:
-        table_name = row["base_tabname"]
-        schema = row["base_tabschema"]
+        assert _iteration < 3, f"Unexpected recursion looking up {schema}.{table_name}"
+        table_name, schema = _resolve_alias_ibm_db_sa(
+            conn, row["base_tabname"], row["base_tabschema"], _iteration=_iteration + 1
+        )
+    return table_name, schema
+
+
+def _resolve_alias_mssql(conn, table_name: str, schema: str, *, _iteration=0):
+    # TODO: consider speeding this up by caching information for complete schemas
+    #  instead of running at least two queries per source table; Ultimately problem can
+    #  also be fixed by upstream contribution to ibm_db_sa
+
+    # we need to resolve aliases since pandas.read_sql_table does not work for them
+    # and sa.Table does not auto-reflect columns
+    database, schema_only = schema.split(".")
+    conn.execute(f"USE [{database}]")
+    # include stored procedures in view names because they can also be recreated
+    # based on sys.sql_modules.description
+    sql = (
+        "select syn.base_object_name from sys.synonyms as syn left join sys.schemas as"
+        f" schem on schem.schema_id=syn.schema_id where schem.name='{schema_only}' and"
+        f" syn.name='{table_name}' and syn.type='SN'"
+    )
+    row = conn.execute(sql).mappings().one_or_none()
+    if row is not None:
+        parts = row["base_object_name"].split(".")
+        assert len(parts) == 3, (
+            "Unexpected number of '.' delimited parts when looking up synonym for "
+            f"{schema}.{table_name}: {row['base_object_name']}"
+        )
+        assert _iteration < 3, f"Unexpected recursion looking up {schema}.{table_name}"
+        parts = [
+            part[1:-1] if part.startswith("[") and part.endswith("]") else part
+            for part in parts
+        ]
+        schema = ".".join(parts[0:2])
+        table_name = parts[2]
+        table_name, schema = _resolve_alias_mssql(
+            conn, table_name, schema, _iteration=_iteration + 1
+        )
     return table_name, schema
 
 

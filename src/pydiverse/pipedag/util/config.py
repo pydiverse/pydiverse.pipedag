@@ -7,8 +7,9 @@ import logging
 import os
 import re
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Any
 
 import structlog
 import yaml
