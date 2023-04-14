@@ -337,8 +337,8 @@ class RunContextServer(IPCServer):
                 self._deferred_table_store_op_threads[stage_id] = {}
                 started_ops_end = 0
             else:
-                started_ops_end = max(
-                    self._deferred_table_store_op_threads[stage_id].keys()
+                started_ops_end = (
+                    max(self._deferred_table_store_op_threads[stage_id].keys()) + 1
                 )
             store = self.config_ctx.store
             for i, (op, commit_op, args, kwargs) in enumerate(
