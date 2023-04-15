@@ -173,7 +173,7 @@ class RunContextServer(IPCServer):
             result = op(*args)
             return [None, result]
         except Exception as e:
-            exception_str = "\n".join(traceback.format_exception(e))
+            exception_str = traceback.format_exc()
             try:
                 pickled_exception = pickle.dumps(e)
             except Exception as e2:

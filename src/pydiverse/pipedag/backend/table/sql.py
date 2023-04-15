@@ -442,10 +442,10 @@ class SQLTableStore(BaseTableStore):
     def reflect_sql_types(
         self, col_names: Iterable[str], table_name: str, schema: Schema
     ):
-        meta = sa.MetaData()
-        meta.reflect(bind=self.engine, schema=schema.get())
-        tables = {table.name: table for table in meta.tables.values()}
-        sql_types = [tables[table_name].c[col].type for col in col_names]
+        inspector = sa.inspect(self.engine)
+        columns = inspector.get_columns(table_name, schema=schema.get())
+        types = {d["name"]: d["type"] for d in columns}
+        sql_types = [types[col] for col in col_names]
         return sql_types
 
     @staticmethod
@@ -593,11 +593,16 @@ class SQLTableStore(BaseTableStore):
                 self.execute(cs_trans, conn=conn)
 
             if not self.disable_caching:
-                conn.execute(
-                    self.tasks_table.delete()
-                    .where(self.tasks_table.c.stage == stage.name)
-                    .where(self.tasks_table.c.in_transaction_schema.in_([True]))
-                )
+                for table in [
+                    self.tasks_table,
+                    self.lazy_cache_table,
+                    self.raw_sql_cache_table,
+                ]:
+                    conn.execute(
+                        table.delete()
+                        .where(table.c.stage == stage.name)
+                        .where(table.c.in_transaction_schema)
+                    )
 
     @_init_stage_schema_swap.dialect("mssql")
     def _init_stage_schema_swap_mssql(self, stage: Stage):
@@ -660,11 +665,16 @@ class SQLTableStore(BaseTableStore):
 
             # Clear metadata
             if not self.disable_caching:
-                conn.execute(
-                    self.tasks_table.delete()
-                    .where(self.tasks_table.c.stage == stage.name)
-                    .where(self.tasks_table.c.in_transaction_schema.in_([True]))
-                )
+                for table in [
+                    self.tasks_table,
+                    self.lazy_cache_table,
+                    self.raw_sql_cache_table,
+                ]:
+                    conn.execute(
+                        table.delete()
+                        .where(table.c.stage == stage.name)
+                        .where(table.c.in_transaction_schema)
+                    )
 
     def _init_stage_read_views(self, stage: Stage):
         try:
@@ -807,7 +817,7 @@ class SQLTableStore(BaseTableStore):
                 conn.execute(
                     table.delete()
                     .where(table.c.stage == stage.name)
-                    .where(table.c.in_transaction_schema.in_([False]))
+                    .where(~table.c.in_transaction_schema)
                 )
                 conn.execute(
                     table.update()
@@ -843,7 +853,7 @@ class SQLTableStore(BaseTableStore):
                 msg
                 + " This error is treated as cache-lookup-failure and thus we can"
                 " continue.",
-                exception="\n".join(traceback.format_exception(_e)),
+                exception=traceback.format_exc(),
             )
             raise CacheError(msg) from _e
         self.add_indexes(table, self.get_schema(stage.transaction_name))
@@ -876,6 +886,13 @@ class SQLTableStore(BaseTableStore):
             msg = (
                 f"Failed to copy lazy table {src_name} (schema:"
                 f" '{src_schema}' -> '{dest_schema}') to transaction."
+            )
+            self.logger.error(
+                "Exception in table copy in background",
+                thread=thread_id,
+                table=src_name,
+                msg=msg,
+                exception=str(_e),
             )
             raise RuntimeError(msg) from _e
         table = copy.deepcopy(table)
@@ -952,7 +969,7 @@ class SQLTableStore(BaseTableStore):
                 f"Failed to copy lazy table {metadata.name} (schema:"
                 f" '{metadata.stage}') to transaction."
             )
-            self.logger.error(msg, exception="\n".join(traceback.format_exception(_e)))
+            self.logger.error(msg, exception=traceback.format_exc())
             raise CacheError(msg) from _e
 
     @engine_dispatch
@@ -1052,7 +1069,7 @@ class SQLTableStore(BaseTableStore):
                     msg
                     + " This error is treated as cache-lookup-failure and thus we can"
                     " continue.",
-                    exception="\n".join(traceback.format_exception(_e)),
+                    exception=traceback.format_exc(),
                 )
                 raise CacheError(msg) from _e
 
@@ -1404,7 +1421,11 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def lazy_query_str(cls, store, obj) -> str:
-        return str(obj.compile(store.engine, compile_kwargs={"literal_binds": True}))
+        if isinstance(obj, sa.sql.selectable.FromClause):
+            query = sa.select([sa.text("*")]).select_from(obj)
+        else:
+            query = obj
+        return str(query.compile(store.engine, compile_kwargs={"literal_binds": True}))
 
 
 def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0):
