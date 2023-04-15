@@ -7,6 +7,11 @@ https://semver.org/spec/v2.0.0.html. The most important bits are:
 Changelog
 =========
 
+0.2.3 (2023-04-15)
+------------------
+- fixed python 3.9 compatibility (traceback.format_exception syntax changed)
+- fixed deferred table copy when task is invalid (introduced with 0.2.2)
+
 0.2.2 (2023-03-31)
 ------------------
 
