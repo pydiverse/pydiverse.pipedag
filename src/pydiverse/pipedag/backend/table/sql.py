@@ -1411,7 +1411,11 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def lazy_query_str(cls, store, obj) -> str:
-        return str(obj.compile(store.engine, compile_kwargs={"literal_binds": True}))
+        if isinstance(obj, sa.sql.selectable.FromClause):
+            query = sa.select([sa.text("*")]).select_from(obj)
+        else:
+            query = obj
+        return str(query.compile(store.engine, compile_kwargs={"literal_binds": True}))
 
 
 def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0):
