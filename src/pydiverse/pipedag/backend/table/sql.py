@@ -442,10 +442,10 @@ class SQLTableStore(BaseTableStore):
     def reflect_sql_types(
         self, col_names: Iterable[str], table_name: str, schema: Schema
     ):
-        meta = sa.MetaData()
-        meta.reflect(bind=self.engine, schema=schema.get())
-        tables = {table.name: table for table in meta.tables.values()}
-        sql_types = [tables[table_name].c[col].type for col in col_names]
+        inspector = sa.inspect(self.engine)
+        columns = inspector.get_columns(table_name, schema=schema.get())
+        types = {d["name"]: d["type"] for d in columns}
+        sql_types = [types[col] for col in col_names]
         return sql_types
 
     @staticmethod
@@ -876,6 +876,13 @@ class SQLTableStore(BaseTableStore):
             msg = (
                 f"Failed to copy lazy table {src_name} (schema:"
                 f" '{src_schema}' -> '{dest_schema}') to transaction."
+            )
+            self.logger.error(
+                "Exception in table copy in background",
+                thread=thread_id,
+                table=src_name,
+                msg=msg,
+                exception=str(_e),
             )
             raise RuntimeError(msg) from _e
         table = copy.deepcopy(table)

@@ -11,6 +11,7 @@ Changelog
 ------------------
 - fixed python 3.9 compatibility (traceback.format_exception syntax changed)
 - fixed deferred table copy when task is invalid (introduced with 0.2.2)
+- fixed mssql to not reflect full schema while renamings happen
 
 0.2.2 (2023-03-31)
 ------------------
