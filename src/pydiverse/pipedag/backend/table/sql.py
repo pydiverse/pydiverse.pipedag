@@ -593,11 +593,16 @@ class SQLTableStore(BaseTableStore):
                 self.execute(cs_trans, conn=conn)
 
             if not self.disable_caching:
-                conn.execute(
-                    self.tasks_table.delete()
-                    .where(self.tasks_table.c.stage == stage.name)
-                    .where(self.tasks_table.c.in_transaction_schema.in_([True]))
-                )
+                for table in [
+                    self.tasks_table,
+                    self.lazy_cache_table,
+                    self.raw_sql_cache_table,
+                ]:
+                    conn.execute(
+                        table.delete()
+                        .where(table.c.stage == stage.name)
+                        .where(table.c.in_transaction_schema)
+                    )
 
     @_init_stage_schema_swap.dialect("mssql")
     def _init_stage_schema_swap_mssql(self, stage: Stage):
@@ -660,11 +665,16 @@ class SQLTableStore(BaseTableStore):
 
             # Clear metadata
             if not self.disable_caching:
-                conn.execute(
-                    self.tasks_table.delete()
-                    .where(self.tasks_table.c.stage == stage.name)
-                    .where(self.tasks_table.c.in_transaction_schema.in_([True]))
-                )
+                for table in [
+                    self.tasks_table,
+                    self.lazy_cache_table,
+                    self.raw_sql_cache_table,
+                ]:
+                    conn.execute(
+                        table.delete()
+                        .where(table.c.stage == stage.name)
+                        .where(table.c.in_transaction_schema)
+                    )
 
     def _init_stage_read_views(self, stage: Stage):
         try:
@@ -807,7 +817,7 @@ class SQLTableStore(BaseTableStore):
                 conn.execute(
                     table.delete()
                     .where(table.c.stage == stage.name)
-                    .where(table.c.in_transaction_schema.in_([False]))
+                    .where(~table.c.in_transaction_schema)
                 )
                 conn.execute(
                     table.update()
