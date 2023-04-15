@@ -843,7 +843,7 @@ class SQLTableStore(BaseTableStore):
                 msg
                 + " This error is treated as cache-lookup-failure and thus we can"
                 " continue.",
-                exception="\n".join(traceback.format_exception(_e)),
+                exception=traceback.format_exc(),
             )
             raise CacheError(msg) from _e
         self.add_indexes(table, self.get_schema(stage.transaction_name))
@@ -952,7 +952,7 @@ class SQLTableStore(BaseTableStore):
                 f"Failed to copy lazy table {metadata.name} (schema:"
                 f" '{metadata.stage}') to transaction."
             )
-            self.logger.error(msg, exception="\n".join(traceback.format_exception(_e)))
+            self.logger.error(msg, exception=traceback.format_exc())
             raise CacheError(msg) from _e
 
     @engine_dispatch
@@ -1052,7 +1052,7 @@ class SQLTableStore(BaseTableStore):
                     msg
                     + " This error is treated as cache-lookup-failure and thus we can"
                     " continue.",
-                    exception="\n".join(traceback.format_exception(_e)),
+                    exception=traceback.format_exc(),
                 )
                 raise CacheError(msg) from _e
 
