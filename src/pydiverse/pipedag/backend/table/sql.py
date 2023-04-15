@@ -1538,8 +1538,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         schema = store.get_schema(stage_name).get()
         with store.engine.connect() as conn:
             table_name = table.name
-            if store.engine.dialect.name == "ibm_db_sa":
-                table_name, schema = _resolve_alias_ibm_db_sa(conn, table_name, schema)
+            table_name, schema = store.resolve_aliases(table_name, schema)
             df = pd.read_sql_table(table_name, conn, schema=schema)
             return df
 
