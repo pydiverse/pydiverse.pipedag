@@ -1437,21 +1437,19 @@ def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0
     # and sa.Table does not auto-reflect columns
     table_name = ibm_db_sa_fix_name(table_name)
     schema = ibm_db_sa_fix_name(schema)
-    tbl = sa.Table("TABLES", sa.MetaData(), schema="SYSCAT", autoload_with=conn)
+    tbl = sa.Table("SYSTABLES", sa.MetaData(), schema="SYSIBM", autoload_with=conn)
     query = (
-        sa.select([tbl.c.base_tabname, tbl.c.base_tabschema])
+        sa.select([tbl.c.base_name, tbl.c.base_schema])
         .select_from(tbl)
         .where(
-            (tbl.c.tabschema == schema)
-            & (tbl.c.tabname == table_name)
-            & (tbl.c.TYPE == "A")
+            (tbl.c.creator == schema) & (tbl.c.name == table_name) & (tbl.c.TYPE == "A")
         )
     )
     row = conn.execute(query).mappings().one_or_none()
     if row is not None:
         assert _iteration < 3, f"Unexpected recursion looking up {schema}.{table_name}"
         table_name, schema = _resolve_alias_ibm_db_sa(
-            conn, row["base_tabname"], row["base_tabschema"], _iteration=_iteration + 1
+            conn, row["base_name"], row["base_schema"], _iteration=_iteration + 1
         )
     return table_name, schema
 
