@@ -240,7 +240,15 @@ class SQLTableStore(BaseTableStore):
     @staticmethod
     def _connect(engine_url, schema_prefix, schema_suffix):
         engine = sa.create_engine(engine_url)
-        if engine.dialect.name == "mssql":
+        if engine.dialect.name == "ibm_db_sa":
+            engine.dispose()
+            # switch to READ STABILITY isolation level to avoid unnecessary deadlock
+            # victims in case of background operations when reflecting columns
+            engine = sa.create_engine(
+                engine_url, execution_options={"isolation_level": "RS"}
+            )
+
+        elif engine.dialect.name == "mssql":
             engine.dispose()
             # this is needed to allow for CREATE DATABASE statements
             # (we don't rely on database transactions anyways)
@@ -1425,7 +1433,16 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
             query = sa.select([sa.text("*")]).select_from(obj)
         else:
             query = obj
-        return str(query.compile(store.engine, compile_kwargs={"literal_binds": True}))
+        query_str = str(
+            query.compile(store.engine, compile_kwargs={"literal_binds": True})
+        )
+        # hacky way to canonicalize query (despite __tmp/__even/__odd suffixes
+        # and alias resolution)
+        query_str = re.sub(
+            r"(__tmp|__even|__odd)(?=[ \t\n.;]|$)", "", query_str.lower()
+        )
+        query_str = re.sub(r'["\[\]]', "", query_str)
+        return query_str
 
 
 def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0):
@@ -1437,21 +1454,19 @@ def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0
     # and sa.Table does not auto-reflect columns
     table_name = ibm_db_sa_fix_name(table_name)
     schema = ibm_db_sa_fix_name(schema)
-    tbl = sa.Table("TABLES", sa.MetaData(), schema="SYSCAT", autoload_with=conn)
+    tbl = sa.Table("SYSTABLES", sa.MetaData(), schema="SYSIBM", autoload_with=conn)
     query = (
-        sa.select([tbl.c.base_tabname, tbl.c.base_tabschema])
+        sa.select([tbl.c.base_name, tbl.c.base_schema])
         .select_from(tbl)
         .where(
-            (tbl.c.tabschema == schema)
-            & (tbl.c.tabname == table_name)
-            & (tbl.c.TYPE == "A")
+            (tbl.c.creator == schema) & (tbl.c.name == table_name) & (tbl.c.TYPE == "A")
         )
     )
     row = conn.execute(query).mappings().one_or_none()
     if row is not None:
         assert _iteration < 3, f"Unexpected recursion looking up {schema}.{table_name}"
         table_name, schema = _resolve_alias_ibm_db_sa(
-            conn, row["base_tabname"], row["base_tabschema"], _iteration=_iteration + 1
+            conn, row["base_name"], row["base_schema"], _iteration=_iteration + 1
         )
     return table_name, schema
 
@@ -1540,8 +1555,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         schema = store.get_schema(stage_name).get()
         with store.engine.connect() as conn:
             table_name = table.name
-            if store.engine.dialect.name == "ibm_db_sa":
-                table_name, schema = _resolve_alias_ibm_db_sa(conn, table_name, schema)
+            table_name, schema = store.resolve_aliases(table_name, schema)
             df = pd.read_sql_table(table_name, conn, schema=schema)
             return df
 
