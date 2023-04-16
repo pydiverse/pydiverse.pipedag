@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pydiverse-pipedag"
-version = "0.2.1"
+version = "0.2.2"
 description = "A pipeline orchestration library executing tasks within one python session. It takes care of SQL table (de)materialization, caching and cache invalidation. Blob storage is supported as well for example for storing model files."
 authors = [
   "QuantCo, Inc.",
@@ -21,7 +21,7 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.9"
 pandas = "^1.4.3"
 SQLAlchemy = "^1.4.39"
 typing-extensions = "<5, >=4.1.0"
@@ -33,6 +33,7 @@ pynng = ">=0.7.1"
 msgpack = ">=1.0.4"
 packaging = ">=21.3"
 python-box = ">=6.1.0"
+PyYAML = ">=6.0"
 
 filelock = { version = ">=3.7.1", optional = true }
 kazoo = { version = ">=2.8.0", optional = true }
@@ -59,7 +60,7 @@ ibm_db2 = ["ibm-db", "ibm-db-sa"]
 pdtransform = ["pydiverse-transform"]
 prefect = ["prefect", "docker-compose"]
 
-[tool.poetry.group.dev.dependencies]
+[tool.poetry.dev-dependencies]
 pytest = ">=7.2.0"
 pytest-mock = ">=3.10.0"
 pytest-timeout = ">=2.1.0"

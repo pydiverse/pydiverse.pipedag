@@ -1,3 +1,5 @@
+import traceback
+
 import pytest
 
 from pydiverse.pipedag.errors import DisposedError
@@ -98,3 +100,14 @@ def test_sql_engine_dispatch():
     assert X("qwerty").bar(1, 2) == 1
     assert X("dialect1").bar(1, 2) == 2
     assert X("dialect2").bar(1, 2) == 1
+
+
+def test_format_exception():
+    # traceback.format_exception syntax changed from python 3.9 to 3.10
+    # thus we use traceback.format_exc()
+    try:
+        raise RuntimeError("this error is intended by test")
+    except RuntimeError as _e:
+        trace = traceback.format_exc()
+        assert 'RuntimeError("this error is intended by test")' in trace
+        assert "test_util.py" in trace

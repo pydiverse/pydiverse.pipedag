@@ -163,7 +163,7 @@ class CacheManager:
         except CacheError as e:
             # Either not found in cache, or copying failed
             # -> Store using default method
-            store.logger.warning("cache miss", exception=str(e))
+            store.logger.warning("cache miss", table=table.name, exception=str(e))
             is_cache_valid = False
 
         # Store metadata
@@ -198,7 +198,7 @@ class CacheManager:
         except CacheError as e:
             # Either not found in cache, or copying failed
             # -> Store using default method
-            store.logger.warning("cache miss", exception=str(e))
+            store.logger.warning("cache miss for raw-SQL", exception=str(e))
             is_cache_valid = False
         return TableCacheInfo(raw_sql.stage, task_hash, query_hash, is_cache_valid)
 
