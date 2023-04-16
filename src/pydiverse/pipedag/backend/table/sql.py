@@ -240,7 +240,15 @@ class SQLTableStore(BaseTableStore):
     @staticmethod
     def _connect(engine_url, schema_prefix, schema_suffix):
         engine = sa.create_engine(engine_url)
-        if engine.dialect.name == "mssql":
+        if engine.dialect.name == "ibm_db_sa":
+            engine.dispose()
+            # switch to READ STABILITY isolation level to avoid unnecessary deadlock
+            # victims in case of background operations when reflecting columns
+            engine = sa.create_engine(
+                engine_url, execution_options={"isolation_level": "RS"}
+            )
+
+        elif engine.dialect.name == "mssql":
             engine.dispose()
             # this is needed to allow for CREATE DATABASE statements
             # (we don't rely on database transactions anyways)
