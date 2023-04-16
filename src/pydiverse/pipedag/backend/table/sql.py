@@ -1425,7 +1425,16 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
             query = sa.select([sa.text("*")]).select_from(obj)
         else:
             query = obj
-        return str(query.compile(store.engine, compile_kwargs={"literal_binds": True}))
+        query_str = str(
+            query.compile(store.engine, compile_kwargs={"literal_binds": True})
+        )
+        # hacky way to canonicalize query (despite __tmp/__even/__odd suffixes
+        # and alias resolution)
+        query_str = re.sub(
+            r"(__tmp|__even|__odd)(?=[ \t\n.;]|$)", "", query_str.lower()
+        )
+        query_str = re.sub(r'["\[\]]', "", query_str)
+        return query_str
 
 
 def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0):
