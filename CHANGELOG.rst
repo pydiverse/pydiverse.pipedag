@@ -15,6 +15,7 @@ Changelog
 - fixed clearing of metadata tables for lazy tables and raw sql tables
 - fixed mssql synonym resolution when reading input table for pandas task
 - initial implementation of issue #62: make query canonical before hashing
+- retry some DB calls in case they are aborted as deadlock victim
 
 0.2.2 (2023-03-31)
 ------------------
