@@ -6,6 +6,7 @@ import json
 import re
 import textwrap
 import threading
+import time
 import traceback
 import warnings
 from collections.abc import Iterable
@@ -240,6 +241,14 @@ class SQLTableStore(BaseTableStore):
     @staticmethod
     def _connect(engine_url, schema_prefix, schema_suffix):
         engine = sa.create_engine(engine_url)
+        # if engine.dialect.name == "ibm_db_sa":
+        #     engine.dispose()
+        #     # switch to READ STABILITY isolation level to avoid unnecessary deadlock
+        #     # victims in case of background operations when reflecting columns
+        #     engine = sa.create_engine(
+        #         engine_url, execution_options={"isolation_level": "RS"}
+        #     )
+
         if engine.dialect.name == "mssql":
             engine.dispose()
             # this is needed to allow for CREATE DATABASE statements
@@ -392,9 +401,19 @@ class SQLTableStore(BaseTableStore):
         early_not_null_possible: bool = False,
     ):
         if not early_not_null_possible:
-            self.execute(
-                ChangeColumnNullable(table_name, schema, key_columns, nullable=False)
-            )
+            for retry_iteration in range(4):
+                # retry operation since it might have been terminated as a
+                # deadlock victim
+                try:
+                    self.execute(
+                        ChangeColumnNullable(
+                            table_name, schema, key_columns, nullable=False
+                        )
+                    )
+                except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
+                    if retry_iteration == 3:
+                        raise
+                    time.sleep(retry_iteration * retry_iteration * 1.1)
         self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
 
     # @add_index.dialect("ibm_db_sa")
@@ -442,10 +461,10 @@ class SQLTableStore(BaseTableStore):
     def reflect_sql_types(
         self, col_names: Iterable[str], table_name: str, schema: Schema
     ):
-        meta = sa.MetaData()
-        meta.reflect(bind=self.engine, schema=schema.get())
-        tables = {table.name: table for table in meta.tables.values()}
-        sql_types = [tables[table_name].c[col].type for col in col_names]
+        inspector = sa.inspect(self.engine)
+        columns = inspector.get_columns(table_name, schema=schema.get())
+        types = {d["name"]: d["type"] for d in columns}
+        sql_types = [types[col] for col in col_names]
         return sql_types
 
     @staticmethod
@@ -593,11 +612,16 @@ class SQLTableStore(BaseTableStore):
                 self.execute(cs_trans, conn=conn)
 
             if not self.disable_caching:
-                conn.execute(
-                    self.tasks_table.delete()
-                    .where(self.tasks_table.c.stage == stage.name)
-                    .where(self.tasks_table.c.in_transaction_schema.in_([True]))
-                )
+                for table in [
+                    self.tasks_table,
+                    self.lazy_cache_table,
+                    self.raw_sql_cache_table,
+                ]:
+                    conn.execute(
+                        table.delete()
+                        .where(table.c.stage == stage.name)
+                        .where(table.c.in_transaction_schema)
+                    )
 
     @_init_stage_schema_swap.dialect("mssql")
     def _init_stage_schema_swap_mssql(self, stage: Stage):
@@ -660,11 +684,16 @@ class SQLTableStore(BaseTableStore):
 
             # Clear metadata
             if not self.disable_caching:
-                conn.execute(
-                    self.tasks_table.delete()
-                    .where(self.tasks_table.c.stage == stage.name)
-                    .where(self.tasks_table.c.in_transaction_schema.in_([True]))
-                )
+                for table in [
+                    self.tasks_table,
+                    self.lazy_cache_table,
+                    self.raw_sql_cache_table,
+                ]:
+                    conn.execute(
+                        table.delete()
+                        .where(table.c.stage == stage.name)
+                        .where(table.c.in_transaction_schema)
+                    )
 
     def _init_stage_read_views(self, stage: Stage):
         try:
@@ -807,7 +836,7 @@ class SQLTableStore(BaseTableStore):
                 conn.execute(
                     table.delete()
                     .where(table.c.stage == stage.name)
-                    .where(table.c.in_transaction_schema.in_([False]))
+                    .where(~table.c.in_transaction_schema)
                 )
                 conn.execute(
                     table.update()
@@ -843,7 +872,7 @@ class SQLTableStore(BaseTableStore):
                 msg
                 + " This error is treated as cache-lookup-failure and thus we can"
                 " continue.",
-                exception="\n".join(traceback.format_exception(_e)),
+                exception=traceback.format_exc(),
             )
             raise CacheError(msg) from _e
         self.add_indexes(table, self.get_schema(stage.transaction_name))
@@ -876,6 +905,13 @@ class SQLTableStore(BaseTableStore):
             msg = (
                 f"Failed to copy lazy table {src_name} (schema:"
                 f" '{src_schema}' -> '{dest_schema}') to transaction."
+            )
+            self.logger.error(
+                "Exception in table copy in background",
+                thread=thread_id,
+                table=src_name,
+                msg=msg,
+                exception=str(_e),
             )
             raise RuntimeError(msg) from _e
         table = copy.deepcopy(table)
@@ -952,7 +988,7 @@ class SQLTableStore(BaseTableStore):
                 f"Failed to copy lazy table {metadata.name} (schema:"
                 f" '{metadata.stage}') to transaction."
             )
-            self.logger.error(msg, exception="\n".join(traceback.format_exception(_e)))
+            self.logger.error(msg, exception=traceback.format_exc())
             raise CacheError(msg) from _e
 
     @engine_dispatch
@@ -1052,7 +1088,7 @@ class SQLTableStore(BaseTableStore):
                     msg
                     + " This error is treated as cache-lookup-failure and thus we can"
                     " continue.",
-                    exception="\n".join(traceback.format_exception(_e)),
+                    exception=traceback.format_exc(),
                 )
                 raise CacheError(msg) from _e
 
@@ -1395,16 +1431,37 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         table_name = table.name
         schema = store.get_schema(stage_name).get()
         table_name, schema = store.resolve_aliases(table_name, schema)
-        return sa.Table(
-            table_name,
-            sa.MetaData(bind=store.engine),
-            schema=schema,
-            autoload_with=store.engine,
-        )
+        for retry_iteration in range(4):
+            # retry operation since it might have been terminated as a deadlock victim
+            try:
+                tbl = sa.Table(
+                    table_name,
+                    sa.MetaData(),
+                    schema=schema,
+                    autoload_with=store.engine,
+                )
+            except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
+                if retry_iteration == 3:
+                    raise
+                time.sleep(retry_iteration * retry_iteration * 1.2)
+        return tbl
 
     @classmethod
     def lazy_query_str(cls, store, obj) -> str:
-        return str(obj.compile(store.engine, compile_kwargs={"literal_binds": True}))
+        if isinstance(obj, sa.sql.selectable.FromClause):
+            query = sa.select([sa.text("*")]).select_from(obj)
+        else:
+            query = obj
+        query_str = str(
+            query.compile(store.engine, compile_kwargs={"literal_binds": True})
+        )
+        # hacky way to canonicalize query (despite __tmp/__even/__odd suffixes
+        # and alias resolution)
+        query_str = re.sub(
+            r"(__tmp|__even|__odd)(?=[ \t\n.;]|$)", "", query_str.lower()
+        )
+        query_str = re.sub(r'["\[\]]', "", query_str)
+        return query_str
 
 
 def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0):
@@ -1416,21 +1473,26 @@ def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0
     # and sa.Table does not auto-reflect columns
     table_name = ibm_db_sa_fix_name(table_name)
     schema = ibm_db_sa_fix_name(schema)
-    tbl = sa.Table("TABLES", sa.MetaData(), schema="SYSCAT", autoload_with=conn)
+    tbl = sa.Table("SYSTABLES", sa.MetaData(), schema="SYSIBM", autoload_with=conn)
     query = (
-        sa.select([tbl.c.base_tabname, tbl.c.base_tabschema])
+        sa.select([tbl.c.base_name, tbl.c.base_schema])
         .select_from(tbl)
         .where(
-            (tbl.c.tabschema == schema)
-            & (tbl.c.tabname == table_name)
-            & (tbl.c.TYPE == "A")
+            (tbl.c.creator == schema) & (tbl.c.name == table_name) & (tbl.c.TYPE == "A")
         )
     )
-    row = conn.execute(query).mappings().one_or_none()
+    for retry_iteration in range(4):
+        # retry operation since it might have been terminated as a deadlock victim
+        try:
+            row = conn.execute(query).mappings().one_or_none()
+        except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
+            if retry_iteration == 3:
+                raise
+            time.sleep(retry_iteration * retry_iteration)
     if row is not None:
         assert _iteration < 3, f"Unexpected recursion looking up {schema}.{table_name}"
         table_name, schema = _resolve_alias_ibm_db_sa(
-            conn, row["base_tabname"], row["base_tabschema"], _iteration=_iteration + 1
+            conn, row["base_name"], row["base_schema"], _iteration=_iteration + 1
         )
     return table_name, schema
 
@@ -1519,8 +1581,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         schema = store.get_schema(stage_name).get()
         with store.engine.connect() as conn:
             table_name = table.name
-            if store.engine.dialect.name == "ibm_db_sa":
-                table_name, schema = _resolve_alias_ibm_db_sa(conn, table_name, schema)
+            table_name, schema = store.resolve_aliases(table_name, schema)
             df = pd.read_sql_table(table_name, conn, schema=schema)
             return df
 
