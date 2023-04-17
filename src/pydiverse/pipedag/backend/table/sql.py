@@ -6,6 +6,7 @@ import json
 import re
 import textwrap
 import threading
+import time
 import traceback
 import warnings
 from collections.abc import Iterable
@@ -248,15 +249,15 @@ class SQLTableStore(BaseTableStore):
     @staticmethod
     def _connect(engine_url, schema_prefix, schema_suffix):
         engine = sa.create_engine(engine_url)
-        if engine.dialect.name == "ibm_db_sa":
-            engine.dispose()
-            # switch to READ STABILITY isolation level to avoid unnecessary deadlock
-            # victims in case of background operations when reflecting columns
-            engine = sa.create_engine(
-                engine_url, execution_options={"isolation_level": "RS"}
-            )
+        # if engine.dialect.name == "ibm_db_sa":
+        #     engine.dispose()
+        #     # switch to READ STABILITY isolation level to avoid unnecessary deadlock
+        #     # victims in case of background operations when reflecting columns
+        #     engine = sa.create_engine(
+        #         engine_url, execution_options={"isolation_level": "RS"}
+        #     )
 
-        elif engine.dialect.name == "mssql":
+        if engine.dialect.name == "mssql":
             engine.dispose()
             # this is needed to allow for CREATE DATABASE statements
             # (we don't rely on database transactions anyways)
@@ -408,9 +409,17 @@ class SQLTableStore(BaseTableStore):
         early_not_null_possible: bool = False,
     ):
         if not early_not_null_possible:
-            self.execute(
-                ChangeColumnNullable(table_name, schema, key_columns, nullable=False)
-            )
+            for retry_iteration in range(3):
+                # retry operation since it might have been terminated as a
+                # deadlock victim
+                try:
+                    self.execute(
+                        ChangeColumnNullable(
+                            table_name, schema, key_columns, nullable=False
+                        )
+                    )
+                except sa.exc.SQLAlchemyError:
+                    time.sleep(retry_iteration * retry_iteration * 1.1)
         self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
 
     # @add_index.dialect("ibm_db_sa")
@@ -1470,7 +1479,12 @@ def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0
             (tbl.c.creator == schema) & (tbl.c.name == table_name) & (tbl.c.TYPE == "A")
         )
     )
-    row = conn.execute(query).mappings().one_or_none()
+    for retry_iteration in range(3):
+        # retry operation since it might have been terminated as a deadlock victim
+        try:
+            row = conn.execute(query).mappings().one_or_none()
+        except sa.exc.SQLAlchemyError:
+            time.sleep(retry_iteration * retry_iteration)
     if row is not None:
         assert _iteration < 3, f"Unexpected recursion looking up {schema}.{table_name}"
         table_name, schema = _resolve_alias_ibm_db_sa(
