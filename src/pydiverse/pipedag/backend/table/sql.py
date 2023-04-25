@@ -127,7 +127,12 @@ class SQLTableStore(BaseTableStore):
         self.engine = self._connect(engine_url, self.schema_prefix, self.schema_suffix)
 
         # Set up metadata tables and schema
-        from sqlalchemy import BigInteger, Boolean, Column, DateTime, String
+        from sqlalchemy import CLOB, BigInteger, Boolean, Column, DateTime, String
+
+        if self.engine.dialect.name == "ibm_db_sa":
+            clob_type = CLOB  # VARCHAR(MAX) does not exist
+        else:
+            clob_type = String  # VARCHAR(MAX)s
 
         self.sql_metadata = sa.MetaData()
 
@@ -166,7 +171,7 @@ class SQLTableStore(BaseTableStore):
             Column("run_id", String(32)),
             Column("input_hash", String(32)),
             Column("cache_fn_hash", String(32)),
-            Column("output_json", sa.String),
+            Column("output_json", clob_type),
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
         )
