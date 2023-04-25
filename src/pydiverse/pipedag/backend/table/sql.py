@@ -128,7 +128,12 @@ class SQLTableStore(BaseTableStore):
         self.engine = self._connect(engine_url, self.schema_prefix, self.schema_suffix)
 
         # Set up metadata tables and schema
-        from sqlalchemy import BigInteger, Boolean, Column, DateTime, String
+        from sqlalchemy import CLOB, BigInteger, Boolean, Column, DateTime, String
+
+        if self.engine.dialect.name == "ibm_db_sa":
+            clob_type = CLOB  # VARCHAR(MAX) does not exist
+        else:
+            clob_type = String  # VARCHAR(MAX)s
 
         self.sql_metadata = sa.MetaData()
 
@@ -167,7 +172,7 @@ class SQLTableStore(BaseTableStore):
             Column("run_id", String(32)),
             Column("input_hash", String(32)),
             Column("cache_fn_hash", String(32)),
-            Column("output_json", String(2048)),  # 2k might be too small => TBD
+            Column("output_json", clob_type),
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
         )
@@ -409,7 +414,7 @@ class SQLTableStore(BaseTableStore):
         early_not_null_possible: bool = False,
     ):
         if not early_not_null_possible:
-            for retry_iteration in range(3):
+            for retry_iteration in range(4):
                 # retry operation since it might have been terminated as a
                 # deadlock victim
                 try:
@@ -418,7 +423,9 @@ class SQLTableStore(BaseTableStore):
                             table_name, schema, key_columns, nullable=False
                         )
                     )
-                except sa.exc.SQLAlchemyError:
+                except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
+                    if retry_iteration == 3:
+                        raise
                     time.sleep(retry_iteration * retry_iteration * 1.1)
         self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
 
@@ -1437,12 +1444,20 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         table_name = table.name
         schema = store.get_schema(stage_name).get()
         table_name, schema = store.resolve_aliases(table_name, schema)
-        return sa.Table(
-            table_name,
-            sa.MetaData(bind=store.engine),
-            schema=schema,
-            autoload_with=store.engine,
-        )
+        for retry_iteration in range(4):
+            # retry operation since it might have been terminated as a deadlock victim
+            try:
+                tbl = sa.Table(
+                    table_name,
+                    sa.MetaData(),
+                    schema=schema,
+                    autoload_with=store.engine,
+                )
+            except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
+                if retry_iteration == 3:
+                    raise
+                time.sleep(retry_iteration * retry_iteration * 1.2)
+        return tbl
 
     @classmethod
     def lazy_query_str(cls, store, obj) -> str:
@@ -1479,11 +1494,13 @@ def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0
             (tbl.c.creator == schema) & (tbl.c.name == table_name) & (tbl.c.TYPE == "A")
         )
     )
-    for retry_iteration in range(3):
+    for retry_iteration in range(4):
         # retry operation since it might have been terminated as a deadlock victim
         try:
             row = conn.execute(query).mappings().one_or_none()
-        except sa.exc.SQLAlchemyError:
+        except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
+            if retry_iteration == 3:
+                raise
             time.sleep(retry_iteration * retry_iteration)
     if row is not None:
         assert _iteration < 3, f"Unexpected recursion looking up {schema}.{table_name}"

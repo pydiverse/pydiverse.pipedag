@@ -65,127 +65,9 @@ jobs:
         with:
           arguments: --workers 2
 
-  full_test39:
-    name: "Full Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+  db2_test:
+    name: "DB2 Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
     needs: [smoke_test]
-    runs-on: ${{ matrix.os }}-latest
-    timeout-minutes: 30
-    strategy:
-      matrix:
-        os: [Ubuntu]
-        python-version: ['3.9']
-    services:
-      ibm_db2:
-        image: ibmcom/db2:11.5.5.1
-        env:
-          LICENSE: accept
-          DB2INSTANCE: db2inst1
-          DB2INST1_PASSWORD: password
-          DBNAME: testdb
-          UPDATEAVAIL: "NO"
-        options: --privileged
-        ports:
-          - 50000:50000
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Environment
-        uses: ./.github/actions/setup
-        with:
-          python-version: ${{ matrix.python-version }}
-          poetry-flags: -E mssql -E ibm_db2
-
-      - name: Install Microsoft ODBC
-        run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
-
-      - name: Start Docker Compose
-        uses: isbang/compose-action@v1.4.1
-        with:
-          compose-file: ./docker-compose.yaml
-
-      - name: Wait for Docker Servers
-        timeout-minutes: 1
-        shell: bash
-        run: |
-          until bash ./.github/workflows/resources/docker_compose_ready.sh; do
-            sleep 2
-          done
-
-      - name: Wait for DB/2
-        timeout-minutes: 2
-        run: |
-          until docker logs "${{ job.services.ibm_db2.id }}" 2>&1 | grep -q "Setup has completed"; do 
-            sleep 10
-            echo Waiting
-          done
-
-      - name: Run Tests
-        uses: ./.github/actions/test
-        with:
-          arguments: --workers 4 --mssql --ibm_db2
-
-  full_test310:
-    name: "Full Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
-    needs: [full_test39]
-    runs-on: ${{ matrix.os }}-latest
-    timeout-minutes: 30
-    strategy:
-      matrix:
-        os: [Ubuntu]
-        python-version: ['3.10']
-    services:
-      ibm_db2:
-        image: ibmcom/db2:11.5.5.1
-        env:
-          LICENSE: accept
-          DB2INSTANCE: db2inst1
-          DB2INST1_PASSWORD: password
-          DBNAME: testdb
-          UPDATEAVAIL: "NO"
-        options: --privileged
-        ports:
-          - 50000:50000
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Environment
-        uses: ./.github/actions/setup
-        with:
-          python-version: ${{ matrix.python-version }}
-          poetry-flags: -E mssql -E ibm_db2
-
-      - name: Install Microsoft ODBC
-        run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
-
-      - name: Start Docker Compose
-        uses: isbang/compose-action@v1.4.1
-        with:
-          compose-file: ./docker-compose.yaml
-
-      - name: Wait for Docker Servers
-        timeout-minutes: 1
-        shell: bash
-        run: |
-          until bash ./.github/workflows/resources/docker_compose_ready.sh; do
-            sleep 2
-          done
-
-      - name: Wait for DB/2
-        timeout-minutes: 2
-        run: |
-          until docker logs "${{ job.services.ibm_db2.id }}" 2>&1 | grep -q "Setup has completed"; do 
-            sleep 10
-            echo Waiting
-          done
-
-      - name: Run Tests
-        uses: ./.github/actions/test
-        with:
-          arguments: --workers 4 --mssql --ibm_db2
-
-  full_test311:
-    name: "Full Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
-    needs: [full_test310]
     runs-on: ${{ matrix.os }}-latest
     timeout-minutes: 30
     strategy:
@@ -211,10 +93,7 @@ jobs:
         uses: ./.github/actions/setup
         with:
           python-version: ${{ matrix.python-version }}
-          poetry-flags: -E mssql -E ibm_db2 -E pdtransform
-
-      - name: Install Microsoft ODBC
-        run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+          poetry-flags: -E ibm_db2 -E pdtransform
 
       - name: Start Docker Compose
         uses: isbang/compose-action@v1.4.1
@@ -240,5 +119,43 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/test
         with:
-          arguments: --workers 4 --mssql --ibm_db2 --pdtransform
+          arguments: --workers 4 --ibm_db2 --pdtransform
 
+  full_test:
+    name: "Full Tests no-DB2 - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    needs: [smoke_test]
+    runs-on: ${{ matrix.os }}-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        os: [Ubuntu]
+        python-version: ['3.9', '3.10', '3.11']
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+        with:
+          python-version: ${{ matrix.python-version }}
+          poetry-flags: -E mssql -E ibm_db2 -E pdtransform
+
+      - name: Install Microsoft ODBC
+        run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+
+      - name: Start Docker Compose
+        uses: isbang/compose-action@v1.4.1
+        with:
+          compose-file: ./docker-compose.yaml
+
+      - name: Wait for Docker Servers
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          until bash ./.github/workflows/resources/docker_compose_ready.sh; do
+            sleep 2
+          done
+
+      - name: Run Tests
+        uses: ./.github/actions/test
+        with:
+          arguments: --workers 4 --mssql --pdtransform
