@@ -166,7 +166,7 @@ class SQLTableStore(BaseTableStore):
             Column("run_id", String(32)),
             Column("input_hash", String(32)),
             Column("cache_fn_hash", String(32)),
-            Column("output_json", String(32000)),  # DB2 limits varchar length
+            Column("output_json", sa.String),
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
         )
