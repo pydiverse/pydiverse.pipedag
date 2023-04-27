@@ -415,6 +415,7 @@ class SQLTableStore(BaseTableStore):
                             table_name, schema, key_columns, nullable=False
                         )
                     )
+                    break
                 except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
                     if retry_iteration == 3:
                         raise
@@ -1445,6 +1446,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                     schema=schema,
                     autoload_with=store.engine,
                 )
+                break
             except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
                 if retry_iteration == 3:
                     raise
@@ -1490,6 +1492,7 @@ def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0
         # retry operation since it might have been terminated as a deadlock victim
         try:
             row = conn.execute(query).mappings().one_or_none()
+            break
         except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
             if retry_iteration == 3:
                 raise
