@@ -124,8 +124,10 @@ class SQLTableStore(BaseTableStore):
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
 
         self._init_database(engine_url, create_database_if_not_exists)
-        self.engine_url_no_pw = repr(sa.engine.make_url(engine_url))
+        self.engine_url_obj = sa.engine.make_url(engine_url)
+        self.engine_url_no_pw = repr(self.engine_url_obj)
         self.engine = self._connect(engine_url, self.schema_prefix, self.schema_suffix)
+        self.engines_other = dict()  # i.e. for IBIS connection
 
         # Set up metadata tables and schema
         from sqlalchemy import CLOB, BigInteger, Boolean, Column, DateTime, String
@@ -423,6 +425,7 @@ class SQLTableStore(BaseTableStore):
                             table_name, schema, key_columns, nullable=False
                         )
                     )
+                    break
                 except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
                     if retry_iteration == 3:
                         raise
@@ -1453,6 +1456,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                     schema=schema,
                     autoload_with=store.engine,
                 )
+                break
             except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
                 if retry_iteration == 3:
                     raise
@@ -1498,6 +1502,7 @@ def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0
         # retry operation since it might have been terminated as a deadlock victim
         try:
             row = conn.execute(query).mappings().one_or_none()
+            break
         except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
             if retry_iteration == 3:
                 raise
@@ -1606,10 +1611,21 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
 
 try:
+    # optional dependency to pydiverse-transform
     import pydiverse.transform as pdt
 except ImportError as e:
     warnings.warn(str(e), ImportWarning)
     pdt = None
+
+
+try:
+    # optional dependency to ibis
+    import ibis
+    import ibis.expr.types as ibis_types
+except ImportError as e:
+    warnings.warn(str(e), ImportWarning)
+    ibis = None
+    ibis_types = None
 
 
 # noinspection PyUnresolvedReferences, PyProtectedMember
@@ -1672,3 +1688,85 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         if query is not None:
             return str(query)
         return super().lazy_query_str(store, obj)
+
+
+@SQLTableStore.register_table(ibis)
+class IbisTableHook(TableHook[SQLTableStore]):
+    @staticmethod
+    def get_con(store):
+        # TODO: move this function to a better ibis specific place
+        con = store.engines_other.get("ibis")
+        if con is None:
+            url = store.engine_url_obj
+            dialect = store.engine.dialect.name
+            if dialect == "postgresql":
+                con = ibis.postgres.connect(
+                    host=url.host,
+                    user=url.username,
+                    password=url.password,
+                    port=url.port,
+                    database=url.database,
+                )
+            elif dialect == "mssql":
+                con = ibis.mssql.connect(
+                    host=url.host,
+                    user=url.username,
+                    password=url.password,
+                    port=url.port,
+                    database=url.database,
+                )
+            else:
+                raise RuntimeError(
+                    f"initializing ibis for {dialect} is not supported, yet "
+                    "-- supported: postgresql, mssql"
+                )
+            store.engines_other["ibis"] = con
+        return con
+
+    @classmethod
+    def can_materialize(cls, type_) -> bool:
+        # Operations on a table like mutate() or join() don't change the type
+        return issubclass(type_, ibis_types.Table)
+
+    @classmethod
+    def can_retrieve(cls, type_) -> bool:
+        return issubclass(type_, ibis_types.Table)
+
+    @classmethod
+    def materialize(
+        cls, store, table: Table[ibis_types.Table], stage_name, task_info: TaskInfo
+    ):
+        t = table.obj
+        table.obj = sa.text(cls.lazy_query_str(store, t))
+        return SQLAlchemyTableHook.materialize(store, table, stage_name, task_info)
+
+    @classmethod
+    def retrieve(cls, store, table, stage_name, as_type):
+        con = cls.get_con(store)
+        table_name = table.name
+        schema = store.get_schema(stage_name).get()
+        table_name, schema = store.resolve_aliases(table_name, schema)
+        for retry_iteration in range(4):
+            # retry operation since it might have been terminated as a deadlock victim
+            try:
+                tbl = con.table(
+                    table_name,
+                    schema=schema,
+                )
+                break
+            except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
+                if retry_iteration == 3:
+                    raise
+                time.sleep(retry_iteration * retry_iteration * 1.2)
+        return tbl
+
+    @classmethod
+    def auto_table(cls, obj: ibis_types.Table):
+        if obj.has_name():
+            return Table(obj, obj.get_name())
+        else:
+            return super().auto_table(obj)
+
+    @classmethod
+    def lazy_query_str(cls, store, obj: ibis_types.Table) -> str:
+        return str(ibis.to_sql(obj, cls.get_con(store).name))
