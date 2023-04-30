@@ -1611,21 +1611,116 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
 
 try:
+    # optional dependency to polars
+    import connectorx
+    import polars
+except ImportError as e:
+    warnings.warn(str(e), ImportWarning)
+    polars = None
+    connectorx = None
+
+
+@SQLTableStore.register_table(polars, connectorx)
+class PolarsTableHook(TableHook[SQLTableStore]):
+    @classmethod
+    def can_materialize(cls, type_) -> bool:
+        # attention: tidypolars.Tibble is subclass of polars DataFrame
+        return type_ == polars.dataframe.DataFrame
+
+    @classmethod
+    def can_retrieve(cls, type_) -> bool:
+        return type_ == polars.dataframe.DataFrame
+
+    @classmethod
+    def materialize(
+        cls,
+        store,
+        table: Table[polars.dataframe.DataFrame],
+        stage_name,
+        task_info: TaskInfo,
+    ):
+        schema = store.get_schema(stage_name)
+        if store.print_materialize:
+            store.logger.info(
+                f"Writing table '{schema.get()}.{table.name}':\n{table.obj}"
+            )
+        table_name = table.name
+        # TODO:
+        # dtype_map = {}
+        # if store.engine.dialect.name == "ibm_db_sa":
+        #     # Default string target is CLOB which can't be used for indexing.
+        #     # We could use VARCHAR(32000), but if we change this to VARCHAR(256)
+        #     # for indexed columns, DB2 hangs.
+        #     dtype_map = {
+        #         col: sa.VARCHAR(256)
+        #         for col in table.obj.dtypes.loc[lambda x: x == object].index
+        #     }
+        #     table_name = ibm_db_sa_fix_name(table_name)
+        table.obj.to_pandas(use_pyarrow_extension_array=True).to_sql(
+            name=table_name, con=store.engine, schema=schema.get(), index=False
+        )
+        store.add_indexes(table, schema)
+
+    @classmethod
+    def retrieve(cls, store, table, stage_name, as_type):
+        schema = store.get_schema(stage_name).get()
+        table_name = table.name
+        table_name, schema = store.resolve_aliases(table_name, schema)
+        conn = str(store.engine_url_obj)
+        df = polars.read_database(f'SELECT * FROM {schema}."{table_name}"', conn)
+        return df
+
+    @classmethod
+    def auto_table(cls, obj: polars.dataframe.DataFrame):
+        return super().auto_table(obj)
+
+
+try:
+    # optional dependency to polars
+    import tidypolars
+except ImportError as e:
+    warnings.warn(str(e), ImportWarning)
+    tidypolars = None
+
+
+@SQLTableStore.register_table(tidypolars, polars, connectorx)
+class TidyPolarsTableHook(TableHook[SQLTableStore]):
+    @classmethod
+    def can_materialize(cls, type_) -> bool:
+        return issubclass(type_, tidypolars.Tibble)
+
+    @classmethod
+    def can_retrieve(cls, type_) -> bool:
+        return type_ == tidypolars.Tibble
+
+    @classmethod
+    def materialize(
+        cls,
+        store,
+        table: Table[tidypolars.Tibble],
+        stage_name,
+        task_info: TaskInfo,
+    ):
+        table = copy.deepcopy(table)
+        table.obj = table.obj.to_polars()
+        PolarsTableHook.materialize(store, table, stage_name, task_info)
+
+    @classmethod
+    def retrieve(cls, store, table, stage_name, as_type):
+        df = PolarsTableHook.retrieve(store, table, stage_name, as_type)
+        return tidypolars.from_polars(df)
+
+    @classmethod
+    def auto_table(cls, obj: tidypolars.Tibble):
+        return super().auto_table(obj)
+
+
+try:
     # optional dependency to pydiverse-transform
     import pydiverse.transform as pdt
 except ImportError as e:
     warnings.warn(str(e), ImportWarning)
     pdt = None
-
-
-try:
-    # optional dependency to ibis
-    import ibis
-    import ibis.expr.types as ibis_types
-except ImportError as e:
-    warnings.warn(str(e), ImportWarning)
-    ibis = None
-    ibis_types = None
 
 
 # noinspection PyUnresolvedReferences, PyProtectedMember
@@ -1688,6 +1783,16 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         if query is not None:
             return str(query)
         return super().lazy_query_str(store, obj)
+
+
+try:
+    # optional dependency to ibis
+    import ibis
+    import ibis.expr.types as ibis_types
+except ImportError as e:
+    warnings.warn(str(e), ImportWarning)
+    ibis = None
+    ibis_types = None
 
 
 @SQLTableStore.register_table(ibis)
