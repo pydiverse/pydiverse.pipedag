@@ -8,7 +8,7 @@ from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.util import PipedagConfig
 
 
-@pytest.mark.ibis
+@pytest.mark.polars
 def test_example_flow():
     import polars
     import tidypolars
