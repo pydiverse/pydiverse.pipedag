@@ -10,6 +10,7 @@ Changelog
 0.2.4 (YYYY-MM-DD)
 ------------------
 - fix errors by increasing output_json length in metadata table
+- improve caching (query normalization) to avoid false cache misses
 
 0.2.3 (2023-04-17)
 ------------------
