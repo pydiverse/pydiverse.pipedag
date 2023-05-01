@@ -1464,10 +1464,10 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         )
         # hacky way to canonicalize query (despite __tmp/__even/__odd suffixes
         # and alias resolution)
+        query_str = re.sub(r'["\[\]]', "", query_str)
         query_str = re.sub(
             r"(__tmp|__even|__odd)(?=[ \t\n.;]|$)", "", query_str.lower()
         )
-        query_str = re.sub(r'["\[\]]', "", query_str)
         return query_str
 
 
