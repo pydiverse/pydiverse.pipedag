@@ -1590,7 +1590,16 @@ class PandasTableHook(TableHook[SQLTableStore]):
         with store.engine.connect() as conn:
             table_name = table.name
             table_name, schema = store.resolve_aliases(table_name, schema)
-            df = pd.read_sql_table(table_name, conn, schema=schema)
+            for retry_iteration in range(4):
+                # retry operation since it might have been terminated as a
+                # deadlock victim
+                try:
+                    df = pd.read_sql_table(table_name, conn, schema=schema)
+                    break
+                except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
+                    if retry_iteration == 3:
+                        raise
+                    time.sleep(retry_iteration * retry_iteration * 1.3)
             return df
 
     @classmethod
