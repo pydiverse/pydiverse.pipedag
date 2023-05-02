@@ -7,6 +7,11 @@ https://semver.org/spec/v2.0.0.html. The most important bits are:
 Changelog
 =========
 
+0.2.4 (YYYY-MM-DD)
+------------------
+- fix errors by increasing output_json length in metadata table
+- fix cache invalidation: query normalization before checking for changes
+
 0.2.3 (2023-04-17)
 ------------------
 - fixed python 3.9 compatibility (traceback.format_exception syntax changed)
@@ -19,19 +24,16 @@ Changelog
 
 0.2.2 (2023-03-31)
 ------------------
-
 - added option avoid_drop_create_schema to table store configuration
 - improve performance when working with IBM DB2 dialect (i.e. table locking)
 - prevent table copying and schema swapping for 100% cache valid stages
 
 0.2.1 (2023-01-15)
 ------------------
-
 - removed contextvars dependency (not needed for python >= 3.7 and broke conda-forge build)
 
 0.2.0 (2023-01-14)
 ------------------
-
 - SQLTableStore: support for Microsoft SQL Server and IBM DB2 (Linux) database connection strings
 - Support primary keys and indexes (can be configured with Table object and used in custom RawSql code)
 - RawSql: support additional return type for @materialize tasks which allows to emit raw SQL string including multiple
@@ -47,9 +49,7 @@ Changelog
 
 0.1.0 (2022-09-01)
 ------------------
-
 Initial release.
-
 - @materialize annotations
 - flow definition with nestable stages
 - zookeeper synchronization
