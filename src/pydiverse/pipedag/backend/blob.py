@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pydiverse.pipedag.context import ConfigContext
-from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.util import Disposable, normalize_name
 
 if TYPE_CHECKING:
@@ -136,7 +135,7 @@ class FileBlobStore(BaseBlobStore):
                 self.get_blob_path(blob.stage.transaction_name, blob.name),
             )
         except FileNotFoundError:
-            raise CacheError(
+            raise RuntimeError(
                 f"Can't copy blob '{blob.name}' (stage: '{blob.stage.name}')"
                 " to working transaction because no such blob exists."
             ) from None
