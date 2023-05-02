@@ -423,6 +423,7 @@ class SQLTableStore(BaseTableStore):
                             table_name, schema, key_columns, nullable=False
                         )
                     )
+                    break
                 except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
                     if retry_iteration == 3:
                         raise
@@ -1453,6 +1454,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                     schema=schema,
                     autoload_with=store.engine,
                 )
+                break
             except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
                 if retry_iteration == 3:
                     raise
@@ -1470,10 +1472,10 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         )
         # hacky way to canonicalize query (despite __tmp/__even/__odd suffixes
         # and alias resolution)
+        query_str = re.sub(r'["\[\]]', "", query_str)
         query_str = re.sub(
             r"(__tmp|__even|__odd)(?=[ \t\n.;]|$)", "", query_str.lower()
         )
-        query_str = re.sub(r'["\[\]]', "", query_str)
         return query_str
 
 
@@ -1498,6 +1500,7 @@ def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0
         # retry operation since it might have been terminated as a deadlock victim
         try:
             row = conn.execute(query).mappings().one_or_none()
+            break
         except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
             if retry_iteration == 3:
                 raise
@@ -1595,7 +1598,16 @@ class PandasTableHook(TableHook[SQLTableStore]):
         with store.engine.connect() as conn:
             table_name = table.name
             table_name, schema = store.resolve_aliases(table_name, schema)
-            df = pd.read_sql_table(table_name, conn, schema=schema)
+            for retry_iteration in range(4):
+                # retry operation since it might have been terminated as a
+                # deadlock victim
+                try:
+                    df = pd.read_sql_table(table_name, conn, schema=schema)
+                    break
+                except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
+                    if retry_iteration == 3:
+                        raise
+                    time.sleep(retry_iteration * retry_iteration * 1.3)
             return df
 
     @classmethod
