@@ -66,7 +66,7 @@ mssql = ["pyodbc", "pytsql"]
 ibm_db2 = ["ibm-db", "ibm-db-sa"]
 pdtransform = ["pydiverse-transform"]
 ibis = ["ibis", "ibis-framework"]
-tidypolars = ["tidypolars", "polars", "connectorx", "pyarrow"]
+polars = ["tidypolars", "polars", "connectorx", "pyarrow"]
 prefect = ["prefect", "docker-compose"]
 
 [tool.poetry.dev-dependencies]
