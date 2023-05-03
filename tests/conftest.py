@@ -39,7 +39,7 @@ setup_structlog(_log_stream=sys.stdout)  # use sys.stderr with `pytest -s in ci.
 
 
 def pytest_addoption(parser):
-    for opt in ["mssql", "ibm_db2", "pdtransform"]:
+    for opt in ["mssql", "ibm_db2", "pdtransform", "ibis", "polars"]:
         parser.addoption(
             "--" + opt,
             action="store_true",
@@ -49,7 +49,7 @@ def pytest_addoption(parser):
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items):
-    for opt in ["mssql", "ibm_db2", "pdtransform"]:
+    for opt in ["mssql", "ibm_db2", "pdtransform", "ibis", "polars"]:
         if not config.getoption("--" + opt):
             skip = pytest.mark.skip(reason=f"{opt} not selected")
             for item in items:
