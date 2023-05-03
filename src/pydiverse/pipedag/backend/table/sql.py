@@ -1549,6 +1549,26 @@ def _resolve_alias_mssql(conn, table_name: str, schema: str, *, _iteration=0):
 
 @SQLTableStore.register_table(pd)
 class PandasTableHook(TableHook[SQLTableStore]):
+    """
+    Materalize pandas->sql and retrieve sql->pandas.
+
+    We like to limit the use of types, so operations can be implemented reliably
+    without the use of pandas dtype=object where every row can have different type:
+      - string/varchar/clob: pd.StringDType
+      - date: datetime64[ns] (we cap year in 1900..2199 and save original year
+            in separate column)
+      - datetime: datetime64[ns] (we cap year in 1900..2199 and save original year
+            in separate column)
+      - int: pd.Int64DType
+      - boolean: pd.BooleanDType
+
+    Dialect specific aspects:
+      * ibm_db_sa:
+        - DB2 does not support boolean type -> integer
+        - We limit string columns to 256 characters since larger columns have
+          trouble with adding indexes/primary keys
+    """
+
     @classmethod
     def can_materialize(cls, type_) -> bool:
         return issubclass(type_, pd.DataFrame)
@@ -1565,6 +1585,8 @@ class PandasTableHook(TableHook[SQLTableStore]):
         stage_name,
         task_info: TaskInfo,
     ):
+        # we might try to avoid this copy for speedup / saving RAM
+        df = table.obj.copy()
         schema = store.get_schema(stage_name)
         if store.print_materialize:
             store.logger.info(
@@ -1572,16 +1594,18 @@ class PandasTableHook(TableHook[SQLTableStore]):
             )
         dtype_map = {}
         table_name = table.name
+        str_type = sa.String()
         if store.engine.dialect.name == "ibm_db_sa":
             # Default string target is CLOB which can't be used for indexing.
             # We could use VARCHAR(32000), but if we change this to VARCHAR(256)
             # for indexed columns, DB2 hangs.
-            dtype_map = {
-                col: sa.VARCHAR(256)
-                for col in table.obj.dtypes.loc[lambda x: x == object].index
-            }
+            str_type = sa.VARCHAR(256)
             table_name = ibm_db_sa_fix_name(table_name)
-        table.obj.to_sql(
+        # force dtype=object to string (we require dates to be stored in datetime64[ns])
+        for col in df.dtypes.loc[lambda x: x == object].index:
+            df[col] = df[col].astype(str)
+            dtype_map[col] = str_type
+        df.to_sql(
             table_name,
             store.engine,
             schema=schema.get(),
@@ -1590,17 +1614,46 @@ class PandasTableHook(TableHook[SQLTableStore]):
         )
         store.add_indexes(table, schema)
 
+    @staticmethod
+    def _pandas_type(sql_type):
+        if isinstance(sql_type, sa.Integer):
+            return pd.Int64Dtype()
+        elif isinstance(sql_type, sa.Boolean):
+            return pd.BooleanDtype()
+        elif isinstance(sql_type, sa.String):
+            return pd.StringDtype()
+        elif isinstance(sql_type, sa.Date):
+            return "datetime64[ns]"
+        elif isinstance(sql_type, sa.DateTime):
+            return "datetime64[ns]"
+
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
         schema = store.get_schema(stage_name).get()
         with store.engine.connect() as conn:
             table_name = table.name
             table_name, schema = store.resolve_aliases(table_name, schema)
+            sql_table = sa.Table(
+                table_name, sa.MetaData(), schema=schema, autoload_with=store.engine
+            )
+            dtype_map = {c.name: cls._pandas_type(c.type) for c in sql_table.c}
             for retry_iteration in range(4):
                 # retry operation since it might have been terminated as a
                 # deadlock victim
                 try:
-                    df = pd.read_sql_table(table_name, conn, schema=schema)
+                    try:
+                        # works only from pandas 2.0.0 on
+                        df = pd.read_sql(
+                            sa.select("*").select_from(sql_table),
+                            con=conn,
+                            dtype=dtype_map,
+                        )
+                    except TypeError:
+                        df = pd.read_sql(
+                            sa.select("*").select_from(sql_table), con=conn
+                        )
+                        for col, _type in dtype_map.items():
+                            df[col] = df[col].astype(_type)
                     break
                 except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
                     if retry_iteration == 3:

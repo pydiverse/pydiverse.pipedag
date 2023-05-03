@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import pandas as pd
+import datetime as dt
 
 from pydiverse.pipedag import Blob, Table, materialize
 import sqlalchemy as sa
+
+from pydiverse.pipedag.context import ConfigContext
 
 
 @materialize(input_type=pd.DataFrame, version="1.0")
@@ -168,10 +171,43 @@ def simple_lazy_table_with_indexes():
     return Table(query, indexes=[["col2"], ["col2", "col1"]])
 
 
-@materialize
-def pd_dataframe(data: dict[str, list]):
-    df = pd.DataFrame(data)
+def _get_df(data: dict[str, list], use_ext_dtype=False):
+    dtypes = {}
+    for col in data:
+        if type(data[col][0]) == dt.date:
+            data[col] = [dt.datetime.combine(d, dt.time()) for d in data[col]]
+    if use_ext_dtype:
+        for col in data:
+            if type(data[col][0]) == str:
+                dtypes[col] = pd.StringDtype()
+            elif type(data[col][0]) == int:
+                dtypes[col] = pd.Int64Dtype()
+            elif type(data[col][0]) == bool:
+                dtypes[col] = pd.BooleanDtype()
+    return pd.DataFrame(
+        {
+            col: pd.Series(values, dtype=dtypes[col])
+            if col in dtypes
+            else pd.Series(values)
+            for col, values in data.items()
+        }
+    )
+
+
+@materialize(version="1.0.0")
+def pd_dataframe(data: dict[str, list], use_ext_dtype=False):
+    df = _get_df(data, use_ext_dtype)
     return Table(df)
+
+
+@materialize(version="1.0.0", input_type=pd.DataFrame)
+def pd_dataframe_assert(df_actual: pd.DataFrame, data: dict[str, list]):
+    df_expected = _get_df(data, use_ext_dtype=True)
+    if ConfigContext.get().store.table_store.engine.dialect.name == "ibm_db_sa":
+        for col in data:
+            if type(data[col][0]) == bool:
+                df_expected[col] = df_expected[col].astype(int)
+    pd.testing.assert_frame_equal(df_expected, df_actual)
 
 
 @materialize
