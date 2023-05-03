@@ -1611,6 +1611,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
             schema=schema.get(),
             index=False,
             dtype=dtype_map,
+            chunksize=100_000,
         )
         store.add_indexes(table, schema)
 
