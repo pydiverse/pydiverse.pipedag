@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
+from pydiverse.pipedag.backend.table.sql import adj_pandas_types
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.util.config import PipedagConfig
 
@@ -67,13 +68,14 @@ def test_source_invalidation():
 
     flow, out1, out2 = get_flow()
 
+    dfA_source_adj = adj_pandas_types(dfA_source)
     with StageLockContext():
         result = flow.run()
         assert result.successful
 
         v_out1, v_out2 = result.get(out1), result.get(out2)
-        pd.testing.assert_frame_equal(dfA_source * 2, v_out1)
-        pd.testing.assert_frame_equal(dfA_source * 4, v_out2)
+        pd.testing.assert_frame_equal(dfA_source_adj * 2, v_out1)
+        pd.testing.assert_frame_equal(dfA_source_adj * 4, v_out2)
 
     # modify input without updating input hash => cached version is used
     dfA["a"] = 10 + dfA_source["a"]
@@ -84,8 +86,8 @@ def test_source_invalidation():
         assert result.successful
 
         v_out1, v_out2 = result.get(out1), result.get(out2)
-        pd.testing.assert_frame_equal(dfA_source * 2, v_out1)
-        pd.testing.assert_frame_equal(dfA_source * 4, v_out2)
+        pd.testing.assert_frame_equal(dfA_source_adj * 2, v_out1)
+        pd.testing.assert_frame_equal(dfA_source_adj * 4, v_out2)
 
     # update input hash trigger reload of new input data
     input_hash = hash(str(dfA))
@@ -96,8 +98,8 @@ def test_source_invalidation():
         assert result.successful
 
         v_out1, v_out2 = result.get(out1), result.get(out2)
-        pd.testing.assert_frame_equal(dfA_source * 2, v_out1)
-        pd.testing.assert_frame_equal(dfA_source * 4, v_out2)
+        pd.testing.assert_frame_equal(dfA_source_adj * 2, v_out1)
+        pd.testing.assert_frame_equal(dfA_source_adj * 4, v_out2)
 
     with StageLockContext():
         result = flow.run()
@@ -105,11 +107,11 @@ def test_source_invalidation():
 
         v_out1, v_out2 = result.get(out1), result.get(out2)
         pd.testing.assert_frame_equal(
-            (dfA_source.values + pd.DataFrame(dict(a=[10, 10, 10, 10], b=0))) * 2,
+            (dfA_source_adj + pd.DataFrame(dict(a=[10, 10, 10, 10], b=0))) * 2,
             v_out1,
         )
         pd.testing.assert_frame_equal(
-            (dfA_source.values + pd.DataFrame(dict(a=[10, 10, 10, 10], b=0))) * 4,
+            (dfA_source_adj + pd.DataFrame(dict(a=[10, 10, 10, 10], b=0))) * 4,
             v_out2,
         )
 

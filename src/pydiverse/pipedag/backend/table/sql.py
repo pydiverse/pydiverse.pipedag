@@ -1548,6 +1548,17 @@ def _resolve_alias_mssql(conn, table_name: str, schema: str, *, _iteration=0):
     return table_name, schema
 
 
+def adj_pandas_types(df: pd.DataFrame):
+    df = df.copy()
+    for col in df.dtypes.loc[lambda x: x == int].index:
+        df[col] = df[col].astype(pd.Int64Dtype())
+    for col in df.dtypes.loc[lambda x: x == bool].index:
+        df[col] = df[col].astype(pd.BooleanDtype())
+    for col in df.dtypes.loc[lambda x: x == object].index:
+        df[col] = df[col].astype(pd.StringDtype())
+    return df
+
+
 @SQLTableStore.register_table(pd)
 class PandasTableHook(TableHook[SQLTableStore]):
     """

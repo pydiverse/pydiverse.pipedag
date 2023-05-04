@@ -25,7 +25,9 @@ def table_2(script_path: str, dependent_table: Table):
 
 @materialize(input_type=pd.DataFrame, lazy=True)
 def assert_result(df: pd.DataFrame):
-    pd.testing.assert_frame_equal(df, pd.DataFrame({"coltab2": [24]}))
+    pd.testing.assert_frame_equal(
+        df, pd.DataFrame({"coltab2": [24]}).astype(pd.Int32Dtype())
+    )
 
 
 def test_sql_node():
