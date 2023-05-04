@@ -93,7 +93,7 @@ jobs:
         uses: ./.github/actions/setup
         with:
           python-version: ${{ matrix.python-version }}
-          poetry-flags: -E ibm_db2
+          poetry-flags: -E ibm_db2 -E pdtransform
 
       - name: Start Docker Compose
         uses: isbang/compose-action@v1.4.1
@@ -119,7 +119,7 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/test
         with:
-          arguments: --workers 4 --ibm_db2
+          arguments: --workers 4 --ibm_db2 --pdtransform
 
   full_test:
     name: "Full Tests no-DB2 - ${{ matrix.os }} / ${{ matrix.python-version }}"
@@ -137,7 +137,7 @@ jobs:
         uses: ./.github/actions/setup
         with:
           python-version: ${{ matrix.python-version }}
-          poetry-flags: -E mssql -E ibm_db2
+          poetry-flags: -E mssql -E ibm_db2 -E pdtransform
 
       - name: Install Microsoft ODBC
         run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
@@ -158,4 +158,4 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/test
         with:
-          arguments: --workers 4 --mssql
+          arguments: --workers 4 --mssql --pdtransform

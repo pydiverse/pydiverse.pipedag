@@ -124,6 +124,7 @@ class SQLTableStore(BaseTableStore):
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
 
         self._init_database(engine_url, create_database_if_not_exists)
+        self.engine_url_no_pw = repr(sa.engine.make_url(engine_url))
         self.engine = self._connect(engine_url, self.schema_prefix, self.schema_suffix)
 
         # Set up metadata tables and schema
@@ -201,6 +202,13 @@ class SQLTableStore(BaseTableStore):
             Column("task_hash", String(32)),
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
+        )
+
+        self.logger.info(
+            "Initialized SQL Table Store",
+            engine_url=self.engine_url_no_pw,
+            schema_prefix=self.schema_prefix,
+            schema_suffix=self.schema_suffix,
         )
 
     @staticmethod
@@ -855,7 +863,7 @@ class SQLTableStore(BaseTableStore):
         schema_name = self.get_schema(stage.name).get()
         has_table = sa.inspect(self.engine).has_table(table.name, schema=schema_name)
         if not has_table:
-            raise CacheError(
+            raise RuntimeError(
                 f"Can't copy table '{table.name}' (schema: '{stage.name}')"
                 " to transaction because no such table exists."
             )
@@ -875,12 +883,10 @@ class SQLTableStore(BaseTableStore):
                 " to transaction."
             )
             self.logger.error(
-                msg
-                + " This error is treated as cache-lookup-failure and thus we can"
-                " continue.",
+                msg,
                 exception=traceback.format_exc(),
             )
-            raise CacheError(msg) from _e
+            raise RuntimeError(msg) from _e
         self.add_indexes(table, self.get_schema(stage.transaction_name))
 
     def deferred_copy_lazy_table_to_transaction(
@@ -970,7 +976,7 @@ class SQLTableStore(BaseTableStore):
                 " exists."
             )
             self.logger.error(msg)
-            raise CacheError(msg)
+            raise RuntimeError(msg)
 
         try:
             self.execute(
@@ -995,7 +1001,7 @@ class SQLTableStore(BaseTableStore):
                 f" '{metadata.stage}') to transaction."
             )
             self.logger.error(msg, exception=traceback.format_exc())
-            raise CacheError(msg) from _e
+            raise RuntimeError(msg) from _e
 
     @engine_dispatch
     def get_view_names(self, schema: str, *, include_everything=False) -> list[str]:
@@ -1091,12 +1097,10 @@ class SQLTableStore(BaseTableStore):
                     f" '{src_schema}') to transaction."
                 )
                 self.logger.error(
-                    msg
-                    + " This error is treated as cache-lookup-failure and thus we can"
-                    " continue.",
+                    msg,
                     exception=traceback.format_exc(),
                 )
-                raise CacheError(msg) from _e
+                raise RuntimeError(msg) from _e
 
         views_to_copy = new_tables & set(views)
         for view_name in views_to_copy:
@@ -1203,7 +1207,7 @@ class SQLTableStore(BaseTableStore):
                     .one_or_none()
                 )
         except sa.exc.MultipleResultsFound:
-            raise CacheError("Multiple results found task metadata") from None
+            raise RuntimeError("Multiple results found task metadata") from None
 
         if result is None:
             raise CacheError(f"Couldn't retrieve task from cache: {task}")
@@ -1258,7 +1262,7 @@ class SQLTableStore(BaseTableStore):
                     .one_or_none()
                 )
         except sa.exc.MultipleResultsFound:
-            raise CacheError(
+            raise RuntimeError(
                 "Multiple results found for lazy table cache key"
             ) from None
 
@@ -1314,7 +1318,7 @@ class SQLTableStore(BaseTableStore):
                     .one_or_none()
                 )
         except sa.exc.MultipleResultsFound:
-            raise CacheError("Multiple results found for raw sql cache key") from None
+            raise RuntimeError("Multiple results found for raw sql cache key") from None
 
         if result is None:
             raise CacheError("No result found for raw sql cache key")

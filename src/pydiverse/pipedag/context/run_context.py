@@ -754,7 +754,15 @@ class MemoState(Enum):
 
 
 def _msg_default(obj):
-    return msgpack.ExtType(0, pickle.dumps(obj))
+    # some table implementations are not picklable
+    if hasattr(obj, "obj"):
+        save = obj.obj
+        obj.obj = None
+        ret = pickle.dumps(obj)
+        obj.obj = save
+    else:
+        ret = pickle.dumps(obj)
+    return msgpack.ExtType(0, ret)
 
 
 def _msg_ext_hook(code, data):

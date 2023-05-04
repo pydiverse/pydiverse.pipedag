@@ -82,3 +82,10 @@ instances:
     table_store:
       table_store_connection: ibm_db2
       avoid_drop_create_schema: true
+
+  pdtransform:
+    instance_id: pd_postgres
+    auto_table: [ "pandas.DataFrame", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable",
+                  "pydiverse.transform.core.table.Table"]
+    table_store:
+      table_store_connection: postgres

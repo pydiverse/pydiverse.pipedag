@@ -574,15 +574,15 @@ pytzdata = ">=2020.1"
 
 [[package]]
 name = "platformdirs"
-version = "3.2.0"
+version = "3.3.0"
 description = "A small Python package for determining appropriate platform-specific dirs, e.g. a \"user data dir\"."
 category = "dev"
 optional = false
 python-versions = ">=3.7"
 
 [package.extras]
-docs = ["furo (>=2022.12.7)", "proselint (>=0.13)", "sphinx (>=6.1.3)", "sphinx-autodoc-typehints (>=1.22,!=1.23.4)"]
-test = ["appdirs (==1.4.4)", "covdefaults (>=2.3)", "pytest (>=7.2.2)", "pytest-cov (>=4)", "pytest-mock (>=3.10)"]
+docs = ["furo (>=2023.3.27)", "proselint (>=0.13)", "sphinx (>=6.1.3)", "sphinx-autodoc-typehints (>=1.23,!=1.23.4)"]
+test = ["appdirs (==1.4.4)", "covdefaults (>=2.3)", "pytest (>=7.3.1)", "pytest-cov (>=4)", "pytest-mock (>=3.10)"]
 
 [[package]]
 name = "pluggy"
@@ -721,6 +721,22 @@ description = "C parser in Python"
 category = "main"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
+
+[[package]]
+name = "pydiverse-transform"
+version = "0.1.0"
+description = "Pipe based dataframe manipulation library that can also transform data on SQL databases"
+category = "main"
+optional = true
+python-versions = ">=3.8,<4.0"
+
+[package.dependencies]
+numpy = ">=1.23.1,<2.0.0"
+pandas = ">=1.4.3,<2.0.0"
+SQLAlchemy = ">=1.4.39,<2.0.0"
+
+[package.extras]
+docs = ["Sphinx (>=5.1.1,<6.0.0)", "sphinx-rtd-theme (>=1.0.0,<2.0.0)", "sphinxcontrib-apidoc (>=0.3.0,<0.4.0)"]
 
 [[package]]
 name = "pydot"
@@ -966,7 +982,7 @@ python-versions = "*"
 
 [[package]]
 name = "sphinx"
-version = "6.2.0"
+version = "6.2.1"
 description = "Python documentation generator"
 category = "main"
 optional = true
@@ -1287,13 +1303,14 @@ docs = ["Sphinx", "sphinx-rtd-theme", "sphinxcontrib-apidoc"]
 filelock = ["filelock"]
 ibm_db2 = ["ibm-db", "ibm-db-sa"]
 mssql = ["pyodbc", "pytsql"]
+pdtransform = ["pydiverse-transform"]
 prefect = ["prefect"]
 zookeeper = ["kazoo"]
 
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
-content-hash = "be86c113b2ae37774ece57185196d17c6d59847918f2366a6cb17fd355242846"
+content-hash = "1c23eb2e7a2568e93965a7a277e0889977f30ec3b9084666f1cb95344ddd680d"
 
 [metadata.files]
 alabaster = [
@@ -1879,8 +1896,8 @@ pendulum = [
     {file = "pendulum-2.1.2.tar.gz", hash = "sha256:b06a0ca1bfe41c990bbf0c029f0b6501a7f2ec4e38bfec730712015e8860f207"},
 ]
 platformdirs = [
-    {file = "platformdirs-3.2.0-py3-none-any.whl", hash = "sha256:ebe11c0d7a805086e99506aa331612429a72ca7cd52a1f0d277dc4adc20cb10e"},
-    {file = "platformdirs-3.2.0.tar.gz", hash = "sha256:d5b638ca397f25f979350ff789db335903d7ea010ab28903f57b27e1b16c2b08"},
+    {file = "platformdirs-3.3.0-py3-none-any.whl", hash = "sha256:ea61fd7b85554beecbbd3e9b37fb26689b227ffae38f73353cbcc1cf8bd01878"},
+    {file = "platformdirs-3.3.0.tar.gz", hash = "sha256:64370d47dc3fca65b4879f89bdead8197e93e05d696d6d1816243ebae8595da5"},
 ]
 pluggy = [
     {file = "pluggy-1.0.0-py2.py3-none-any.whl", hash = "sha256:74134bbf457f031a36d68416e1509f34bd5ccc019f0bcc952c7b909d06b37bd3"},
@@ -1928,6 +1945,10 @@ psycopg2 = [
 pycparser = [
     {file = "pycparser-2.21-py2.py3-none-any.whl", hash = "sha256:8ee45429555515e1f6b185e78100aea234072576aa43ab53aefcae078162fca9"},
     {file = "pycparser-2.21.tar.gz", hash = "sha256:e644fdec12f7872f86c58ff790da456218b10f863970249516d60a5eaca77206"},
+]
+pydiverse-transform = [
+    {file = "pydiverse-transform-0.1.0.tar.gz", hash = "sha256:471becccddf1a0301fc7190a751ff8a38187d07079aebf70d7d8938c1a7a894b"},
+    {file = "pydiverse_transform-0.1.0-py3-none-any.whl", hash = "sha256:8255ad29787bbffaea2a5388029e813887eea6f2cd7dfe15b29191bad248f5bc"},
 ]
 pydot = [
     {file = "pydot-1.4.2-py2.py3-none-any.whl", hash = "sha256:66c98190c65b8d2e2382a441b4c0edfdb4f4c025ef9cb9874de478fb0793a451"},
@@ -2216,8 +2237,8 @@ sortedcontainers = [
     {file = "sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88"},
 ]
 sphinx = [
-    {file = "Sphinx-6.2.0.tar.gz", hash = "sha256:9ef22c2941bc3d0ff080d25a797f7521fc317e857395c712ddde97a19d5bb440"},
-    {file = "sphinx-6.2.0-py3-none-any.whl", hash = "sha256:ff1c2a1167bef9cdcd8ec71339e85fe10f26d4e9ef9382ef10b2687c876c936b"},
+    {file = "Sphinx-6.2.1.tar.gz", hash = "sha256:6d56a34697bb749ffa0152feafc4b19836c755d90a7c59b72bc7dfd371b9cc6b"},
+    {file = "sphinx-6.2.1-py3-none-any.whl", hash = "sha256:97787ff1fa3256a3eef9eda523a63dbf299f7b47e053cfcf684a1c2a8380c912"},
 ]
 sphinx-rtd-theme = [
     {file = "sphinx_rtd_theme-1.2.0-py2.py3-none-any.whl", hash = "sha256:f823f7e71890abe0ac6aaa6013361ea2696fc8d3e1fa798f463e82bdb77eeff2"},
