@@ -16,6 +16,7 @@ import pandas as pd
 import sqlalchemy as sa
 import sqlalchemy.exc
 import sqlalchemy.sql.elements
+from sqlalchemy.dialects.mssql import DATETIME2
 
 from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
@@ -1617,6 +1618,11 @@ class PandasTableHook(TableHook[SQLTableStore]):
             dtype_map[col] = sa.SMALLINT()
         if table.type_map is not None:
             dtype_map.update(table.type_map)
+        # Todo: do better abstraction of dialect specific code
+        if store.engine.dialect.name == "mssql":
+            for col, _type in dtype_map.items():
+                if _type == sa.DateTime:
+                    dtype_map[col] = DATETIME2()
         df.to_sql(
             table_name,
             store.engine,
@@ -1645,7 +1651,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
             return "datetime64[ns]"
 
     @staticmethod
-    def _fix_cols(cols: dict[str, Any]):
+    def _fix_cols(cols: dict[str, Any], dialect_name):
         cols = cols.copy()
         year_cols = []
         min_date = "1900-01-01"
@@ -1657,9 +1663,16 @@ class PandasTableHook(TableHook[SQLTableStore]):
                         sa.func.extract("year", cols[name]), sa.Integer
                     ).label(name + "_year")
                     year_cols.append(name + "_year")
-                cols[name] = sa.func.least(
-                    max_date, sa.func.greatest(min_date, cols[name])
-                ).label(name)
+                # Todo: do better abstraction of dialect specific code
+                if dialect_name == "mssql":
+                    cap_min = sa.func.iif(cols[name] < min_date, min_date, cols[name])
+                    cols[name] = sa.func.iif(
+                        cap_min > max_date, max_date, cap_min
+                    ).label(name)
+                else:
+                    cols[name] = sa.func.least(
+                        max_date, sa.func.greatest(min_date, cols[name])
+                    ).label(name)
         return cols, year_cols
 
     @classmethod
@@ -1676,7 +1689,9 @@ class PandasTableHook(TableHook[SQLTableStore]):
                 # retry operation since it might have been terminated as a
                 # deadlock victim
                 try:
-                    cols, year_cols = cls._fix_cols({c.name: c for c in sql_table.c})
+                    cols, year_cols = cls._fix_cols(
+                        {c.name: c for c in sql_table.c}, store.engine.dialect.name
+                    )
                     dtype_map.update({col: pd.Int16Dtype() for col in year_cols})
                     try:
                         # works only from pandas 2.0.0 on
