@@ -4,6 +4,7 @@ from pydiverse.pipedag import materialize, Table, Flow, Stage
 import sqlalchemy as sa
 import pandas as pd
 
+from pydiverse.pipedag.backend.table.sql import sa_select
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.util import PipedagConfig
 
@@ -14,7 +15,7 @@ def test_example_flow():
 
     @materialize(lazy=True)
     def lazy_task_1():
-        return sa.select([sa.literal(1).label("x"), sa.literal(2).label("y")])
+        return sa_select([sa.literal(1).label("x"), sa.literal(2).label("y")])
 
     @materialize(lazy=True, input_type=ibis_types.Table)
     def lazy_task_2(input1: ibis_types.Table, input2: ibis_types.Table):

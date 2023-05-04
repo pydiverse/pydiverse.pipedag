@@ -23,7 +23,7 @@ classifiers = [
 [tool.poetry.dependencies]
 python = ">=3.9, <3.11"  # currently, optional dependency tidypolars does not support python 3.11
 pandas = ">=1.4.3"
-SQLAlchemy = ">=1.4.39, <2.0"
+SQLAlchemy = ">=1.4.39"
 typing-extensions = "<5, >=4.1.0"
 networkx = ">=2.8"
 attrs = ">=22.1.0"

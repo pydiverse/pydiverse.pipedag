@@ -2,17 +2,18 @@ from pydiverse.pipedag import materialize, Table, Flow, Stage
 import sqlalchemy as sa
 import pandas as pd
 
+from pydiverse.pipedag.backend.table.sql import sa_select
 from pydiverse.pipedag.context import StageLockContext
 
 
 def test_example_flow():
     @materialize(lazy=True)
     def lazy_task_1():
-        return sa.select([sa.literal(1).label("x"), sa.literal(2).label("y")])
+        return sa_select([sa.literal(1).label("x"), sa.literal(2).label("y")])
 
     @materialize(lazy=True, input_type=sa.Table)
     def lazy_task_2(input1: sa.Table, input2: sa.Table):
-        query = sa.select([(input1.c.x * 5).label("x5"), input2.c.a]).select_from(
+        query = sa_select([(input1.c.x * 5).label("x5"), input2.c.a]).select_from(
             input1.outerjoin(input2, input2.c.x == input1.c.x)
         )
         return Table(query, name="task_2_out", primary_key=["a"])

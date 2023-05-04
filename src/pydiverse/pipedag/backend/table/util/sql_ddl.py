@@ -398,11 +398,10 @@ def visit_drop_schema_ibm_db_sa(drop: DropSchema, compiler, **kw):
         # see SQLTableStore.drop_all_dialect_specific()
         with drop.engine.connect() as conn:
             alias_names = conn.execute(
-                (
+                sa.text(
                     "SELECT NAME FROM SYSIBM.SYSTABLES WHERE CREATOR ="
                     f" '{ibm_db_sa_fix_name(drop.schema.get())}' and TYPE='A'"
                 ),
-                conn=drop.engine,
             ).all()
         alias_names = [row[0] for row in alias_names]
         for alias in alias_names:

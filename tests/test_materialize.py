@@ -7,6 +7,7 @@ import pytest
 import structlog
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
+from pydiverse.pipedag.backend.table.sql import sa_select
 from pydiverse.pipedag.context import RunContext, StageLockContext
 from pydiverse.pipedag.util.config import PipedagConfig
 
@@ -397,7 +398,7 @@ def _lazy_task_2():
 
 @materialize(lazy=True, input_type=sa.Table)
 def _lazy_join(src1: sa.Table, src2: sa.Table):
-    query = sa.select([src1.c.x, src2.c.x.label("x2")]).select_from(
+    query = sa_select([src1.c.x, src2.c.x.label("x2")]).select_from(
         src1.outerjoin(src2, src1.c.x == src2.c.x)
     )
     return Table(query, "t3_%%", indexes=[["x2"], ["x", "x2"]])
@@ -417,7 +418,7 @@ def _sql_task_2():
 
 @materialize(version="1.0", input_type=sa.Table)
 def _sql_join(src1: sa.Table, src2: sa.Table):
-    query = sa.select([src1.c.x, src2.c.x.label("x2")]).select_from(
+    query = sa_select([src1.c.x, src2.c.x.label("x2")]).select_from(
         src1.outerjoin(src2, src1.c.x == src2.c.x)
     )
     return Table(query, "t3_%%", indexes=[["x2"], ["x", "x2"]])
