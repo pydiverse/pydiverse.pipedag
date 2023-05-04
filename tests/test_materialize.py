@@ -90,12 +90,20 @@ def test_materialize_table_values():
         "b": [True, False],
         "d": [dt.date(1900, 1, 1), dt.date(2199, 12, 31)],
         "dt": [dt.datetime(1900, 1, 1, 0, 0, 0), dt.datetime(2199, 12, 31, 23, 59, 59)],
+        "d2": [dt.date(1, 1, 1), dt.date(9999, 12, 31)],
+        "dt2": [dt.datetime(1, 1, 1, 0, 0, 0), dt.datetime(9999, 12, 31, 23, 59, 59)],
     }
 
     with Flow("flow") as f:
         with Stage("stage_0"):
-            t_0 = m.pd_dataframe(values_dict_of_lists)
-            m.pd_dataframe_assert(t_0, values_dict_of_lists)
+            t_0 = m.pd_dataframe(values_dict_of_lists, cap_dates=True)
+            t_1 = m.pd_dataframe(values_dict_of_lists, cap_dates=False)
+            t_2 = m.noop(t_0)
+            t_3 = m.noop(t_1)
+            t_4 = m.noop_lazy(t_0)
+            t_5 = m.noop_lazy(t_1)
+            for t in [t_0, t_1, t_2, t_3, t_4, t_5]:
+                m.pd_dataframe_assert(t, values_dict_of_lists)
 
     assert f.run().successful
 

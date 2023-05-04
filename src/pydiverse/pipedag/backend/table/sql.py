@@ -1603,8 +1603,20 @@ class PandasTableHook(TableHook[SQLTableStore]):
             table_name = ibm_db_sa_fix_name(table_name)
         # force dtype=object to string (we require dates to be stored in datetime64[ns])
         for col in df.dtypes.loc[lambda x: x == object].index:
-            df[col] = df[col].astype(str)
-            dtype_map[col] = str_type
+            if table.type_map is None or col not in table.type_map:
+                df[col] = df[col].astype(str)
+                dtype_map[col] = str_type
+        for col in df.dtypes.loc[
+            lambda x: (x != object) & x.isin([pd.Int32Dtype, pd.UInt16Dtype])
+        ].index:
+            dtype_map[col] = sa.INTEGER()
+        for col in df.dtypes.loc[
+            lambda x: (x != object)
+            & x.isin([pd.Int16Dtype, pd.Int8Dtype, pd.UInt8Dtype])
+        ].index:
+            dtype_map[col] = sa.SMALLINT()
+        if table.type_map is not None:
+            dtype_map.update(table.type_map)
         df.to_sql(
             table_name,
             store.engine,
@@ -1617,8 +1629,12 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
     @staticmethod
     def _pandas_type(sql_type):
-        if isinstance(sql_type, sa.Integer):
+        if isinstance(sql_type, sa.SmallInteger):
+            return pd.Int16Dtype()
+        elif isinstance(sql_type, sa.BigInteger):
             return pd.Int64Dtype()
+        elif isinstance(sql_type, sa.Integer):
+            return pd.Int32Dtype()
         elif isinstance(sql_type, sa.Boolean):
             return pd.BooleanDtype()
         elif isinstance(sql_type, sa.String):
@@ -1628,6 +1644,24 @@ class PandasTableHook(TableHook[SQLTableStore]):
         elif isinstance(sql_type, sa.DateTime):
             return "datetime64[ns]"
 
+    @staticmethod
+    def _fix_cols(cols: dict[str, Any]):
+        cols = cols.copy()
+        year_cols = []
+        min_date = "1900-01-01"
+        max_date = "2199-12-31"
+        for name, col in list(cols.items()):
+            if isinstance(col.type, sa.Date) or isinstance(col.type, sa.DateTime):
+                if name + "_year" not in cols:
+                    cols[name + "_year"] = sa.cast(
+                        sa.func.extract("year", cols[name]), sa.Integer
+                    ).label(name + "_year")
+                    year_cols.append(name + "_year")
+                cols[name] = sa.func.least(
+                    max_date, sa.func.greatest(min_date, cols[name])
+                ).label(name)
+        return cols, year_cols
+
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
         schema = store.get_schema(stage_name).get()
@@ -1636,22 +1670,24 @@ class PandasTableHook(TableHook[SQLTableStore]):
             table_name, schema = store.resolve_aliases(table_name, schema)
             sql_table = sa.Table(
                 table_name, sa.MetaData(), schema=schema, autoload_with=store.engine
-            )
+            ).alias("tbl")
             dtype_map = {c.name: cls._pandas_type(c.type) for c in sql_table.c}
             for retry_iteration in range(4):
                 # retry operation since it might have been terminated as a
                 # deadlock victim
                 try:
+                    cols, year_cols = cls._fix_cols({c.name: c for c in sql_table.c})
+                    dtype_map.update({col: pd.Int16Dtype() for col in year_cols})
                     try:
                         # works only from pandas 2.0.0 on
                         df = pd.read_sql(
-                            sa.select("*").select_from(sql_table),
+                            sa.select(cols.values()).select_from(sql_table),
                             con=conn,
                             dtype=dtype_map,
                         )
                     except TypeError:
                         df = pd.read_sql(
-                            sa.select("*").select_from(sql_table), con=conn
+                            sa.select(cols.values()).select_from(sql_table), con=conn
                         )
                         for col, _type in dtype_map.items():
                             df[col] = df[col].astype(_type)
