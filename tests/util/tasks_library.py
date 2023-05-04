@@ -233,7 +233,7 @@ def pd_dataframe_assert(df_actual: pd.DataFrame, data: dict[str, list]):
     if ConfigContext.get().store.table_store.engine.dialect.name == "ibm_db_sa":
         for col in data:
             if type(data[col][0]) == bool:
-                df_expected[col] = df_expected[col].astype(pd.Int64Dtype())
+                df_expected[col] = df_expected[col].astype(pd.Int16Dtype())
     pd.testing.assert_frame_equal(df_expected, df_actual)
 
 
