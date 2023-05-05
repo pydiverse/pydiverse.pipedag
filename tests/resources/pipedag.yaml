@@ -89,3 +89,10 @@ instances:
                   "pydiverse.transform.core.table.Table"]
     table_store:
       table_store_connection: postgres
+
+  ibis:
+    instance_id: ibis_postgres
+    auto_table: [ "pandas.DataFrame", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable",
+                  "ibis.expr.types.Table"]
+    table_store:
+      table_store_connection: postgres
