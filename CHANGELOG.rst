@@ -11,6 +11,9 @@ Changelog
 ------------------
 - fix errors by increasing output_json length in metadata table
 - fix cache invalidation: query normalization before checking for changes
+- implemented pandas type mapping to avoid rowwise type checks of object columns
+- support pandas 2.0 (no arrow features used that)
+- support sqlalchemy 2.0 (except for with polars)
 
 0.2.3 (2023-04-17)
 ------------------
