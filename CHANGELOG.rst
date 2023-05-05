@@ -11,6 +11,7 @@ Changelog
 ------------------
 - fix errors by increasing output_json length in metadata table
 - fix cache invalidation: query normalization before checking for changes
+- add rudimentary support for ibis tasks (postgres + mssql)
 
 0.2.3 (2023-04-17)
 ------------------
