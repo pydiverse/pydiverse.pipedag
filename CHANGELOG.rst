@@ -7,12 +7,15 @@ https://semver.org/spec/v2.0.0.html. The most important bits are:
 Changelog
 =========
 
-0.2.4 (YYYY-MM-DD)
+0.2.4 (2023-05-05)
 ------------------
 - fix errors by increasing output_json length in metadata table
 - fix cache invalidation: query normalization before checking for changes
 - add rudimentary support for ibis tasks (postgres + mssql)
 - add rudimentary support for polars + tidypolars tasks
+- implemented pandas type mapping to avoid row wise type checks of object columns
+- support pandas 2.0 (no arrow features used that)
+- support sqlalchemy 2.0 (except for with polars)
 
 0.2.3 (2023-04-17)
 ------------------

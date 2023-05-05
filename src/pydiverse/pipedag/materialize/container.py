@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generic
+from typing import TYPE_CHECKING, Any, Generic
 
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.util import normalize_name
@@ -30,6 +30,7 @@ class Table(Generic[T]):
         stage: Stage | None = None,
         primary_key: str | list[str] | None = None,
         indexes: list[list[str]] | None = None,
+        type_map: dict[str, Any] | None = None,
     ):
         self._name = None
 
@@ -38,6 +39,7 @@ class Table(Generic[T]):
         self.stage = stage
         self.primary_key = primary_key
         self.indexes = indexes
+        self.type_map = type_map
 
         # cache_key will be overridden shortly before handing over to downstream tasks
         # that use it to compute their input_hash for cache_invalidation due to input

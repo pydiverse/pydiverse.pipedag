@@ -10,12 +10,14 @@ import time
 import traceback
 import warnings
 from collections.abc import Iterable
+from contextlib import contextmanager
 from typing import Any
 
 import pandas as pd
 import sqlalchemy as sa
 import sqlalchemy.exc
 import sqlalchemy.sql.elements
+from sqlalchemy.dialects.mssql import DATETIME2
 
 from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
@@ -233,20 +235,20 @@ class SQLTableStore(BaseTableStore):
             try:
                 with engine.connect() as conn:
                     # try whether connection with database in connect string works
-                    conn.execute("SELECT 1")
+                    conn.execute(sa.text("SELECT 1"))
             except sa.exc.DBAPIError:
                 postgres_db_url = url.set(database="postgres")
                 tmp_engine = sa.create_engine(postgres_db_url)
                 try:
                     with tmp_engine.connect() as conn:
-                        conn.execute("COMMIT")
+                        conn.execute(sa.text("COMMIT"))
                         conn.execute(CreateDatabase(url.database))
                 except sa.exc.DBAPIError:
                     # This happens if multiple instances try to create the database
                     # at the same time.
                     with engine.connect() as conn:
                         # Verify database actually exists
-                        conn.execute("SELECT 1")
+                        conn.execute(sa.text("SELECT 1"))
         else:
             raise NotImplementedError(
                 "create_database_if_not_exists is only implemented for postgres, yet"
@@ -256,6 +258,7 @@ class SQLTableStore(BaseTableStore):
     @staticmethod
     def _connect(engine_url, schema_prefix, schema_suffix):
         engine = sa.create_engine(engine_url)
+
         # if engine.dialect.name == "ibm_db_sa":
         #     engine.dispose()
         #     # switch to READ STABILITY isolation level to avoid unnecessary deadlock
@@ -263,6 +266,7 @@ class SQLTableStore(BaseTableStore):
         #     engine = sa.create_engine(
         #         engine_url, execution_options={"isolation_level": "RS"}
         #     )
+        # sqlalchemy 2 has create_engine().execution_options()
 
         if engine.dialect.name == "mssql":
             engine.dispose()
@@ -286,6 +290,23 @@ class SQLTableStore(BaseTableStore):
                 )
         return engine
 
+    @contextmanager
+    def engine_connect(self):
+        if self.engine.dialect.name == "ibm_db_sa":
+            conn = self.engine.connect()
+        else:
+            # sqlalchemy 2.0 uses this (except for dialect ibm_db_sa)
+            conn = self.engine.connect().execution_options(isolation_level="AUTOCOMMIT")
+        try:
+            yield conn
+        finally:
+            try:
+                # sqlalchemy 2.0 + ibm_db_sa needs this
+                conn.commit()
+            except AttributeError:
+                # sqlalchemy 1.x does not have this function and does not need it
+                pass
+
     def get_schema(self, name):
         return Schema(name, self.schema_prefix, self.schema_suffix)
 
@@ -300,12 +321,18 @@ class SQLTableStore(BaseTableStore):
             pretty_query_str = self.format_sql_string(query_str)
             self.logger.info(f"Executing sql:\n{pretty_query_str}")
 
-        return conn.execute(query)
+        if isinstance(query, str):
+            return conn.execute(sa.text(query))
+        else:
+            return conn.execute(query)
 
     def execute(self, query, *, conn: sa.engine.Connection = None):
         if conn is None:
-            with self.engine.connect() as conn:
-                return self.execute(query, conn=conn)
+            with self.engine_connect() as conn:
+                if isinstance(query, str):
+                    return self.execute(sa.text(query), conn=conn)
+                else:
+                    return self.execute(query, conn=conn)
 
         if isinstance(query, sa.schema.DDLElement):
             # Some custom DDL statements contain multiple statements.
@@ -313,6 +340,12 @@ class SQLTableStore(BaseTableStore):
             query_str = str(
                 query.compile(self.engine, compile_kwargs={"literal_binds": True})
             )
+            try:
+                # sqlalchemy 2.0 + ibm_db_sa needs this
+                conn.commit()
+            except AttributeError:
+                # sqlalchemy 1.x does not have this function and does not need it
+                pass
             with conn.begin():
                 for part in split_ddl_statement(query_str):
                     self._execute(part, conn)
@@ -515,7 +548,7 @@ class SQLTableStore(BaseTableStore):
             if re.match(r"\bUSE\b", statement):
                 last_use_statement = statement
 
-            with self.engine.connect() as conn:
+            with self.engine_connect() as conn:
                 if last_use_statement is not None:
                     self.execute(last_use_statement, conn=conn)
                 self.execute(statement, conn=conn)
@@ -543,7 +576,7 @@ class SQLTableStore(BaseTableStore):
         super().setup()
         if not self.avoid_drop_create_schema:
             self.execute(CreateSchema(self.metadata_schema, if_not_exists=True))
-        with self.engine.connect() as conn:
+        with self.engine_connect() as conn:
             try:
                 version = conn.execute(
                     sa.select(self.version_table.c.version)
@@ -551,27 +584,27 @@ class SQLTableStore(BaseTableStore):
             except sa.exc.ProgrammingError:
                 # table metadata_version does not yet exist
                 version = None
-            if version is None:
-                with conn.begin():
-                    self.sql_metadata.create_all(conn)
-                    version = conn.execute(
-                        sa.select(self.version_table.c.version)
-                    ).scalar_one_or_none()
-                    assert version is None  # detect race condition
-                    conn.execute(
-                        self.version_table.insert().values(
-                            version=self.metadata_version,
-                        )
+        if version is None:
+            with self.engine_connect() as conn, conn.begin():
+                self.sql_metadata.create_all(conn)
+                version = conn.execute(
+                    sa.select(self.version_table.c.version)
+                ).scalar_one_or_none()
+                assert version is None  # detect race condition
+                conn.execute(
+                    self.version_table.insert().values(
+                        version=self.metadata_version,
                     )
-            elif version != self.metadata_version:
-                # disable caching due to incompatible metadata table schemas
-                # (in future versions, consider automatic metadata schema upgrade)
-                self.disable_caching = True
-                self.logger.warning(
-                    "Disabled caching due to metadata version mismatch",
-                    version=version,
-                    expected_version=self.metadata_version,
                 )
+        elif version != self.metadata_version:
+            # disable caching due to incompatible metadata table schemas
+            # (in future versions, consider automatic metadata schema upgrade)
+            self.disable_caching = True
+            self.logger.warning(
+                "Disabled caching due to metadata version mismatch",
+                version=version,
+                expected_version=self.metadata_version,
+            )
 
     def dispose(self):
         self.engine.dispose()
@@ -591,10 +624,12 @@ class SQLTableStore(BaseTableStore):
 
     @drop_all_dialect_specific.dialect("ibm_db_sa")
     def _drop_all_dialect_specific_ibm_db_sa(self, schema: Schema):
-        with self.engine.connect() as conn:
+        with self.engine_connect() as conn:
             alias_names = conn.execute(
-                "SELECT NAME FROM SYSIBM.SYSTABLES WHERE CREATOR ="
-                f" '{ibm_db_sa_fix_name(schema.get())}' and TYPE='A'"
+                sa.text(
+                    "SELECT NAME FROM SYSIBM.SYSTABLES WHERE CREATOR ="
+                    f" '{ibm_db_sa_fix_name(schema.get())}' and TYPE='A'"
+                )
             ).all()
         alias_names = [row[0] for row in alias_names]
         for alias in alias_names:
@@ -611,7 +646,7 @@ class SQLTableStore(BaseTableStore):
         )
         cs_trans = CreateSchema(transaction_schema, if_not_exists=False)
 
-        with self.engine.connect() as conn:
+        with self.engine_connect() as conn:
             if self.avoid_drop_create_schema:
                 # empty tansaction_schema by deleting all tables and views
                 # Attention: similar code in sql_ddl.py:visit_drop_schema_ibm_db_sa
@@ -656,7 +691,7 @@ class SQLTableStore(BaseTableStore):
 
         # don't drop/create databases, just replace the schema underneath
         # (files will keep name on renaming)
-        with self.engine.connect() as conn:
+        with self.engine_connect() as conn:
             if not self.avoid_drop_create_schema:
                 self.execute(cs_base, conn=conn)
                 self.execute(cs_trans, conn=conn)
@@ -713,7 +748,7 @@ class SQLTableStore(BaseTableStore):
 
     def _init_stage_read_views(self, stage: Stage):
         try:
-            with self.engine.connect() as conn:
+            with self.engine_connect() as conn:
                 metadata_rows = (
                     conn.execute(
                         self.stage_table.select().where(
@@ -754,7 +789,11 @@ class SQLTableStore(BaseTableStore):
         # dispose open connections which may prevent schema swapping
         self.engine.dispose()
 
-        with self.engine.connect() as conn, conn.begin():
+        # We might want to also append ', conn.begin()' to the with statement,
+        # but this collides with the inner conn.begin() used to execute
+        # statement parts as one transaction. This is solvable via complex code,
+        # but we typically don't want to rely on database transactions anyways.
+        with self.engine_connect() as conn:
             # TODO: for mssql try to find schema does not exist and then move
             #       the forgotten tmp schema there
             assert not self.avoid_drop_create_schema, (
@@ -777,7 +816,7 @@ class SQLTableStore(BaseTableStore):
         dest_schema = self.get_schema(stage.name)
         src_schema = self.get_schema(stage.transaction_name)
 
-        with self.engine.connect() as conn:
+        with self.engine_connect() as conn:
             # Delete all read views in visible (destination) schema
             views = self.get_view_names(dest_schema.get())
             for view in views:
@@ -1036,7 +1075,7 @@ class SQLTableStore(BaseTableStore):
 
     # noinspection SqlDialectInspection
     def _get_mssql_sql_modules(self, schema: str):
-        with self.engine.connect() as conn:
+        with self.engine_connect() as conn:
             database, schema_only = schema.split(".")
             self.execute(f"USE {database}", conn=conn)
             # include stored procedures in view names because they can also be recreated
@@ -1052,7 +1091,7 @@ class SQLTableStore(BaseTableStore):
 
     # noinspection SqlDialectInspection
     def _get_mssql_sql_synonyms(self, schema: str):
-        with self.engine.connect() as conn:
+        with self.engine_connect() as conn:
             database, schema_only = schema.split(".")
             self.execute(f"USE {database}", conn=conn)
             # include stored procedures in view names because they can also be recreated
@@ -1122,7 +1161,7 @@ class SQLTableStore(BaseTableStore):
         src_database, src_schema_only = src_schema.get().split(".")
         dest_database, dest_schema_only = dest_schema.get().split(".")
 
-        with self.engine.connect() as conn:
+        with self.engine_connect() as conn:
             self.execute(f"USE {src_database}", conn=conn)
             view_sql = self.execute(
                 f"""
@@ -1164,7 +1203,7 @@ class SQLTableStore(BaseTableStore):
 
     def store_task_metadata(self, metadata: TaskMetadata, stage: Stage):
         if not self.disable_caching:
-            with self.engine.connect() as conn:
+            with self.engine_connect() as conn:
                 conn.execute(
                     self.tasks_table.insert().values(
                         name=metadata.name,
@@ -1190,7 +1229,7 @@ class SQLTableStore(BaseTableStore):
 
         ignore_fresh_input = RunContext.get().ignore_fresh_input
         try:
-            with self.engine.connect() as conn:
+            with self.engine_connect() as conn:
                 result = (
                     conn.execute(
                         self.tasks_table.select()
@@ -1227,7 +1266,7 @@ class SQLTableStore(BaseTableStore):
 
     def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
         if not self.disable_caching:
-            with self.engine.connect() as conn:
+            with self.engine_connect() as conn:
                 conn.execute(
                     self.lazy_cache_table.insert().values(
                         name=metadata.name,
@@ -1249,7 +1288,7 @@ class SQLTableStore(BaseTableStore):
             )
 
         try:
-            with self.engine.connect() as conn:
+            with self.engine_connect() as conn:
                 result = (
                     conn.execute(
                         self.lazy_cache_table.select()
@@ -1280,7 +1319,7 @@ class SQLTableStore(BaseTableStore):
 
     def store_raw_sql_metadata(self, metadata: RawSqlMetadata):
         if not self.disable_caching:
-            with self.engine.connect() as conn:
+            with self.engine_connect() as conn:
                 conn.execute(
                     self.raw_sql_cache_table.insert().values(
                         prev_tables=json.dumps(metadata.prev_tables),
@@ -1303,7 +1342,7 @@ class SQLTableStore(BaseTableStore):
             )
 
         try:
-            with self.engine.connect() as conn:
+            with self.engine_connect() as conn:
                 result = (
                     conn.execute(
                         self.raw_sql_cache_table.select()
@@ -1339,12 +1378,12 @@ class SQLTableStore(BaseTableStore):
 
     @resolve_aliases.dialect("ibm_db_sa")
     def resolve_aliases_ibm_db_sa(self, table_name, schema):
-        with self.engine.connect() as conn:
+        with self.engine_connect() as conn:
             return _resolve_alias_ibm_db_sa(conn, table_name, schema)
 
     @resolve_aliases.dialect("mssql")
     def resolve_aliases_mssql(self, table_name, schema):
-        with self.engine.connect() as conn:
+        with self.engine_connect() as conn:
             return _resolve_alias_mssql(conn, table_name, schema)
 
     def list_tables(self, stage: Stage, *, include_everything=False):
@@ -1380,9 +1419,9 @@ class SQLTableStore(BaseTableStore):
             raise NotImplementedError(
                 "computing stage hash with disabled caching is currently not supported"
             )
-        with self.engine.connect() as conn:
+        with self.engine_connect() as conn:
             result = conn.execute(
-                sa.select([self.tasks_table.c.output_json])
+                sa.select(self.tasks_table.c.output_json)
                 .where(self.tasks_table.c.stage == stage.name)
                 .where(self.tasks_table.c.in_transaction_schema.in_([False]))
                 .order_by(self.tasks_table.c.output_json)
@@ -1462,7 +1501,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @classmethod
     def lazy_query_str(cls, store, obj) -> str:
         if isinstance(obj, sa.sql.selectable.FromClause):
-            query = sa.select([sa.text("*")]).select_from(obj)
+            query = sa.select(sa.text("*")).select_from(obj)
         else:
             query = obj
         query_str = str(
@@ -1488,7 +1527,7 @@ def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0
     schema = ibm_db_sa_fix_name(schema)
     tbl = sa.Table("SYSTABLES", sa.MetaData(), schema="SYSIBM", autoload_with=conn)
     query = (
-        sa.select([tbl.c.base_name, tbl.c.base_schema])
+        sa_select([tbl.c.base_name, tbl.c.base_schema])
         .select_from(tbl)
         .where(
             (tbl.c.creator == schema) & (tbl.c.name == table_name) & (tbl.c.TYPE == "A")
@@ -1519,7 +1558,7 @@ def _resolve_alias_mssql(conn, table_name: str, schema: str, *, _iteration=0):
     # we need to resolve aliases since pandas.read_sql_table does not work for them
     # and sa.Table does not auto-reflect columns
     database, schema_only = schema.split(".")
-    conn.execute(f"USE [{database}]")
+    conn.execute(sa.text(f"USE [{database}]"))
     # include stored procedures in view names because they can also be recreated
     # based on sys.sql_modules.description
     sql = (
@@ -1527,7 +1566,7 @@ def _resolve_alias_mssql(conn, table_name: str, schema: str, *, _iteration=0):
         f" schem on schem.schema_id=syn.schema_id where schem.name='{schema_only}' and"
         f" syn.name='{table_name}' and syn.type='SN'"
     )
-    row = conn.execute(sql).mappings().one_or_none()
+    row = conn.execute(sa.text(sql)).mappings().one_or_none()
     if row is not None:
         parts = row["base_object_name"].split(".")
         assert len(parts) == 3, (
@@ -1547,8 +1586,39 @@ def _resolve_alias_mssql(conn, table_name: str, schema: str, *, _iteration=0):
     return table_name, schema
 
 
+def adj_pandas_types(df: pd.DataFrame):
+    df = df.copy()
+    for col in df.dtypes.loc[lambda x: x == int].index:
+        df[col] = df[col].astype(pd.Int64Dtype())
+    for col in df.dtypes.loc[lambda x: x == bool].index:
+        df[col] = df[col].astype(pd.BooleanDtype())
+    for col in df.dtypes.loc[lambda x: x == object].index:
+        df[col] = df[col].astype(pd.StringDtype())
+    return df
+
+
 @SQLTableStore.register_table(pd)
 class PandasTableHook(TableHook[SQLTableStore]):
+    """
+    Materalize pandas->sql and retrieve sql->pandas.
+
+    We like to limit the use of types, so operations can be implemented reliably
+    without the use of pandas dtype=object where every row can have different type:
+      - string/varchar/clob: pd.StringDType
+      - date: datetime64[ns] (we cap year in 1900..2199 and save original year
+            in separate column)
+      - datetime: datetime64[ns] (we cap year in 1900..2199 and save original year
+            in separate column)
+      - int: pd.Int64DType
+      - boolean: pd.BooleanDType
+
+    Dialect specific aspects:
+      * ibm_db_sa:
+        - DB2 does not support boolean type -> integer
+        - We limit string columns to 256 characters since larger columns have
+          trouble with adding indexes/primary keys
+    """
+
     @classmethod
     def can_materialize(cls, type_) -> bool:
         return issubclass(type_, pd.DataFrame)
@@ -1565,6 +1635,8 @@ class PandasTableHook(TableHook[SQLTableStore]):
         stage_name,
         task_info: TaskInfo,
     ):
+        # we might try to avoid this copy for speedup / saving RAM
+        df = table.obj.copy()
         schema = store.get_schema(stage_name)
         if store.print_materialize:
             store.logger.info(
@@ -1572,23 +1644,85 @@ class PandasTableHook(TableHook[SQLTableStore]):
             )
         dtype_map = {}
         table_name = table.name
+        str_type = sa.String()
         if store.engine.dialect.name == "ibm_db_sa":
             # Default string target is CLOB which can't be used for indexing.
             # We could use VARCHAR(32000), but if we change this to VARCHAR(256)
             # for indexed columns, DB2 hangs.
-            dtype_map = {
-                col: sa.VARCHAR(256)
-                for col in table.obj.dtypes.loc[lambda x: x == object].index
-            }
+            str_type = sa.VARCHAR(256)
             table_name = ibm_db_sa_fix_name(table_name)
-        table.obj.to_sql(
+        # force dtype=object to string (we require dates to be stored in datetime64[ns])
+        for col in df.dtypes.loc[lambda x: x == object].index:
+            if table.type_map is None or col not in table.type_map:
+                df[col] = df[col].astype(str)
+                dtype_map[col] = str_type
+        for col in df.dtypes.loc[
+            lambda x: (x != object) & x.isin([pd.Int32Dtype, pd.UInt16Dtype])
+        ].index:
+            dtype_map[col] = sa.INTEGER()
+        for col in df.dtypes.loc[
+            lambda x: (x != object)
+            & x.isin([pd.Int16Dtype, pd.Int8Dtype, pd.UInt8Dtype])
+        ].index:
+            dtype_map[col] = sa.SMALLINT()
+        if table.type_map is not None:
+            dtype_map.update(table.type_map)
+        # Todo: do better abstraction of dialect specific code
+        if store.engine.dialect.name == "mssql":
+            for col, _type in dtype_map.items():
+                if _type == sa.DateTime:
+                    dtype_map[col] = DATETIME2()
+        df.to_sql(
             table_name,
             store.engine,
             schema=schema.get(),
             index=False,
             dtype=dtype_map,
+            chunksize=100_000,
         )
         store.add_indexes(table, schema)
+
+    @staticmethod
+    def _pandas_type(sql_type):
+        if isinstance(sql_type, sa.SmallInteger):
+            return pd.Int16Dtype()
+        elif isinstance(sql_type, sa.BigInteger):
+            return pd.Int64Dtype()
+        elif isinstance(sql_type, sa.Integer):
+            return pd.Int32Dtype()
+        elif isinstance(sql_type, sa.Boolean):
+            return pd.BooleanDtype()
+        elif isinstance(sql_type, sa.String):
+            return pd.StringDtype()
+        elif isinstance(sql_type, sa.Date):
+            return "datetime64[ns]"
+        elif isinstance(sql_type, sa.DateTime):
+            return "datetime64[ns]"
+
+    @staticmethod
+    def _fix_cols(cols: dict[str, Any], dialect_name):
+        cols = cols.copy()
+        year_cols = []
+        min_date = "1900-01-01"
+        max_date = "2199-12-31"
+        for name, col in list(cols.items()):
+            if isinstance(col.type, sa.Date) or isinstance(col.type, sa.DateTime):
+                if name + "_year" not in cols:
+                    cols[name + "_year"] = sa.cast(
+                        sa.func.extract("year", cols[name]), sa.Integer
+                    ).label(name + "_year")
+                    year_cols.append(name + "_year")
+                # Todo: do better abstraction of dialect specific code
+                if dialect_name == "mssql":
+                    cap_min = sa.func.iif(cols[name] < min_date, min_date, cols[name])
+                    cols[name] = sa.func.iif(
+                        cap_min > max_date, max_date, cap_min
+                    ).label(name)
+                else:
+                    cols[name] = sa.func.least(
+                        max_date, sa.func.greatest(min_date, cols[name])
+                    ).label(name)
+        return cols, year_cols
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
@@ -1600,7 +1734,29 @@ class PandasTableHook(TableHook[SQLTableStore]):
                 # retry operation since it might have been terminated as a
                 # deadlock victim
                 try:
-                    df = pd.read_sql_table(table_name, conn, schema=schema)
+                    sql_table = sa.Table(
+                        table_name,
+                        sa.MetaData(),
+                        schema=schema,
+                        autoload_with=store.engine,
+                    ).alias("tbl")
+                    dtype_map = {c.name: cls._pandas_type(c.type) for c in sql_table.c}
+                    cols, year_cols = cls._fix_cols(
+                        {c.name: c for c in sql_table.c}, store.engine.dialect.name
+                    )
+                    dtype_map.update({col: pd.Int16Dtype() for col in year_cols})
+                    query = sa_select(cols.values()).select_from(sql_table)
+                    try:
+                        # works only from pandas 2.0.0 on
+                        df = pd.read_sql(
+                            query,
+                            con=conn,
+                            dtype=dtype_map,
+                        )
+                    except TypeError:
+                        df = pd.read_sql(query, con=conn)
+                        for col, _type in dtype_map.items():
+                            df[col] = df[col].astype(_type)
                     break
                 except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
                     if retry_iteration == 3:
@@ -1880,3 +2036,15 @@ class IbisTableHook(TableHook[SQLTableStore]):
     @classmethod
     def lazy_query_str(cls, store, obj: ibis_types.Table) -> str:
         return str(ibis.to_sql(obj, cls.get_con(store).name))
+
+
+def sa_select(*args, **kwargs):
+    """Run sa.select in 'old' way compatible with sqlalchemy>=2.0."""
+    try:
+        return sa.select(*args, **kwargs)
+    except sa.exc.ArgumentError:
+        if len(args) == 1 and isinstance(args[0], Iterable) and len(kwargs) == 0:
+            # for sqlalchemy 2.0, we need to unpack columns
+            return sa.select(*args[0])
+        else:
+            raise

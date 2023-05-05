@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import pandas as pd
 import sqlalchemy as sa
+import datetime as dt
 import pytest
 import structlog
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
+from pydiverse.pipedag.backend.table.sql import sa_select
 from pydiverse.pipedag.context import RunContext, StageLockContext
 from pydiverse.pipedag.util.config import PipedagConfig
 
@@ -32,11 +34,24 @@ def test_materialize_literals():
             materialize_and_retrieve(0)
             materialize_and_retrieve(1)
 
+            # max 32bit
+            materialize_and_retrieve(-2147483648)
+            materialize_and_retrieve(2147483647)
+
+            # max 64bit
+            materialize_and_retrieve(-9223372036854775808)
+            materialize_and_retrieve(9223372036854775807)
+
+            # in python json we even have infinite precision integers:
+            materialize_and_retrieve(-9223372036854775809)
+            materialize_and_retrieve(9223372036854775808)
+
             materialize_and_retrieve(3.14)
             materialize_and_retrieve(-2.71)
 
             materialize_and_retrieve("")
             materialize_and_retrieve("a string")
+            materialize_and_retrieve("a" * 256)
 
             materialize_and_retrieve([0, 1, 2, 3])
             materialize_and_retrieve((0, 1, 2, 3))
@@ -63,6 +78,33 @@ def test_materialize_table():
             x = m.simple_dataframe()
 
             m.assert_table_equal(x, x)
+
+    assert f.run().successful
+
+
+def test_materialize_table_values():
+    values_dict_of_lists = {
+        "x": [0, 1],
+        "x32": [-2147483648, 2147483647],
+        "x64": [-9223372036854775808, 9223372036854775807],
+        "str256": ["", "a" * 256],
+        "b": [True, False],
+        "d": [dt.date(1900, 1, 1), dt.date(2199, 12, 31)],
+        "dt": [dt.datetime(1900, 1, 1, 0, 0, 0), dt.datetime(2199, 12, 31, 23, 59, 59)],
+        "d2": [dt.date(1, 1, 1), dt.date(9999, 12, 31)],
+        "dt2": [dt.datetime(1, 1, 1, 0, 0, 0), dt.datetime(9999, 12, 31, 23, 59, 59)],
+    }
+
+    with Flow("flow") as f:
+        with Stage("stage_0"):
+            t_0 = m.pd_dataframe(values_dict_of_lists, cap_dates=True)
+            t_1 = m.pd_dataframe(values_dict_of_lists, cap_dates=False)
+            t_2 = m.noop(t_0)
+            t_3 = m.noop(t_1)
+            t_4 = m.noop_lazy(t_0)
+            t_5 = m.noop_lazy(t_1)
+            for t in [t_0, t_1, t_2, t_3, t_4, t_5]:
+                m.pd_dataframe_assert(t, values_dict_of_lists)
 
     assert f.run().successful
 
@@ -356,7 +398,7 @@ def _lazy_task_2():
 
 @materialize(lazy=True, input_type=sa.Table)
 def _lazy_join(src1: sa.Table, src2: sa.Table):
-    query = sa.select([src1.c.x, src2.c.x.label("x2")]).select_from(
+    query = sa_select([src1.c.x, src2.c.x.label("x2")]).select_from(
         src1.outerjoin(src2, src1.c.x == src2.c.x)
     )
     return Table(query, "t3_%%", indexes=[["x2"], ["x", "x2"]])
@@ -376,7 +418,7 @@ def _sql_task_2():
 
 @materialize(version="1.0", input_type=sa.Table)
 def _sql_join(src1: sa.Table, src2: sa.Table):
-    query = sa.select([src1.c.x, src2.c.x.label("x2")]).select_from(
+    query = sa_select([src1.c.x, src2.c.x.label("x2")]).select_from(
         src1.outerjoin(src2, src1.c.x == src2.c.x)
     )
     return Table(query, "t3_%%", indexes=[["x2"], ["x", "x2"]])

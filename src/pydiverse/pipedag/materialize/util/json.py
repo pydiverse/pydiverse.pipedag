@@ -7,6 +7,7 @@ type of the object.
 
 from __future__ import annotations
 
+import datetime as dt
 from pathlib import Path
 
 from pydiverse.pipedag import Stage
@@ -21,6 +22,8 @@ PIPEDAG_TYPE_BLOB = "blob"
 PIPEDAG_TYPE_STAGE = "stage"
 PIPEDAG_TYPE_PIPEDAG_CONFIG = "pipedag_config"
 PIPEDAG_TYPE_PATH = "path"
+PIPEDAG_TYPE_DATE = "date"
+PIPEDAG_TYPE_DATETIME = "datetime"
 
 
 def json_default(o):
@@ -62,6 +65,16 @@ def json_default(o):
         return {
             PIPEDAG_TYPE: PIPEDAG_TYPE_PATH,
             "path": str(o),
+        }
+    if isinstance(o, dt.date):
+        return {
+            PIPEDAG_TYPE: PIPEDAG_TYPE_DATE,
+            "date": o.isoformat(),
+        }
+    if isinstance(o, dt.datetime):
+        return {
+            PIPEDAG_TYPE: PIPEDAG_TYPE_DATETIME,
+            "datetime": o.isoformat(),
         }
 
     raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
@@ -106,6 +119,10 @@ def json_object_hook(d: dict):
             raise TypeError("PipedagConfig can't be deserialized.")
         elif pipedag_type == PIPEDAG_TYPE_PATH:
             return Path(d["path"])
+        elif pipedag_type == PIPEDAG_TYPE_DATE:
+            return dt.date.fromisoformat(d["date"])
+        elif pipedag_type == PIPEDAG_TYPE_DATETIME:
+            return dt.datetime.fromisoformat(d["datetime"])
         else:
             raise ValueError(
                 f"Invalid value for '{PIPEDAG_TYPE}' key: {repr(pipedag_type)}"

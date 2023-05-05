@@ -49,6 +49,14 @@ poetry shell
 pre-commit install
 ```
 
+## Testing
+
+After installation, you should be able to run:
+
+```bash
+poetry run pytest --workers 4
+```
+
 ## Pre-commit install with conda and python 3.9
 
 We currently have some pre-commit hooks bound to python=3.9. So pre-commit install may fail when running with
