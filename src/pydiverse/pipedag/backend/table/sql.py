@@ -1730,11 +1730,11 @@ class PandasTableHook(TableHook[SQLTableStore]):
         with store.engine.connect() as conn:
             table_name = table.name
             table_name, schema = store.resolve_aliases(table_name, schema)
-            sql_table = sa.Table(
-                table_name, sa.MetaData(), schema=schema, autoload_with=store.engine
-            ).alias("tbl")
-            dtype_map = {c.name: cls._pandas_type(c.type) for c in sql_table.c}
             for retry_iteration in range(4):
+                sql_table = sa.Table(
+                    table_name, sa.MetaData(), schema=schema, autoload_with=store.engine
+                ).alias("tbl")
+                dtype_map = {c.name: cls._pandas_type(c.type) for c in sql_table.c}
                 # retry operation since it might have been terminated as a
                 # deadlock victim
                 try:
