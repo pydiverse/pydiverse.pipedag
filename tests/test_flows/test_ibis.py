@@ -10,7 +10,6 @@ from pydiverse.pipedag.util import PipedagConfig
 
 @pytest.mark.ibis
 def test_example_flow():
-    import ibis
     import ibis.expr.types as ibis_types
 
     @materialize(lazy=True)

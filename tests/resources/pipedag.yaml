@@ -96,3 +96,10 @@ instances:
                   "ibis.expr.types.Table"]
     table_store:
       table_store_connection: postgres
+
+  polars:
+    instance_id: polars_postgres
+    auto_table: [ "pandas.DataFrame", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable",
+                  "polars.dataframe.DataFrame", "tidypolars.Tibble"]
+    table_store:
+      table_store_connection: postgres
