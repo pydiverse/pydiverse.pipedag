@@ -300,8 +300,12 @@ class SQLTableStore(BaseTableStore):
         try:
             yield conn
         finally:
-            # sqlalchemy 2.0 + ibm_db_sa needs this
-            conn.commit()
+            try:
+                # sqlalchemy 2.0 + ibm_db_sa needs this
+                conn.commit()
+            except AttributeError:
+                # sqlalchemy 1.x does not have this function and does not need it
+                pass
 
     def get_schema(self, name):
         return Schema(name, self.schema_prefix, self.schema_suffix)
@@ -336,7 +340,12 @@ class SQLTableStore(BaseTableStore):
             query_str = str(
                 query.compile(self.engine, compile_kwargs={"literal_binds": True})
             )
-            conn.commit()
+            try:
+                # sqlalchemy 2.0 + ibm_db_sa needs this
+                conn.commit()
+            except AttributeError:
+                # sqlalchemy 1.x does not have this function and does not need it
+                pass
             with conn.begin():
                 for part in split_ddl_statement(query_str):
                     self._execute(part, conn)
