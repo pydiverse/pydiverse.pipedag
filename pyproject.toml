@@ -46,7 +46,7 @@ pyodbc = { version = ">=4.0.35", optional = true }
 pytsql = { version = ">=1.1.4", optional = true }
 ibm-db = { version = ">=3.1.4", optional = true }
 ibm-db-sa = { version = ">=0.3.8", optional = true }
-pydiverse-transform = { version = ">=0.1.0", optional = true }
+pydiverse-transform = { version = ">=0.1.1", optional = true }
 ibis = { version = ">=3.2.0", optional = true }
 ibis-framework = {extras = ["mssql", "postgres"], version = "^5.1.0", optional = true }
 tidypolars = { version = ">=0.2.19", optional = true }

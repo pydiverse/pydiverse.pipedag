@@ -1630,7 +1630,7 @@ zookeeper = ["kazoo"]
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9, <3.11"  # currently, optional dependency tidypolars does not support python 3.11
-content-hash = "ecf221f3c30e745956b66cb90f382588d5a97a5119754f26cc643a7dfacde0dd"
+content-hash = "9732c214ad56a0f05c5c412493621c58c9686d3ce477b71d1624852c0f3c2959"
 
 [metadata.files]
 alabaster = [
