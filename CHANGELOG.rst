@@ -7,6 +7,10 @@ https://semver.org/spec/v2.0.0.html. The most important bits are:
 Changelog
 =========
 
+0.2.4 (YYYY-MM-DD)
+------------------
+- fix ibm_db_sa bug when copying dataframes from cache: uppercase table names by default
+
 0.2.4 (2023-05-05)
 ------------------
 - fix errors by increasing output_json length in metadata table
