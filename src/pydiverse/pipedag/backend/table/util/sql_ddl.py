@@ -1152,6 +1152,7 @@ def _get_nullable_change_statements(change, compiler):
 
 def ibm_db_sa_fix_name(name):
     # DB2 seems to create tables uppercase if all lowercase given
+    # TODO: consider moving this replacement to call in sql.py
     return name.upper() if name.islower() else name
 
 
