@@ -1478,7 +1478,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         task_info: TaskInfo,
     ):
         obj = table.obj
-        if isinstance(table.obj, sa.Table):
+        if isinstance(table.obj, (sa.Table, sa.sql.selectable.Alias)):
             obj = sa.select("*").select_from(table.obj)
 
         source_tables = [
