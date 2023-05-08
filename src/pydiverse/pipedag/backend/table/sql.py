@@ -886,7 +886,9 @@ class SQLTableStore(BaseTableStore):
         _ = src_schema  # only needed by other dialects
         for table in src_tables:
             self.execute(
-                CreateViewAsSelect(table.name, dest_schema, sa.select(table)),
+                CreateViewAsSelect(
+                    table.name, dest_schema, sa.select("*").select_from(table)
+                ),
                 conn=conn,
             )
 
@@ -1477,7 +1479,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     ):
         obj = table.obj
         if isinstance(table.obj, sa.Table):
-            obj = sa.select(table.obj)
+            obj = sa.select("*").select_from(table.obj)
 
         source_tables = [
             dict(
@@ -1526,7 +1528,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @classmethod
     def lazy_query_str(cls, store, obj) -> str:
         if isinstance(obj, sa.sql.selectable.FromClause):
-            query = sa.select(sa.text("*")).select_from(obj)
+            query = sa.select("*").select_from(obj)
         else:
             query = obj
         query_str = str(
