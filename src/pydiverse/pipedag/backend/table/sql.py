@@ -1505,7 +1505,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         store.add_indexes(table, schema, early_not_null_possible=True)
 
     @classmethod
-    def retrieve(cls, store, table, stage_name, as_type):
+    def retrieve(cls, store, table, stage_name, as_type, namer):
         table_name = table.name
         schema = store.get_schema(stage_name).get()
         table_name, schema = store.resolve_aliases(table_name, schema)
@@ -1517,7 +1517,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                     sa.MetaData(),
                     schema=schema,
                     autoload_with=store.engine,
-                )
+                ).alias(namer.get_name(table_name))
                 break
             except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
                 if retry_iteration == 3:
@@ -1752,7 +1752,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         return cols, year_cols
 
     @classmethod
-    def retrieve(cls, store, table, stage_name, as_type):
+    def retrieve(cls, store, table, stage_name, as_type, namer):
         schema = store.get_schema(stage_name).get()
         with store.engine.connect() as conn:
             table_name = table.name
@@ -1850,7 +1850,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         store.add_indexes(table, schema)
 
     @classmethod
-    def retrieve(cls, store, table, stage_name, as_type):
+    def retrieve(cls, store, table, stage_name, as_type, namer):
         schema = store.get_schema(stage_name).get()
         table_name = table.name
         table_name, schema = store.resolve_aliases(table_name, schema)
@@ -1894,8 +1894,8 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         PolarsTableHook.materialize(store, table, stage_name, task_info)
 
     @classmethod
-    def retrieve(cls, store, table, stage_name, as_type):
-        df = PolarsTableHook.retrieve(store, table, stage_name, as_type)
+    def retrieve(cls, store, table, stage_name, as_type, namer):
+        df = PolarsTableHook.retrieve(store, table, stage_name, as_type, namer)
         return tidypolars.from_polars(df)
 
     @classmethod
@@ -1946,15 +1946,17 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         raise NotImplementedError
 
     @classmethod
-    def retrieve(cls, store, table, stage_name, as_type):
+    def retrieve(cls, store, table, stage_name, as_type, namer):
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
 
         if issubclass(as_type, PandasTableImpl):
-            df = PandasTableHook.retrieve(store, table, stage_name, pd.DataFrame)
+            df = PandasTableHook.retrieve(store, table, stage_name, pd.DataFrame, namer)
             return pdt.Table(PandasTableImpl(table.name, df))
         if issubclass(as_type, SQLTableImpl):
-            sa_tbl = SQLAlchemyTableHook.retrieve(store, table, stage_name, sa.Table)
+            sa_tbl = SQLAlchemyTableHook.retrieve(
+                store, table, stage_name, sa.Table, namer
+            )
             return pdt.Table(SQLTableImpl(store.engine, sa_tbl))
         raise NotImplementedError
 
@@ -2034,7 +2036,7 @@ class IbisTableHook(TableHook[SQLTableStore]):
         return SQLAlchemyTableHook.materialize(store, table, stage_name, task_info)
 
     @classmethod
-    def retrieve(cls, store, table, stage_name, as_type):
+    def retrieve(cls, store, table, stage_name, as_type, namer):
         con = cls.get_con(store)
         table_name = table.name
         schema = store.get_schema(stage_name).get()
