@@ -10,6 +10,7 @@ Changelog
 0.2.5 (YYYY-MM-DD)
 ------------------
 - fix ibm_db_sa bug when copying dataframes from cache: uppercase table names by default
+- nicer readable SQL queries: use automatic aliases for inputs of SQLAlchemy tasks
 
 0.2.4 (2023-05-05)
 ------------------

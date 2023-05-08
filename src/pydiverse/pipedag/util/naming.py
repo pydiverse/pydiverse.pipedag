@@ -32,17 +32,18 @@ class NameDisambiguator:
 
     def __init__(self, prefix):
         self.prefix = prefix
-        self.names = {}
+        self.names = set()
         self.cnt = 1
 
     def get_name(self, name_wish: str | None):
         if name_wish is not None and name_wish not in self.names:
-            self.names.update(name_wish)
+            self.names.add(name_wish)
             return name_wish
         else:
             for _ in range(100):
                 name = f"{self.prefix}{self.cnt}"
                 if name not in self.names:
+                    self.names.add(name)
                     return name
                 self.cnt += 1
             raise RuntimeError(f"Failed to find unique name: wish={name_wish}")
