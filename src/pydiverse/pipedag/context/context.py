@@ -129,6 +129,7 @@ class ConfigContext(BaseAttrsContext):
     # per instance attributes
     fail_fast: bool
     strict_result_get_locking: bool
+    ignore_task_version: bool
     instance_id: str  # may be used as database name or locking ID
     stage_commit_technique: StageCommitTechnique
     network_interface: str

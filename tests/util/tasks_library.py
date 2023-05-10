@@ -29,38 +29,38 @@ def noop_lazy(x):
     return x
 
 
-@materialize(nout=2)
+@materialize(nout=2, version="1.0")
 def create_tuple(x, y):
     return x, y
 
 
-@materialize
+@materialize(version="1.0")
 def one():
     return 1
 
 
-@materialize
+@materialize(version="1.0")
 def two():
     return 2
 
 
-@materialize
+@materialize(version="1.0")
 def assert_equal(x, y):
     assert x == y, f"{x} != {y}"
     return x, y
 
 
-@materialize(input_type=pd.DataFrame)
+@materialize(input_type=pd.DataFrame, version="1.0")
 def assert_table_equal(x, y):
     pd.testing.assert_frame_equal(x, y)
 
 
-@materialize
+@materialize(version="1.0")
 def assert_blob_equal(x, y):
     assert x == y
 
 
-@materialize
+@materialize(version="1.0")
 def simple_dataframe():
     df = pd.DataFrame(
         {
@@ -71,7 +71,7 @@ def simple_dataframe():
     return Table(df)
 
 
-@materialize
+@materialize(version="1.0")
 def simple_dataframe_with_pk():
     df = pd.DataFrame(
         {
@@ -82,7 +82,7 @@ def simple_dataframe_with_pk():
     return Table(df, primary_key="col1")
 
 
-@materialize
+@materialize(version="1.0")
 def simple_dataframe_with_pk2():
     df = pd.DataFrame(
         {
@@ -93,7 +93,7 @@ def simple_dataframe_with_pk2():
     return Table(df, primary_key=["col1", "col2"])
 
 
-@materialize
+@materialize(version="1.0")
 def simple_dataframe_with_index():
     df = pd.DataFrame(
         {
@@ -104,7 +104,7 @@ def simple_dataframe_with_index():
     return Table(df, primary_key=["col1"], indexes=[["col2"]])
 
 
-@materialize
+@materialize(version="1.0")
 def simple_dataframe_with_indexes():
     df = pd.DataFrame(
         {
@@ -115,7 +115,7 @@ def simple_dataframe_with_indexes():
     return Table(df, primary_key=["col1"], indexes=[["col2"], ["col2", "col1"]])
 
 
-@materialize(nout=2)
+@materialize(nout=2, version="1.0")
 def simple_dataframes_with_indexes_task():
     df = pd.DataFrame(
         {
@@ -244,7 +244,7 @@ def pd_dataframe_assert(df_actual: pd.DataFrame, data: dict[str, list]):
     pd.testing.assert_frame_equal(df_expected, df_actual)
 
 
-@materialize
+@materialize(version="1.0")
 def as_blob(x):
     return Blob(x)
 
@@ -254,7 +254,7 @@ class _SomeClass:
         return self.__dict__ == other.__dict__
 
 
-@materialize
+@materialize(version="1.0")
 def object_blob(x: dict):
     instance = _SomeClass()
     instance.__dict__.update(x)
@@ -262,7 +262,7 @@ def object_blob(x: dict):
     return Blob(instance)
 
 
-@materialize
+@materialize(version="1.0")
 def exception(x, r: bool):
     if r:
         raise Exception("THIS EXCEPTION IS EXPECTED")
