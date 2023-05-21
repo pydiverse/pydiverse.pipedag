@@ -5,7 +5,7 @@ import sqlalchemy as sa
 from pandas.testing import assert_frame_equal
 
 from pydiverse.pipedag import Blob, Flow, Stage, Table, materialize
-from pydiverse.pipedag.backend.table.sql import adj_pandas_types
+from pydiverse.pipedag.backend.table.util.pandas import adj_pandas_types
 from pydiverse.pipedag.context import StageLockContext
 
 dfA = pd.DataFrame(

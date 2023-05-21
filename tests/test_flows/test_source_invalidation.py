@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
-from pydiverse.pipedag.backend.table.sql import adj_pandas_types
+from pydiverse.pipedag.backend.table.util.pandas import adj_pandas_types
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.util.config import PipedagConfig
 

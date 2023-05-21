@@ -20,6 +20,7 @@ import sqlalchemy.sql.elements
 from sqlalchemy.dialects.mssql import DATETIME2
 
 from pydiverse.pipedag import Stage, Table
+from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
 from pydiverse.pipedag.backend.table.util import engine_dispatch
 from pydiverse.pipedag.backend.table.util.sql_ddl import (
@@ -57,6 +58,7 @@ from pydiverse.pipedag.materialize.metadata import (
 )
 from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.util.ipc import human_thread_id
+from pydiverse.pipedag.util.naming import NameDisambiguator
 
 
 class SQLTableStore(BaseTableStore):
@@ -1506,10 +1508,13 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         store.add_indexes(table, schema, early_not_null_possible=True)
 
     @classmethod
-    def retrieve(cls, store, table, stage_name, as_type, namer):
+    def retrieve(
+        cls, store, table, stage_name, as_type: type[sa.Table], namer=None
+    ) -> sa.sql.selectable.Selectable:
         table_name = table.name
         schema = store.get_schema(stage_name).get()
         table_name, schema = store.resolve_aliases(table_name, schema)
+        tbl = None
         for retry_iteration in range(4):
             # retry operation since it might have been terminated as a deadlock victim
             try:
@@ -1612,17 +1617,6 @@ def _resolve_alias_mssql(conn, table_name: str, schema: str, *, _iteration=0):
             conn, table_name, schema, _iteration=_iteration + 1
         )
     return table_name, schema
-
-
-def adj_pandas_types(df: pd.DataFrame):
-    df = df.copy()
-    for col in df.dtypes.loc[lambda x: x == int].index:
-        df[col] = df[col].astype(pd.Int64Dtype())
-    for col in df.dtypes.loc[lambda x: x == bool].index:
-        df[col] = df[col].astype(pd.BooleanDtype())
-    for col in df.dtypes.loc[lambda x: x == object].index:
-        df[col] = df[col].astype(pd.StringDtype())
-    return df
 
 
 @SQLTableStore.register_table(pd)
@@ -1753,7 +1747,14 @@ class PandasTableHook(TableHook[SQLTableStore]):
         return cols, year_cols
 
     @classmethod
-    def retrieve(cls, store, table, stage_name, as_type, namer):
+    def retrieve(
+        cls,
+        store: SQLTableStore,
+        table: Table,
+        stage_name: str,
+        as_type: type[pd.DataFrame],
+        namer: NameDisambiguator | None = None,
+    ) -> pd.DataFrame:
         schema = store.get_schema(stage_name).get()
         with store.engine.connect() as conn:
             table_name = table.name
@@ -1851,7 +1852,14 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         store.add_indexes(table, schema)
 
     @classmethod
-    def retrieve(cls, store, table, stage_name, as_type, namer):
+    def retrieve(
+        cls,
+        store: SQLTableStore,
+        table: Table,
+        stage_name: str,
+        as_type: type[polars.dataframe.DataFrame],
+        namer: NameDisambiguator | None = None,
+    ) -> polars.dataframe.DataFrame:
         schema = store.get_schema(stage_name).get()
         table_name = table.name
         table_name, schema = store.resolve_aliases(table_name, schema)
@@ -1861,6 +1869,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def auto_table(cls, obj: polars.dataframe.DataFrame):
+        # currently, we don't know how to store a table name inside polars dataframe
         return super().auto_table(obj)
 
 
@@ -1890,17 +1899,27 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         stage_name,
         task_info: TaskInfo,
     ):
+        tibble = table.obj
+        table.obj = None
         table = copy.deepcopy(table)
-        table.obj = table.obj.to_polars()
+        table.obj = tibble.to_polars()
         PolarsTableHook.materialize(store, table, stage_name, task_info)
 
     @classmethod
-    def retrieve(cls, store, table, stage_name, as_type, namer):
+    def retrieve(
+        cls,
+        store: SQLTableStore,
+        table: Table,
+        stage_name: str,
+        as_type: type[tidypolars.Tibble],
+        namer: NameDisambiguator | None = None,
+    ) -> tidypolars.Tibble:
         df = PolarsTableHook.retrieve(store, table, stage_name, as_type, namer)
         return tidypolars.from_polars(df)
 
     @classmethod
     def auto_table(cls, obj: tidypolars.Tibble):
+        # currently, we don't know how to store a table name inside tidypolars tibble
         return super().auto_table(obj)
 
 
@@ -1934,6 +1953,8 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         from pydiverse.transform.lazy import SQLTableImpl
 
         t = table.obj
+        table.obj = None
+        table = copy.deepcopy(table)
         if isinstance(t._impl, PandasTableImpl):
             from pydiverse.transform.core.verbs import collect
 
@@ -1947,7 +1968,14 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         raise NotImplementedError
 
     @classmethod
-    def retrieve(cls, store, table, stage_name, as_type, namer):
+    def retrieve(
+        cls,
+        store: SQLTableStore,
+        table: Table,
+        stage_name: str,
+        as_type: type[T],
+        namer: NameDisambiguator | None = None,
+    ) -> T:
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
 
@@ -2033,11 +2061,21 @@ class IbisTableHook(TableHook[SQLTableStore]):
         cls, store, table: Table[ibis_types.Table], stage_name, task_info: TaskInfo
     ):
         t = table.obj
-        table.obj = sa.text(cls.lazy_query_str(store, t))
-        return SQLAlchemyTableHook.materialize(store, table, stage_name, task_info)
+        table.obj = None
+        # noinspection PyTypeChecker
+        sa_table = copy.deepcopy(table)  # type: Table[sa.Text]
+        sa_table.obj = sa.text(cls.lazy_query_str(store, t))
+        return SQLAlchemyTableHook.materialize(store, sa_table, stage_name, task_info)
 
     @classmethod
-    def retrieve(cls, store, table, stage_name, as_type, namer):
+    def retrieve(
+        cls,
+        store: SQLTableStore,
+        table: Table,
+        stage_name: str,
+        as_type: type[ibis_types.Table],
+        namer: NameDisambiguator | None = None,
+    ) -> ibis_types.Table:
         con = cls.get_con(store)
         table_name = table.name
         schema = store.get_schema(stage_name).get()

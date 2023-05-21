@@ -8,7 +8,7 @@ import pytest
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
-from pydiverse.pipedag.backend.table.sql import adj_pandas_types
+from pydiverse.pipedag.backend.table.util.pandas import adj_pandas_types
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.util.config import PipedagConfig
 
