@@ -41,47 +41,10 @@ class _TableStoreMeta(ABCMeta):
         return cls
 
 
-class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
-    """Table store base class
-
-    The table store is responsible for storing and retrieving various types
-    of tabular data. Additionally, it also has to manage all task metadata,
-    This includes storing it, but also cleaning up stale metadata.
-
-    A store must use a table's name (`table.name`) and stage (`table.stage`)
-    as the primary keys for storing and retrieving it. This means that
-    two different `Table` objects can be used to store and retrieve the same
-    data as long as they have the same name and stage.
-
-    The same is also true for the task metadata where the task `stage`,
-    `version` and `cache_key` act as the primary keys (those values are
-    stored both in the task object and the metadata object).
-
-    To implement the stage transaction and commit mechanism, a technique
-    called schema swapping is used:
-
-    All outputs from materializing tasks get materialized into a temporary
-    empty schema (`stage.transaction_name`) and only if all tasks have
-    finished running *successfully* you swap the 'base schema' (original stage,
-    or cache) with the 'transaction schema'. This is usually done by renaming
-    them.
-
-    """
-
+class TableHookResolver(Disposable, metaclass=_TableStoreMeta):
     _REGISTERED_TABLES: list[TableHook]
     _M_TABLE_CACHE: dict[type, TableHook]
     _R_TABLE_CACHE: dict[type, TableHook]
-
-    def __init__(self):
-        self.logger = structlog.get_logger(type(self).__name__)
-
-    def setup(self):
-        """Setup function
-
-        This function gets called at the beginning of a flow run.
-        Unlike the __init__ method, a lock is acquired before
-        the setup method gets called to prevent race conditions.
-        """
 
     @classmethod
     def register_table(cls, *requirements: Any):
@@ -143,6 +106,83 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
                 return hook
         raise TypeError(f"Can't retrieve Table as type {type_}")
 
+    def store_table(self, table: Table, task: MaterializingTask, task_info: TaskInfo):
+        """Stores a table in the associated transaction stage
+
+        The store must convert the table object (`table.obj`) to the correct
+        internal type. This means, that in some cases it first has to
+        evaluate a lazy object. For example: if a sql based table store
+        receives a sql query to store, it has to execute it first.
+
+        The implementation details of this get handled by the registered
+        TableHooks.
+        """
+        _ = task  # not needed in this kind of store_table, yet
+        hook = self.get_m_table_hook(type(table.obj))
+        hook.materialize(self, table, table.stage.transaction_name, task_info)
+
+    def retrieve_table_obj(
+        self, table: Table, as_type: type[T], namer: NameDisambiguator | None = None
+    ) -> T:
+        """Loads a table from the store
+
+        Retrieves the table from the store, converts it to the correct
+        If the stage hasn't yet been committed, the table must be retrieved
+        from the transaction, else it must be retrieved from the committed
+        stage.
+
+        :raises TypeError: if the retrieved table can't be converted to
+            the requested type.
+        """
+
+        if as_type is None:
+            raise TypeError(
+                "Missing 'as_type' argument. You must specify a type to be able "
+                "to dematerialize a Table."
+            )
+
+        hook = self.get_r_table_hook(as_type)
+        return hook.retrieve(self, table, table.stage.current_name, as_type, namer)
+
+
+class BaseTableStore(TableHookResolver):
+    """Table store base class
+
+    The table store is responsible for storing and retrieving various types
+    of tabular data. Additionally, it also has to manage all task metadata,
+    This includes storing it, but also cleaning up stale metadata.
+
+    A store must use a table's name (`table.name`) and stage (`table.stage`)
+    as the primary keys for storing and retrieving it. This means that
+    two different `Table` objects can be used to store and retrieve the same
+    data as long as they have the same name and stage.
+
+    The same is also true for the task metadata where the task `stage`,
+    `version` and `cache_key` act as the primary keys (those values are
+    stored both in the task object and the metadata object).
+
+    To implement the stage transaction and commit mechanism, a technique
+    called schema swapping is used:
+
+    All outputs from materializing tasks get materialized into a temporary
+    empty schema (`stage.transaction_name`) and only if all tasks have
+    finished running *successfully* you swap the 'base schema' (original stage,
+    or cache) with the 'transaction schema'. This is usually done by renaming
+    them.
+
+    """
+
+    def __init__(self):
+        self.logger = structlog.get_logger(type(self).__name__)
+
+    def setup(self):
+        """Setup function
+
+        This function gets called at the beginning of a flow run.
+        Unlike the __init__ method, a lock is acquired before
+        the setup method gets called to prevent race conditions.
+        """
+
     # Stage
 
     @abstractmethod
@@ -170,21 +210,6 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
         """
 
     # Materialize
-
-    def store_table(self, table: Table, task: MaterializingTask, task_info: TaskInfo):
-        """Stores a table in the associated transaction stage
-
-        The store must convert the table object (`table.obj`) to the correct
-        internal type. This means, that in some cases it first has to
-        evaluate a lazy object. For example: if a sql based table store
-        receives a sql query to store, it has to execute it first.
-
-        The implementation details of this get handled by the registered
-        TableHooks.
-        """
-        _ = task  # not needed in this kind of store_table, yet
-        hook = self.get_m_table_hook(type(table.obj))
-        hook.materialize(self, table, table.stage.transaction_name, task_info)
 
     def execute_raw_sql(self, raw_sql: RawSql):
         """Executed raw SQL statements in the associated transaction stage
@@ -306,31 +331,6 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
 
         If the table doesn't exist in the transaction stage, fail silently.
         """
-
-    # Dematerialize
-
-    def retrieve_table_obj(
-        self, table: Table, as_type: type[T], namer: NameDisambiguator | None = None
-    ) -> T:
-        """Loads a table from the store
-
-        Retrieves the table from the store, converts it to the correct
-        If the stage hasn't yet been committed, the table must be retrieved
-        from the transaction, else it must be retrieved from the committed
-        stage.
-
-        :raises TypeError: if the retrieved table can't be converted to
-            the requested type.
-        """
-
-        if as_type is None:
-            raise TypeError(
-                "Missing 'as_type' argument. You must specify a type to be able "
-                "to dematerialize a Table."
-            )
-
-        hook = self.get_r_table_hook(as_type)
-        return hook.retrieve(self, table, table.stage.current_name, as_type, namer)
 
     # Metadata
 

@@ -81,7 +81,7 @@ class FileBlobStore(BaseBlobStore):
     In the base directory there will be two folders for every stage, one
     for the base and one for the transaction stage. Inside those folders the
     blobs will be stored as pickled files:
-    `/base_path/STAGE_NAME/BLOB_NAME.pkl`.
+    `base_path/instance_id/STAGE_NAME/BLOB_NAME.pkl`.
 
     To commit a stage, the only thing that has to be done is to rename
     the appropriate folders.

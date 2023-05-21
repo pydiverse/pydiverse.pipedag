@@ -146,8 +146,15 @@ class ConfigContext(BaseAttrsContext):
     @cached_property
     def store(self):
         # Load objects referenced in config
-        table_store = load_object(self.config_dict["table_store"])
-        blob_store = load_object(self.config_dict["blob_store"])
+        try:
+            table_store = load_object(self.config_dict["table_store"])
+        except Exception as e:
+            raise RuntimeError("Failed loading table_store") from e
+
+        try:
+            blob_store = load_object(self.config_dict["blob_store"])
+        except Exception as e:
+            raise RuntimeError("Failed loading blob_store") from e
         from pydiverse.pipedag.materialize.store import PipeDAGStore
 
         return PipeDAGStore(

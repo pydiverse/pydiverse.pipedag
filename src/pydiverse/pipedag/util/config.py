@@ -111,7 +111,7 @@ class PipedagConfig:
                 "auto_blob": [],
                 "attrs": {},
             },
-        )
+        ).copy()
 
         # check enums
         # Alternative: could be a feature of __get_merged_config_dict
@@ -151,14 +151,16 @@ class PipedagConfig:
             )
 
         # Handle url_attrs_file
-        url_attrs_file = _pop(config, "table_store", "url_attrs_file", default=None)
+        url_attrs_file = _pop(
+            config, "table_store", "args", "url_attrs_file", default=None
+        )
         if url_attrs_file is not None:
             with open(url_attrs_file, encoding="utf-8") as fh:
                 url_attrs = yaml.safe_load(fh)
 
-            url = _get(config, "table_store", "url")
+            url = _get(config, "table_store", "args", "url")
             url = expand_variables(url, url_attrs, skip_missing=True)
-            _set(config, url, "table_store", "url")
+            _set(config, url, "table_store", "args", "url")
 
         # Finally, expand all normal variables
         config = self.__expand_variables(config)
@@ -178,15 +180,21 @@ class PipedagConfig:
             attrs=Box(config["attrs"], frozen_box=True),
         )
 
-        # Make sure @cached_property store is set up and loaded
-        # and throw config errors early.
-        with config_context:
-            _ = config_context.store
-            _ = config_context.auto_table
-            _ = config_context.auto_blob
+        try:
+            # Make sure @cached_property store is set up and loaded
+            # and throw config errors early.
+            with config_context:
+                _ = config_context.store
+                _ = config_context.auto_table
+                _ = config_context.auto_blob
 
-            config_context.create_orchestration_engine().dispose()
-            config_context.create_lock_manager().dispose()
+                config_context.create_orchestration_engine().dispose()
+                config_context.create_lock_manager().dispose()
+        except Exception as e:
+            raise RuntimeError(
+                "Error while creating backend objects from pipedag config "
+                f"(instance={instance}, flow={flow}): {self.path}"
+            ) from e
 
         return config_context
 
@@ -231,8 +239,8 @@ class PipedagConfig:
     @staticmethod
     def __expand_environment_variables(*, inout_config):
         locations = [
-            ("table_store", "url"),
-            ("table_store", "url_attrs_file"),
+            ("table_store", "args", "url"),
+            ("table_store", "args", "url_attrs_file"),
         ]
 
         for location in locations:
@@ -246,9 +254,9 @@ class PipedagConfig:
     def __expand_variables(self, config) -> dict[str, Any]:
         out_config = copy.deepcopy(config)
         locations = [
-            ("table_store", "url"),
-            ("table_store", "schema_prefix"),
-            ("table_store", "schema_suffix"),
+            ("table_store", "args", "url"),
+            ("table_store", "args", "schema_prefix"),
+            ("table_store", "args", "schema_suffix"),
         ]
 
         # TODO: Decide on a list of available variables
@@ -369,7 +377,7 @@ def load_object(config_dict: dict):
     """Instantiates an instance of an object given
 
     The import path (module.Class) should be specified as the "class" value
-    of the dict. The rest of the dict get used as the instance config.
+    of the dict. The args section of the dict get used as the instance config.
 
     If the class defines a `_init_conf_` function, it gets called using the
     config values, otherwise they just get passed to the class initializer.
@@ -377,18 +385,31 @@ def load_object(config_dict: dict):
     >>> # module.Class(argument="value")
     >>> load_object({
     >>>     "class": "module.Class",
-    >>>     "argument": "value",
+    >>>     "args": {
+    >>>         "argument": "value",
+    >>>     },
     >>> })
     """
 
-    config_dict = config_dict.copy()
-    cls = import_object(config_dict.pop("class"))
+    if "class" not in config_dict:
+        raise RuntimeError(
+            "Attribute 'class' is missing in configuration "
+            "section that supports multiple backends\n"
+            f"config section: {config_dict}"
+        )
+    cls = import_object(config_dict["class"])
 
+    args = config_dict.get("args", {})
+    if not isinstance(args, dict):
+        raise TypeError(
+            f"Invalid type for args section: {type(args)}\n"
+            f"config section: {config_dict}"
+        )
     try:
         init_conf = cls._init_conf_
-        return init_conf(config_dict)
+        return init_conf(args)
     except AttributeError:
-        return cls(**config_dict)
+        return cls(**args)
 
 
 # Nested Dictionary Utilities

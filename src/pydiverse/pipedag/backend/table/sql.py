@@ -72,6 +72,7 @@ class SQLTableStore(BaseTableStore):
 
     @classmethod
     def _init_conf_(cls, config: dict[str, Any]):
+        config = config.copy()
         engine_url = config.pop("url")
         return cls(engine_url, **config)
 
