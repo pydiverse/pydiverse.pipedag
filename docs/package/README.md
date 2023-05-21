@@ -111,8 +111,9 @@ Create a file called `pipedag.yaml` in the same directory:
 name: pipedag_tests
 table_store_connections:
   postgres:
-    # Postgres: this can be used after running `docker-compose up`
-    url: "postgresql://{$POSTGRES_USERNAME}:{$POSTGRES_PASSWORD}@127.0.0.1:6543/{instance_id}"
+    args:
+      # Postgres: this can be used after running `docker-compose up`  
+      url: "postgresql://{$POSTGRES_USERNAME}:{$POSTGRES_PASSWORD}@127.0.0.1:6543/{instance_id}"
 
 instances:
   __any__:
@@ -129,21 +130,24 @@ instances:
 
       # Postgres: this can be used after running `docker-compose up`
       table_store_connection: postgres
-      create_database_if_not_exists: True
-
-      # print select statements before being encapsualted in materialize expressions and tables before writing to
-      # database
-      print_materialize: true
-      # print final sql statements
-      print_sql: true
+      args:
+        create_database_if_not_exists: True
+        
+        # print select statements before being encapsualted in materialize expressions and tables before writing to
+        # database
+        print_materialize: true
+        # print final sql statements
+        print_sql: true
 
     blob_store:
       class: "pydiverse.pipedag.backend.blob.FileBlobStore"
-      base_path: "/tmp/pipedag/blobs"
+      args:
+        base_path: "/tmp/pipedag/blobs"
 
     lock_manager:
       class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
-      hosts: "localhost:2181"
+      args:
+        hosts: "localhost:2181"
 
     orchestration:
       class: "pydiverse.pipedag.engine.SequentialEngine"

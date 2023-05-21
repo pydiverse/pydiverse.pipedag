@@ -146,8 +146,13 @@ class ConfigContext(BaseAttrsContext):
     @cached_property
     def store(self):
         # Load objects referenced in config
+        local_table_cache = None
         try:
             table_store = load_object(self.config_dict["table_store"])
+            if "local_table_cache" in self.config_dict["table_store"]:
+                local_table_cache = load_object(
+                    self.config_dict["table_store"]["local_table_cache"]
+                )
         except Exception as e:
             raise RuntimeError("Failed loading table_store") from e
 
@@ -160,6 +165,7 @@ class ConfigContext(BaseAttrsContext):
         return PipeDAGStore(
             table=table_store,
             blob=blob_store,
+            local_table_cache=local_table_cache,
         )
 
     def create_lock_manager(self) -> BaseLockManager:

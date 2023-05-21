@@ -35,9 +35,11 @@ class PipeDAGStore(Disposable):
         self,
         table: backend.table.BaseTableStore,
         blob: backend.blob.BaseBlobStore,
+        local_table_cache: backend.table_cache.BaseTableCache | None = None,
     ):
         self.table_store = table
         self.blob_store = blob
+        self.local_table_cache = local_table_cache
 
         self.logger = structlog.get_logger()
         self.json_encoder = json.JSONEncoder(
@@ -57,6 +59,8 @@ class PipeDAGStore(Disposable):
         """
         self.table_store.dispose()
         self.blob_store.dispose()
+        if self.local_table_cache is not None:
+            self.local_table_cache.dispose()
         super().dispose()
 
     # ### Stage ### #
