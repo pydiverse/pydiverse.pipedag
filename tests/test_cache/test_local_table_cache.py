@@ -1,6 +1,7 @@
 import shutil
 from pathlib import Path
 
+import filelock
 import pytest
 
 from pydiverse.pipedag import materialize, Table, Flow, Stage
@@ -73,60 +74,62 @@ def test_local_table_cache(instance):
     use_cache = instance != "local_table_store"
     flow, eager, lazy_2, lazy_3 = get_flow()
     cfg = PipedagConfig.default.get(instance)
-    shutil.rmtree(
-        cfg.config_dict["table_store"]["local_table_cache"]["args"]["base_path"]
-    )
 
-    # Run flow 1st time
-    with StageLockContext():
-        result = flow.run(cfg)
-        base_dir = "/tmp/pipedag/table_cache/pipedag_default"
-        stage_1_files = [
-            p.name
-            for p in Path(f"{base_dir}/stage_1").iterdir()
-            if p.name.endswith(".parquet")
-        ]
-        stage_2_files = [
-            p.name
-            for p in Path(f"{base_dir}/stage_2").iterdir()
-            if p.name.endswith(".parquet")
-        ]
-        assert result.successful
-        if store_only_inputs:
-            # only input tables of eager tasks are cached
-            assert sorted(stage_1_files) == ["dfb.parquet", "lazy_1.parquet"]
-            assert stage_2_files == []
-        else:
-            assert sorted(stage_1_files) == [
-                "dfa.parquet",
-                "dfb.parquet",
-                "lazy_1.parquet",
-            ]
-            assert sorted(stage_2_files) == ["eager.parquet"]
-        # attention: the following calls will create further parquet files
-        assert result.get(eager, as_type=pd.DataFrame)["a"].sum() == 3
-        assert result.get(lazy_2, as_type=pd.DataFrame)["a"].sum() == 3
-        assert result.get(lazy_3, as_type=pd.DataFrame)["a"].sum() == 3
-        # inject a change in cached file without invalidating it
-        path = f"{base_dir}/stage_2/lazy_3.parquet"
-        df = pd.read_parquet(path)
-        df["a"] += 1
-        df.to_parquet(path)
-        # test that result.get also uses cache
-        assert (
-            result.get(lazy_3, as_type=pd.DataFrame)["a"].sum() == 5 if use_cache else 3
-        )
+    base_dir = Path("/tmp/pipedag/table_cache/pipedag_default")
+    with filelock.FileLock(base_dir / "lock"):
+        shutil.rmtree(base_dir)
 
-    if use_cache:
-        # inject a change in cached file without invalidating it
-        path = f"{base_dir}/stage_1/lazy_1.parquet"
-        df = pd.read_parquet(path)
-        df["x"] += 1  # switches join key from 1 to 2 => a=0,1
-        df.to_parquet(path)
-        # Run flow 2nd time and expect load from local file cache
+        # Run flow 1st time
         with StageLockContext():
             result = flow.run(cfg)
+            stage_1_files = [
+                p.name
+                for p in (base_dir / "stage_1").iterdir()
+                if p.name.endswith(".parquet")
+            ]
+            stage_2_files = [
+                p.name
+                for p in (base_dir / "stage_2").iterdir()
+                if p.name.endswith(".parquet")
+            ]
             assert result.successful
-            assert result.get(eager, as_type=pd.DataFrame)["a"].sum() == 1
+            if store_only_inputs:
+                # only input tables of eager tasks are cached
+                assert sorted(stage_1_files) == ["dfb.parquet", "lazy_1.parquet"]
+                assert stage_2_files == []
+            else:
+                assert sorted(stage_1_files) == [
+                    "dfa.parquet",
+                    "dfb.parquet",
+                    "lazy_1.parquet",
+                ]
+                assert sorted(stage_2_files) == ["eager.parquet"]
+            # attention: the following calls will create further parquet files
+            assert result.get(eager, as_type=pd.DataFrame)["a"].sum() == 3
             assert result.get(lazy_2, as_type=pd.DataFrame)["a"].sum() == 3
-            assert result.get(lazy_3, as_type=pd.DataFrame)["a"].sum() == 1
+            assert result.get(lazy_3, as_type=pd.DataFrame)["a"].sum() == 3
+            # inject a change in cached file without invalidating it
+            path = str(base_dir / "stage_2" / "lazy_3.parquet")
+            df = pd.read_parquet(path)
+            df["a"] += 1
+            df.to_parquet(path)
+            # test that result.get also uses cache
+            assert (
+                result.get(lazy_3, as_type=pd.DataFrame)["a"].sum() == 5
+                if use_cache
+                else 3
+            )
+
+        if use_cache:
+            # inject a change in cached file without invalidating it
+            path = f"{base_dir}/stage_1/lazy_1.parquet"
+            df = pd.read_parquet(path)
+            df["x"] += 1  # switches join key from 1 to 2 => a=0,1
+            df.to_parquet(path)
+            # Run flow 2nd time and expect load from local file cache
+            with StageLockContext():
+                result = flow.run(cfg)
+                assert result.successful
+                assert result.get(eager, as_type=pd.DataFrame)["a"].sum() == 1
+                assert result.get(lazy_2, as_type=pd.DataFrame)["a"].sum() == 3
+                assert result.get(lazy_3, as_type=pd.DataFrame)["a"].sum() == 1
