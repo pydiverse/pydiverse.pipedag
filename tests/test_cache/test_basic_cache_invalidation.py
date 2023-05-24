@@ -490,3 +490,68 @@ def test_same_task_different_stages(mocker):
         assert result.get(out_s1) == 1
         assert result.get(out_s2) == 1
         out_spy.assert_not_called()
+
+
+def test_change_version_table(mocker):
+    cache_value = 0
+
+    def cache():
+        return cache_value
+
+    @materialize(lazy=True, cache=cache)
+    def return_cache_table():
+        return Table(select_as(cache_value, "x"))
+
+    def get_flow(version):
+        @materialize(version=version, input_type=pd.DataFrame)
+        def named_copy(table: pd.DataFrame):
+            return Table(table, "_table_copy")
+
+        with Flow() as flow:
+            with Stage("stage_1"):
+                out = return_cache_table()
+                cpy = named_copy(out)
+        return flow, out, cpy
+
+    flow, out, cpy = get_flow(version="1.0")
+    # Initial Call
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(cpy)["x"].iloc[0] == 0
+
+    # Calling flow.run again shouldn't call the task
+    out_spy = spy_task(mocker, out)
+    cpy_spy = spy_task(mocker, cpy)
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(cpy)["x"].iloc[0] == 0
+        out_spy.assert_called_once()  # lazy task is always called
+        cpy_spy.assert_not_called()
+
+    # Changing the cache value should cause it to get called again
+    cache_value = 1
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(cpy)["x"].iloc[0] == 1
+        out_spy.assert_called_once()
+        cpy_spy.assert_called_once()
+
+    # recreating flow without version change should not invalidate cache
+    flow, out, cpy = get_flow(version="1.0")
+    out_spy = spy_task(mocker, out)
+    cpy_spy = spy_task(mocker, cpy)
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(cpy)["x"].iloc[0] == 1
+        out_spy.assert_called_once()  # lazy task is always called
+        cpy_spy.assert_not_called()
+
+    # Changing the version value should cause cpy to get recreated again
+    flow, out, cpy = get_flow(version="1.1")
+    out_spy = spy_task(mocker, out)
+    cpy_spy = spy_task(mocker, cpy)
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(cpy)["x"].iloc[0] == 1
+        out_spy.assert_called_once()  # lazy task is always called
+        cpy_spy.assert_called_once()

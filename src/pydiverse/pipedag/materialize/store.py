@@ -17,6 +17,7 @@ from pydiverse.pipedag.materialize.metadata import TaskMetadata
 from pydiverse.pipedag.materialize.util import json as json_util
 from pydiverse.pipedag.util import Disposable, deep_map
 from pydiverse.pipedag.util.config import PipedagConfig
+from pydiverse.pipedag.util.naming import NameDisambiguator
 
 
 class PipeDAGStore(Disposable):
@@ -104,14 +105,20 @@ class PipeDAGStore(Disposable):
     # ### Materialization ### #
 
     def dematerialize_item(
-        self, item: Table | Blob | Any, as_type: type, ctx: RunContext = None
+        self,
+        item: Table | Blob | Any,
+        as_type: type,
+        ctx: RunContext | None = None,
+        namer: NameDisambiguator | None = None,
     ):
         if ctx is None:
             ctx = RunContext.get()
 
         if isinstance(item, Table):
             ctx.validate_stage_lock(item.stage)
-            return self.table_store.retrieve_table_obj(item, as_type=as_type)
+            return self.table_store.retrieve_table_obj(
+                item, as_type=as_type, namer=namer
+            )
         elif isinstance(item, Blob):
             ctx.validate_stage_lock(item.stage)
             return self.blob_store.retrieve_blob(item)
@@ -137,11 +144,14 @@ class PipeDAGStore(Disposable):
         ctx = RunContext.get()
 
         input_tables = []
+        namer = NameDisambiguator(prefix="t")
 
         def dematerialize_mapper(x):
             if isinstance(x, Table):
                 input_tables.append(x)
-            return self.dematerialize_item(x, as_type=task.input_type, ctx=ctx)
+            return self.dematerialize_item(
+                x, as_type=task.input_type, ctx=ctx, namer=namer
+            )
 
         d_args = deep_map(args, dematerialize_mapper)
         d_kwargs = deep_map(kwargs, dematerialize_mapper)

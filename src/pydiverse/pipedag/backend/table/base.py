@@ -17,6 +17,7 @@ from pydiverse.pipedag.materialize.metadata import (
 )
 from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.util import Disposable, requires
+from pydiverse.pipedag.util.naming import NameDisambiguator
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Stage
@@ -308,7 +309,9 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
 
     # Dematerialize
 
-    def retrieve_table_obj(self, table: Table, as_type: type[T]) -> T:
+    def retrieve_table_obj(
+        self, table: Table, as_type: type[T], namer: NameDisambiguator | None = None
+    ) -> T:
         """Loads a table from the store
 
         Retrieves the table from the store, converts it to the correct
@@ -327,7 +330,7 @@ class BaseTableStore(Disposable, metaclass=_TableStoreMeta):
             )
 
         hook = self.get_r_table_hook(as_type)
-        return hook.retrieve(self, table, table.stage.current_name, as_type)
+        return hook.retrieve(self, table, table.stage.current_name, as_type, namer)
 
     # Metadata
 
@@ -476,7 +479,12 @@ class TableHook(Generic[StoreT], ABC):
     @classmethod
     @abstractmethod
     def retrieve(
-        cls, store: StoreT, table: Table, stage_name: str, as_type: type[T]
+        cls,
+        store: StoreT,
+        table: Table,
+        stage_name: str,
+        as_type: type[T],
+        namer: NameDisambiguator | None = None,
     ) -> T:
         """Retrieve a table from the store
 
@@ -485,6 +493,7 @@ class TableHook(Generic[StoreT], ABC):
         :param stage_name: The name of the stage from which te table should
             be retrieved
         :param as_type: The type as which the table is to be retrieved
+        :param namer: Helper object which ensures unique alias names
         :return: The retrieved table (converted to the correct type)
         """
 
