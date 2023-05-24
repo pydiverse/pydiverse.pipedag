@@ -139,6 +139,14 @@ instances:
         # print final sql statements
         print_sql: true
 
+      local_table_cache:
+        store_input: true
+        store_output: true
+        use_stored_input_as_cache: true
+        class: "pydiverse.pipedag.backend.table_cache.ParquetTableCache"
+        args:
+          base_path: "/tmp/pipedag/table_cache"
+
     blob_store:
       class: "pydiverse.pipedag.backend.blob.FileBlobStore"
       args:
