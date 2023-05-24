@@ -7,6 +7,7 @@ from pydiverse.pipedag import Blob, Flow, Stage, Table
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import materialize
+from pydiverse.pipedag.util import PipedagConfig
 
 from tests.util import select_as, compile_sql, tasks_library as m
 from tests.util.spy import spy_task
@@ -55,7 +56,7 @@ def test_changed_cache_fn_literal(mocker):
     def cache():
         return cache_value
 
-    @materialize(cache=cache)
+    @materialize(cache=cache, version="1.0")
     def return_cache_value():
         return cache_value
 
@@ -96,11 +97,11 @@ def test_change_cache_fn_table(mocker):
     def cache():
         return cache_value
 
-    @materialize(cache=cache)
+    @materialize(cache=cache, version="1.0")
     def return_cache_table():
         return Table(select_as(cache_value, "x"))
 
-    @materialize(input_type=pd.DataFrame)
+    @materialize(input_type=pd.DataFrame, version="1.0")
     def get_first(table, col):
         return int(table[col][0])
 
@@ -138,7 +139,7 @@ def test_change_cache_fn_blob(mocker):
     def cache():
         return cache_value
 
-    @materialize(cache=cache)
+    @materialize(cache=cache, version="1.0")
     def return_cache_blob():
         return Blob(cache_value)
 
@@ -263,7 +264,7 @@ def test_change_lazy_query(mocker):
     def lazy_task():
         return 0, Table(select_as(query_value, "x"), name="lazy_table")
 
-    @materialize(input_type=pd.DataFrame)
+    @materialize(input_type=pd.DataFrame, version="1.0")
     def get_first(table, col):
         return int(table[col][0])
 
@@ -315,12 +316,12 @@ def test_change_lazy_query(mocker):
 def test_change_raw_sql(mocker):
     query_value = 1
 
-    @materialize(lazy=True, nout=2)
+    @materialize(lazy=True, nout=2, version="1.0")
     def raw_task(stage):
         raw_sql = compile_sql(select_as(query_value, "x"))
         return 0, RawSql(raw_sql, "raw_task", stage)
 
-    @materialize
+    @materialize(version="1.0")
     def raw_child(raw):
         return raw.sql
 
@@ -368,6 +369,7 @@ def test_change_task_stage_literal(mocker):
             m.noop(0)  # This is to clear the stage
         with Stage("stage_3"):
             child = m.noop(one)
+    _ = child
 
     assert flow.run().successful
 
@@ -555,3 +557,42 @@ def test_change_version_table(mocker):
         assert result.get(cpy)["x"].iloc[0] == 1
         out_spy.assert_called_once()  # lazy task is always called
         cpy_spy.assert_called_once()
+
+    # Changing the version value should cause cpy to get recreated again
+    for _ in range(3):
+        flow, out, cpy = get_flow(version=None)
+        out_spy = spy_task(mocker, out)
+        cpy_spy = spy_task(mocker, cpy)
+        with StageLockContext():
+            result = flow.run()
+            assert result.get(cpy)["x"].iloc[0] == 1
+            out_spy.assert_called_once()  # lazy task is always called
+            cpy_spy.assert_called_once()
+
+
+def test_ignore_task_version(mocker):
+    cfg = PipedagConfig.default.get("ignore_task_version")
+
+    input_list = [1]
+
+    with Flow() as flow:
+        with Stage("stage_1"):
+            out = m.noop(input_list)
+            child = m.noop2(out)
+
+    # Initial Call
+    with StageLockContext():
+        result = flow.run(cfg)
+        assert result.get(out)[0] == 1
+        assert result.get(child)[0] == 1
+
+    # Calling flow.run again should still call the task (disabled caching)
+    out_spy = spy_task(mocker, out)
+    child_spy = spy_task(mocker, child)
+    for _ in range(3):
+        with StageLockContext():
+            result = flow.run(cfg)
+            assert result.get(out)[0] == 1
+            assert result.get(child)[0] == 1
+            out_spy.assert_called_once()
+            child_spy.assert_called_once()

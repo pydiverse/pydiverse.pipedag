@@ -266,6 +266,17 @@ This does not allow a flow to change result outputs before they are fetched. The
 choice when (potentially) running tests in parallel. For interactive debugging it might be handy to
 disable this check.
 
+
+ignore_task_version
+-------------------
+
+default: false
+
+If ignore_task_version=true, tasks that specify an explicit version for cache invalidation will always
+be considered cache invalid. This might be useful for instances with short execution time during rapid
+development cycles when manually bumping version numbers becomes cumbersome.
+
+
 table_store
 -----------
 
@@ -806,16 +817,16 @@ example code for loading configuration
 .. code-block:: python
 
     flow = create_flow1()
-    flow.run()  # will internally run cfg=PipedagConfig.load().get(flow_name=flow.name)
+    flow.run()  # will internally run cfg=PipedagConfig.default.get(flow_name=flow.name)
 
-    cfg=PipedagConfig.load().get() # will load instance=__any__, flow_name=cfg.get_pipedag_name()
+    cfg=PipedagConfig.default.get() # will load instance=__any__, flow_name=cfg.get_pipedag_name()
     flow = create_flow2(cfg.flow_name, cfg.attrs)
     flow.run(cfg)
 
-    with PipedagConfig.load().get(): # will load instance=__any__, flow_name=cfg.get_pipedag_name()
+    with PipedagConfig.default.get(): # will load instance=__any__, flow_name=cfg.get_pipedag_name()
       flow = create_flow3()  # can get ConfigContext.get().get_pipedag_name() or ConfigContext.get().attrs
       flow.run()  # will work with cfg=ConfigContext.get()
 
-    cfg=PipedagConfig.load().get(flow_name="foo") # will load instance=__any__
+    cfg=PipedagConfig.default.get(flow_name="foo") # will load instance=__any__
     flow = create_flow4(cfg.flow_name, cfg.attrs)
     flow.run(cfg)

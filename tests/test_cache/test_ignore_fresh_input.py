@@ -23,7 +23,7 @@ def test_literal(mocker):
     def cache():
         return cache_value
 
-    @materialize(cache=cache)
+    @materialize(cache=cache, version="1.0")
     def return_cache_value():
         return cache_value
 
@@ -74,11 +74,11 @@ def test_table(mocker):
     def cache():
         return cache_value
 
-    @materialize(cache=cache)
+    @materialize(cache=cache, version="1.0")
     def return_cache_table():
         return Table(select_as(cache_value, "x"))
 
-    @materialize(input_type=pd.DataFrame)
+    @materialize(input_type=pd.DataFrame, version="1.0")
     def get_first(table, col):
         return int(table[col][0])
 
@@ -130,7 +130,7 @@ def test_lazy_table(mocker):
     def input_task():
         return Table(select_as(lazy_value, "x")), cache_value
 
-    @materialize(input_type=pd.DataFrame)
+    @materialize(input_type=pd.DataFrame, version="1.0")
     def get_first(table, col):
         return int(table[col][0])
 
@@ -207,7 +207,7 @@ def test_blob(mocker):
     def cache():
         return cache_value
 
-    @materialize(cache=cache)
+    @materialize(cache=cache, version="1.0")
     def return_cache_blob():
         return Blob(cache_value)
 
@@ -271,7 +271,7 @@ def test_raw_sql(mocker):
             stage,
         )
 
-    @materialize
+    @materialize(version="1.0")
     def child_task(input):
         return Table(sa.text(f"SELECT * FROM {input.stage.transaction_name}.raw_table"))
 
@@ -380,7 +380,7 @@ def test_cache_temporarily_different(mocker):
     def cache():
         return cache_value
 
-    @materialize(cache=cache)
+    @materialize(cache=cache, version="1.0")
     def return_cache_value():
         return cache_value
 

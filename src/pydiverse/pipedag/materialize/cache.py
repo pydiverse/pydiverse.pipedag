@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from pydiverse.pipedag.context import RunContext
+from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.metadata import (
@@ -97,37 +97,40 @@ class CacheManager:
         input_hash: str,
         cache_fn_hash: str,
     ):
-        # Check the cache
-        try:
-            # `cache_fn_hash` is not used for cache retrieval if ignore_fresh_input
-            # is set to True. In that case, cache_metadata.cache_fn_hash may be
-            # different form the cache_fn_hash of the current task run.
-            cached_output, cache_metadata = store.retrieve_cached_output(
-                task, input_hash, cache_fn_hash
-            )
-            if not task.lazy:
-                # Task isn't lazy -> copy cache to transaction stage
-                store.copy_cached_output_to_transaction_stage(
-                    cached_output, cache_metadata, task
+        if (
+            not ConfigContext.get().ignore_task_version and task.version is not None
+        ) or task.lazy:
+            # Check the cache
+            try:
+                # `cache_fn_hash` is not used for cache retrieval if ignore_fresh_input
+                # is set to True. In that case, cache_metadata.cache_fn_hash may be
+                # different form the cache_fn_hash of the current task run.
+                cached_output, cache_metadata = store.retrieve_cached_output(
+                    task, input_hash, cache_fn_hash
                 )
-                task.logger.info("Found task in cache. Using cached result.")
-            task_cache_key = CacheManager.task_cache_key(
-                task, cache_metadata.input_hash, cache_metadata.cache_fn_hash
-            )
-            return TaskCacheInfo(
-                task,
-                cache_metadata.input_hash,
-                cache_metadata.cache_fn_hash,
-                task_cache_key,
-                cached_output,
-                cache_metadata,
-                _is_cache_valid=True,
-            )
-        except CacheError as e:
-            task.logger.info(
-                "Failed to retrieve task from cache.",
-                exception=str(e),
-            )
+                if not task.lazy:
+                    # Task isn't lazy -> copy cache to transaction stage
+                    store.copy_cached_output_to_transaction_stage(
+                        cached_output, cache_metadata, task
+                    )
+                    task.logger.info("Found task in cache. Using cached result.")
+                task_cache_key = CacheManager.task_cache_key(
+                    task, cache_metadata.input_hash, cache_metadata.cache_fn_hash
+                )
+                return TaskCacheInfo(
+                    task,
+                    cache_metadata.input_hash,
+                    cache_metadata.cache_fn_hash,
+                    task_cache_key,
+                    cached_output,
+                    cache_metadata,
+                    _is_cache_valid=True,
+                )
+            except CacheError as e:
+                task.logger.info(
+                    "Failed to retrieve task from cache.",
+                    exception=str(e),
+                )
         new_task_cache_key = CacheManager.task_cache_key(
             task, input_hash, cache_fn_hash
         )
