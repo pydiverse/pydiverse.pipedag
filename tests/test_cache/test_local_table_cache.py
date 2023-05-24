@@ -76,7 +76,7 @@ def test_local_table_cache(instance):
     cfg = PipedagConfig.default.get(instance)
 
     base_dir = Path("/tmp/pipedag/table_cache/pipedag_default")
-    with filelock.FileLock(base_dir / "lock"):
+    with filelock.FileLock(base_dir.parent / "lock"):
         shutil.rmtree(base_dir)
 
         # Run flow 1st time
