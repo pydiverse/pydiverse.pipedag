@@ -1478,7 +1478,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         store,
         table: Table[sa.sql.elements.TextClause | sa.Text],
         stage_name,
-        task_info: TaskInfo,
+        task_info: TaskInfo | None,
     ):
         obj = table.obj
         if isinstance(table.obj, (sa.Table, sa.sql.selectable.Alias)):
@@ -1655,7 +1655,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         store,
         table: Table[pd.DataFrame],
         stage_name,
-        task_info: TaskInfo,
+        task_info: TaskInfo | None,
     ):
         # we might try to avoid this copy for speedup / saving RAM
         df = table.obj.copy()
@@ -1827,7 +1827,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         store,
         table: Table[polars.dataframe.DataFrame],
         stage_name,
-        task_info: TaskInfo,
+        task_info: TaskInfo | None,
     ):
         schema = store.get_schema(stage_name)
         if store.print_materialize:
@@ -1897,7 +1897,7 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         store,
         table: Table[tidypolars.Tibble],
         stage_name,
-        task_info: TaskInfo,
+        task_info: TaskInfo | None,
     ):
         tibble = table.obj
         table.obj = None
@@ -1947,7 +1947,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def materialize(
-        cls, store, table: Table[pdt.Table], stage_name, task_info: TaskInfo
+        cls, store, table: Table[pdt.Table], stage_name, task_info: TaskInfo | None
     ):
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
@@ -2058,7 +2058,11 @@ class IbisTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def materialize(
-        cls, store, table: Table[ibis_types.Table], stage_name, task_info: TaskInfo
+        cls,
+        store,
+        table: Table[ibis_types.Table],
+        stage_name,
+        task_info: TaskInfo | None,
     ):
         t = table.obj
         table.obj = None

@@ -42,14 +42,6 @@ instances:
         # print final sql statements
         print_sql: true
 
-      local_table_cache:
-        store_inputs: true
-        store_outputs: true
-        use_stored_input_as_cache: true
-        class: "pydiverse.pipedag.backend.table_cache.ParquetTableCache"
-        args:
-          base_path: "/tmp/pipedag/table_cache"
-
     blob_store:
       class: "pydiverse.pipedag.backend.blob.FileBlobStore"
       args:
@@ -125,3 +117,30 @@ instances:
     ignore_task_version: true
     table_store:
       table_store_connection: postgres
+
+  local_table_cache:
+    table_store:
+      local_table_cache:
+        class: "pydiverse.pipedag.backend.table_cache.ParquetTableCache"
+        args:
+          base_path: "/tmp/pipedag/table_cache"
+
+  local_table_cache_inout:
+    table_store:
+      local_table_cache:
+        store_input: true
+        store_output: true
+        use_stored_input_as_cache: true
+        class: "pydiverse.pipedag.backend.table_cache.ParquetTableCache"
+        args:
+          base_path: "/tmp/pipedag/table_cache"
+
+  local_table_store:
+    table_store:
+      local_table_cache:
+        store_input: true
+        store_output: true
+        use_stored_input_as_cache: false
+        class: "pydiverse.pipedag.backend.table_cache.ParquetTableCache"
+        args:
+          base_path: "/tmp/pipedag/table_cache"

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -131,6 +133,11 @@ class CacheManager:
                     "Failed to retrieve task from cache.",
                     exception=str(e),
                 )
+        else:
+            if not task.lazy:
+                # choose a deliberately random version since caching was disabled
+                task = copy.deepcopy(task)
+                task.version = uuid.uuid4().hex
         new_task_cache_key = CacheManager.task_cache_key(
             task, input_hash, cache_fn_hash
         )

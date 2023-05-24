@@ -145,7 +145,7 @@ class PandasTableHook(TableHook[DictTableStore]):
         store,
         table: Table[pd.DataFrame],
         stage_name,
-        task_info: TaskInfo,
+        task_info: TaskInfo | None,
     ):
         _ = task_info
         if table.name is not None:
@@ -188,7 +188,7 @@ class PydiverseTransformTableHook(TableHook[DictTableStore]):
         store,
         table: Table[pdt.Table],
         stage_name,
-        task_info: TaskInfo,
+        task_info: TaskInfo | None,
     ):
         _ = task_info
         from pydiverse.transform.core.verbs import collect

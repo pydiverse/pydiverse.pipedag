@@ -77,7 +77,7 @@ class MaterializingTask(Task):
         always have to bump / change the version number to ensure that
         the new implementation gets used. Else a cached result might be used
         instead. version=None means the task is never cached. In addition,
-        see also option ignore_task_valid in pipedag config documentation.
+        see also option ignore_task_version in pipedag config documentation.
     :key cache: An explicit function for validating cache validity. If the output
         of this function changes while the source parameters are the same (e.g.
         the source is a filepath and `cache` loads data from this file), then the

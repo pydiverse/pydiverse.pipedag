@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
+import structlog
 
 from pydiverse.pipedag import Table
 from pydiverse.pipedag._typing import T
@@ -27,6 +28,77 @@ __all__ = [
 ]
 
 
+class LocalTableCache:
+    """Proxy class for local table cache which interprets backend independent options"""
+
+    def __init__(
+        self,
+        obj: BaseTableCache | None,
+        store_input,
+        store_output,
+        use_stored_input_as_cache,
+    ):
+        self.logger = structlog.getLogger(module=__name__, cls=self.__class__.__name__)
+        self.obj = obj
+        self.store_input = store_input
+        self.store_output = store_output
+        self.use_stored_input_as_cache = use_stored_input_as_cache
+
+    def store_table(
+        self,
+        table: Table,
+        task: MaterializingTask | None,
+        task_info: TaskInfo | None,
+        is_input: bool,
+    ):
+        """Stores a table in the associated transaction stage"""
+        if self.obj is not None and (
+            (is_input and self.store_input) or (not is_input and self.store_output)
+        ):
+            try:
+                self.obj.store_table(table, task, task_info)
+            except TypeError:
+                self.logger.debug(
+                    (
+                        "Could not store table in local table cache (expected for"
+                        " non-dataframe types)"
+                    ),
+                    name=table.name,
+                    type=type(table.obj),
+                )
+
+    def retrieve_table_obj(
+        self, table: Table, as_type: type[T], namer: NameDisambiguator | None = None
+    ) -> T:
+        assert (
+            self.obj is not None
+        ), "this method should only be called if has_cache_table returns True"
+        return self.obj.retrieve_table_obj(
+            table, as_type, namer, use_transaction_name=False
+        )
+
+    def has_cache_table(self, table: Table, astype: type[T]):
+        """Checks if the cache has a table for the given table.cache_key"""
+        if self.obj is None or not self.use_stored_input_as_cache:
+            return False
+        return self.obj.has_cache_table(table, astype)
+
+    def list_stages(self) -> list[str]:
+        """Return list of stages for which cached tables exist"""
+        if self.obj is None:
+            return []
+        return self.obj.list_stages()
+
+    def clear_stages(self, stages: list[str] | None) -> Any:
+        """Clear cached tables for the given stages"""
+        if self.obj is not None:
+            self.obj.clear_stages(stages)
+
+    def dispose(self):
+        if self.obj is not None:
+            self.obj.dispose()
+
+
 class BaseTableCache(TableHookResolver, ABC):
     """Local Table cache base class
 
@@ -38,8 +110,8 @@ class BaseTableCache(TableHookResolver, ABC):
     """
 
     @abstractmethod
-    def has_cache_table(self, table: Table, input_hash: str):
-        """Checks if the cache has a table for the given input hash"""
+    def has_cache_table(self, table: Table, as_type: type[T]):
+        """Checks if the cache has a table for the given table.cache_key"""
 
     @abstractmethod
     def list_stages(self) -> list[str]:
@@ -72,19 +144,23 @@ class ParquetTableCache(BaseTableCache):
         _dir = self.base_path / table.stage.name
         _dir.mkdir(exist_ok=True, parents=True)
 
-        super().store_table(table, task, task_info)
+        super().store_table(table, task, task_info, use_transaction_name=False)
 
-        input_hash = task_info.task_cache_info._input_hash
         path = self.base_path / table.stage.name / f"{table.name}.cache.json"
-        path.write_text(json.dumps(dict(input_hash=input_hash)))
+        path.write_text(json.dumps(dict(cache_key=table.cache_key)))
 
-    def has_cache_table(self, table: Table, input_hash: str):
-        """Checks if the cache has a table for the given cache info"""
+    def has_cache_table(self, table: Table, as_type: type[T]):
+        """Checks if the cache has a table for the given table.cache_key"""
+        try:
+            self.get_r_table_hook(as_type)
+        except TypeError:
+            return False  # cannot dematerialize type wish
+
         path = self.base_path / table.stage.name / f"{table.name}.cache.json"
         if not path.exists():
             return False
         stored_info = json.loads(path.read_text())
-        return stored_info.input_hash == input_hash
+        return stored_info["cache_key"] == table.cache_key
 
     def list_stages(self) -> list[str]:
         return [entry.name for entry in self.base_path.iterdir() if entry.is_dir()]
@@ -118,7 +194,7 @@ class PandasParquetTableHook(TableHook[ParquetTableCache]):
         store: ParquetTableCache,
         table: Table[pd.DataFrame],
         stage_name,
-        task_info: TaskInfo,
+        task_info: TaskInfo | None,
     ):
         assert isinstance(store, ParquetTableCache)
         path = store.base_path / stage_name / f"{table.name}.parquet"
@@ -172,7 +248,7 @@ class PolarsParquetTableHook(TableHook[ParquetTableCache]):
         store,
         table: Table[polars.dataframe.DataFrame],
         stage_name,
-        task_info: TaskInfo,
+        task_info: TaskInfo | None,
     ):
         path = store.base_path / stage_name / f"{table.name}.parquet"
         table.obj.to_parquet(path)
@@ -219,7 +295,7 @@ class TidyPolarsParquetTableHook(TableHook[ParquetTableCache]):
         store,
         table: Table[tidypolars.Tibble],
         stage_name,
-        task_info: TaskInfo,
+        task_info: TaskInfo | None,
     ):
         tibble = table.obj
         table.obj = None
@@ -267,7 +343,7 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
 
     @classmethod
     def materialize(
-        cls, store, table: Table[pdt.Table], stage_name, task_info: TaskInfo
+        cls, store, table: Table[pdt.Table], stage_name, task_info: TaskInfo | None
     ):
         from pydiverse.transform.eager import PandasTableImpl
 

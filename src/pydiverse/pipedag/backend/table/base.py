@@ -106,7 +106,13 @@ class TableHookResolver(Disposable, metaclass=_TableStoreMeta):
                 return hook
         raise TypeError(f"Can't retrieve Table as type {type_}")
 
-    def store_table(self, table: Table, task: MaterializingTask, task_info: TaskInfo):
+    def store_table(
+        self,
+        table: Table,
+        task: MaterializingTask | None,
+        task_info: TaskInfo | None,
+        use_transaction_name=True,
+    ):
         """Stores a table in the associated transaction stage
 
         The store must convert the table object (`table.obj`) to the correct
@@ -119,10 +125,17 @@ class TableHookResolver(Disposable, metaclass=_TableStoreMeta):
         """
         _ = task  # not needed in this kind of store_table, yet
         hook = self.get_m_table_hook(type(table.obj))
-        hook.materialize(self, table, table.stage.transaction_name, task_info)
+        stage_name = (
+            table.stage.transaction_name if use_transaction_name else table.stage.name
+        )
+        hook.materialize(self, table, stage_name, task_info)
 
     def retrieve_table_obj(
-        self, table: Table, as_type: type[T], namer: NameDisambiguator | None = None
+        self,
+        table: Table,
+        as_type: type[T],
+        namer: NameDisambiguator | None = None,
+        use_transaction_name=True,
     ) -> T:
         """Loads a table from the store
 
@@ -142,7 +155,10 @@ class TableHookResolver(Disposable, metaclass=_TableStoreMeta):
             )
 
         hook = self.get_r_table_hook(as_type)
-        return hook.retrieve(self, table, table.stage.current_name, as_type, namer)
+        stage_name = (
+            table.stage.current_name if use_transaction_name else table.stage.name
+        )
+        return hook.retrieve(self, table, stage_name, as_type, namer)
 
 
 class BaseTableStore(TableHookResolver):
