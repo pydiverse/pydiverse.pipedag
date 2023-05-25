@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import itertools
 import json
 from typing import Any, Callable
@@ -7,7 +8,7 @@ from typing import Any, Callable
 import structlog
 
 from pydiverse.pipedag import Blob, Stage, Table, backend
-from pydiverse.pipedag._typing import Materializable
+from pydiverse.pipedag._typing import Materializable, T
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.errors import DuplicateNameError, StageError
@@ -35,9 +36,11 @@ class PipeDAGStore(Disposable):
         self,
         table: backend.table.BaseTableStore,
         blob: backend.blob.BaseBlobStore,
+        local_table_cache: backend.table_cache.LocalTableCache,
     ):
         self.table_store = table
         self.blob_store = blob
+        self.local_table_cache = local_table_cache
 
         self.logger = structlog.get_logger()
         self.json_encoder = json.JSONEncoder(
@@ -57,6 +60,8 @@ class PipeDAGStore(Disposable):
         """
         self.table_store.dispose()
         self.blob_store.dispose()
+        if self.local_table_cache is not None:
+            self.local_table_cache.dispose()
         super().dispose()
 
     # ### Stage ### #
@@ -107,7 +112,7 @@ class PipeDAGStore(Disposable):
     def dematerialize_item(
         self,
         item: Table | Blob | Any,
-        as_type: type,
+        as_type: type[T],
         ctx: RunContext | None = None,
         namer: NameDisambiguator | None = None,
     ):
@@ -116,9 +121,18 @@ class PipeDAGStore(Disposable):
 
         if isinstance(item, Table):
             ctx.validate_stage_lock(item.stage)
-            return self.table_store.retrieve_table_obj(
-                item, as_type=as_type, namer=namer
-            )
+            if self.local_table_cache.has_cache_table(item, as_type):
+                return self.local_table_cache.retrieve_table_obj(item, as_type, namer)
+            else:
+                obj = self.table_store.retrieve_table_obj(
+                    item, as_type=as_type, namer=namer
+                )
+                table = copy.deepcopy(item)
+                table.obj = obj
+                self.local_table_cache.store_table(
+                    table, task=None, task_info=None, is_input=True
+                )
+                return obj
         elif isinstance(item, Blob):
             ctx.validate_stage_lock(item.stage)
             return self.blob_store.retrieve_blob(item)
@@ -275,6 +289,9 @@ class PipeDAGStore(Disposable):
             if task.lazy:
                 self.table_store.store_table_lazy(table, task, task_info)
             else:
+                self.local_table_cache.store_table(
+                    table, task, task_info, is_input=False
+                )
                 self.table_store.store_table(table, task, task_info)
 
         # Materialize

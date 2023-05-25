@@ -19,12 +19,12 @@ def test_example_flow():
         return Table(query, name="task_2_out", primary_key=["a"])
 
     @materialize(lazy=True, input_type=sa.Table)
-    def lazy_task_3(input: sa.Table, my_stage: Stage):
-        return sa.text(f"SELECT * FROM {my_stage.transaction_name}.{input.name}")
+    def lazy_task_3(input: sa.Table):
+        return sa.text(f"SELECT * FROM {input.original.schema}.{input.name}")
 
     @materialize(lazy=True, input_type=sa.Table)
-    def lazy_task_4(input: sa.Table, prev_stage: Stage):
-        return sa.text(f"SELECT * FROM {prev_stage.name}.{input.name}")
+    def lazy_task_4(input: sa.Table):
+        return sa.text(f"SELECT * FROM {input.original.schema}.{input.name}")
 
     @materialize(nout=2, version="1.0.0")
     def eager_inputs():
@@ -52,13 +52,13 @@ def test_example_flow():
                 lazy_1 = lazy_task_1()
                 a, b = eager_inputs()
 
-            with Stage("stage_2") as stage2:
+            with Stage("stage_2"):
                 lazy_2 = lazy_task_2(lazy_1, b)
-                lazy_3 = lazy_task_3(lazy_2, stage2)
+                lazy_3 = lazy_task_3(lazy_2)
                 eager = eager_task(lazy_1, b)
 
             with Stage("stage_3"):
-                lazy_4 = lazy_task_4(lazy_2, stage2)
+                lazy_4 = lazy_task_4(lazy_2)
             _ = lazy_3, lazy_4, eager  # unused terminal output tables
 
         # Run flow

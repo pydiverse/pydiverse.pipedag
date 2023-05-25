@@ -7,12 +7,16 @@ https://semver.org/spec/v2.0.0.html. The most important bits are:
 Changelog
 =========
 
-0.2.5 (YYYY-MM-DD)
+0.3.0 (2023-05-25)
 ------------------
+- breaking change to pipedag.yaml: introduced `args` subsections for arguments
+  that are passed to backend classes
 - fix ibm_db_sa bug when copying dataframes from cache: uppercase table names by default
 - nicer readable SQL queries: use automatic aliases for inputs of SQLAlchemy tasks
 - implement option ignore_task_version: disable eager task caching for some instances to
     reduce overhead from task version bumping
+- implement local table cache: store input/output of dataframe tasks in parquet files
+    and allow using it as cache to avoid rereading from database
 
 0.2.4 (2023-05-05)
 ------------------

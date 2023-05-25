@@ -121,13 +121,13 @@ def lazy_task_2(input1: sa.Table, input2: sa.Table):
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_3(input: sa.Table, my_stage: Stage):
-    return sa.text(f"SELECT * FROM {my_stage.transaction_name}.{input.name}")
+def lazy_task_3(input: sa.Table):
+    return sa.text(f"SELECT * FROM {input.original.schema}.{input.name}")
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_4(input: sa.Table, prev_stage: Stage):
-    return sa.text(f"SELECT * FROM {prev_stage.name}.{input.name}")
+def lazy_task_4(input: sa.Table):
+    return sa.text(f"SELECT * FROM {input.original.schema}.{input.name}")
 
 
 @materialize(nout=2, version="1.0.0")
@@ -158,13 +158,13 @@ def main():
             lazy_1 = lazy_task_1()
             a, b = eager_inputs()
 
-        with Stage("stage_2") as stage2:
+        with Stage("stage_2"):
             lazy_2 = lazy_task_2(lazy_1, b)
-            lazy_3 = lazy_task_3(lazy_2, stage2)
+            lazy_3 = lazy_task_3(lazy_2)
             eager = eager_task(lazy_1, b)
 
         with Stage("stage_3"):
-            lazy_4 = lazy_task_4(lazy_2, stage2)
+            lazy_4 = lazy_task_4(lazy_2)
         _ = lazy_3, lazy_4, eager  # unused terminal output tables
 
     # Run flow
@@ -190,8 +190,9 @@ You also need a file called `pipedag.yaml` in the same directory (see `example/p
 name: pipedag_tests
 table_store_connections:
   postgres:
-    # Postgres: this can be used after running `docker-compose up`
-    url: "postgresql://{$POSTGRES_USERNAME}:{$POSTGRES_PASSWORD}@127.0.0.1:6543/{instance_id}"
+    args:
+      # Postgres: this can be used after running `docker-compose up`  
+      url: "postgresql://{$POSTGRES_USERNAME}:{$POSTGRES_PASSWORD}@127.0.0.1:6543/{instance_id}"
 
 instances:
   __any__:
@@ -208,21 +209,32 @@ instances:
 
       # Postgres: this can be used after running `docker-compose up`
       table_store_connection: postgres
-      create_database_if_not_exists: True
+      args:
+        create_database_if_not_exists: True
+        
+        # print select statements before being encapsualted in materialize expressions and tables before writing to
+        # database
+        print_materialize: true
+        # print final sql statements
+        print_sql: true
 
-      # print select statements before being encapsualted in materialize expressions and tables before writing to
-      # database
-      print_materialize: true
-      # print final sql statements
-      print_sql: true
+      local_table_cache:
+        store_input: true
+        store_output: true
+        use_stored_input_as_cache: true
+        class: "pydiverse.pipedag.backend.table_cache.ParquetTableCache"
+        args:
+          base_path: "/tmp/pipedag/table_cache"
 
     blob_store:
       class: "pydiverse.pipedag.backend.blob.FileBlobStore"
-      base_path: "/tmp/pipedag/blobs"
+      args:
+        base_path: "/tmp/pipedag/blobs"
 
     lock_manager:
       class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
-      hosts: "localhost:2181"
+      args:
+        hosts: "localhost:2181"
 
     orchestration:
       class: "pydiverse.pipedag.engine.SequentialEngine"

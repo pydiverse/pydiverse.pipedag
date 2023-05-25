@@ -68,25 +68,28 @@ simple example configuration
     name: pipedag_tests
 
     instances:
-      __any__:
-        auto_table: ["pandas.DataFrame", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable"]
+        __any__:
+            auto_table: ["pandas.DataFrame", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable"]
 
-        instance_id: pipedag_default
-        table_store:
-          class: "pydiverse.pipedag.backend.table.SQLTableStore"
-          url: "postgresql://sa:Pydiverse23@127.0.0.1:6543/{instance_id}"
-          create_database_if_not_exists: true
+            instance_id: pipedag_default
+            table_store:
+                class: "pydiverse.pipedag.backend.table.SQLTableStore"
+                args:
+                    url: "postgresql://sa:Pydiverse23@127.0.0.1:6543/{instance_id}"
+                    create_database_if_not_exists: true
 
-        blob_store:
-          class: "pydiverse.pipedag.backend.blob.FileBlobStore"
-          base_path: "/tmp/pipedag/blobs"
+            blob_store:
+                class: "pydiverse.pipedag.backend.blob.FileBlobStore"
+                args:
+                    base_path: "/tmp/pipedag/blobs"
 
-        lock_manager:
-          class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
-          hosts: "localhost:2181"
+            lock_manager:
+                class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
+                args:
+                    hosts: "localhost:2181"
 
-        orchestration:
-          class: "pydiverse.pipedag.engine.SequentialEngine"
+            orchestration:
+                class: "pydiverse.pipedag.engine.SequentialEngine"
 
 
 top level attributes
@@ -282,8 +285,9 @@ table_store
 
 This section describes the table store to use. **Required**
 
-The `class` key/value is used to define which class to use as a the table store.
-Any other key/value pairs in this section are backend specific and either get passed to the classes `__init__` or `_init_conf_` method.
+The `class` attribute is used to define which class to use as the table store.
+Attributes of the `args` subsection are backend specific and get passed to the respective classes
+(detail: see `__init__` or `_init_conf_` methods).
 
 Fields `schema_prefix` and `schema_suffix` are optional. They are particularly useful for use with SQL Server database.
 SQL Server can query multiple databases within one query. So the database becomes effectively a part of the schema
@@ -295,10 +299,12 @@ specific database as part of the schema. If `schema_suffix` includes a dot, we u
 
     table_store:
         class: "pydiverse.pipedag.backend.table.SQLTableStore"
-        url: "postgresql://{username}:{password}@127.0.0.1/{instance_id}"
-        url_attrs_file: "~/.pipedag/{name}_{instance_id}.yaml"
-        # schema_prefix: "myflow_"
-        # schema_suffix: "_flow01"
+        args:
+            url: "postgresql://{username}:{password}@127.0.0.1/{instance_id}"
+            url_attrs_file: "~/.pipedag/{name}_{instance_id}.yaml"
+            # schema_prefix: "myflow_"
+            # schema_suffix: "_flow01"
+
 
 table_store_connection
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -310,17 +316,20 @@ This is an attribute within `table_store`_ section which allows referencing a bl
 
     table_store_connections:
         postgres:
-            url: "postgresql://postgres:pipedag@127.0.0.1/{instance_id}"
-            schema_prefix: "myflow_"
+            args:
+                url: "postgresql://postgres:pipedag@127.0.0.1/{instance_id}"
+                schema_prefix: "myflow_"
 
     table_store:
-        class: "pydiverse.pipedag.backend.table.SQLTableStore"
         table_store_connection: postgres
+        class: "pydiverse.pipedag.backend.table.SQLTableStore"
+
 
 class: pydiverse.pipedag.backend.table.SQLTableStore
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Database backend for storing tables and working with tables based on hand-written or programatically created SQL.
+The following attributes to the `args` section are supported:
 
 url
 """
@@ -433,6 +442,68 @@ class: pydiverse.pipedag.backend.table.DictTableStore
 
 Rather used for fast testing. It stores dataframes in a dictionary. Not intended for productive use.
 
+local_table_cache
+^^^^^^^^^^^^^^^^^
+
+This section describes a local table cache for dataframe tasks. **Optional**
+
+The `class` attribute is used to define which class to use as the local table cache.
+Attributes of the `args` subsection are backend specific and get passed to the respective classes
+(detail: see `__init__` or `_init_conf_` methods).
+
+Example:
+
+.. code-block:: yaml
+
+    table_store:
+        table_store_connection: postgres
+        class: "pydiverse.pipedag.backend.table.SQLTableStore"
+
+        local_table_cache:
+            store_input: true
+            store_output: true
+            use_stored_input_as_cache: true
+            class: "pydiverse.pipedag.backend.table_cache.ParquetTableCache"
+            args:
+                base_path: "/tmp/pipedag/table_cache"
+
+
+store_input
+"""""""""""
+
+default: true
+
+If true, input dataframes are cached after reading from table store. This can speedup dataframe retrieval significantly.
+
+store_output
+""""""""""""
+
+default: false
+
+If true, output dataframes are stored before writing to table store. This is mainly useful for using parquet files
+in debugging.
+
+use_stored_input_as_cache
+"""""""""""""""""""""""""
+
+default: true
+
+If true, input dataframes are read from cache instead of table store if cache is valid. An error will be issued if it is
+combined with `store_input: false`.
+
+
+class: pydiverse.pipedag.backend.table_cache.ParquetTableCache
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+This class stores locally cached dataframes in parquet files.
+
+**base_path:**
+
+The directory under which parquet files are stored. Directories are created based on `instance_id`_.
+
+Attention: `PipedagConfig.get(per_user=true)` modifies `instance_id`_ before it is used here.
+
+
 blob_store
 ----------
 
@@ -444,7 +515,8 @@ It is structured the same way as the `table_store` section.
 
     blob_store:
         class: "pydiverse.pipedag.backend.blob.FileBlobStore"
-        base_path: "/tmp/pipedag/blobs"
+        args:
+            base_path: "/tmp/pipedag/blobs"
 
 blob_store_connection
 ^^^^^^^^^^^^^^^
@@ -456,18 +528,22 @@ This is an attribute within `blob_store`_ section which allows referencing a blo
 
     blob_store_connections:
         tmp:
-            base_path: "/tmp/pipedag/blobs"
+            args:
+                base_path: "/tmp/pipedag/blobs"
 
     table_store:
-        class: "pydiverse.pipedag.backend.table.SQLTableStore"
         blob_store_connection: tmp
+        class: "pydiverse.pipedag.backend.table.SQLTableStore"
 
 class: pydiverse.pipedag.backend.blob.FileBlobStore
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Store blobs as files on the filesystem (might be mounted network drive)
 
-base_name
+Attributes of the `args` subsection are backend specific and get passed to the respective classes
+(detail: see `__init__` or `_init_conf_` methods):
+
+base_path
 """""""""
 
 The directory under which blobs are stored. Directories are created based on `instance_id`_.
@@ -490,14 +566,15 @@ in which case you set `class = "pydiverse.pipedag.backend.lock.NoLockManager"`.
         class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
         hosts: "localhost:2181"
 
-class: FileLockManager
+class: pydiverse.pipedag.backend.lock.FileLockManager
 ^^^^^^^^^^^^^^^^^^^^^^
 
 Use lock files on the filesystem.
-
 Attention: sometimes mounted network drives have unreliable locking
 
-base_name
+Attributes of the `args` subsection for this class:
+
+base_path
 """""""""
 
 The directory under which lock files are stored. Directories are created based on `instance_id`_.
@@ -508,7 +585,7 @@ Attention: `PipedagConfig.get(per_user=true)` modifies `instance_id`_ before it 
 class: pydiverse.pipedag.backend.lock.ZooKeeperLockManager
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-all attributes besides `class` are given as keyword
+Attributes of the `args` subsection are given as keyword
 arguments to https://kazoo.readthedocs.io/en/latest/api/client.html
 
 An excerpt of most needed attributes:
@@ -588,112 +665,115 @@ example configuration
     name: pipedag_tests
     strict_instance_lookup: true  # default value: true
     table_store_connections:
-      postgres:
-        url: "postgresql://{username}:{password}@127.0.0.1:6543/{instance_id}"
-        url_attrs_file: "~/.pipedag/{name}_{instance_id}.yaml"
+        postgres:
+            args:
+                url: "postgresql://{username}:{password}@127.0.0.1:6543/{instance_id}"
+                url_attrs_file: "~/.pipedag/{name}_{instance_id}.yaml"
 
-      mssql:
-        url: "mssql+pyodbc://{username}:{password}@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
-        url_attrs_file: "~/.pipedag/mssql.yaml"
-        schema_prefix: "{instance_id}_"  # SQL Server needs database.schema (uncomment only on of prefix and suffix)
-        schema_suffix: ".dbo"   # Alternatively SQL Server databases can be used as schemas with .dbo default schema
+        mssql:
+            args:
+                url: "mssql+pyodbc://{username}:{password}@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
+                url_attrs_file: "~/.pipedag/mssql.yaml"
+                schema_prefix: "{instance_id}_"  # SQL Server needs database.schema (uncomment only on of prefix and suffix)
+                schema_suffix: ".dbo"   # Alternatively SQL Server databases can be used as schemas with .dbo default schema
 
     blob_store_connections:
-      file:
-        base_path: "/tmp/pipedag/blobs"
+        file:
+            args:
+                base_path: "/tmp/pipedag/blobs"
 
     technical_setups:
-      default:
-        network_interface: "127.0.0.1"
-        auto_table: ["pandas.DataFrame", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable"]
-        fail_fast: true
+        default:
+            network_interface: "127.0.0.1"
+            auto_table: ["pandas.DataFrame", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable"]
+            fail_fast: true
 
-        instance_id: pipedag_default
-        table_store:
-          class: "pydiverse.pipedag.backend.table.SQLTableStore"
-
-          table_store_connection: postgres
-          create_database_if_not_exists: true
-
-          print_materialize: true
-          print_sql: true
+            instance_id: pipedag_default
+            table_store:
+                table_store_connection: postgres
+                class: "pydiverse.pipedag.backend.table.SQLTableStore"
+                args:
+                    create_database_if_not_exists: true
+                    print_materialize: true
+                    print_sql: true
 
         blob_store:
-          class: "pydiverse.pipedag.backend.blob.FileBlobStore"
-          blob_store_connection: file
+            blob_store_connection: file
+            class: "pydiverse.pipedag.backend.blob.FileBlobStore"
 
         lock_manager:
-          class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
-          hosts: "localhost:2181"
+            class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
+            args:
+                hosts: "localhost:2181"
 
         orchestration:
-          class: "pydiverse.pipedag.engine.SequentialEngine"
-          ## Activate this class to work either with prefect 1.x or prefect 2.y
-          # class: "pydiverse.pipedag.engine.PrefectEngine"
+            class: "pydiverse.pipedag.engine.SequentialEngine"
+            ## Activate this class to work either with prefect 1.x or prefect 2.y
+            # class: "pydiverse.pipedag.engine.PrefectEngine"
 
     instances:
-      __any__:
-        technical_setup: default
-        # The following Attributes are handed over to the flow implementation (pipedag does not care)
-        attrs:
-          # by default we load source data and not a sampled version of a loaded database
-          copy_filtered_input: false
+        __any__:
+            technical_setup: default
+            # The following Attributes are handed over to the flow implementation (pipedag does not care)
+            attrs:
+                # by default we load source data and not a sampled version of a loaded database
+                copy_filtered_input: false
 
-      full:
-        # pipedag instance for full dataset scheduled by CI
-        instance_id: pipedag_full
-        # Run this instance under @pytest.mark.slow5 (pydiverse.pipetest will read tags from here)
-        tags: pytest_mark_slow5
+        full:
+            # pipedag instance for full dataset scheduled by CI
+            instance_id: pipedag_full
+            # Run this instance under @pytest.mark.slow5 (pydiverse.pipetest will read tags from here)
+            tags: pytest_mark_slow5
 
-      midi:
-        # pipedag instance for medium size input with some code coverage
-        instance_id: pipedag_midi
-        attrs:
-          # copy filtered input from full instance
-          copy_filtered_input: true
-          copy_source: full
-          copy_per_user: false
-          sample_cnt: 2  # this is just dummy input where we sample 2 rows
+        midi:
+            # pipedag instance for medium size input with some code coverage
+            instance_id: pipedag_midi
+            attrs:
+                # copy filtered input from full instance
+                copy_filtered_input: true
+                copy_source: full
+                copy_per_user: false
+                sample_cnt: 2  # this is just dummy input where we sample 2 rows
 
-        # Run this instance under @pytest.mark.slow4 (pydiverse.pipetest will read tags from here)
-        tags: pytest_mark_slow4
-        # Run only stage_2 under @pytest.mark.slow3 (pydiverse.pipetest will read stage_tags from here)
-        stage_tags:
-          pytest_mark_slow3:
-            - simple_flow_stage2
+            # Run this instance under @pytest.mark.slow4 (pydiverse.pipetest will read tags from here)
+            tags: pytest_mark_slow4
+            # Run only stage_2 under @pytest.mark.slow3 (pydiverse.pipetest will read stage_tags from here)
+            stage_tags:
+                pytest_mark_slow3:
+                - simple_flow_stage2
 
-      mini:
-        # pipedag instance for tiny input just for smoke test development
-        instance_id: pipedag_mini
-        attrs:
-          copy_filtered_input: true
-          copy_source: full
-          copy_per_user: false
-          sample_cnt: 1  # this is just dummy input where we sample 1 row
+        mini:
+            # pipedag instance for tiny input just for smoke test development
+            instance_id: pipedag_mini
+            attrs:
+                copy_filtered_input: true
+                copy_source: full
+                copy_per_user: false
+                sample_cnt: 1  # this is just dummy input where we sample 1 row
 
-        # Run this instance under @pytest.mark.slow2
-        tags: pytest_mark_slow2
-        # Run only stage_2 under @pytest.mark.slow1
-        stage_tags:
-          pytest_mark_slow1:
-            - simple_flow_stage2
+            # Run this instance under @pytest.mark.slow2
+            tags: pytest_mark_slow2
+            # Run only stage_2 under @pytest.mark.slow1
+            stage_tags:
+                pytest_mark_slow1:
+                - simple_flow_stage2
 
-      mssql:
-        # Full dataset is using default database connection and schemas
-        table_store:
-          <<: *db_mssql
+        mssql:
+            # Full dataset is using default database connection and schemas
+            table_store:
+                <<: *db_mssql
 
     flows:
-    #  __any__:
-    #    instances:
-    #      # it would be equivalent to move everything in "instances:" to here
-      test_instance_selection:
-        instances:
-          full:
+        # __any__:
+        #     instances:
+        #         # it would be equivalent to move everything in "instances:" to here
+        test_instance_selection:
+            instances:
+                full:
+                    table_store:
+                        schema_suffix: "_full"
             table_store:
-              schema_suffix: "_full"
-        table_store:
-          schema_prefix: "instance_selection_"
+                schema_prefix: "instance_selection_"
 
 example configuration with anchor syntax
 ----------------------------------------
@@ -707,109 +787,115 @@ which then can be later referenced
     name: pipedag_tests
     strict_instance_lookup: true  # default value: true
     _table_store_connections:
-      postgres: &db_postgres
-        url: "postgresql://{username}:{password}@127.0.0.1:6543/{instance_id}"
-        url_attrs_file: "~/.pipedag/{name}_{instance_id}.yaml"
+        postgres: &db_postgres
+            args:
+                url: "postgresql://{username}:{password}@127.0.0.1:6543/{instance_id}"
+                url_attrs_file: "~/.pipedag/{name}_{instance_id}.yaml"
 
-      mssql: &db_mssql
-        url: "mssql+pyodbc://{username}:{password}@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
-        url_attrs_file: "~/.pipedag/mssql.yaml"
-        schema_prefix: "{instance_id}_"  # SQL Server needs database.schema (uncomment only on of prefix and suffix)
-        schema_suffix: ".dbo"   # Alternatively SQL Server databases can be used as schemas with .dbo default schema
+        mssql: &db_mssql
+            args:
+                url: "mssql+pyodbc://{username}:{password}@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
+                url_attrs_file: "~/.pipedag/mssql.yaml"
+                schema_prefix: "{instance_id}_"  # SQL Server needs database.schema (uncomment only on of prefix and suffix)
+                schema_suffix: ".dbo"   # Alternatively SQL Server databases can be used as schemas with .dbo default schema
 
     _blob_store_connections:
-      file: &blob_file
-        base_path: "/tmp/pipedag/blobs"
+        file: &blob_file
+            args:
+                base_path: "/tmp/pipedag/blobs"
 
     _technical_setups:
-      default: &technical_setup_default
-        network_interface: "127.0.0.1"
-        auto_table: ["pandas.DataFrame", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable"]
-        fail_fast: true
+        default: &technical_setup_default
+            network_interface: "127.0.0.1"
+            auto_table: ["pandas.DataFrame", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable"]
+            fail_fast: true
 
-        instance_id: pipedag_default
-        table_store:
-          # Postgres:
-          <<: *db_postgres
-          create_database_if_not_exists: true
+            instance_id: pipedag_default
+            table_store:
+                # Postgres:
+                <<: *db_postgres
+                create_database_if_not_exists: true
 
-          class: "pydiverse.pipedag.backend.table.SQLTableStore"
+                class: "pydiverse.pipedag.backend.table.SQLTableStore"
 
-          print_materialize: true
-          print_sql: true
+                args:
+                    print_materialize: true
+                    print_sql: true
 
-        blob_store:
-          class: "pydiverse.pipedag.backend.blob.FileBlobStore"
-          <<: *blob_file
+            blob_store:
+                  class: "pydiverse.pipedag.backend.blob.FileBlobStore"
+                  <<: *blob_file
 
-        lock_manager:
-          class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
-          hosts: "localhost:2181"
+            lock_manager:
+                class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
+                args:
+                    hosts: "localhost:2181"
 
-        orchestration:
-          class: "pydiverse.pipedag.engine.SequentialEngine"
+            orchestration:
+                class: "pydiverse.pipedag.engine.SequentialEngine"
 
     _instances: &instances
-      __any__:
-        <<: *technical_setup_default
-        # The following Attributes are handed over to the flow implementation (pipedag does not care)
-        attrs:
-          # by default we load source data and not a sampled version of a loaded database
-          copy_filtered_input: false
+        __any__:
+            <<: *technical_setup_default
+            # The following Attributes are handed over to the flow implementation (pipedag does not care)
+            attrs:
+                # by default we load source data and not a sampled version of a loaded database
+                copy_filtered_input: false
 
-      full:
-        # pipedag instance for full dataset scheduled by CI
-        instance_id: pipedag_full
-        # Run this instance under @pytest.mark.slow5 (pydiverse.pipetest will read tags from here)
-        tags: pytest_mark_slow5
+        full:
+            # pipedag instance for full dataset scheduled by CI
+            instance_id: pipedag_full
+            # Run this instance under @pytest.mark.slow5 (pydiverse.pipetest will read tags from here)
+            tags: pytest_mark_slow5
 
-      midi:
-        # pipedag instance for medium size input with some code coverage
-        instance_id: pipedag_midi
-        attrs:
-          # copy filtered input from full instance
-          copy_filtered_input: true
-          copy_source: full
-          copy_per_user: false
-          sample_cnt: 2  # this is just dummy input where we sample 2 rows from each table
+        midi:
+            # pipedag instance for medium size input with some code coverage
+            instance_id: pipedag_midi
+            attrs:
+                # copy filtered input from full instance
+                copy_filtered_input: true
+                copy_source: full
+                copy_per_user: false
+                sample_cnt: 2  # this is just dummy input where we sample 2 rows from each table
 
-        # Run this instance under @pytest.mark.slow4 (pydiverse.pipetest will read tags from here)
-        tags: pytest_mark_slow4
-        # Run only stage_2 under @pytest.mark.slow3 (pydiverse.pipetest will read stage_tags from here)
-        stage_tags:
-          pytest_mark_slow3:
-            - simple_flow_stage2
+            # Run this instance under @pytest.mark.slow4 (pydiverse.pipetest will read tags from here)
+            tags: pytest_mark_slow4
+            # Run only stage_2 under @pytest.mark.slow3 (pydiverse.pipetest will read stage_tags from here)
+            stage_tags:
+                pytest_mark_slow3:
+                - simple_flow_stage2
 
-      mini:
-        # pipedag instance for tiny input just for smoke test development
-        instance_id: pipedag_mini
-        attrs:
-          copy_filtered_input: true
-          copy_source: full
-          copy_per_user: false
-          sample_cnt: 1  # this is just dummy input where we sample 1 row from each table
+        mini:
+            # pipedag instance for tiny input just for smoke test development
+            instance_id: pipedag_mini
+            attrs:
+                copy_filtered_input: true
+                copy_source: full
+                copy_per_user: false
+                sample_cnt: 1  # this is just dummy input where we sample 1 row from each table
 
-        # Run this instance under @pytest.mark.slow2
-        tags: pytest_mark_slow2
-        # Run only stage_2 under @pytest.mark.slow1
-        stage_tags:
-          pytest_mark_slow1:
-            - simple_flow_stage2
+            # Run this instance under @pytest.mark.slow2
+            tags: pytest_mark_slow2
+            # Run only stage_2 under @pytest.mark.slow1
+            stage_tags:
+                pytest_mark_slow1:
+                - simple_flow_stage2
 
-      mssql:
-        table_store:
-          <<: *db_mssql
+        mssql:
+            table_store:
+                <<: *db_mssql
 
     flows:
-      __any__:
-        instances: *instances
-      test_instance_selection:
-        instances:
-          full:
+        __any__:
+            instances: *instances
+
+        test_instance_selection:
+            instances:
+                full:
+                    table_store:
+                        schema_suffix: "_full"
             table_store:
-              schema_suffix: "_full"
-        table_store:
-          schema_prefix: "instance_selection_"
+                schema_prefix: "instance_selection_"
 
 example code for loading configuration
 --------------------------------------

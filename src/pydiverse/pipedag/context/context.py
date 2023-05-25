@@ -20,8 +20,6 @@ if TYPE_CHECKING:
 import structlog
 from attrs import define, frozen
 
-logger = structlog.get_logger()
-
 
 class BaseContext:
     _context_var: ClassVar[ContextVar]
@@ -146,13 +144,52 @@ class ConfigContext(BaseAttrsContext):
     @cached_property
     def store(self):
         # Load objects referenced in config
-        table_store = load_object(self.config_dict["table_store"])
-        blob_store = load_object(self.config_dict["blob_store"])
+        try:
+            from pydiverse.pipedag.backend.table_cache import LocalTableCache
+
+            table_store = load_object(self.config_dict["table_store"])
+            if "local_table_cache" in self.config_dict["table_store"]:
+                local_cache_cfg = self.config_dict["table_store"]["local_table_cache"]
+                local_table_cache = LocalTableCache(
+                    load_object(local_cache_cfg),
+                    local_cache_cfg.get("store_input", True),
+                    local_cache_cfg.get("store_output", False),
+                    local_cache_cfg.get("use_stored_input_as_cache", True),
+                )
+                unknown_attributes = set(local_cache_cfg.keys()) - {
+                    "class",
+                    "args",
+                    "store_input",
+                    "store_output",
+                    "use_stored_input_as_cache",
+                }
+                if len(unknown_attributes) > 0:
+                    raise AttributeError(
+                        (
+                            "Unknown attributes in local_table_cache config:"
+                            f" {unknown_attributes}"
+                        ),
+                    )
+            else:
+                local_table_cache = LocalTableCache(
+                    None,
+                    store_input=False,
+                    store_output=False,
+                    use_stored_input_as_cache=False,
+                )
+        except Exception as e:
+            raise RuntimeError("Failed loading table_store") from e
+
+        try:
+            blob_store = load_object(self.config_dict["blob_store"])
+        except Exception as e:
+            raise RuntimeError("Failed loading blob_store") from e
         from pydiverse.pipedag.materialize.store import PipeDAGStore
 
         return PipeDAGStore(
             table=table_store,
             blob=blob_store,
+            local_table_cache=local_table_cache,
         )
 
     def create_lock_manager(self) -> BaseLockManager:

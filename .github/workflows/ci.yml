@@ -93,7 +93,7 @@ jobs:
         uses: ./.github/actions/setup
         with:
           python-version: ${{ matrix.python-version }}
-          poetry-flags: -E ibm_db2 -E pdtransform
+          poetry-flags: -E filelock -E ibm_db2 -E pdtransform
 
       - name: Start Docker Compose
         uses: isbang/compose-action@v1.4.1
@@ -137,7 +137,7 @@ jobs:
         uses: ./.github/actions/setup
         with:
           python-version: ${{ matrix.python-version }}
-          poetry-flags: -E mssql -E ibm_db2 -E pdtransform -E ibis -E polars
+          poetry-flags: -E filelock -E mssql -E ibm_db2 -E pdtransform -E ibis -E polars
 
       - name: Install Microsoft ODBC
         run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18

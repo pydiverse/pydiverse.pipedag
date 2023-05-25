@@ -1,19 +1,22 @@
 name: pipedag_tests
 table_store_connections:
   postgres:
-    # Postgres: this can be used after running `docker-compose up`
-    url: "postgresql://{$POSTGRES_USERNAME}:{$POSTGRES_PASSWORD}@127.0.0.1:6543/{instance_id}"
+    args:
+      # Postgres: this can be used after running `docker-compose up`
+      url: "postgresql://{$POSTGRES_USERNAME}:{$POSTGRES_PASSWORD}@127.0.0.1:6543/{instance_id}"
 
   mssql:
-    # SQL Server: this can be used after running `docker-compose up`
-    url: "mssql+pyodbc://{$MSSQL_USERNAME}:{$MSSQL_PASSWORD}@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
-    schema_prefix: "{instance_id}_"  # SQL Server needs database.schema
-    schema_suffix: ".dbo"   # Alternatively SQL Server databases can be used as schemas with .dbo default schema
+    args:
+      # SQL Server: this can be used after running `docker-compose up`
+      url: "mssql+pyodbc://{$MSSQL_USERNAME}:{$MSSQL_PASSWORD}@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
+      schema_prefix: "{instance_id}_"  # SQL Server needs database.schema
+      schema_suffix: ".dbo"   # Alternatively SQL Server databases can be used as schemas with .dbo default schema
 
   ibm_db2:
-    # SQL Server: this can be used after running `docker-compose up`
-    url: "db2+ibm_db://db2inst1:password@localhost:50000/testdb"
-    schema_prefix: "{instance_id}_"
+    args:
+      # SQL Server: this can be used after running `docker-compose up`
+      url: "db2+ibm_db://db2inst1:password@localhost:50000/testdb"
+      schema_prefix: "{instance_id}_"
 
 instances:
   __any__:
@@ -27,25 +30,27 @@ instances:
 
     instance_id: pipedag_default
     table_store:
-      class: "pydiverse.pipedag.backend.table.SQLTableStore"
-
-      # Postgres: this can be used after running `docker-compose up`
       table_store_connection: postgres
-      create_database_if_not_exists: true
+      class: "pydiverse.pipedag.backend.table.SQLTableStore"
+      args:
+        # Postgres: this can be used after running `docker-compose up`
+        create_database_if_not_exists: true
 
-      # print select statements before being encapsualted in materialize expressions and tables before writing to
-      # database
-      print_materialize: true
-      # print final sql statements
-      print_sql: true
+        # print select statements before being encapsualted in materialize expressions and tables before writing to
+        # database
+        print_materialize: true
+        # print final sql statements
+        print_sql: true
 
     blob_store:
       class: "pydiverse.pipedag.backend.blob.FileBlobStore"
-      base_path: "/tmp/pipedag/blobs"
+      args:
+        base_path: "/tmp/pipedag/blobs"
 
     lock_manager:
       class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
-      hosts: "localhost:2181"
+      args:
+        hosts: "localhost:2181"
 
     orchestration:
       class: "pydiverse.pipedag.engine.SequentialEngine"
@@ -61,14 +66,16 @@ instances:
     instance_id: pd_mssql
     table_store:
       table_store_connection: mssql
-      disable_pytsql: true
+      args:
+        disable_pytsql: true
 
   mssql_pytsql:
     instance_id: pd_mssql_pytsql
     table_store:
       table_store_connection: mssql
-      disable_pytsql: false
-      pytsql_isolate_top_level_statements: true
+      args:
+        disable_pytsql: false
+        pytsql_isolate_top_level_statements: true
 
   ibm_db2:
     instance_id: pd_ibm_db2
@@ -81,7 +88,8 @@ instances:
     stage_commit_technique: READ_VIEWS
     table_store:
       table_store_connection: ibm_db2
-      avoid_drop_create_schema: true
+      args:
+        avoid_drop_create_schema: true
 
   pdtransform:
     instance_id: pd_postgres
@@ -109,3 +117,30 @@ instances:
     ignore_task_version: true
     table_store:
       table_store_connection: postgres
+
+  local_table_cache:
+    table_store:
+      local_table_cache:
+        class: "pydiverse.pipedag.backend.table_cache.ParquetTableCache"
+        args:
+          base_path: "/tmp/pipedag/table_cache"
+
+  local_table_cache_inout:
+    table_store:
+      local_table_cache:
+        store_input: true
+        store_output: true
+        use_stored_input_as_cache: true
+        class: "pydiverse.pipedag.backend.table_cache.ParquetTableCache"
+        args:
+          base_path: "/tmp/pipedag/table_cache"
+
+  local_table_store:
+    table_store:
+      local_table_cache:
+        store_input: true
+        store_output: true
+        use_stored_input_as_cache: false
+        class: "pydiverse.pipedag.backend.table_cache.ParquetTableCache"
+        args:
+          base_path: "/tmp/pipedag/table_cache"
