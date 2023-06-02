@@ -208,9 +208,11 @@ def _get_df(data: dict[str, list], use_ext_dtype=False, cap_dates=False):
                 dtypes[col] = pd.BooleanDtype()
     return pd.DataFrame(
         {
-            col: pd.Series(values, dtype=dtypes[col])
-            if col in dtypes
-            else pd.Series(values)
+            col: (
+                pd.Series(values, dtype=dtypes[col])
+                if col in dtypes
+                else pd.Series(values)
+            )
             for col, values in data.items()
         }
     )

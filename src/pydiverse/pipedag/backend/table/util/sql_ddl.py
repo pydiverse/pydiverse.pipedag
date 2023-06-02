@@ -304,7 +304,7 @@ def visit_create_schema_mssql(create: CreateSchema, compiler, **kw):
     create_database = f"CREATE DATABASE {database}"
     if create.if_not_exists:
         create_database = f"""
-            IF NOT EXISTS ( 
+            IF NOT EXISTS (
                 SELECT * FROM sys.databases WHERE name = N'{database_name}'
             )
             BEGIN {create_database} END"""

@@ -57,6 +57,12 @@ After installation, you should be able to run:
 poetry run pytest --workers 4
 ```
 
+To be able to run all tests (for different databases or table types), you have to install the test dependency group:
+
+```bash
+poetry install --with=test
+```
+
 ## Pre-commit install with conda and python 3.9
 
 We currently have some pre-commit hooks bound to python=3.9. So pre-commit install may fail when running with
