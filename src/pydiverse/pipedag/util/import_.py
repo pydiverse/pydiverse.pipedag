@@ -65,3 +65,42 @@ def import_object(import_path: str):
         obj = getattr(obj, part)
 
     return obj
+
+
+def load_object(config_dict: dict):
+    """Instantiates an instance of an object given
+
+    The import path (module.Class) should be specified as the "class" value
+    of the dict. The args section of the dict get used as the instance config.
+
+    If the class defines a `_init_conf_` function, it gets called using the
+    config values, otherwise they just get passed to the class initializer.
+
+    >>> # module.Class(argument="value")
+    >>> load_object({
+    >>>     "class": "module.Class",
+    >>>     "args": {
+    >>>         "argument": "value",
+    >>>     },
+    >>> })
+    """
+
+    if "class" not in config_dict:
+        raise RuntimeError(
+            "Attribute 'class' is missing in configuration "
+            "section that supports multiple backends\n"
+            f"config section: {config_dict}"
+        )
+    cls = import_object(config_dict["class"])
+
+    args = config_dict.get("args", {})
+    if not isinstance(args, dict):
+        raise TypeError(
+            f"Invalid type for args section: {type(args)}\n"
+            f"config section: {config_dict}"
+        )
+    try:
+        init_conf = cls._init_conf_
+        return init_conf(args)
+    except AttributeError:
+        return cls(**args)
