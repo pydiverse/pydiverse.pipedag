@@ -3,7 +3,6 @@ import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import StageLockContext
-from pydiverse.pipedag.util import setup_structlog
 
 
 @materialize(lazy=True)
@@ -78,6 +77,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # initialize logging
-    setup_structlog()
     main()

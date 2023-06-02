@@ -1,6 +1,6 @@
 import pytest
 
-from pydiverse.pipedag.util import PipedagConfig
+from pydiverse.pipedag import PipedagConfig
 
 
 __all__ = [

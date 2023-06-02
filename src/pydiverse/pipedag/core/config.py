@@ -3,20 +3,16 @@ from __future__ import annotations
 import copy
 import getpass
 import itertools
-import logging
 import os
 import re
-import sys
 from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import structlog
 import yaml
 from box import Box
 
 from pydiverse.pipedag.util.deep_merge import deep_merge
-from pydiverse.pipedag.util.import_ import import_object
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.context import ConfigContext
@@ -373,45 +369,6 @@ def expand_variables(
     return re.sub(r"\{[a-zA-Z_]+[a-zA-Z0-9_]*\}", var_sub, string)
 
 
-def load_object(config_dict: dict):
-    """Instantiates an instance of an object given
-
-    The import path (module.Class) should be specified as the "class" value
-    of the dict. The args section of the dict get used as the instance config.
-
-    If the class defines a `_init_conf_` function, it gets called using the
-    config values, otherwise they just get passed to the class initializer.
-
-    >>> # module.Class(argument="value")
-    >>> load_object({
-    >>>     "class": "module.Class",
-    >>>     "args": {
-    >>>         "argument": "value",
-    >>>     },
-    >>> })
-    """
-
-    if "class" not in config_dict:
-        raise RuntimeError(
-            "Attribute 'class' is missing in configuration "
-            "section that supports multiple backends\n"
-            f"config section: {config_dict}"
-        )
-    cls = import_object(config_dict["class"])
-
-    args = config_dict.get("args", {})
-    if not isinstance(args, dict):
-        raise TypeError(
-            f"Invalid type for args section: {type(args)}\n"
-            f"config section: {config_dict}"
-        )
-    try:
-        init_conf = cls._init_conf_
-        return init_conf(args)
-    except AttributeError:
-        return cls(**args)
-
-
 # Nested Dictionary Utilities
 
 
@@ -457,29 +414,3 @@ def _pop(d, *path, default=_nil) -> Any:
         if default == _nil:
             raise e
         return default
-
-
-def setup_structlog(
-    _log_level=logging.INFO,
-    _log_stream=sys.stderr,
-    timestamp_format="%Y-%m-%d %H:%M:%S.%f",
-):
-    logging.basicConfig(
-        stream=_log_stream,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        level=_log_level,
-    )
-    structlog.configure(
-        processors=[
-            structlog.contextvars.merge_contextvars,
-            structlog.processors.add_log_level,
-            structlog.processors.StackInfoRenderer(),
-            structlog.dev.set_exc_info,
-            structlog.processors.TimeStamper(fmt=timestamp_format),
-            structlog.dev.ConsoleRenderer(),
-        ],
-        wrapper_class=structlog.make_filtering_bound_logger(_log_level),
-        context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(_log_stream),
-        cache_logger_on_first_use=True,
-    )

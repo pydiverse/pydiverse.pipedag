@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pandas as pd
 import pytest
 import sqlalchemy as sa
 
-from pydiverse.pipedag import Flow, Stage, Table, materialize
+from pydiverse.pipedag import Flow, Stage, materialize, PipedagConfig
 from pydiverse.pipedag.context import ConfigContext, StageLockContext
 from pydiverse.pipedag.materialize.container import RawSql
-from pydiverse.pipedag.util.config import PipedagConfig
 
 """
 Attention: Wrapping Raw SQL statements should always be just the first step of pipedag adoption.

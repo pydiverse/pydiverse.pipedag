@@ -1,12 +1,11 @@
 import pytest
 
-from pydiverse.pipedag import materialize, Table, Flow, Stage
+from pydiverse.pipedag import materialize, Table, Flow, Stage, PipedagConfig
 import sqlalchemy as sa
 import pandas as pd
 
 from pydiverse.pipedag.backend.table.sql import sa_select
 from pydiverse.pipedag.context import StageLockContext
-from pydiverse.pipedag.util import PipedagConfig
 
 
 @pytest.mark.ibis

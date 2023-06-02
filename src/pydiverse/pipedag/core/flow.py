@@ -7,8 +7,8 @@ import networkx as nx
 import structlog
 
 from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContextServer
+from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
-from pydiverse.pipedag.util.config import PipedagConfig
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import Result, Stage, Task
