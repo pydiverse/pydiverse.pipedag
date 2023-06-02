@@ -76,6 +76,7 @@ def test_local_table_cache(instance):
     cfg = PipedagConfig.default.get(instance)
 
     base_dir = Path("/tmp/pipedag/table_cache/pipedag_default")
+    base_dir.mkdir(parents=True, exist_ok=True)
     with filelock.FileLock(base_dir.parent / "lock"):
         shutil.rmtree(base_dir)
 
