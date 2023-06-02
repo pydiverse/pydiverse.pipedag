@@ -110,7 +110,6 @@ import sqlalchemy as sa
 import pandas as pd
 
 from pydiverse.pipedag.context import StageLockContext, RunContext
-from pydiverse.pipedag.util import setup_structlog
 
 
 @materialize(lazy=True)
@@ -185,8 +184,6 @@ def main():
 
 
 if __name__ == "__main__":
-    # initialize logging
-    setup_structlog()
     main()
 ```
 
