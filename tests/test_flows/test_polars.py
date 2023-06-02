@@ -1,11 +1,9 @@
 import pytest
 
-from pydiverse.pipedag import materialize, Table, Flow, Stage
-import sqlalchemy as sa
+from pydiverse.pipedag import materialize, Table, Flow, Stage, PipedagConfig
 import pandas as pd
 
 from pydiverse.pipedag.context import StageLockContext
-from pydiverse.pipedag.util import PipedagConfig
 
 
 @pytest.mark.polars

@@ -7,7 +7,7 @@ from pydiverse.pipedag import Blob, Flow, Stage, Table
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import materialize
-from pydiverse.pipedag.util import PipedagConfig
+from pydiverse.pipedag.core import PipedagConfig
 
 from tests.util import select_as, compile_sql, tasks_library as m
 from tests.util.spy import spy_task

@@ -6,7 +6,7 @@ from functools import cached_property
 from threading import Lock
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from pydiverse.pipedag.util.config import load_object
+from pydiverse.pipedag.core.config import load_object
 from pydiverse.pipedag.util.import_ import import_object
 
 if TYPE_CHECKING:

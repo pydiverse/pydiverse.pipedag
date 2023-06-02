@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from pydiverse.pipedag.util.config import setup_structlog
+from pydiverse.pipedag.core.config import setup_structlog
 
 if TYPE_CHECKING:
     pass

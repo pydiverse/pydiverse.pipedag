@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -10,7 +9,7 @@ import sqlalchemy as sa
 from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.backend.table.util.pandas import adj_pandas_types
 from pydiverse.pipedag.context import StageLockContext
-from pydiverse.pipedag.util.config import PipedagConfig
+from pydiverse.pipedag.core.config import PipedagConfig
 
 dfA_source = pd.DataFrame(
     {

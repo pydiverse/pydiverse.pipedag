@@ -9,7 +9,7 @@ import structlog
 from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.backend.table.sql import sa_select
 from pydiverse.pipedag.context import RunContext, StageLockContext
-from pydiverse.pipedag.util.config import PipedagConfig
+from pydiverse.pipedag.core.config import PipedagConfig
 
 from tests.util import select_as, tasks_library as m
 

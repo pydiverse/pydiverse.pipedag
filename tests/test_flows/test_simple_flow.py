@@ -4,8 +4,7 @@ import pandas as pd
 import pytest
 import sqlalchemy as sa
 
-from pydiverse.pipedag import Flow, Stage, Table, materialize
-from pydiverse.pipedag.util.config import PipedagConfig
+from pydiverse.pipedag import Flow, Stage, Table, materialize, PipedagConfig
 
 
 @materialize(nout=2, version="1.1")

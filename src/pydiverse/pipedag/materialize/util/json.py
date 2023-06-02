@@ -12,8 +12,8 @@ from pathlib import Path
 
 from pydiverse.pipedag import Stage
 from pydiverse.pipedag.context import RunContext
+from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.materialize.container import Blob, RawSql, Table
-from pydiverse.pipedag.util.config import PipedagConfig
 
 PIPEDAG_TYPE = "_pipedag_type_"
 PIPEDAG_TYPE_TABLE = "table"
