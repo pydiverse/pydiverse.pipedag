@@ -11,6 +11,7 @@ from typing import Any
 import msgpack
 import pynng
 import structlog
+from cryptography.fernet import Fernet
 
 from pydiverse.pipedag.errors import IPCError
 
@@ -42,6 +43,8 @@ class IPCServer(threading.Thread):
 
         self.socket = pynng.Rep0(listen=listen, recv_timeout=recv_timeout)
         self.nonces = set()
+
+        self._fernet = Fernet(Fernet.generate_key())
 
         self.__stop_flag = False
         self.__thread = None
@@ -106,6 +109,7 @@ class IPCServer(threading.Thread):
                 # noinspection PyBroadException
                 try:
                     data = socket.recv()
+                    data = self._fernet.decrypt(data)
                     unpacker = msgpack.Unpacker(
                         use_list=False, ext_hook=self.msg_ext_hook
                     )
@@ -185,7 +189,9 @@ class IPCServer(threading.Thread):
             ctx_id=ctx_id,
             thread=human_thread_id(threading.get_ident()),
         )
-        socket.send(msgpack.packb(reply, default=self.msg_default))
+        reply = msgpack.packb(reply, default=self.msg_default)
+        reply = self._fernet.encrypt(reply)
+        socket.send(reply)
 
     def handle_request(self, request: dict[str, Any]):
         return None
@@ -211,21 +217,23 @@ class IPCServer(threading.Thread):
     def get_client(self) -> IPCClient:
         return IPCClient(
             addr=self.address,
+            fernet=self._fernet,
             msg_default=self.msg_default,
             msg_ext_hook=self.msg_ext_hook,
         )
 
 
 class IPCClient:
-    def __init__(self, addr: str, msg_default=None, msg_ext_hook=None):
+    def __init__(self, addr: str, fernet: Fernet, msg_default=None, msg_ext_hook=None):
         self.logger = structlog.get_logger(
             thread=human_thread_id(threading.get_ident())
         )
         self.addr = addr
-        self.socket = self._connect()
-
+        self._fernet = fernet
         self.msg_default = msg_default
         self.msg_ext_hook = msg_ext_hook
+
+        self.socket = self._connect()
 
     def _connect(self):
         self.logger.debug("opening client connection", addr=self.addr)
@@ -234,14 +242,16 @@ class IPCClient:
     def request(self, payload: Any) -> Any:
         with self.socket.new_context() as socket:
             self.logger.debug("client request")
-            nonce = uuid.uuid4().bytes[:8]
+            nonce = uuid.uuid4().bytes[:16]
             msg = msgpack.packb((nonce, payload), default=self.msg_default)
+            msg = self._fernet.encrypt(msg)
             socket.send(msg)
 
-            response_msg = socket.recv()
+            response = socket.recv()
             self.logger.debug("client got response")
+            response = self._fernet.decrypt(response)
             response = msgpack.unpackb(
-                response_msg, use_list=False, ext_hook=self.msg_ext_hook
+                response, use_list=False, ext_hook=self.msg_ext_hook
             )
             return response
 
