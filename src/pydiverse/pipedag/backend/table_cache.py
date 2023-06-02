@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import json
-import os
 import shutil
 import warnings
 from abc import ABC, abstractmethod
@@ -138,7 +137,6 @@ class ParquetTableCache(BaseTableCache):
 
     def __init__(self, base_path: str | Path):
         self.base_path = Path(base_path).absolute()
-        os.makedirs(self.base_path, exist_ok=True)
 
     def store_table(self, table: Table, task: MaterializingTask, task_info: TaskInfo):
         _dir = self.base_path / table.stage.name
