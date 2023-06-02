@@ -21,14 +21,13 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.9, <3.11"  # currently, optional dependency tidypolars does not support python 3.11
+python = "^3.9"
 pandas = ">=1.4.3"
 SQLAlchemy = ">=1.4.39"
-typing-extensions = "<5, >=4.1.0"
+typing-extensions = "^4.1.0"
 networkx = ">=2.8"
 attrs = ">=22.1.0"
 structlog = ">=22.1.0"
-tomli = ">=2.0.1"
 pynng = ">=0.7.1"
 msgpack = ">=1.0.4"
 packaging = ">=21.3"
@@ -39,47 +38,58 @@ pyarrow = ">=11.0.0"
 filelock = { version = ">=3.7.1", optional = true }
 kazoo = { version = ">=2.8.0", optional = true }
 
-Sphinx = { version = ">=5.1.1", optional = true }
-sphinx-rtd-theme = { version = ">=1.0.0", optional = true }
-sphinxcontrib-apidoc = { version=">=0.3.0", optional = true }
-
-pyodbc = { version = ">=4.0.35", optional = true }
-pytsql = { version = ">=1.1.4", optional = true }
-ibm-db = { version = ">=3.1.4", optional = true }
-ibm-db-sa = { version = ">=0.3.8", optional = true }
-pydiverse-transform = { version = ">=0.1.1", optional = true }
-ibis = { version = ">=3.2.0", optional = true }
-ibis-framework = {extras = ["mssql", "postgres"], version = "^5.1.0", optional = true }
-tidypolars = { version = ">=0.2.19", optional = true }
-connectorx = { version=">=0.3.1", optional = true }
-polars = { version=">=0.16.18,<0.17", optional = true }
-prefect = { version = ">=1.3,<2", optional = true }
-# for prefect 2 (radical change of paradigmns especially in task graph display => not ideal for rather linear pipeline)
-# prefect = { version = "prefect>=2.0,<3", optional = true }
-
 [tool.poetry.extras]
 filelock = ["filelock"]
 zookeeper = ["kazoo"]
-docs = ["Sphinx", "sphinx-rtd-theme", "sphinxcontrib-apidoc"]
-mssql = ["pyodbc", "pytsql"]
-ibm_db2 = ["ibm-db", "ibm-db-sa"]
-pdtransform = ["pydiverse-transform"]
-ibis = ["ibis", "ibis-framework"]
-polars = ["tidypolars", "polars", "connectorx"]
-prefect = ["prefect", "docker-compose"]
+#mssql = ["pyodbc", "pytsql"]
+#ibm_db2 = ["ibm-db", "ibm-db-sa"]
+#pdtransform = ["pydiverse-transform"]
+#ibis = ["ibis", "ibis-framework"]
+#polars = ["tidypolars", "polars", "connectorx"]
+#prefect = ["prefect", "docker-compose"]
 
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
 pytest = ">=7.2.0"
 pytest-mock = ">=3.10.0"
 pytest-timeout = ">=2.1.0"
-black = "^23.3.0"
+
+black = "23.3.0"
 isort = "^5.10.1"
-ruff = ">=0.0.189"
+ruff = "^0.0.270"
 pre-commit = ">=2.20.0"
+
 kazoo = ">=2.8.0"
 psycopg2 = ">=2.9.3"
 pydot = ">=1.4.2"
-setuptools = ">=65.6.3"
+
+[tool.poetry.group.test]
+optional = true
+
+[tool.poetry.group.test.dependencies]
+# Table Hooks
+pydiverse-transform = "^0.1.0"
+ibis = ">=3.2.0"
+ibis-framework = { version = ">=5.1.0", extras = ["mssql", "postgres"] }
+polars = ">=0.16.18"
+tidypolars = { version = "^0.2.19", python = "<3.11" }
+connectorx = { version = ">=0.3.1", python = "<3.11" }
+# Engines
+prefect = "^1.3"
+# MSSQL
+pyodbc = ">=4.0.35"
+pytsql = ">=1.1.4"
+# IBM DB2
+ibm-db = { version = ">=3.1.4", markers="platform_machine == 'x86_64'" }
+ibm-db-sa = { version = ">=0.3.8", markers="platform_machine == 'x86_64'" }
+
+
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
+Sphinx = "^5.1.1"
+sphinx-rtd-theme = "^1.0.0"
+sphinxcontrib-apidoc = "^0.3.0"
 
 [tool.black]
 exclude = '''
@@ -91,7 +101,6 @@ exclude = '''
   | dist
 )/
 '''
-preview = true
 
 [tool.ruff]
 select = [
@@ -102,6 +111,9 @@ select = [
     "I001",
     "B",
     "A",
+]
+ignore = [
+    "B028",
 ]
 force-exclude = true
 extend-exclude = ["tests/*", "docs/*"]
