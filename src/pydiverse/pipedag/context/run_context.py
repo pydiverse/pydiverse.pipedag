@@ -173,17 +173,22 @@ class RunContextServer(IPCServer):
             result = op(*args)
             return [None, result]
         except Exception as e:
-            exception_str = traceback.format_exc()
+            exception_tb = traceback.format_exc()
             try:
-                pickled_exception = pickle.dumps(e)
+                # Add more context to exception
+                exception_with_traceback = Exception(
+                    f"{type(e).__name__}: {e}\n{exception_tb}"
+                )
+                exception_with_traceback.__cause__ = e
+                pickled_exception = pickle.dumps(exception_with_traceback)
             except Exception as e2:
                 self.logger.error(
                     "failed pickling exception",
-                    exception=exception_str,
+                    exception=exception_tb,
                     pickle_exception=str(e2),
                 )
                 pickled_exception = pickle.dumps(
-                    RuntimeError("failed pickling exception\n" + exception_str)
+                    RuntimeError("failed pickling exception\n" + exception_tb)
                 )
 
             return [pickled_exception, None]
