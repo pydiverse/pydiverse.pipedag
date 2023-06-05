@@ -754,8 +754,9 @@ class MemoState(Enum):
 
 
 def _msg_default(obj):
-    # some table implementations are not picklable
-    if hasattr(obj, "obj"):
+    from pydiverse.pipedag.materialize import Blob, Table
+
+    if isinstance(obj, (Table, Blob)):
         save = obj.obj
         obj.obj = None
         ret = pickle.dumps(obj)
