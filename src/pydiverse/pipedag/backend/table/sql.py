@@ -932,7 +932,7 @@ class SQLTableStore(BaseTableStore):
             self.name_adj(table.name), schema=self.name_adj(schema_name)
         )
         if not has_table:
-            raise RuntimeError(
+            raise CacheError(
                 f"Can't copy table '{table.name}' (schema: '{stage.name}')"
                 " to transaction because no such table exists."
             )
@@ -952,10 +952,11 @@ class SQLTableStore(BaseTableStore):
                 " to transaction."
             )
             self.logger.error(
-                msg,
+                msg + " This error is treated as cache-lookup-failure and thus we can"
+                " continue.",
                 exception=traceback.format_exc(),
             )
-            raise RuntimeError(msg) from _e
+            raise CacheError(msg) from _e
         self.add_indexes(table, self.get_schema(stage.transaction_name))
 
     def deferred_copy_lazy_table_to_transaction(
@@ -1047,7 +1048,7 @@ class SQLTableStore(BaseTableStore):
                 " exists."
             )
             self.logger.error(msg)
-            raise RuntimeError(msg)
+            raise CacheError(msg)
 
         try:
             self.execute(
@@ -1072,7 +1073,7 @@ class SQLTableStore(BaseTableStore):
                 f" '{metadata.stage}') to transaction."
             )
             self.logger.error(msg, exception=traceback.format_exc())
-            raise RuntimeError(msg) from _e
+            raise CacheError(msg) from _e
 
     @engine_dispatch
     def get_view_names(self, schema: str, *, include_everything=False) -> list[str]:
@@ -1168,10 +1169,12 @@ class SQLTableStore(BaseTableStore):
                     f" '{src_schema}') to transaction."
                 )
                 self.logger.error(
-                    msg,
+                    msg
+                    + " This error is treated as cache-lookup-failure and thus we can"
+                    " continue.",
                     exception=traceback.format_exc(),
                 )
-                raise RuntimeError(msg) from _e
+                raise CacheError(msg) from _e
 
         views_to_copy = new_tables & set(views)
         for view_name in views_to_copy:
@@ -1278,7 +1281,7 @@ class SQLTableStore(BaseTableStore):
                     .one_or_none()
                 )
         except sa.exc.MultipleResultsFound:
-            raise RuntimeError("Multiple results found task metadata") from None
+            raise CacheError("Multiple results found task metadata") from None
 
         if result is None:
             raise CacheError(f"Couldn't retrieve task from cache: {task}")
@@ -1333,7 +1336,7 @@ class SQLTableStore(BaseTableStore):
                     .one_or_none()
                 )
         except sa.exc.MultipleResultsFound:
-            raise RuntimeError(
+            raise CacheError(
                 "Multiple results found for lazy table cache key"
             ) from None
 
@@ -1389,7 +1392,7 @@ class SQLTableStore(BaseTableStore):
                     .one_or_none()
                 )
         except sa.exc.MultipleResultsFound:
-            raise RuntimeError("Multiple results found for raw sql cache key") from None
+            raise CacheError("Multiple results found for raw sql cache key") from None
 
         if result is None:
             raise CacheError("No result found for raw sql cache key")
