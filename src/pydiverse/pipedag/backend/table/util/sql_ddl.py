@@ -44,6 +44,9 @@ class Schema:
     def get(self):
         return self.prefix + self.name + self.suffix
 
+    def __str__(self):
+        return self.get()
+
 
 class CreateSchema(DDLElement):
     def __init__(self, schema: Schema, if_not_exists=False):

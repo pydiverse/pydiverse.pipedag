@@ -123,7 +123,13 @@ class TableHookResolver(Disposable, metaclass=_TableStoreMeta):
         The implementation details of this get handled by the registered
         TableHooks.
         """
-        _ = task  # not needed in this kind of store_table, yet
+
+        # In case of deferred operations, inform run context that stage
+        # isn't 100% cache valid anymore.
+        if task is not None:
+            RunContext.get().set_stage_has_changed(task.stage)
+
+        # Materialize
         hook = self.get_m_table_hook(type(table.obj))
         stage_name = (
             table.stage.transaction_name if use_transaction_name else table.stage.name
@@ -158,7 +164,11 @@ class TableHookResolver(Disposable, metaclass=_TableStoreMeta):
         stage_name = (
             table.stage.current_name if use_transaction_name else table.stage.name
         )
-        return hook.retrieve(self, table, stage_name, as_type, namer)
+
+        try:
+            return hook.retrieve(self, table, stage_name, as_type, namer)
+        except Exception as e:
+            raise RuntimeError(f"Failed to retrieve table '{table}'") from e
 
 
 class BaseTableStore(TableHookResolver):
@@ -267,7 +277,6 @@ class BaseTableStore(TableHookResolver):
             self, task_info.task_cache_info, table, query_hash
         )
         if not table_cache_info.is_cache_valid():
-            RunContext.get().stage_output_cache_invalid(task.stage)
             self.store_table(table, task, task_info)
 
         # At this point we MUST also update the cache info, so that any downstream
@@ -293,7 +302,7 @@ class BaseTableStore(TableHookResolver):
             self, task_info.task_cache_info, raw_sql, query_hash
         )
         if not table_cache_info.is_cache_valid():
-            RunContext.get().stage_output_cache_invalid(task.stage)
+            RunContext.get().set_stage_has_changed(task.stage)
             prev_tables = self.list_tables(raw_sql.stage, include_everything=True)
             self.execute_raw_sql(raw_sql)
             post_tables = self.list_tables(raw_sql.stage, include_everything=True)

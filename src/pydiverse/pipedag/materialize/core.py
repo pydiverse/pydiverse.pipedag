@@ -197,8 +197,6 @@ class MaterializationWrapper:
                     )
                     # Task isn't lazy -> copy cache to transaction stage
                     return task_cache_info.get_cached_output()
-                else:
-                    ctx.stage_output_cache_invalid(task.stage)
 
             # Not found in cache / lazy -> Evaluate Function
             args, kwargs, input_tables = store.dematerialize_task_inputs(
