@@ -1899,11 +1899,10 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         stage_name,
         task_info: TaskInfo | None,
     ):
-        tibble = table.obj
-        table.obj = None
-        table = copy.deepcopy(table)
-        table.obj = tibble.to_polars()
-        PolarsTableHook.materialize(store, table, stage_name, task_info)
+        t = table.obj
+        table = table.copy_without_obj()
+        table.obj = t.obj.to_polars()
+        PolarsTableHook.materialize(store, t, stage_name, task_info)
 
     @classmethod
     def retrieve(
@@ -1953,8 +1952,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         from pydiverse.transform.lazy import SQLTableImpl
 
         t = table.obj
-        table.obj = None
-        table = copy.deepcopy(table)
+        table = table.copy_without_obj()
         if isinstance(t._impl, PandasTableImpl):
             from pydiverse.transform.core.verbs import collect
 
@@ -2065,11 +2063,9 @@ class IbisTableHook(TableHook[SQLTableStore]):
         task_info: TaskInfo | None,
     ):
         t = table.obj
-        table.obj = None
-        # noinspection PyTypeChecker
-        sa_table = copy.deepcopy(table)  # type: Table[sa.Text]
-        sa_table.obj = sa.text(cls.lazy_query_str(store, t))
-        return SQLAlchemyTableHook.materialize(store, sa_table, stage_name, task_info)
+        table = table.copy_without_obj()
+        table.obj = sa.text(cls.lazy_query_str(store, t))
+        return SQLAlchemyTableHook.materialize(store, table, stage_name, task_info)
 
     @classmethod
     def retrieve(

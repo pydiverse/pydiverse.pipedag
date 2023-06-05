@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 import itertools
 import json
 from typing import Any, Callable
@@ -127,7 +126,7 @@ class PipeDAGStore(Disposable):
                 obj = self.table_store.retrieve_table_obj(
                     item, as_type=as_type, namer=namer
                 )
-                table = copy.deepcopy(item)
+                table = item.copy_without_obj()
                 table.obj = obj
                 self.local_table_cache.store_table(
                     table, task=None, task_info=None, is_input=True
@@ -246,6 +245,7 @@ class PipeDAGStore(Disposable):
                         f"{task_info.task_cache_info.get_task_cache_key()}"
                         f"_{object_number:04d}"
                     )
+
                     if x.name is None:
                         x.name = task.name + "_" + auto_suffix
                     elif x.name.endswith("%%"):
