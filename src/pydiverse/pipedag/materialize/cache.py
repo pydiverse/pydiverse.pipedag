@@ -168,7 +168,6 @@ class CacheManager:
             )
             store.copy_lazy_table_to_transaction(metadata, table)
             store.logger.info(f"Lazy cache of table '{table.name}' found")
-            table.name = metadata.name
             is_cache_valid = True
         except CacheError as e:
             # Either not found in cache, or copying failed

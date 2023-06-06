@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 import json
 import shutil
 import warnings
@@ -295,10 +294,9 @@ class TidyPolarsParquetTableHook(TableHook[ParquetTableCache]):
         stage_name,
         task_info: TaskInfo | None,
     ):
-        tibble = table.obj
-        table.obj = None
-        table = copy.deepcopy(table)
-        table.obj = tibble.to_polars()
+        t = table.obj
+        table = table.copy_without_obj()
+        table.obj = t.to_polars()
         PolarsParquetTableHook.materialize(store, table, stage_name, task_info)
 
     @classmethod
@@ -346,15 +344,13 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
         from pydiverse.transform.eager import PandasTableImpl
 
         t = table.obj
-        table.obj = None
-        # noinspection PyTypeChecker
-        pd_table = copy.deepcopy(table)  # type: Table[pd.DataFrame]
+        table = table.copy_without_obj()
         if isinstance(t._impl, PandasTableImpl):
             from pydiverse.transform.core.verbs import collect
 
-            pd_table.obj = t >> collect()
+            table.obj = t >> collect()
             return PandasParquetTableHook.materialize(
-                store, pd_table, stage_name, task_info
+                store, table, stage_name, task_info
             )
         raise NotImplementedError
 

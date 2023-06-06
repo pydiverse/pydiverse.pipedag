@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from typing import TYPE_CHECKING, Any, Generic
 
 from pydiverse.pipedag._typing import T
@@ -58,6 +59,20 @@ class Table(Generic[T]):
         if value is not None and not isinstance(value, str):
             raise TypeError(f"Table name must be of instance 'str' not {type(value)}.")
         self._name = normalize_name(value)
+
+    def copy_without_obj(self) -> Table:
+        obj = self.obj
+        self.obj = None
+        self_copy = copy.deepcopy(self)
+        self.obj = obj
+        return self_copy
+
+    def __getstate__(self):
+        # The table `obj` field can't necessarily be pickled. That's why we remove it
+        # from the state before pickling.
+        state = self.__dict__.copy()
+        state["obj"] = None
+        return state
 
 
 class RawSql:

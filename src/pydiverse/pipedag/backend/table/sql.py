@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import copy
 import itertools
 import json
 import re
 import textwrap
-import threading
 import time
 import traceback
 import warnings
@@ -48,6 +46,7 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
 )
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.context.context import ConfigContext, StageCommitTechnique
+from pydiverse.pipedag.context.run_context import DeferredTableStoreOp
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import MaterializingTask, TaskInfo
@@ -57,7 +56,6 @@ from pydiverse.pipedag.materialize.metadata import (
     TaskMetadata,
 )
 from pydiverse.pipedag.materialize.util import compute_cache_key
-from pydiverse.pipedag.util.ipc import human_thread_id
 from pydiverse.pipedag.util.naming import NameDisambiguator
 
 
@@ -796,6 +794,14 @@ class SQLTableStore(BaseTableStore):
         self._init_stage_schema_swap(stage)
 
     def commit_stage(self, stage: Stage):
+        # If the stage is 100% cache valid, then we just need to update the
+        # "in_transaction_schema" column of the metadata tables.
+        if not RunContext.get().has_stage_changed(stage):
+            with self.engine_connect() as conn:
+                self._commit_stage_update_metadata(stage, conn)
+            return
+
+        # Commit normally
         stage_commit_technique = ConfigContext.get().stage_commit_technique
         if stage_commit_technique == StageCommitTechnique.SCHEMA_SWAP:
             return self._commit_stage_schema_swap(stage)
@@ -926,153 +932,172 @@ class SQLTableStore(BaseTableStore):
                 )
 
     def copy_table_to_transaction(self, table: Table):
-        stage = table.stage
-        schema_name = self.get_schema(stage.name).get()
+        from_schema = self.get_schema(table.stage.name)
+        from_name = table.name
+
+        if RunContext.get().has_stage_changed(table.stage):
+            self._copy_table(table, from_schema, from_name)
+        else:
+            self._deferred_copy_table(table, from_schema, from_name)
+
+    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
+        from_schema = self.get_schema(metadata.stage)
+        from_name = metadata.name
+
+        if RunContext.get().has_stage_changed(table.stage):
+            self._copy_table(table, from_schema, from_name)
+        else:
+            self._deferred_copy_table(table, from_schema, from_name)
+
+    def _copy_table(self, table: Table, from_schema: Schema, from_name: str):
+        """Copies the table immediately"""
         has_table = sa.inspect(self.engine).has_table(
-            self.name_adj(table.name), schema=self.name_adj(schema_name)
+            self.name_adj(from_name), schema=self.name_adj(from_schema.get())
+        )
+
+        if not has_table:
+            available_tables = sa.inspect(self.engine).get_table_names(
+                self.name_adj(from_schema.get())
+            )
+            msg = (
+                f"Can't copy table '{from_name}' (schema: '{from_schema}') to "
+                f"transaction because no such table exists.\n"
+                f"Tables in schema: {available_tables}"
+            )
+            self.logger.error(msg)
+            raise CacheError(msg)
+
+        self.execute(
+            CopyTable(
+                from_name,
+                from_schema,
+                table.name,
+                self.get_schema(table.stage.transaction_name),
+                early_not_null=table.primary_key,
+            )
+        )
+        self.add_indexes(table, self.get_schema(table.stage.transaction_name))
+
+    def _deferred_copy_table(
+        self,
+        table: Table,
+        from_schema: Schema,
+        from_name: str,
+    ):
+        """Tries to perform a deferred copy
+
+        As long as the stage is determined to still be 100% cache valid, we don't
+        actually copy any tables to the transaction, and instead just create an alias
+        from the main schema to the transaction schema.
+
+        If at the end of the stage, the all tables in the stage are cache valid, then
+        we don't actually need to commit the stage, and instead just rename the
+        tables from their old names to their new names.
+
+        Otherwise, we copy the tables to the transaction schema in the background,
+        and once we're ready to commit, we replace the aliases with the copied tables.
+        """
+        assert from_schema == self.get_schema(table.stage.name)
+
+        has_table = sa.inspect(self.engine).has_table(
+            self.name_adj(from_name), schema=self.name_adj(from_schema.get())
         )
         if not has_table:
-            raise RuntimeError(
-                f"Can't copy table '{table.name}' (schema: '{stage.name}')"
-                " to transaction because no such table exists."
+            available_tables = sa.inspect(self.engine).get_table_names(
+                self.name_adj(from_schema.get())
             )
+            msg = (
+                f"Can't deferred copy table '{from_name}' (schema: '{from_schema}') to "
+                f"transaction because no such table exists.\n"
+                f"Tables in schema: {available_tables}"
+            )
+            self.logger.error(msg)
+            raise CacheError(msg)
 
         try:
+            ctx = RunContext.get()
+            stage = table.stage
+
             self.execute(
-                CopyTable(
-                    table.name,
-                    self.get_schema(stage.name),
+                CreateAlias(
+                    from_name,
+                    from_schema,
                     table.name,
                     self.get_schema(stage.transaction_name),
                 )
             )
+
+            table_copy = table.copy_without_obj()
+            table_copy.name = f"{table.name}__copy"
+
+            ctx.defer_table_store_op(
+                stage,
+                DeferredTableStoreOp(
+                    "_copy_table",
+                    DeferredTableStoreOp.Condition.ON_STAGE_CHANGED,
+                    (
+                        table_copy,
+                        from_schema,
+                        from_name,
+                    ),
+                ),
+            )
+            ctx.defer_table_store_op(
+                stage,
+                DeferredTableStoreOp(
+                    "_swap_alias_with_table_copy",
+                    DeferredTableStoreOp.Condition.ON_STAGE_COMMIT,
+                    (),
+                    {"table": table, "table_copy": table_copy},
+                ),
+            )
+            ctx.defer_table_store_op(
+                stage,
+                DeferredTableStoreOp(
+                    "_rename_table",
+                    DeferredTableStoreOp.Condition.ON_STAGE_ABORT,
+                    (from_name, table.name, from_schema),
+                ),
+            )
+
         except Exception as _e:
             msg = (
-                f"Failed to copy table '{table.name}' (schema: '{stage.name}')"
-                " to transaction."
+                f"Failed to copy table {from_name} (schema: '{from_schema}') "
+                f"to transaction."
             )
-            self.logger.error(
-                msg,
-                exception=traceback.format_exc(),
-            )
-            raise RuntimeError(msg) from _e
-        self.add_indexes(table, self.get_schema(stage.transaction_name))
+            self.logger.error(msg, exception=traceback.format_exc())
+            raise CacheError(msg) from _e
 
-    def deferred_copy_lazy_table_to_transaction(
-        self, src_name: str, src_stage: Stage, table: Table
-    ):
-        stage = table.stage
-        src_schema = self.get_schema(src_stage)
-        dest_schema = self.get_schema(stage.transaction_name)
-        thread_id = human_thread_id(threading.get_ident())
-        try:
-            self.logger.info(
-                "Running table copy in background",
-                thread=thread_id,
-                table=src_name,
-                src_schema=src_schema.get(),
-                dest_schema=dest_schema.get(),
-            )
-            self.execute(
-                CopyTable(
-                    src_name,
-                    src_schema,
-                    "__cpy_" + src_name,
-                    dest_schema,
-                    early_not_null=table.primary_key,
-                )
-            )
-        except Exception as _e:
-            msg = (
-                f"Failed to copy lazy table {src_name} (schema:"
-                f" '{src_schema}' -> '{dest_schema}') to transaction."
-            )
-            self.logger.error(
-                "Exception in table copy in background",
-                thread=thread_id,
-                table=src_name,
-                msg=msg,
-                exception=str(_e),
-            )
-            raise RuntimeError(msg) from _e
-        table = copy.deepcopy(table)
-        table.name = "__cpy_" + src_name
-        self.add_indexes(
-            table, self.get_schema(stage.transaction_name), early_not_null_possible=True
-        )
-        self.logger.info(
-            "Completed table copy in background",
-            thread=thread_id,
-            table=src_name,
-            src_schema=src_schema.get(),
-            dest_schema=dest_schema.get(),
-        )
+    def _swap_alias_with_table_copy(self, table: Table, table_copy: Table):
+        assert table_copy.stage.name == table.stage.name
 
-    def swap_alias_and_copied_table(
-        self, src_name: str, src_stage: Stage, table: Table
-    ):
-        stage = table.stage
-        dest_schema = self.get_schema(stage.transaction_name)
+        schema = self.get_schema(table.stage.transaction_name)
         try:
             self.execute(
                 DropAlias(
-                    src_name,
-                    dest_schema,
+                    table.name,
+                    schema,
                 )
             )
             self.execute(
                 RenameTable(
-                    "__cpy_" + src_name,
-                    src_name,
-                    dest_schema,
+                    table_copy.name,
+                    table.name,
+                    schema,
                 )
             )
         except Exception as _e:
             msg = (
-                f"Failed putting copied lazy table (__cpy_){src_name} (schema:"
-                f" '{dest_schema.get()}') in place of alias."
+                f"Failed putting copied table {table_copy.name} (schema: '{schema}') "
+                f"in place of alias."
             )
             raise RuntimeError(msg) from _e
 
-    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
-        stage = table.stage
-        schema_name = self.get_schema(metadata.stage).get()
-        has_table = sa.inspect(self.engine).has_table(
-            self.name_adj(metadata.name), schema=self.name_adj(schema_name)
-        )
-        if not has_table:
-            msg = (
-                f"Can't copy lazy table '{metadata.name}' (schema:"
-                f" '{metadata.stage}') to transaction because no such table"
-                " exists."
-            )
-            self.logger.error(msg)
-            raise RuntimeError(msg)
-
-        try:
-            self.execute(
-                CreateAlias(
-                    metadata.name,
-                    self.get_schema(metadata.stage),
-                    metadata.name,
-                    self.get_schema(stage.transaction_name),
-                )
-            )
-            RunContext.get().deferred_table_store_op_if_stage_invalid(
-                stage,
-                "deferred_copy_lazy_table_to_transaction",
-                "swap_alias_and_copied_table",
-                metadata.name,
-                metadata.stage,
-                table,
-            )
-        except Exception as _e:
-            msg = (
-                f"Failed to copy lazy table {metadata.name} (schema:"
-                f" '{metadata.stage}') to transaction."
-            )
-            self.logger.error(msg, exception=traceback.format_exc())
-            raise RuntimeError(msg) from _e
+    def _rename_table(self, from_name: str, to_name: str, schema: Schema):
+        if from_name == to_name:
+            return
+        self.logger.info("RENAME", fr=from_name, to=to_name)
+        self.execute(RenameTable(from_name, to_name, schema))
 
     @engine_dispatch
     def get_view_names(self, schema: str, *, include_everything=False) -> list[str]:
@@ -1168,10 +1193,12 @@ class SQLTableStore(BaseTableStore):
                     f" '{src_schema}') to transaction."
                 )
                 self.logger.error(
-                    msg,
+                    msg
+                    + " This error is treated as cache-lookup-failure and thus we can"
+                    " continue.",
                     exception=traceback.format_exc(),
                 )
-                raise RuntimeError(msg) from _e
+                raise CacheError(msg) from _e
 
         views_to_copy = new_tables & set(views)
         for view_name in views_to_copy:
@@ -1278,7 +1305,7 @@ class SQLTableStore(BaseTableStore):
                     .one_or_none()
                 )
         except sa.exc.MultipleResultsFound:
-            raise RuntimeError("Multiple results found task metadata") from None
+            raise CacheError("Multiple results found task metadata") from None
 
         if result is None:
             raise CacheError(f"Couldn't retrieve task from cache: {task}")
@@ -1333,7 +1360,7 @@ class SQLTableStore(BaseTableStore):
                     .one_or_none()
                 )
         except sa.exc.MultipleResultsFound:
-            raise RuntimeError(
+            raise CacheError(
                 "Multiple results found for lazy table cache key"
             ) from None
 
@@ -1389,7 +1416,7 @@ class SQLTableStore(BaseTableStore):
                     .one_or_none()
                 )
         except sa.exc.MultipleResultsFound:
-            raise RuntimeError("Multiple results found for raw sql cache key") from None
+            raise CacheError("Multiple results found for raw sql cache key") from None
 
         if result is None:
             raise CacheError("No result found for raw sql cache key")
@@ -1899,11 +1926,10 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         stage_name,
         task_info: TaskInfo | None,
     ):
-        tibble = table.obj
-        table.obj = None
-        table = copy.deepcopy(table)
-        table.obj = tibble.to_polars()
-        PolarsTableHook.materialize(store, table, stage_name, task_info)
+        t = table.obj
+        table = table.copy_without_obj()
+        table.obj = t.obj.to_polars()
+        PolarsTableHook.materialize(store, t, stage_name, task_info)
 
     @classmethod
     def retrieve(
@@ -1953,8 +1979,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         from pydiverse.transform.lazy import SQLTableImpl
 
         t = table.obj
-        table.obj = None
-        table = copy.deepcopy(table)
+        table = table.copy_without_obj()
         if isinstance(t._impl, PandasTableImpl):
             from pydiverse.transform.core.verbs import collect
 
@@ -2065,11 +2090,9 @@ class IbisTableHook(TableHook[SQLTableStore]):
         task_info: TaskInfo | None,
     ):
         t = table.obj
-        table.obj = None
-        # noinspection PyTypeChecker
-        sa_table = copy.deepcopy(table)  # type: Table[sa.Text]
-        sa_table.obj = sa.text(cls.lazy_query_str(store, t))
-        return SQLAlchemyTableHook.materialize(store, sa_table, stage_name, task_info)
+        table = table.copy_without_obj()
+        table.obj = sa.text(cls.lazy_query_str(store, t))
+        return SQLAlchemyTableHook.materialize(store, table, stage_name, task_info)
 
     @classmethod
     def retrieve(

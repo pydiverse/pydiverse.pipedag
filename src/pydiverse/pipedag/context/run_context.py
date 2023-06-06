@@ -1,17 +1,17 @@
 from __future__ import annotations
 
+import dataclasses
 import functools
 import pickle
 import time
 import traceback
 import uuid
 from collections import defaultdict
-from collections.abc import Iterable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from contextvars import ContextVar
 from enum import Enum
-from threading import Lock
+from threading import Lock, RLock
 from typing import TYPE_CHECKING, Any
 
 import msgpack
@@ -95,22 +95,18 @@ class RunContextServer(IPCServer):
 
         self.task_memo: defaultdict[Any, Any] = defaultdict(lambda: MemoState.NONE)
 
-        # deferred table store operations
-        self._thread_pool = ThreadPoolExecutor(
-            max_workers=2  # TODO: make 2 configurable
-        )
-        self._deferred_table_store_ops: dict[
-            int, list[tuple[str, str, Iterable, dict]]
-        ] = {}
-        self._any_stage_changes: dict[int, bool] = {}
-        self._deferred_table_store_op_threads: dict[int, dict[int, tuple]] = {}
+        # DEFERRED TABLE STORE OPERATIONS
+        self.deferred_thread_pool = ThreadPoolExecutor()
+        self.deferred_ts_ops: dict[int, list[DeferredTableStoreOp]] = {}
+        self.deferred_ts_ops_futures: dict[int, list[Future]] = {}
+        self.changed_stages: set[int] = set()
 
         # STATE LOCKS
         self.ref_count_lock = Lock()
         self.stage_state_lock = Lock()
         self.names_lock = Lock()
         self.task_memo_lock = Lock()
-        self.deferred_ops = Lock()
+        self.deferred_ops_lock = RLock()
 
         # LOCKING
         self.lock_manager = config_ctx.create_lock_manager()
@@ -149,12 +145,12 @@ class RunContextServer(IPCServer):
 
         self.__context_proxy = RunContext(self)
         self.__context_proxy.__enter__()
-        self._thread_pool.__enter__()
+        self.deferred_thread_pool.__enter__()
         return self.__context_proxy
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self._thread_pool.shutdown(wait=True, cancel_futures=True)
-        self._thread_pool.__exit__(exc_type, exc_val, exc_tb)
+        self.deferred_thread_pool.shutdown(wait=True, cancel_futures=True)
+        self.deferred_thread_pool.__exit__(exc_type, exc_val, exc_tb)
         self.__context_proxy.__exit__(exc_type, exc_val, exc_tb)
 
         if not self.keep_stages_locked:
@@ -173,17 +169,22 @@ class RunContextServer(IPCServer):
             result = op(*args)
             return [None, result]
         except Exception as e:
-            exception_str = traceback.format_exc()
+            exception_tb = traceback.format_exc()
             try:
-                pickled_exception = pickle.dumps(e)
+                # Add more context to exception
+                exception_with_traceback = Exception(
+                    f"{type(e).__name__}: {e}\n{exception_tb}"
+                )
+                exception_with_traceback.__cause__ = e
+                pickled_exception = pickle.dumps(exception_with_traceback)
             except Exception as e2:
                 self.logger.error(
                     "failed pickling exception",
-                    exception=exception_str,
+                    exception=exception_tb,
                     pickle_exception=str(e2),
                 )
                 pickled_exception = pickle.dumps(
-                    RuntimeError("failed pickling exception\n" + exception_str)
+                    RuntimeError("failed pickling exception\n" + exception_tb)
                 )
 
             return [pickled_exception, None]
@@ -217,8 +218,14 @@ class RunContextServer(IPCServer):
         )
 
     def enter_commit_stage(self, stage_id: int):
-        stage_changed = self._any_stage_changes.get(stage_id, False)
-        self._join_deferred_table_store_ops(stage_id, stage_changed)
+        if self.has_stage_changed(stage_id):
+            self._trigger_deferred_ts_ops(
+                stage_id, DeferredTableStoreOp.Condition.ON_STAGE_COMMIT
+            )
+        else:
+            self.abort_stage(stage_id)
+        self._await_deferred_ts_ops(stage_id)
+
         return self._enter_stage_state_transition(
             stage_id,
             StageState.READY,
@@ -302,72 +309,77 @@ class RunContextServer(IPCServer):
         stage = self.stages[stage_id]
         self.lock_handler.validate_stage_lock(stage)
 
-    # Deferred operations
+    # DEFERRED TABLE STORE OPERATIONS
+    # Allows deferring operations that should be run on the table store object
+    # until certain events occur. This is required to implement deferred copying
+    # of tables from one schema to another.
 
-    @synchronized("deferred_ops")
-    def deferred_table_store_op_if_stage_invalid(
-        self, stage_id: int, op: str, commit_op: str, args, kwargs
+    @synchronized("deferred_ops_lock")
+    def defer_table_store_op(self, stage_id: int, op: DeferredTableStoreOp):
+        if stage_id not in self.deferred_ts_ops:
+            self.deferred_ts_ops[stage_id] = []
+            self.deferred_ts_ops_futures[stage_id] = []
+        self.deferred_ts_ops[stage_id].append(op)
+
+        if self.has_stage_changed(stage_id):
+            self._trigger_deferred_ts_ops(
+                stage_id, DeferredTableStoreOp.Condition.ON_STAGE_CHANGED
+            )
+
+    @synchronized("deferred_ops_lock")
+    def has_stage_changed(self, stage_id: int) -> bool:
+        return stage_id in self.changed_stages
+
+    @synchronized("deferred_ops_lock")
+    def set_stage_has_changed(self, stage_id: int):
+        self.changed_stages.add(stage_id)
+        self._trigger_deferred_ts_ops(
+            stage_id, DeferredTableStoreOp.Condition.ON_STAGE_CHANGED
+        )
+
+    @synchronized("deferred_ops_lock")
+    def _trigger_deferred_ts_ops(
+        self, stage_id: int, condition: DeferredTableStoreOp.Condition
     ):
-        if stage_id not in self._deferred_table_store_ops:
-            self._deferred_table_store_ops[stage_id] = []
-        self._deferred_table_store_ops[stage_id].append((op, commit_op, args, kwargs))
-        if self._any_stage_changes.get(stage_id, False):
-            self._trigger_deferred_table_store_ops(stage_id)
+        # Partition deferred ops into those that should and shouldn't get executed
+        deferred_ts_ops = self.deferred_ts_ops.get(stage_id, [])
 
-    @synchronized("deferred_ops")
-    def any_stage_changes(self, stage_id: int):
-        return self._any_stage_changes.get(stage_id, False)
+        ops_to_execute = [op for op in deferred_ts_ops if op.condition == condition]
+        remaining_ops = [op for op in deferred_ts_ops if op.condition != condition]
 
-    @synchronized("deferred_ops")
-    def stage_output_cache_invalid(self, stage_id: int):
-        if not self._any_stage_changes.get(stage_id, False):
-            self._trigger_deferred_table_store_ops(stage_id)
-        self._any_stage_changes[stage_id] = True
+        if len(ops_to_execute) == 0:
+            return
 
-    @synchronized("deferred_ops")
+        # Trigger ops and store futures
+        store = self.config_ctx.store
+        for op in ops_to_execute:
+            fn = getattr(store.table_store, op.fn_name)
+            assert callable(fn)
+
+            future = self.deferred_thread_pool.submit(
+                _call_with_args, fn, op.args, op.kwargs
+            )
+            self.deferred_ts_ops_futures[stage_id].append(future)
+
+        # Remove ops that just have been executed
+        self.deferred_ts_ops[stage_id] = remaining_ops
+
+    @synchronized("deferred_ops_lock")
+    def _await_deferred_ts_ops(self, stage_id: int):
+        if stage_id not in self.deferred_ts_ops_futures:
+            return
+
+        futures = self.deferred_ts_ops_futures[stage_id]
+        for future in futures:
+            future.result()
+
+    @synchronized("deferred_ops_lock")
     def abort_stage(self, stage_id: int):
-        return self._join_deferred_table_store_ops(stage_id, stage_changed=False)
-
-    def _trigger_deferred_table_store_ops(self, stage_id: int):
-        if (
-            stage_id in self._deferred_table_store_ops
-            and len(self._deferred_table_store_ops[stage_id]) > 0
-        ):
-            if len(self._deferred_table_store_op_threads.get(stage_id, {})) == 0:
-                self._deferred_table_store_op_threads[stage_id] = {}
-                started_ops_end = 0
-            else:
-                started_ops_end = (
-                    max(self._deferred_table_store_op_threads[stage_id].keys()) + 1
-                )
-            store = self.config_ctx.store
-            for i, (op, commit_op, args, kwargs) in enumerate(
-                self._deferred_table_store_ops[stage_id][started_ops_end:]
-            ):
-                _id = started_ops_end + i
-                fn = getattr(store.table_store, op)
-                commit_fn = getattr(store.table_store, commit_op)
-                assert callable(fn) and callable(commit_fn)
-                future = self._thread_pool.submit(_call_with_args, fn, args, kwargs)
-                self._deferred_table_store_op_threads[stage_id][_id] = (
-                    future,
-                    commit_fn,
-                    args,
-                    kwargs,
-                )
-
-    def _join_deferred_table_store_ops(self, stage_id: int, stage_changed: bool):
-        for (
-            future,
-            commit_fn,
-            args,
-            kwargs,
-        ) in self._deferred_table_store_op_threads.get(stage_id, {}).values():
-            if stage_changed:
-                _ = future.result()  # this implies a thread join
-                commit_fn(*args, **kwargs)
-            else:
-                future.cancel()
+        self._await_deferred_ts_ops(stage_id)
+        self._trigger_deferred_ts_ops(
+            stage_id, DeferredTableStoreOp.Condition.ON_STAGE_ABORT
+        )
+        self._await_deferred_ts_ops(stage_id)
 
     # TASK
 
@@ -566,6 +578,20 @@ class RunContext(BaseContext):
     def validate_stage_lock(self, stage: Stage):
         self._request("validate_stage_lock", stage.id)
 
+    # DEFERRED TABLE STORE OPERATIONS
+
+    def defer_table_store_op(self, stage: Stage, op: DeferredTableStoreOp):
+        """Defer running a table store operation until a specific stage event"""
+        return self._request("defer_table_store_op", stage.id, op)
+
+    def has_stage_changed(self, stage: Stage) -> bool:
+        """Check if a stage has changed and still is 100% cache valid"""
+        return self._request("has_stage_changed", stage.id)
+
+    def set_stage_has_changed(self, stage: Stage):
+        """Inform the run context that a stage isn't 100% cache valid anymore"""
+        return self._request("set_stage_has_changed", stage.id)
+
     # TASK
 
     def did_finish_task(self, task: Task, final_state: FinalTaskState):
@@ -610,27 +636,6 @@ class RunContext(BaseContext):
             [t.name for t in tables],
             [b.name for b in blobs],
         )
-
-    def deferred_table_store_op_if_stage_invalid(
-        self, stage: Stage, op: str, commit_op: str, *args, **kwargs
-    ):
-        self._request(
-            "deferred_table_store_op_if_stage_invalid",
-            stage.id,
-            op,
-            commit_op,
-            args,
-            kwargs,
-        )
-
-    def any_stage_changes(self, stage):
-        return self._request("any_stage_changes", stage.id)
-
-    def abort_stage(self, stage):
-        return self._request("abort_stage", stage.id)
-
-    def stage_output_cache_invalid(self, stage):
-        return self._request("stage_output_cache_invalid", stage.id)
 
 
 class DematerializeRunContext(BaseContext):
@@ -749,19 +754,38 @@ class MemoState(Enum):
     FAILED = 127
 
 
+# Deferred Table Store operations
+
+
+@dataclasses.dataclass
+class DeferredTableStoreOp:
+    class Condition(Enum):
+        ON_STAGE_CHANGED = 0
+        """Some table produced in the stage is determined to be cache invalid"""
+
+        ON_STAGE_ABORT = 1
+        """The stage has finished running and all tables are still cache valid"""
+
+        ON_STAGE_COMMIT = 2
+        """The stage has finished running and some tables weren't cache valid"""
+
+    fn_name: str
+    condition: Condition
+    args: tuple | list = ()
+    kwargs: dict = dataclasses.field(default_factory=dict)
+
+
 # msgpack hooks
 # Only used to transmit Table and Blob type metadata
 
 
 def _msg_default(obj):
-    # some table implementations are not picklable
-    if hasattr(obj, "obj"):
-        save = obj.obj
-        obj.obj = None
+    try:
         ret = pickle.dumps(obj)
-        obj.obj = save
-    else:
-        ret = pickle.dumps(obj)
+    except Exception as e:
+        logger = structlog.get_logger()
+        logger.exception("_msg_default: failed to pickle object", object=obj)
+        raise e
     return msgpack.ExtType(0, ret)
 
 

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 
-from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext
+from pydiverse.pipedag.context import ConfigContext, DAGContext
 from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import StageError
 from pydiverse.pipedag.util import normalize_name
@@ -175,7 +175,4 @@ class CommitStageTask(Task):
 
     def fn(self):
         self.logger.info(f"Committing stage '{self.stage.name}'")
-        if RunContext.get().any_stage_changes(self.stage):
-            ConfigContext.get().store.commit_stage(self.stage)
-        else:
-            RunContext.get().abort_stage(self.stage)
+        ConfigContext.get().store.commit_stage(self.stage)
