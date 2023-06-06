@@ -985,12 +985,6 @@ class SQLTableStore(BaseTableStore):
         from_name: str,
     ):
         """Tries to perform a deferred copy"""
-        self.logger.info(
-            "_deferred_copy_table",
-            table=str(table),
-            from_schema=from_schema,
-            to_schema=self.get_schema(table.stage.name),
-        )
         assert from_schema == self.get_schema(table.stage.name)
 
         has_table = sa.inspect(self.engine).has_table(
