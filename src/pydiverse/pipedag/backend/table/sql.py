@@ -1545,12 +1545,15 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         for retry_iteration in range(4):
             # retry operation since it might have been terminated as a deadlock victim
             try:
+                alias_name = (
+                    namer.get_name(table_name) if namer is not None else table_name
+                )
                 tbl = sa.Table(
                     table_name,
                     sa.MetaData(),
                     schema=schema,
                     autoload_with=store.engine,
-                ).alias(namer.get_name(table_name))
+                ).alias(alias_name)
                 break
             except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
                 if retry_iteration == 3:
