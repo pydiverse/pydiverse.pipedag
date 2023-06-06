@@ -23,7 +23,7 @@ class Flow:
     ):
         self.name = name
 
-        self.logger = structlog.getLogger(module=__name__, cls=self.__class__.__name__)
+        self.logger = structlog.get_logger(module=__name__, cls=self.__class__.__name__)
         self.stages: dict[str, Stage] = {}
         self.tasks: list[Task] = []
 

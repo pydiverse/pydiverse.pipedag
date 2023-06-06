@@ -35,7 +35,7 @@ class Result:
         :return: The results of the task.
         """
         if not self.successful:
-            logger = structlog.getLogger()
+            logger = structlog.get_logger()
             logger.warning(
                 "Attention: getting tables from unsuccessful run is unreliable!"
             )

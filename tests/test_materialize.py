@@ -465,7 +465,7 @@ def _eager_join(src1: pd.DataFrame, src2: pd.DataFrame):
     ],
 )
 def test_task_and_stage_communication(task_1, task_2, noop, join):
-    logger = structlog.getLogger("test_task_and_stage_communication")
+    logger = structlog.get_logger("test_task_and_stage_communication")
     with Flow() as f:
         with Stage("stage_1"):
             t1 = task_1()
