@@ -310,6 +310,9 @@ class RunContextServer(IPCServer):
         self.lock_handler.validate_stage_lock(stage)
 
     # DEFERRED TABLE STORE OPERATIONS
+    # Allows deferring operations that should be run on the table store object
+    # until certain events occur. This is required to implement deferred copying
+    # of tables from one schema to another.
 
     @synchronized("deferred_ops_lock")
     def defer_table_store_op(self, stage_id: int, op: DeferredTableStoreOp):
@@ -578,16 +581,16 @@ class RunContext(BaseContext):
     # DEFERRED TABLE STORE OPERATIONS
 
     def defer_table_store_op(self, stage: Stage, op: DeferredTableStoreOp):
+        """Defer running a table store operation until a specific stage event"""
         return self._request("defer_table_store_op", stage.id, op)
 
     def has_stage_changed(self, stage: Stage) -> bool:
+        """Check if a stage has changed and still is 100% cache valid"""
         return self._request("has_stage_changed", stage.id)
 
     def set_stage_has_changed(self, stage: Stage):
+        """Inform the run context that a stage isn't 100% cache valid anymore"""
         return self._request("set_stage_has_changed", stage.id)
-
-    def abort_stage(self, stage: Stage):
-        return self._request("abort_stage", stage.id)
 
     # TASK
 
@@ -758,8 +761,13 @@ class MemoState(Enum):
 class DeferredTableStoreOp:
     class Condition(Enum):
         ON_STAGE_CHANGED = 0
+        """Some table produced in the stage is determined to be cache invalid"""
+
         ON_STAGE_ABORT = 1
+        """The stage has finished running and all tables are still cache valid"""
+
         ON_STAGE_COMMIT = 2
+        """The stage has finished running and some tables weren't cache valid"""
 
     fn_name: str
     condition: Condition

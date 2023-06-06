@@ -984,7 +984,19 @@ class SQLTableStore(BaseTableStore):
         from_schema: Schema,
         from_name: str,
     ):
-        """Tries to perform a deferred copy"""
+        """Tries to perform a deferred copy
+
+        As long as the stage is determined to still be 100% cache valid, we don't
+        actually copy any tables to the transaction, and instead just create an alias
+        from the main schema to the transaction schema.
+
+        If at the end of the stage, the all tables in the stage are cache valid, then
+        we don't actually need to commit the stage, and instead just rename the
+        tables from their old names to their new names.
+
+        Otherwise, we copy the tables to the transaction schema in the background,
+        and once we're ready to commit, we replace the aliases with the copied tables.
+        """
         assert from_schema == self.get_schema(table.stage.name)
 
         has_table = sa.inspect(self.engine).has_table(
