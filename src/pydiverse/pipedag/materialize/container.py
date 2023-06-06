@@ -42,6 +42,21 @@ class Table(Generic[T]):
         self.indexes = indexes
         self.type_map = type_map
 
+        # Check that indexes is of type list[list[str]]
+        indexes_type_error = TypeError(
+            "Table argument 'indexes' must be of type list[list[str]]. "
+            "Make sure you provide a 2d list, not just a 1d list."
+        )
+        if self.indexes is not None:
+            if not isinstance(self.indexes, (list, tuple)):
+                raise indexes_type_error
+            for index in self.indexes:
+                if not isinstance(index, (list, tuple)):
+                    raise indexes_type_error
+                for col in index:
+                    if not isinstance(col, str):
+                        raise indexes_type_error
+
         # cache_key will be overridden shortly before handing over to downstream tasks
         # that use it to compute their input_hash for cache_invalidation due to input
         # change
