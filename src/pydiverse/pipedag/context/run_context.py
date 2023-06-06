@@ -772,15 +772,12 @@ class DeferredTableStoreOp:
 
 
 def _msg_default(obj):
-    from pydiverse.pipedag.materialize import Blob, Table
-
-    if isinstance(obj, (Table, Blob)):
-        save = obj.obj
-        obj.obj = None
+    try:
         ret = pickle.dumps(obj)
-        obj.obj = save
-    else:
-        ret = pickle.dumps(obj)
+    except Exception as e:
+        logger = structlog.get_logger()
+        logger.exception("_msg_default: failed to pickle object", object=obj)
+        raise e
     return msgpack.ExtType(0, ret)
 
 

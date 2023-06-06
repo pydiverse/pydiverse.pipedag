@@ -67,6 +67,13 @@ class Table(Generic[T]):
         self.obj = obj
         return self_copy
 
+    def __getstate__(self):
+        # The table `obj` field can't necessarily be pickled. That's why we remove it
+        # from the state before pickling.
+        state = self.__dict__.copy()
+        state["obj"] = None
+        return state
+
 
 class RawSql:
     """Container for raw sql strings
