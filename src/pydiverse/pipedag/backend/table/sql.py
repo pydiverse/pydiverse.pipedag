@@ -1284,7 +1284,7 @@ class SQLTableStore(BaseTableStore):
                 f" cache: {task}"
             )
 
-        ignore_fresh_input = RunContext.get().ignore_fresh_input
+        ignore_fresh_input = ConfigContext.get().ignore_fresh_input
         try:
             with self.engine_connect() as conn:
                 result = (

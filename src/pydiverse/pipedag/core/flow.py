@@ -245,10 +245,15 @@ class Flow:
             except LookupError:
                 config_context = PipedagConfig.default.get()
 
-        with config_context, RunContextServer(self) as run_context:
-            # Configure Run Context
-            run_context.ignore_fresh_input = ignore_fresh_input
+        # Evolve config using the arguments passed to flow.run
+        config_context = config_context.evolve(
+            fail_fast=(
+                fail_fast if fail_fast is not None else config_context.fail_fast
+            ),
+            ignore_fresh_input=ignore_fresh_input,
+        )
 
+        with config_context, RunContextServer(self):
             if orchestration_engine is None:
                 orchestration_engine = config_context.create_orchestration_engine()
             result = orchestration_engine.run(flow=self, **kwargs)

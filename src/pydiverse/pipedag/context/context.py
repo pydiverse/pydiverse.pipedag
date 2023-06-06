@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from pydiverse.pipedag.materialize.metadata import TaskMetadata
 
 import structlog
-from attrs import define, frozen
+from attrs import define, evolve, frozen
 
 
 class BaseContext:
@@ -132,6 +132,9 @@ class ConfigContext(BaseAttrsContext):
     network_interface: str
     attrs: dict[str, Any]
 
+    # other configuration options
+    ignore_fresh_input: bool = False
+
     @cached_property
     def auto_table(self) -> tuple[type, ...]:
         return tuple(map(import_object, self.config_dict.get("auto_table", ())))
@@ -190,6 +193,10 @@ class ConfigContext(BaseAttrsContext):
             blob=blob_store,
             local_table_cache=local_table_cache,
         )
+
+    def evolve(self, **changes) -> ConfigContext:
+        """Create a new instance with the changes applied; Wrapper for attrs.evolve"""
+        return evolve(self, **changes)
 
     def create_lock_manager(self) -> BaseLockManager:
         return load_object(self.config_dict["lock_manager"])
