@@ -258,7 +258,7 @@ class Flow:
                 orchestration_engine = config_context.create_orchestration_engine()
             result = orchestration_engine.run(flow=self, **kwargs)
 
-        fail_fast = config_context.fail_fast if fail_fast is None else fail_fast
+        fail_fast = config_context.fail_fast
         if not result.successful and fail_fast:
             raise result.exception or Exception("Flow run failed")
 
