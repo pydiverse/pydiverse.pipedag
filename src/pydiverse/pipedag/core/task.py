@@ -57,7 +57,7 @@ class Task:
         self._signature = inspect.signature(fn)
         self._bound_args: inspect.BoundArguments = None  # type: ignore
 
-        self.logger = structlog.get_logger()
+        self.logger = structlog.get_logger(task=self)
         self._visualize_hidden = False
 
     def __repr__(self):
@@ -136,6 +136,7 @@ class Task:
             try:
                 result = self._run(inputs)
             except Exception as e:
+                self.logger.exception("Task failed (raised an exception)")
                 self.did_finish(FinalTaskState.FAILED)
                 raise e
             else:
@@ -166,9 +167,7 @@ class Task:
 
     def did_finish(self, state: FinalTaskState):
         if state == FinalTaskState.COMPLETED:
-            self.logger.info("Task finished successfully", task=self, state=state)
-        else:
-            self.logger.warning("Task failed", task=self, state=state)
+            self.logger.info("Task finished successfully", state=state)
         RunContext.get().did_finish_task(self, state)
 
     def resolve_value(self, task_value: Any):
