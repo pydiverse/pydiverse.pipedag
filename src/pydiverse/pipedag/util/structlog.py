@@ -55,8 +55,7 @@ class PipedagConsoleRenderer(structlog.dev.ConsoleRenderer):
                 + self._styles.reset
                 + "]"
                 + "\n"
-                + self._styles.kv_value
-                + textwrap.indent(string_rep, prefix="    ")
+                + textwrap.indent(string_rep, prefix="    " + self._styles.kv_value)
                 + self._styles.reset
             )
 
