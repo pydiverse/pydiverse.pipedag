@@ -233,11 +233,11 @@ class StageLockContext(BaseContext):
     _context_var = ContextVar("stage_lock_context")
 
     def __init__(self):
-        self.logger = structlog.get_logger(module=__name__, cls=self.__class__.__name__)
-        self.logger.info(f"OPEN STAGE LOCK CONTEXT {id(self)}")
+        self.logger = structlog.get_logger(logger_name=type(self).__name__, id=id(self))
+        self.logger.info("Open stage lock context")
         self.lock_state_handlers = []
 
     def close(self):
-        self.logger.info(f"CLOSE STAGE LOCK CONTEXT {id(self)}")
+        self.logger.info("Close stage lock context")
         for lock_state_handler in self.lock_state_handlers:
             lock_state_handler.dispose()

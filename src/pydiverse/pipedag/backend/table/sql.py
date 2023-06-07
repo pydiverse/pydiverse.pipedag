@@ -5,7 +5,6 @@ import json
 import re
 import textwrap
 import time
-import traceback
 import warnings
 from collections.abc import Iterable
 from contextlib import contextmanager
@@ -320,7 +319,7 @@ class SQLTableStore(BaseTableStore):
                     query.compile(self.engine, compile_kwargs={"literal_binds": True})
                 )
             pretty_query_str = self.format_sql_string(query_str)
-            self.logger.info(f"Executing sql:\n{pretty_query_str}")
+            self.logger.info("Executing sql", query=pretty_query_str)
 
         if isinstance(query, str):
             return conn.execute(sa.text(query))
@@ -582,7 +581,7 @@ class SQLTableStore(BaseTableStore):
             max_length = 5000
             if len(print_query_string) >= max_length:
                 print_query_string = print_query_string[:max_length] + " [...]"
-            self.logger.info(f"Executing sql:\n{print_query_string}")
+            self.logger.info("Executing sql", query=print_query_string)
 
         pytsql.executes(
             sql_string,
@@ -1065,7 +1064,7 @@ class SQLTableStore(BaseTableStore):
                 f"Failed to copy table {from_name} (schema: '{from_schema}') "
                 f"to transaction."
             )
-            self.logger.error(msg, exception=traceback.format_exc())
+            self.logger.exception(msg)
             raise CacheError(msg) from _e
 
     def _swap_alias_with_table_copy(self, table: Table, table_copy: Table):
@@ -1192,11 +1191,10 @@ class SQLTableStore(BaseTableStore):
                     f"Failed to copy raw sql generated table {table_name} (schema:"
                     f" '{src_schema}') to transaction."
                 )
-                self.logger.error(
+                self.logger.exception(
                     msg
                     + " This error is treated as cache-lookup-failure and thus we can"
-                    " continue.",
-                    exception=traceback.format_exc(),
+                    " continue."
                 )
                 raise CacheError(msg) from _e
 
@@ -1692,7 +1690,8 @@ class PandasTableHook(TableHook[SQLTableStore]):
         schema = store.get_schema(stage_name)
         if store.print_materialize:
             store.logger.info(
-                f"Writing table '{schema.get()}.{table.name}':\n{table.obj}"
+                f"Writing table '{schema.get()}.{table.name}'",
+                table_obj=table.obj,
             )
         dtype_map = {}
         table_name = table.name

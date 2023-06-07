@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import logging
 import os
-import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-import structlog
+
+from pydiverse.pipedag.util.structlog import setup_logging
 
 if TYPE_CHECKING:
     pass
@@ -31,34 +30,18 @@ def setup_environ():
     os.environ["PYDIVERSE_PIPEDAG_PYTEST"] = "1"
 
 
-def setup_structlog(
-    _log_level=logging.INFO,
-    _log_stream=sys.stderr,
-    timestamp_format="%Y-%m-%d %H:%M:%S.%f",
-):
-    logging.basicConfig(
-        stream=_log_stream,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        level=_log_level,
-    )
-    structlog.configure(
-        processors=[
-            structlog.contextvars.merge_contextvars,
-            structlog.processors.add_log_level,
-            structlog.processors.StackInfoRenderer(),
-            structlog.dev.set_exc_info,
-            structlog.processors.TimeStamper(fmt=timestamp_format),
-            structlog.dev.ConsoleRenderer(),
-        ],
-        wrapper_class=structlog.make_filtering_bound_logger(_log_level),
-        context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(_log_stream),
-        cache_logger_on_first_use=True,
-    )
-
-
 setup_environ()
-setup_structlog(_log_stream=sys.stdout)  # use sys.stderr with `pytest -s in ci.yml`
+setup_logging()
+
+
+# @pytest.fixture(
+#     autouse=True,
+#     scope="function",
+# )
+# def structlog_test_info(request):
+#     """Add testcase information to structlog context"""
+#     with structlog.contextvars.bound_contextvars(testcase=request.node.name):
+#         yield
 
 
 # Pytest Configuration

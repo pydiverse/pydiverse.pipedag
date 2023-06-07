@@ -129,10 +129,7 @@ class CacheManager:
                     _is_cache_valid=True,
                 )
             except CacheError as e:
-                task.logger.info(
-                    "Failed to retrieve task from cache.",
-                    exception=str(e),
-                )
+                task.logger.info("Failed to retrieve task from cache", cause=str(e))
         else:
             if not task.lazy:
                 # choose a deliberately random version since caching was disabled
@@ -172,7 +169,9 @@ class CacheManager:
         except CacheError as e:
             # Either not found in cache, or copying failed
             # -> Store using default method
-            store.logger.warning("cache miss", table=table.name, exception=str(e))
+            store.logger.warning(
+                "Cache miss", table=table.name, stage=table.stage.name, cause=str(e)
+            )
             is_cache_valid = False
 
         # Store metadata
@@ -207,7 +206,7 @@ class CacheManager:
         except CacheError as e:
             # Either not found in cache, or copying failed
             # -> Store using default method
-            store.logger.warning("cache miss for raw-SQL", exception=str(e))
+            store.logger.warning("Cache miss for raw-SQL", cause=str(e))
             is_cache_valid = False
         return TableCacheInfo(raw_sql.stage, task_hash, query_hash, is_cache_valid)
 

@@ -116,7 +116,6 @@ select = [
 ignore = [
     "B028",
 ]
-force-exclude = true
 extend-exclude = ["tests/*", "docs/*"]
 ignore-init-module-imports = true
 fix = true

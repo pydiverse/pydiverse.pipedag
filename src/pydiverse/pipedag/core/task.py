@@ -57,7 +57,7 @@ class Task:
         self._signature = inspect.signature(fn)
         self._bound_args: inspect.BoundArguments = None  # type: ignore
 
-        self.logger = structlog.get_logger(task=self)
+        self.logger = structlog.get_logger(logger_name=f"Task '{self.name}'", task=self)
         self._visualize_hidden = False
 
     def __repr__(self):
@@ -88,7 +88,7 @@ class Task:
         new = copy.copy(self_)
         new.flow = ctx.flow
         new.stage = ctx.stage
-        new.logger = structlog.get_logger(task=new)
+        new.logger = new.logger.bind(logger_name=f"Task '{new.name}'", task=new)
 
         new._bound_args = new._signature.bind(*args, **kwargs)
 

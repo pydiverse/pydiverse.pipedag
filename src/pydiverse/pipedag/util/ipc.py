@@ -16,11 +16,6 @@ from cryptography.fernet import Fernet
 from pydiverse.pipedag.errors import IPCError
 
 
-def human_thread_id(thread_ident):
-    """Return human processable number for thread ID."""
-    return hash(thread_ident) % 100
-
-
 class IPCServer(threading.Thread):
     """Server for inter process communication
 
@@ -48,7 +43,7 @@ class IPCServer(threading.Thread):
 
         self.__stop_flag = False
         self.__thread = None
-        self.logger = structlog.get_logger(cls=type(self).__name__)
+        self.logger = structlog.get_logger(logger_name=type(self).__name__)
 
         self.msg_default = msg_default
         self.msg_ext_hook = msg_ext_hook
@@ -56,32 +51,28 @@ class IPCServer(threading.Thread):
     def _get_id(self, ctx_id=0):
         return dict(
             address=self.address,
-            thread=human_thread_id(threading.get_ident()),
+            thread=threading.get_ident(),
             ctx_id=ctx_id,
         )
 
     def run(self):
-        self.logger.info("start IPCServer", **self._get_id())
+        self.logger.info("Starting IPCServer", **self._get_id())
         self.run_loop()
 
     def stop(self):
         self.__stop_flag = True
-        self.logger.debug("request IPCServer to stop", **self._get_id())
+        self.logger.debug("Request IPCServer to stop", **self._get_id())
 
     def __enter__(self):
         self.__thread = self
         self.__thread.start()
-        self.logger.debug(
-            "started IPCServer thread", thread=human_thread_id(self.__thread.ident)
-        )
+        self.logger.debug("Started IPCServer thread", thread=self.__thread.ident)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop()
         if self.__thread is not None:
-            self.logger.debug(
-                "stop IPCServer thread", thread=human_thread_id(self.__thread.ident)
-            )
+            self.logger.debug("Stop IPCServer thread", thread=self.__thread.ident)
             self.__thread.join()
 
     def run_loop(self):
@@ -104,7 +95,7 @@ class IPCServer(threading.Thread):
         try:
             socket = self.socket.new_context()
             ctx_id += 1
-            self.logger.debug("new socket context", **self._get_id(ctx_id))
+            self.logger.debug("New socket context", **self._get_id(ctx_id))
             while not self.__stop_flag:
                 # noinspection PyBroadException
                 try:
@@ -133,22 +124,22 @@ class IPCServer(threading.Thread):
                         )
                         socket = self.socket.new_context()
                         ctx_id += 1
-                        self.logger.debug("next socket context", **self._get_id(ctx_id))
+                        self.logger.debug("Next socket context", **self._get_id(ctx_id))
                         continue
 
                     self.nonces.add(nonce)
 
                     if len(threads) >= max_threads_in_flight:
-                        self.logger.debug(
-                            "joining thread", thread=human_thread_id(threads[0].ident)
-                        )
+                        self.logger.debug("Joining thread", thread=threads[0].ident)
                         threads[0].join()
                         del threads[0]
-                    thread_logger = structlog.get_logger()
+                    thread_logger = structlog.get_logger(
+                        logger_name="IPC Worker", nonce=nonce_hex, ctx_id=ctx_id
+                    )
                     thread = threading.Thread(
                         name="IPC Worker",
                         target=self._serve,
-                        args=[thread_logger, socket, unpacker, nonce_hex, ctx_id],
+                        args=[thread_logger, socket, unpacker],
                         daemon=True,
                     )
                     socket = self.socket.new_context()
@@ -159,39 +150,41 @@ class IPCServer(threading.Thread):
                 except pynng.Timeout:
                     pass
                 except Exception:
-                    self.logger.exception("exception occurred in run_loop")
+                    self.logger.exception("Exception occurred in run_loop")
         finally:
             for thread in threads:
-                self.logger.debug(
-                    "joining thread", thread=human_thread_id(thread.ident)
-                )
+                self.logger.debug("Joining thread", thread=thread.ident)
                 thread.join()
-            self.logger.debug("closing socket", **self._get_id())
+            self.logger.debug("Closing socket", **self._get_id())
             if socket is not None:
                 socket.close()  # close the open request-response context
             self.socket.close()
-            self.logger.info("stopped IPCServer", **self._get_id())
+            self.logger.info("Stopped IPCServer", **self._get_id())
 
-    def _serve(self, thread_logger, socket, unpacker, nonce_hex, ctx_id):
-        msg = unpacker.unpack()
-        thread_logger.debug(
-            "IPCServer Received",
-            message=msg,
-            nonce=nonce_hex,
-            ctx_id=ctx_id,
-            thread=human_thread_id(threading.get_ident()),
-        )
-        reply = self.handle_request(msg)
-        thread_logger.debug(
-            "IPCServer Reply",
-            reply=reply,
-            nonce=nonce_hex,
-            ctx_id=ctx_id,
-            thread=human_thread_id(threading.get_ident()),
-        )
-        reply = msgpack.packb(reply, default=self.msg_default)
-        reply = self._fernet.encrypt(reply)
-        socket.send(reply)
+    def _serve(self, thread_logger, socket: pynng.Socket, unpacker):
+        try:
+            msg = unpacker.unpack()
+            thread_logger.debug(
+                "IPCServer Received",
+                message=msg,
+                thread=threading.get_ident(),
+            )
+            reply = self.handle_request(msg)
+            thread_logger.debug(
+                "IPCServer Reply",
+                reply=reply,
+                thread=threading.get_ident(),
+            )
+            reply = msgpack.packb(reply, default=self.msg_default)
+            reply = self._fernet.encrypt(reply)
+        except Exception as e:
+            thread_logger.critical("Uncaught exception in _serve", exc_info=e)
+            reply = b""
+
+        try:
+            socket.send(reply)
+        except Exception:
+            thread_logger.exception("Failed to send reply")
 
     def handle_request(self, request: dict[str, Any]):
         return None
@@ -226,7 +219,8 @@ class IPCServer(threading.Thread):
 class IPCClient:
     def __init__(self, addr: str, fernet: Fernet, msg_default=None, msg_ext_hook=None):
         self.logger = structlog.get_logger(
-            thread=human_thread_id(threading.get_ident())
+            logger_name=type(self).__name__,
+            thread=threading.get_ident(),
         )
         self.addr = addr
         self._fernet = fernet
@@ -236,19 +230,19 @@ class IPCClient:
         self.socket = self._connect()
 
     def _connect(self):
-        self.logger.debug("opening client connection", addr=self.addr)
+        self.logger.debug("Opening client connection", addr=self.addr)
         return pynng.Req0(dial=self.addr, resend_time=30_000)
 
     def request(self, payload: Any) -> Any:
         with self.socket.new_context() as socket:
-            self.logger.debug("client request")
+            self.logger.debug("Client request")
             nonce = uuid.uuid4().bytes[:16]
             msg = msgpack.packb((nonce, payload), default=self.msg_default)
             msg = self._fernet.encrypt(msg)
             socket.send(msg)
 
             response = socket.recv()
-            self.logger.debug("client got response")
+            self.logger.debug("Client got response")
             response = self._fernet.decrypt(response)
             response = msgpack.unpackb(
                 response, use_list=False, ext_hook=self.msg_ext_hook
@@ -258,12 +252,13 @@ class IPCClient:
     def __getstate__(self):
         state = self.__dict__.copy()
         del state["socket"]
-        del state["logger"]
         return state
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-        self.logger = structlog.get_logger(threading.get_ident())
+        self.logger = self.logger.bind(
+            thread=threading.get_ident(),
+        )
         self.socket = self._connect()
 
 

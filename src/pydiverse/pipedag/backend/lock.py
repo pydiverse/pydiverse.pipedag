@@ -72,7 +72,7 @@ class BaseLockManager(Disposable, ABC):
     """
 
     def __init__(self):
-        self.logger = structlog.get_logger(lock=type(self).__name__)
+        self.logger = structlog.get_logger(logger_name=type(self).__name__)
 
         self.state_listeners = set()
         self.lock_states = defaultdict(lambda: LockState.UNLOCKED)

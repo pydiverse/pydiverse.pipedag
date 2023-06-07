@@ -180,7 +180,7 @@ class RunContextServer(IPCServer):
             except Exception as e2:
                 self.logger.error(
                     "failed pickling exception",
-                    exception=exception_tb,
+                    traceback=exception_tb,
                     pickle_exception=str(e2),
                 )
                 pickled_exception = pickle.dumps(
@@ -664,7 +664,7 @@ class StageLockStateHandler(Disposable):
     """
 
     def __init__(self, lock_manager: BaseLockManager):
-        self.logger = structlog.get_logger(cls=type(self).__name__)
+        self.logger = structlog.get_logger(logger_name=type(self).__name__)
         self.lock_manager = lock_manager
         self.lock_manager.add_lock_state_listener(self._lock_state_listener)
 
@@ -780,8 +780,8 @@ def _msg_default(obj):
     try:
         ret = pickle.dumps(obj)
     except Exception as e:
-        logger = structlog.get_logger()
-        logger.exception("_msg_default: failed to pickle object", object=obj)
+        logger = structlog.get_logger(logger_name="RunContext msg_default")
+        logger.exception("failed to pickle object", object=obj)
         raise e
     return msgpack.ExtType(0, ret)
 

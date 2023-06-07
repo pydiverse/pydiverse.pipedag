@@ -199,7 +199,7 @@ class BaseTableStore(TableHookResolver):
     """
 
     def __init__(self):
-        self.logger = structlog.get_logger(type(self).__name__)
+        self.logger = structlog.get_logger(logger_name=type(self).__name__)
 
     def setup(self):
         """Setup function

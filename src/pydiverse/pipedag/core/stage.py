@@ -62,7 +62,7 @@ class Stage:
         self.commit_task: CommitStageTask = None  # type: ignore
         self.outer_stage: Stage | None = None
 
-        self.logger = structlog.get_logger(stage=self)
+        self.logger = structlog.get_logger(logger_name=type(self).__name__, stage=self)
         self.id: int = None  # type: ignore
 
         self._did_enter = False
@@ -170,9 +170,11 @@ class CommitStageTask(Task):
         self.upstream_stages = {stage}
         self.input_tasks = {}
 
+        self.logger = self.logger.bind(logger_name="Commit Stage", stage=stage)
+
         self._bound_args = self._signature.bind()
         self._visualize_hidden = True
 
     def fn(self):
-        self.logger.info(f"Committing stage '{self.stage.name}'")
+        self.logger.info("Committing stage")
         ConfigContext.get().store.commit_stage(self.stage)
