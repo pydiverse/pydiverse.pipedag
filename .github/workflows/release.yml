@@ -10,6 +10,7 @@ on:
 jobs:
   release:
     name: 'Build and Release on PyPi'
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout branch
         uses: actions/checkout@v3
