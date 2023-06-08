@@ -1,0 +1,20 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - 'main'
+    tags:
+      - '*.*.*'
+
+jobs:
+  release:
+    name: 'Build and Release on PyPi'
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v3
+
+      - name: Build and Publish
+        uses: JRubics/poetry-publish@v1.17
+        with:
+          pypi_token: ${{ secrets.PYPI_TOKEN }}
