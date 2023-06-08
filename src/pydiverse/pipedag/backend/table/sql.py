@@ -1930,8 +1930,8 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
     ):
         t = table.obj
         table = table.copy_without_obj()
-        table.obj = t.obj.to_polars()
-        PolarsTableHook.materialize(store, t, stage_name, task_info)
+        table.obj = t.to_polars()
+        PolarsTableHook.materialize(store, table, stage_name, task_info)
 
     @classmethod
     def retrieve(
