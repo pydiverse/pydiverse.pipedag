@@ -7,6 +7,13 @@ https://semver.org/spec/v2.0.0.html. The most important bits are:
 Changelog
 =========
 
+0.4.0 (2023-06-08)
+------------------
+- update public interface
+- encrypt IPC communication
+- remove preemptive os.makedirs from ParquetTableCache
+- improve logging and provide structlog utilities
+
 0.3.0 (2023-05-25)
 ------------------
 - breaking change to pipedag.yaml: introduced `args` subsections for arguments
