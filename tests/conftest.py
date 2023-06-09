@@ -25,7 +25,7 @@ def setup_environ():
     os.environ["POSTGRES_USERNAME"] = "sa"
     os.environ["POSTGRES_PASSWORD"] = "Pydiverse23"
     os.environ["MSSQL_USERNAME"] = "sa"
-    os.environ["MSSQL_PASSWORD"] = "PidyQuant27"
+    os.environ["MSSQL_PASSWORD"] = "PydiQuant27"
 
     os.environ["PYDIVERSE_PIPEDAG_PYTEST"] = "1"
 

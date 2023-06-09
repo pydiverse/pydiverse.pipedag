@@ -13,7 +13,7 @@ services:
     image: mcr.microsoft.com/azure-sql-edge
     environment:
       ACCEPT_EULA: Y
-      SA_PASSWORD: PidyQuant27
+      SA_PASSWORD: PydiQuant27
     ports:
       - 1433:1433
   zoo:
