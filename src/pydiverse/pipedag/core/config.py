@@ -176,21 +176,23 @@ class PipedagConfig:
             attrs=Box(config["attrs"], frozen_box=True),
         )
 
-        try:
-            # Make sure @cached_property store is set up and loaded
-            # and throw config errors early.
-            with config_context:
-                _ = config_context.store
-                _ = config_context.auto_table
-                _ = config_context.auto_blob
+        if "PYDIVERSE_PIPEDAG_PYTEST" not in os.environ:
+            # If we're running test cases, this can be skipped to improve performance
+            try:
+                # Make sure @cached_property store is set up and loaded
+                # and throw config errors early.
+                with config_context:
+                    _ = config_context.store
+                    _ = config_context.auto_table
+                    _ = config_context.auto_blob
 
-                config_context.create_orchestration_engine().dispose()
-                config_context.create_lock_manager().dispose()
-        except Exception as e:
-            raise RuntimeError(
-                "Error while creating backend objects from pipedag config "
-                f"(instance={instance}, flow={flow}): {self.path}"
-            ) from e
+                    config_context.create_orchestration_engine().dispose()
+                    config_context.create_lock_manager().dispose()
+            except Exception as e:
+                raise RuntimeError(
+                    "Error while creating backend objects from pipedag config "
+                    f"(instance={instance}, flow={flow}): {self.path}"
+                ) from e
 
         return config_context
 
