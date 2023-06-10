@@ -60,7 +60,7 @@ poetry run pytest --workers 4
 To be able to run all tests (for different databases or table types), you have to install the test dependency group:
 
 ```bash
-poetry install --with=test
+poetry install --with=tests
 ```
 
 ## Pre-commit install with conda and python 3.9

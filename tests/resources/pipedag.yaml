@@ -91,27 +91,6 @@ instances:
       args:
         avoid_drop_create_schema: true
 
-  pdtransform:
-    instance_id: pd_postgres
-    auto_table: [ "pandas.DataFrame", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable",
-                  "pydiverse.transform.core.table.Table"]
-    table_store:
-      table_store_connection: postgres
-
-  ibis:
-    instance_id: ibis_postgres
-    auto_table: [ "pandas.DataFrame", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable",
-                  "ibis.expr.types.Table"]
-    table_store:
-      table_store_connection: postgres
-
-  polars:
-    instance_id: polars_postgres
-    auto_table: [ "pandas.DataFrame", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable",
-                  "polars.dataframe.DataFrame", "tidypolars.Tibble"]
-    table_store:
-      table_store_connection: postgres
-
   ignore_task_version:
     instance_id: pd_postgres
     ignore_task_version: true

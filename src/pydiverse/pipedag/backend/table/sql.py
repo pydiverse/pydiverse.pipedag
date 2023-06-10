@@ -126,8 +126,7 @@ class SQLTableStore(BaseTableStore):
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
 
         self._init_database(engine_url, create_database_if_not_exists)
-        self.engine_url_obj = sa.engine.make_url(engine_url)
-        self.engine_url_no_pw = repr(self.engine_url_obj)
+        self.engine_url = sa.engine.make_url(engine_url)
         self.engine = self._connect(engine_url, self.schema_prefix, self.schema_suffix)
         self.engines_other = dict()  # i.e. for IBIS connection
 
@@ -210,7 +209,7 @@ class SQLTableStore(BaseTableStore):
 
         self.logger.info(
             "Initialized SQL Table Store",
-            engine_url=self.engine_url_no_pw,
+            engine_url=self.engine_url.render_as_string(hide_password=True),
             schema_prefix=self.schema_prefix,
             schema_suffix=self.schema_suffix,
         )
@@ -796,6 +795,7 @@ class SQLTableStore(BaseTableStore):
         # If the stage is 100% cache valid, then we just need to update the
         # "in_transaction_schema" column of the metadata tables.
         if not RunContext.get().has_stage_changed(stage):
+            self.logger.info("Stage is cache valid", stage=stage)
             with self.engine_connect() as conn:
                 self._commit_stage_update_metadata(stage, conn)
             return
@@ -1861,7 +1861,8 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         schema = store.get_schema(stage_name)
         if store.print_materialize:
             store.logger.info(
-                f"Writing table '{schema.get()}.{table.name}':\n{table.obj}"
+                f"Writing table '{schema.get()}.{table.name}'",
+                table_obj=table.obj,
             )
         table_name = table.name
         # TODO:
@@ -1892,8 +1893,10 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         schema = store.get_schema(stage_name).get()
         table_name = table.name
         table_name, schema = store.resolve_aliases(table_name, schema)
-        conn = str(store.engine_url_obj)
-        df = polars.read_database(f'SELECT * FROM {schema}."{table_name}"', conn)
+        connection_uri = store.engine_url.render_as_string(hide_password=False)
+        df = polars.read_database(
+            f'SELECT * FROM {schema}."{table_name}"', connection_uri
+        )
         return df
 
     @classmethod
@@ -2048,7 +2051,7 @@ class IbisTableHook(TableHook[SQLTableStore]):
         # TODO: move this function to a better ibis specific place
         con = store.engines_other.get("ibis")
         if con is None:
-            url = store.engine_url_obj
+            url = store.engine_url
             dialect = store.engine.dialect.name
             if dialect == "postgresql":
                 con = ibis.postgres.connect(
@@ -2121,6 +2124,8 @@ class IbisTableHook(TableHook[SQLTableStore]):
                 if retry_iteration == 3:
                     raise
                 time.sleep(retry_iteration * retry_iteration * 1.2)
+        else:
+            raise Exception
         return tbl
 
     @classmethod

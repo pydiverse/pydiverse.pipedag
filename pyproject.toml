@@ -63,17 +63,20 @@ kazoo = ">=2.8.0"
 psycopg2 = ">=2.9.3"
 pydot = ">=1.4.2"
 
-[tool.poetry.group.test]
+[tool.poetry.group.tests]
 optional = true
 
-[tool.poetry.group.test.dependencies]
+[tool.poetry.group.tests.dependencies]
 # Table Hooks
 pydiverse-transform = "^0.1.0"
 ibis = ">=3.2.0"
 ibis-framework = { version = ">=5.1.0", extras = ["mssql", "postgres"] }
 polars = ">=0.16.18"
 tidypolars = { version = "^0.2.19", python = "<3.11" }
-connectorx = { version = ">=0.3.1", python = "<3.11" }
+connectorx = [
+    { version = ">=0.3.1", python = "<3.11" },
+    { version = "0.3.2a5", python = "==3.11" }  # Latest full release is broken - unpin when 0.3.2 released
+]
 # Engines
 prefect = "^1.3"
 # MSSQL

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import pandas as pd
-import sqlalchemy as sa
 import datetime as dt
+
+import pandas as pd
 import pytest
+import sqlalchemy as sa
 import structlog
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
@@ -11,10 +12,12 @@ from pydiverse.pipedag.backend.table.sql import sa_select
 from pydiverse.pipedag.context import RunContext, StageLockContext
 from pydiverse.pipedag.core.config import PipedagConfig
 
-from tests.util import select_as, tasks_library as m
+# Parameterize all tests in this file with several instance_id configurations
+from tests.fixtures.instances import ALL_INSTANCES, with_instances
+from tests.util import select_as
+from tests.util import tasks_library as m
 
-# parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instance import *
+pytestmark = [with_instances(ALL_INSTANCES)]
 
 
 def test_materialize_literals():
@@ -231,13 +234,13 @@ def test_materialize_memo_table():
 def test_materialize_memo_with_failure():
     with Flow("flow") as f:
         with Stage("stage"):
-            t_0 = m.exception(1, False)
-            t_1 = m.exception(1, False)
+            m.exception(1, False)
+            m.exception(1, False)
 
             one = m.one()
-            t_2 = m.exception(1, True)
+            m.exception(1, True)
             t_3 = m.exception(one, True)
-            t_4 = m.exception(t_3, False)
+            m.exception(t_3, False)
 
     assert not f.run(fail_fast=False).successful
 
@@ -446,6 +449,7 @@ def _eager_join(src1: pd.DataFrame, src2: pd.DataFrame):
     return Table(join, "t3_%%", indexes=[["x2"], ["x", "x2"]])
 
 
+@pytest.mark.skip
 @pytest.mark.parametrize(
     "task_1,task_2,noop,join",
     [

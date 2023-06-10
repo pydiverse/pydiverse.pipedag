@@ -2,14 +2,21 @@ import shutil
 from pathlib import Path
 
 import filelock
-import pytest
 
-from pydiverse.pipedag import materialize, Table, Flow, Stage, PipedagConfig
+from pydiverse.pipedag import (
+    materialize,
+    Table,
+    Flow,
+    Stage,
+    PipedagConfig,
+    ConfigContext,
+)
 import sqlalchemy as sa
 import pandas as pd
 
 from pydiverse.pipedag.backend.table.sql import sa_select
 from pydiverse.pipedag.context import StageLockContext
+from tests.fixtures.instances import with_instances
 
 
 def get_flow():
@@ -65,23 +72,28 @@ def get_flow():
     return flow, eager, lazy_2, lazy_3
 
 
-@pytest.mark.parametrize(
-    "instance", ["local_table_cache", "local_table_cache_inout", "local_table_store"]
+@with_instances(
+    "local_table_cache",
+    "local_table_cache_inout",
+    "local_table_store",
 )
-def test_local_table_cache(instance):
-    store_only_inputs = instance == "local_table_cache"
-    use_cache = instance != "local_table_store"
-    flow, eager, lazy_2, lazy_3 = get_flow()
-    cfg = PipedagConfig.default.get(instance)
+def test_local_table_cache():
+    config = ConfigContext.get()
+    instance_id = config.instance_id
+    instance_name = config.instance_name
 
-    base_dir = Path("/tmp/pipedag/table_cache/pipedag_default")
+    store_only_inputs = instance_name == "local_table_cache"
+    use_cache = instance_name != "local_table_store"
+    flow, eager, lazy_2, lazy_3 = get_flow()
+
+    base_dir = Path(f"/tmp/pipedag/table_cache/{instance_id}")
     base_dir.mkdir(parents=True, exist_ok=True)
     with filelock.FileLock(base_dir.parent / "lock"):
         shutil.rmtree(base_dir)
 
         # Run flow 1st time
         with StageLockContext():
-            result = flow.run(cfg)
+            result = flow.run()
             stage_1_files = [
                 p.name
                 for p in (base_dir / "stage_1").iterdir()
@@ -128,7 +140,7 @@ def test_local_table_cache(instance):
             df.to_parquet(path)
             # Run flow 2nd time and expect load from local file cache
             with StageLockContext():
-                result = flow.run(cfg)
+                result = flow.run()
                 assert result.successful
                 assert result.get(eager, as_type=pd.DataFrame)["a"].sum() == 1
                 assert result.get(lazy_2, as_type=pd.DataFrame)["a"].sum() == 3

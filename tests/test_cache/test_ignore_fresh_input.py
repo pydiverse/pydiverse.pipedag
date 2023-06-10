@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Blob, Flow, Stage, Table
@@ -11,6 +10,12 @@ from pydiverse.pipedag.materialize.core import materialize
 
 from tests.util import select_as, tasks_library as m
 from tests.util.spy import spy_task
+
+# Parameterize all tests in this file with several instance_id configurations
+from tests.fixtures.instances import with_instances, ALL_INSTANCES, skip_instances
+
+pytestmark = [with_instances(ALL_INSTANCES)]
+
 
 # Test that running a flow that contains a task with an invalid cache function
 # doesn't trigger that task when run with ignore_fresh_input=True, and it is
@@ -252,7 +257,7 @@ def test_blob(mocker):
         child_spy.assert_called_once()
 
 
-@pytest.mark.skip_instance("mssql", "mssql_pytsql", "ibm_db2", "ibm_db2_avoid_schema")
+@skip_instances("mssql", "mssql_pytsql", "ibm_db2", "ibm_db2_avoid_schema")
 def test_raw_sql(mocker):
     cache_value = 0
     raw_value = 0

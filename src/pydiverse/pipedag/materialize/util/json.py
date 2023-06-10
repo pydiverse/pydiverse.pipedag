@@ -77,7 +77,7 @@ def json_default(o):
             "datetime": o.isoformat(),
         }
 
-    raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
+    raise TypeError(f"Object of type {type(o)} is not JSON serializable")
 
 
 def json_object_hook(d: dict):

@@ -3,14 +3,15 @@ from __future__ import annotations
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import pytest
 
 from pydiverse.pipedag.util.structlog import setup_logging
 
-if TYPE_CHECKING:
-    pass
+# Load the `run_with_instances` fixture, so it gets applied to all tests
+from tests.fixtures.instances import INSTANCE_MARKS, fixture_run_with_instance
+
+_ = fixture_run_with_instance
 
 
 pytest_plugins = ["tests.parallelize.plugin"]
@@ -34,17 +35,31 @@ setup_environ()
 setup_logging()
 
 
-# @pytest.fixture(
-#     autouse=True,
-#     scope="function",
-# )
-# def structlog_test_info(request):
-#     """Add testcase information to structlog context"""
-#     with structlog.contextvars.bound_contextvars(testcase=request.node.name):
-#         yield
-
-
 # Pytest Configuration
+
+
+def pytest_generate_tests(metafunc: pytest.Metafunc):
+    # Parametrize tests based on `instances` and `skip_instances` mark.
+    # Depends on the `fixture_run_with_instance` fixture to be imported at a
+    #     global level.
+
+    instances = {}
+    if mark := metafunc.definition.get_closest_marker("instances"):
+        instances = dict.fromkeys(mark.args)
+    if mark := metafunc.definition.get_closest_marker("skip_instances"):
+        for instance in mark.args:
+            if instance in instances:
+                del instances[instance]
+
+    if len(instances):
+        params = []
+        for instance in instances:
+            if instance in INSTANCE_MARKS:
+                params.append(pytest.param(instance, marks=INSTANCE_MARKS[instance]))
+            else:
+                params.append(instance)
+
+        metafunc.parametrize("run_with_instance", params, indirect=True)
 
 
 def pytest_addoption(parser):
@@ -73,7 +88,7 @@ def pytest_parallelize_group_items(config, items):
         group = "DEFAULT"
 
         if callspec := getattr(item, "callspec", None):
-            if instance := callspec.params.get("instance"):
+            if instance := callspec.params.get("run_with_instance"):
                 group = instance
 
         groups[group].append(item)

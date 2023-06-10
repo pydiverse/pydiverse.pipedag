@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pandas as pd
-import sqlalchemy as sa
 
 from pydiverse.pipedag import Blob, Flow, Stage, Table
 from pydiverse.pipedag.context import StageLockContext
@@ -11,6 +10,11 @@ from pydiverse.pipedag.core import PipedagConfig
 
 from tests.util import select_as, compile_sql, tasks_library as m
 from tests.util.spy import spy_task
+
+# Parameterize all tests in this file with several instance_id configurations
+from tests.fixtures.instances import with_instances, ALL_INSTANCES
+
+pytestmark = [with_instances(ALL_INSTANCES)]
 
 
 # Test Basic Cache Invalidation Behaviour

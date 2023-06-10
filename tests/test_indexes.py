@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from pydiverse.pipedag import Flow, Stage, Table, materialize
+from pydiverse.pipedag import Flow, Stage
 
+# Parameterize all tests in this file with several instance_id configurations
+from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
 from tests.util import tasks_library as m
 
-# parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instance import *
+pytestmark = [with_instances(DATABASE_INSTANCES)]
 
 
 @pytest.mark.parametrize(

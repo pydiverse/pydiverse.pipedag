@@ -2,9 +2,9 @@ import traceback
 
 import pytest
 
+from pydiverse.pipedag.backend.table.util import engine_dispatch
 from pydiverse.pipedag.errors import DisposedError
 from pydiverse.pipedag.util import Disposable, requires
-from pydiverse.pipedag.backend.table.util import engine_dispatch
 
 
 def test_requires():
@@ -107,7 +107,7 @@ def test_format_exception():
     # thus we use traceback.format_exc()
     try:
         raise RuntimeError("this error is intended by test")
-    except RuntimeError as _e:
+    except RuntimeError:
         trace = traceback.format_exc()
         assert 'RuntimeError("this error is intended by test")' in trace
         assert "test_util.py" in trace

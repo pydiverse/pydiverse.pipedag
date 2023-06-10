@@ -44,19 +44,21 @@ def two():
     return 2
 
 
-@materialize(version="1.0")
+@materialize()
 def assert_equal(x, y):
+    # This function explicitly has no version set to prevent it from getting cached
     assert x == y, f"{x} != {y}"
-    return x, y
 
 
-@materialize(input_type=pd.DataFrame, version="1.0")
-def assert_table_equal(x, y):
-    pd.testing.assert_frame_equal(x, y)
+@materialize(input_type=pd.DataFrame)
+def assert_table_equal(x, y, **kwargs):
+    # This function explicitly has no version set to prevent it from getting cached
+    pd.testing.assert_frame_equal(x, y, **kwargs)
 
 
-@materialize(version="1.0")
+@materialize()
 def assert_blob_equal(x, y):
+    # This function explicitly has no version set to prevent it from getting cached
     assert x == y
 
 
@@ -264,7 +266,7 @@ def object_blob(x: dict):
     return Blob(instance)
 
 
-@materialize(version="1.0")
+@materialize()
 def exception(x, r: bool):
     if r:
         raise Exception("THIS EXCEPTION IS EXPECTED")
