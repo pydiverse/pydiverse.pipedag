@@ -14,8 +14,12 @@ class NoLockManager(BaseLockManager):
         ESSENTIAL TO PREVENT DATA CORRUPTION.
     """
 
-    def acquire(self, lock: Lockable):
-        self.set_lock_state(lock, LockState.LOCKED)
+    @property
+    def supports_stage_level_locking(self):
+        return True
 
-    def release(self, lock: Lockable):
-        self.set_lock_state(lock, LockState.UNLOCKED)
+    def acquire(self, lockable: Lockable):
+        self.set_lock_state(lockable, LockState.LOCKED)
+
+    def release(self, lockable: Lockable):
+        self.set_lock_state(lockable, LockState.UNLOCKED)

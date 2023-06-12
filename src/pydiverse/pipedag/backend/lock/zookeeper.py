@@ -63,22 +63,26 @@ class ZooKeeperLockManager(BaseLockManager):
         self.locks.clear()
         super().dispose()
 
-    def acquire(self, lock: Lockable):
-        zk_lock = self.client.Lock(self.lock_path(lock))
-        self.logger.info(f"Locking '{lock}'", base_path=self.base_path)
-        if not zk_lock.acquire():
-            raise LockError(f"Failed to acquire lock '{lock}'")
-        self.locks[lock] = zk_lock
-        self.set_lock_state(lock, LockState.LOCKED)
+    @property
+    def supports_stage_level_locking(self):
+        return True
 
-    def release(self, lock: Lockable):
-        if lock not in self.locks:
-            raise LockError(f"No lock '{lock}' found.")
+    def acquire(self, lockable: Lockable):
+        lock = self.client.Lock(self.lock_path(lockable))
+        self.logger.info(f"Locking '{lockable}'", base_path=self.base_path)
+        if not lock.acquire():
+            raise LockError(f"Failed to acquire lock '{lockable}'")
+        self.locks[lockable] = lock
+        self.set_lock_state(lockable, LockState.LOCKED)
 
-        self.logger.info(f"Unlocking '{lock}'", base_path=self.base_path)
-        self.locks[lock].release()
-        del self.locks[lock]
-        self.set_lock_state(lock, LockState.UNLOCKED)
+    def release(self, lockable: Lockable):
+        if lockable not in self.locks:
+            raise LockError(f"No lock '{lockable}' found.")
+
+        self.logger.info(f"Unlocking '{lockable}'", base_path=self.base_path)
+        self.locks[lockable].release()
+        del self.locks[lockable]
+        self.set_lock_state(lockable, LockState.UNLOCKED)
 
     def lock_path(self, lock: Lockable):
         if isinstance(lock, Stage):

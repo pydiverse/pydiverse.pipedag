@@ -41,29 +41,33 @@ class FileLockManager(BaseLockManager):
         base_path = Path(config["base_path"]) / instance_id
         return cls(base_path)
 
-    def acquire(self, lock: Lockable):
-        if lock not in self.locks:
-            lock_path = self.lock_path(lock)
-            self.locks[lock] = fl.FileLock(lock_path)
+    @property
+    def supports_stage_level_locking(self):
+        return True
 
-        f_lock = self.locks[lock]
+    def acquire(self, lockable: Lockable):
+        if lockable not in self.locks:
+            lock_path = self.lock_path(lockable)
+            self.locks[lockable] = fl.FileLock(lock_path)
+
+        f_lock = self.locks[lockable]
         if not f_lock.is_locked:
-            self.logger.info(f"Locking '{lock}'")
+            self.logger.info(f"Locking '{lockable}'")
         f_lock.acquire()
-        self.set_lock_state(lock, LockState.LOCKED)
+        self.set_lock_state(lockable, LockState.LOCKED)
 
-    def release(self, lock: Lockable):
-        if lock not in self.locks:
-            raise LockError(f"No lock '{lock}' found.")
+    def release(self, lockable: Lockable):
+        if lockable not in self.locks:
+            raise LockError(f"No lock '{lockable}' found.")
 
-        f_lock = self.locks[lock]
+        f_lock = self.locks[lockable]
         f_lock.release()
 
         if not f_lock.is_locked:
-            self.logger.info(f"Unlocking '{lock}'")
+            self.logger.info(f"Unlocking '{lockable}'")
             os.remove(f_lock.lock_file)
-            del self.locks[lock]
-            self.set_lock_state(lock, LockState.UNLOCKED)
+            del self.locks[lockable]
+            self.set_lock_state(lockable, LockState.UNLOCKED)
 
     def lock_path(self, lock: Lockable) -> Path:
         if isinstance(lock, Stage):

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import threading
 from abc import ABC, abstractmethod
-from collections import defaultdict
 from contextlib import contextmanager
 from enum import Enum
 from typing import Callable, Union
@@ -10,6 +9,7 @@ from typing import Callable, Union
 import structlog
 
 from pydiverse.pipedag import Stage
+from pydiverse.pipedag.errors import LockError
 from pydiverse.pipedag.util import Disposable
 
 
@@ -76,16 +76,24 @@ class BaseLockManager(Disposable, ABC):
         self.release_all()
         super().dispose()
 
+    @property
     @abstractmethod
-    def acquire(self, lock: Lockable):
+    def supports_stage_level_locking(self):
+        """
+        Flag indicating if locking is supported on stage level, or only on
+        instance level.
+        """
+
+    @abstractmethod
+    def acquire(self, lockable: Lockable):
         """Acquires a lock to access a given object"""
 
     @abstractmethod
-    def release(self, lock: Lockable):
+    def release(self, lockable: Lockable):
         """Releases a previously acquired lock"""
 
     def release_all(self):
-        """Releases all aquired locks"""
+        """Releases all acquired locks"""
         locks = list(self.lock_states.items())
         for lock, _state in locks:
             self.release(lock)
@@ -104,28 +112,79 @@ class BaseLockManager(Disposable, ABC):
         """Removes a function from the set of listeners"""
         self.state_listeners.remove(listener)
 
-    def set_lock_state(self, lock: Lockable, new_state: LockState):
+    def set_lock_state(self, lockable: Lockable, new_state: LockState):
         """Update the state of a lock
 
         Function used by lock implementations to update the state of a
         lock. If appropriate, listeners will be informed about this change.
         """
         with self.__lock_state_lock:
-            if lock not in self.lock_states:
-                self.lock_states[lock] = new_state
+            if lockable not in self.lock_states:
+                self.lock_states[lockable] = new_state
                 for listener in self.state_listeners:
-                    listener(lock, LockState.UNLOCKED, new_state)
+                    listener(lockable, LockState.UNLOCKED, new_state)
             else:
-                old_state = self.lock_states[lock]
-                self.lock_states[lock] = new_state
+                old_state = self.lock_states[lockable]
+                self.lock_states[lockable] = new_state
                 if old_state != new_state:
                     for listener in self.state_listeners:
-                        listener(lock, old_state, new_state)
+                        listener(lockable, old_state, new_state)
 
             if new_state == LockState.UNLOCKED:
-                del self.lock_states[lock]
+                del self.lock_states[lockable]
 
-    def get_lock_state(self, lock: Lockable) -> LockState:
+    def get_lock_state(self, lockable: Lockable) -> LockState:
         """Returns the state of a lock"""
         with self.__lock_state_lock:
-            return self.lock_states.get(lock, LockState.UNLOCKED)
+            return self.lock_states.get(lockable, LockState.UNLOCKED)
+
+
+class InstanceLevelLockManager(BaseLockManager, ABC):
+    """
+    Base class for a lock manager that only supports locking on instance level
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.__locks_lock = threading.Lock()
+        self.__locks: set[Lockable] = set()
+
+    @property
+    def supports_stage_level_locking(self) -> bool:
+        return False
+
+    def acquire(self, lockable: Lockable):
+        with self.__locks_lock:
+            if len(self.__locks):
+                self._acquire_instance_lock()
+
+            if lockable in self.__locks:
+                raise LockError("Lock already acquired.")
+            self.__locks.add(lockable)
+
+        self.set_lock_state(lockable, LockState.LOCKED)
+
+    def release(self, lockable: Lockable):
+        with self.__locks_lock:
+            if lockable not in self.__locks:
+                raise LockError(f"No lock '{lockable}' found.")
+            self.__locks.remove(lockable)
+
+            if len(self.__locks):
+                self._release_instance_lock()
+
+        self.set_lock_state(lockable, LockState.UNLOCKED)
+
+    def release_all(self):
+        with self.__locks_lock:
+            self.__locks.clear()
+            self.lock_states.clear()
+            self._release_instance_lock()
+
+    @abstractmethod
+    def _acquire_instance_lock(self):
+        """Acquires a lock on the instance level"""
+
+    @abstractmethod
+    def _release_instance_lock(self):
+        """Releases a previous lock on the instance level"""
