@@ -5,7 +5,6 @@ import os
 import threading
 import warnings
 from abc import ABC, abstractmethod
-from collections import defaultdict
 from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path
@@ -75,7 +74,7 @@ class BaseLockManager(Disposable, ABC):
         self.logger = structlog.get_logger(logger_name=type(self).__name__)
 
         self.state_listeners = set()
-        self.lock_states = defaultdict(lambda: LockState.UNLOCKED)
+        self.lock_states = {}
         self.__lock_state_lock = threading.Lock()
 
     @contextmanager
@@ -142,7 +141,7 @@ class BaseLockManager(Disposable, ABC):
     def get_lock_state(self, lock: Lockable) -> LockState:
         """Returns the state of a lock"""
         with self.__lock_state_lock:
-            return self.lock_states[lock]
+            return self.lock_states.get(lock, LockState.UNLOCKED)
 
 
 class NoLockManager(BaseLockManager):
