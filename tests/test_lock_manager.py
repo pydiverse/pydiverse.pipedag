@@ -8,6 +8,19 @@ import pytest
 from pydiverse.pipedag.backend.lock import BaseLockManager, LockState
 
 
+class RaisingThread(threading.Thread):
+    def run(self) -> None:
+        try:
+            super().run()
+        except BaseException as e:
+            self.exception = e
+
+    def join(self, timeout=...) -> None:
+        super().join(timeout)
+        if e := getattr(self, "exception", None):
+            raise e
+
+
 def _test_lock_manager(create_lock_manager: Callable[[], BaseLockManager]):
     lock_name = "test_lock"
     sleep_time = 1
@@ -28,8 +41,7 @@ def _test_lock_manager(create_lock_manager: Callable[[], BaseLockManager]):
                 time.sleep(sleep_time)
             unlocked_event.set()
         finally:
-            done_barrier.wait(timeout=1)
-
+            done_barrier.wait(timeout=3)
             assert lm.get_lock_state(lock_name) == LockState.UNLOCKED
             lm.dispose()
 
@@ -54,17 +66,21 @@ def _test_lock_manager(create_lock_manager: Callable[[], BaseLockManager]):
             delta = end_time - start_time
             assert delta >= sleep_time
         finally:
-            done_barrier.wait(timeout=1)
-
+            done_barrier.wait(timeout=3)
             assert lm.get_lock_state(lock_name) == LockState.UNLOCKED
             lm.dispose()
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        lm_1_future = executor.submit(lm_1_task)
-        lm_2_future = executor.submit(lm_2_task)
+    t1 = RaisingThread(target=lm_1_task, daemon=True)
+    t2 = RaisingThread(target=lm_2_task, daemon=True)
 
-        lm_1_future.result()
-        lm_2_future.result()
+    t1.start()
+    t2.start()
+
+    t1.join(timeout=(5 + sleep_time))
+    assert not t1.is_alive(), "Thread timed out"
+
+    t2.join(timeout=5)
+    assert not t2.is_alive(), "Thread timed out"
 
 
 @pytest.mark.parallelize
@@ -76,8 +92,7 @@ def test_zookeeper():
     def create_lock_manager():
         # TODO: Don't hardcode ip - Get somehow from the environment
         client = KazooClient(hosts="localhost:2181")
-        lock_manager = ZooKeeperLockManager(client, "pipedag/tests/zookeeper/")
-        return lock_manager
+        return ZooKeeperLockManager(client, "pipedag/tests/zookeeper/")
 
     _test_lock_manager(create_lock_manager)
 
@@ -92,7 +107,18 @@ def test_filelock():
     base_path = Path(tempfile.gettempdir()) / "pipedag" / "tests"
 
     def create_lock_manager():
-        lock_manager = FileLockManager(base_path=base_path)
-        return lock_manager
+        return FileLockManager(base_path=base_path)
 
     _test_lock_manager(create_lock_manager)
+
+
+@pytest.mark.parallelize
+def test_no_lock():
+    from pydiverse.pipedag.backend.lock import NoLockManager
+
+    def create_lock_manager():
+        return NoLockManager()
+
+    with pytest.raises(BaseException):
+        _test_lock_manager(create_lock_manager)
+        pytest.fail("No lock manager MUST fail the lock manager tests")
