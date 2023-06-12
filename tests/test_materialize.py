@@ -7,7 +7,7 @@ import pytest
 import sqlalchemy as sa
 import structlog
 
-from pydiverse.pipedag import Flow, Stage, Table, materialize
+from pydiverse.pipedag import Flow, Stage, Table, materialize, ConfigContext
 from pydiverse.pipedag.backend.table.sql import sa_select
 from pydiverse.pipedag.context import RunContext, StageLockContext
 from pydiverse.pipedag.core.config import PipedagConfig
@@ -143,16 +143,18 @@ def test_failure():
         with Stage("failure_stage"):
             m.exception(0, True)
 
-    with pytest.raises(Exception, match="THIS EXCEPTION IS EXPECTED"):
-        f.run(fail_fast=True)
+    with ConfigContext.get().evolve(swallow_exceptions=True):
+        with pytest.raises(Exception, match="THIS EXCEPTION IS EXPECTED"):
+            f.run(fail_fast=True)
 
     with Flow("flow") as f:
         with Stage("failure_stage"):
             x = m.exception(0, True)
             m.noop(x)
 
-    with pytest.raises(Exception, match="THIS EXCEPTION IS EXPECTED"):
-        f.run(fail_fast=True)
+    with ConfigContext.get().evolve(swallow_exceptions=True):
+        with pytest.raises(Exception, match="THIS EXCEPTION IS EXPECTED"):
+            f.run(fail_fast=True)
 
 
 def test_return_pipedag_config():
@@ -160,8 +162,9 @@ def test_return_pipedag_config():
         with Stage("failure_stage"):
             m.noop(PipedagConfig.default)
 
-    with pytest.raises(TypeError, match="PipedagConfig"):
-        f.run(fail_fast=True)
+    with ConfigContext.get().evolve(swallow_exceptions=True):
+        with pytest.raises(TypeError, match="PipedagConfig"):
+            f.run(fail_fast=True)
 
 
 def test_materialize_memo_literal():
@@ -242,7 +245,8 @@ def test_materialize_memo_with_failure():
             t_3 = m.exception(one, True)
             m.exception(t_3, False)
 
-    assert not f.run(fail_fast=False).successful
+    with ConfigContext.get().evolve(swallow_exceptions=True):
+        assert not f.run(fail_fast=False).successful
 
 
 def test_stage_ref_counter():

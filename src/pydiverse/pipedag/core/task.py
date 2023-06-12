@@ -136,7 +136,11 @@ class Task:
             try:
                 result = self._run(inputs)
             except Exception as e:
-                self.logger.exception("Task failed (raised an exception)")
+                if config_context._swallow_exceptions:
+                    # PIPEDAG INTERNAL
+                    self.logger.info("Task failed (raised an exception)", cause=str(e))
+                else:
+                    self.logger.exception("Task failed (raised an exception)")
                 self.did_finish(FinalTaskState.FAILED)
                 raise e
             else:

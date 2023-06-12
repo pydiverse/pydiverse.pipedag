@@ -135,6 +135,10 @@ class ConfigContext(BaseAttrsContext):
     # other configuration options
     ignore_fresh_input: bool = False
 
+    # INTERNAL FLAGS - ONLY FOR PIPEDAG USE
+    # When set to True, exceptions raised in a flow don't get logged
+    _swallow_exceptions: bool = False
+
     @cached_property
     def auto_table(self) -> tuple[type, ...]:
         return tuple(map(import_object, self.config_dict.get("auto_table", ())))
