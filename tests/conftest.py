@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import itertools
 from collections import defaultdict
 from pathlib import Path
 
@@ -84,11 +85,20 @@ def pytest_collection_modifyitems(config: pytest.Config, items):
 @pytest.hookimpl
 def pytest_parallelize_group_items(config, items):
     groups = defaultdict(list)
+    auto_group_iter = itertools.cycle([f"auto_{i}" for i in range(os.cpu_count() or 4)])
+
     for item in items:
         group = "DEFAULT"
 
-        if callspec := getattr(item, "callspec", None):
-            if instance := callspec.params.get("run_with_instance"):
+        if hasattr(item, "get_closest_marker"):
+            if marker := item.get_closest_marker("parallelize"):
+                if marker.args:
+                    group = marker.args[0]
+                else:
+                    group = next(auto_group_iter)
+
+        if hasattr(item, "callspec"):
+            if instance := item.callspec.params.get("run_with_instance"):
                 group = instance
 
         groups[group].append(item)

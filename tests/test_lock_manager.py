@@ -3,6 +3,8 @@ import threading
 import time
 from typing import Callable
 
+import pytest
+
 from pydiverse.pipedag.backend.lock import BaseLockManager, LockState
 
 
@@ -65,6 +67,7 @@ def _test_lock_manager(create_lock_manager: Callable[[], BaseLockManager]):
         lm_2_future.result()
 
 
+@pytest.mark.parallelize
 def test_zookeeper():
     from kazoo.client import KazooClient
 
@@ -79,6 +82,7 @@ def test_zookeeper():
     _test_lock_manager(create_lock_manager)
 
 
+@pytest.mark.parallelize
 def test_filelock():
     import tempfile
     from pathlib import Path

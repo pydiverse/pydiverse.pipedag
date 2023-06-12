@@ -132,7 +132,16 @@ class Session:
             )
             raise AssertionError(msg)
 
-        return groupings[0]
+        grouping = groupings[0]
+
+        reporter = session.config.pluginmanager.getplugin("terminalreporter")
+        if reporter.showheader and not reporter.no_header:
+            reporter.line(
+                f"Split tests into {len(grouping)} parallelization groups: "
+                + ", ".join(sorted(list(grouping)))
+            )
+
+        return grouping
 
     def prepare_work_queue(self, num_workers, grouped_items):
         for group, items in grouped_items.items():
