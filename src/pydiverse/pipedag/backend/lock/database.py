@@ -11,7 +11,11 @@ import sqlalchemy as sa
 from pydiverse.pipedag import ConfigContext, Stage
 from pydiverse.pipedag.backend.lock.base import BaseLockManager, Lockable, LockState
 from pydiverse.pipedag.backend.table.util import engine_dispatch
-from pydiverse.pipedag.backend.table.util.sql_ddl import CreateSchema, Schema
+from pydiverse.pipedag.backend.table.util.sql_ddl import (
+    CreateSchema,
+    Schema,
+    ibm_db_sa_fix_name,
+)
 from pydiverse.pipedag.errors import LockError
 
 
@@ -65,6 +69,7 @@ class DatabaseLockManager(BaseLockManager):
         ...
 
     @prepare.dialect("mssql")
+    @prepare.dialect("ibm_db_sa")
     def __prepare(self):
         # Create the lock schema
         # If two lock managers do this concurrently, this action might fail. Thus,
@@ -88,7 +93,7 @@ class DatabaseLockManager(BaseLockManager):
 
     @property
     def supports_stage_level_locking(self):
-        return True
+        return self.engine.dialect.name not in ["ibm_db_sa"]
 
     def acquire(self, lockable: Lockable):
         if self.supports_stage_level_locking:
@@ -107,7 +112,7 @@ class DatabaseLockManager(BaseLockManager):
                     if not self.il_lock.acquire():
                         raise LockError(f"Failed to acquire lock '{lockable}'")
 
-                if lockable in self.locks:
+                if lockable in self.il_locks:
                     raise LockError("Already acquired lock")
                 self.il_locks.add(lockable)
                 self.set_lock_state(lockable, LockState.LOCKED)
@@ -126,7 +131,7 @@ class DatabaseLockManager(BaseLockManager):
                 if self.il_lock is None or not self.il_lock.locked:
                     raise LockError("Instance level lock must be acquired first")
 
-                if lockable not in self.locks:
+                if lockable not in self.il_locks:
                     raise LockError(f"No lock '{lockable}' found.")
                 self.il_locks.remove(lockable)
                 self.set_lock_state(lockable, LockState.UNLOCKED)
@@ -159,6 +164,10 @@ class DatabaseLockManager(BaseLockManager):
     @engine_dispatch
     def get_instance_level_lock(self):
         raise NotImplementedError(f"Dialect '{self.engine.dialect}' not supported")
+
+    @get_instance_level_lock.dialect("ibm_db_sa")
+    def __get_instance_level_lock(self):
+        return DB2Lock("instance_lock", self.lock_schema.get(), self.engine)
 
     def lock_name(self, lock: Lockable):
         if isinstance(lock, Stage):
@@ -269,7 +278,71 @@ class MSSqlLock(Lock):
             {"lock_name": self.name},
         ).scalar()
         result = result >= 0
+        self._locked = False
         return result
+
+    @property
+    def locked(self) -> bool:
+        return self._locked
+
+
+class DB2Lock(Lock):
+    """
+    Locking based on 'LOCK TABLE' statements.
+    https://www.ibm.com/docs/en/db2-for-zos/13?topic=statements-lock-table
+
+    These locks can only be released by committing a transaction. Therefor it is
+    not suitable for fine grain locking.
+    """
+
+    def __init__(self, table: str, schema: str, engine: sa.Engine):
+        self._engine = engine
+        self._connection = None
+        self._locked = False
+
+        self.table = table
+        self.schema = schema
+
+    def acquire(self) -> bool:
+        table = self._engine.dialect.identifier_preparer.quote_identifier(
+            ibm_db_sa_fix_name(self.table)
+        )
+        schema = self._engine.dialect.identifier_preparer.format_schema(
+            ibm_db_sa_fix_name(self.schema)
+        )
+
+        # CREATE TABLE IF NOT EXISTS
+        with self._engine.begin() as conn:
+            conn.execute(
+                sa.text(
+                    f"""
+                    BEGIN
+                        DECLARE CONTINUE HANDLER FOR SQLSTATE '42710' BEGIN END;
+                        EXECUTE IMMEDIATE 'CREATE TABLE {schema}.{table} (x int)';
+                    END
+                    """
+                )
+            )
+
+        # LOCK TABLE
+        if self._connection is None:
+            self._connection = self._engine.connect()
+            self._connection.begin()
+
+        self._connection.execute(
+            sa.text(f"LOCK TABLE {schema}.{table} IN EXCLUSIVE MODE")
+        )
+
+        self._locked = True
+        return True
+
+    def release(self) -> bool:
+        if self._connection is None:
+            return False
+
+        self._connection.close()
+        self._locked = False
+        return True
 
     @property
     def locked(self) -> bool:
