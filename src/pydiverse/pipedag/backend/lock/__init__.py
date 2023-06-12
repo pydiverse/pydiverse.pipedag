@@ -10,4 +10,5 @@ __all__ = [
     "NoLockManager",
     "FileLockManager",
     "ZooKeeperLockManager",
+    "DatabaseLockManager",
 ]

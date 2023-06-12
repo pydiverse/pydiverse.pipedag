@@ -1,4 +1,3 @@
-import concurrent.futures
 import threading
 import time
 from typing import Callable
@@ -6,6 +5,7 @@ from typing import Callable
 import pytest
 
 from pydiverse.pipedag.backend.lock import BaseLockManager, LockState
+from tests.fixtures.instances import with_instances
 
 
 class RaisingThread(threading.Thread):
@@ -15,7 +15,7 @@ class RaisingThread(threading.Thread):
         except BaseException as e:
             self.exception = e
 
-    def join(self, timeout=...) -> None:
+    def join(self, timeout=None) -> None:
         super().join(timeout)
         if e := getattr(self, "exception", None):
             raise e
@@ -27,6 +27,7 @@ def _test_lock_manager(create_lock_manager: Callable[[], BaseLockManager]):
 
     ready_barrier = threading.Barrier(2)
     locked_event = threading.Event()
+    sleep_event = threading.Event()
     unlocked_event = threading.Event()
     done_barrier = threading.Barrier(2)
 
@@ -39,6 +40,8 @@ def _test_lock_manager(create_lock_manager: Callable[[], BaseLockManager]):
                 assert lm.get_lock_state(lock_name) == LockState.LOCKED
                 locked_event.set()
                 time.sleep(sleep_time)
+                sleep_event.set()
+                time.sleep(0.025)
             unlocked_event.set()
         finally:
             done_barrier.wait(timeout=3)
@@ -55,9 +58,9 @@ def _test_lock_manager(create_lock_manager: Callable[[], BaseLockManager]):
         try:
             with lm(lock_name):
                 assert lm.get_lock_state(lock_name) == LockState.LOCKED
-
                 end_time = time.perf_counter()
-                if not unlocked_event.is_set():
+
+                if not sleep_event.is_set() or not unlocked_event.wait(timeout=0.025):
                     raise RuntimeError(
                         "Second lock manager was able to acquire lock before the "
                         "first lock manager released it."
@@ -122,3 +125,17 @@ def test_no_lock():
     with pytest.raises(BaseException):
         _test_lock_manager(create_lock_manager)
         pytest.fail("No lock manager MUST fail the lock manager tests")
+
+
+@with_instances("postgres", "mssql", "ibm_db2")
+def test_database():
+    from pydiverse.pipedag import ConfigContext
+    from pydiverse.pipedag.backend.lock import DatabaseLockManager
+
+    config_context = ConfigContext.get()
+
+    def create_lock_manager():
+        with config_context.evolve():
+            return DatabaseLockManager.init_from_config_context(config_context)
+
+    _test_lock_manager(create_lock_manager)
