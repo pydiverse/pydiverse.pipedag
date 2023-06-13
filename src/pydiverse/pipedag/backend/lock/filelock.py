@@ -50,22 +50,20 @@ class FileLockManager(BaseLockManager):
             lock_path = self.lock_path(lockable)
             self.locks[lockable] = fl.FileLock(lock_path)
 
-        f_lock = self.locks[lockable]
-        if not f_lock.is_locked:
+        lock = self.locks[lockable]
+        if not lock.is_locked:
             self.logger.info(f"Locking '{lockable}'")
-        f_lock.acquire()
+        lock.acquire()
         self.set_lock_state(lockable, LockState.LOCKED)
 
     def release(self, lockable: Lockable):
         if lockable not in self.locks:
             raise LockError(f"No lock '{lockable}' found.")
 
-        f_lock = self.locks[lockable]
-        f_lock.release()
-
-        if not f_lock.is_locked:
+        lock = self.locks[lockable]
+        lock.release()
+        if not lock.is_locked:
             self.logger.info(f"Unlocking '{lockable}'")
-            os.remove(f_lock.lock_file)
             del self.locks[lockable]
             self.set_lock_state(lockable, LockState.UNLOCKED)
 
