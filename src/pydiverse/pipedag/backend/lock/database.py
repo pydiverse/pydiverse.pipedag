@@ -20,6 +20,17 @@ from pydiverse.pipedag.errors import LockError
 
 
 class DatabaseLockManager(BaseLockManager):
+    """Lock manager based on database locking mechanisms
+
+    Many databases provide some kind of locking mechanism. Depending on the specific
+    database technology, this allows us to implement locking on either the schema
+    level (where each stage can be locked and unlocked individually), or only on
+    the instance level (where the entire instance including all stages get locked and
+    unlocked together).
+
+    The database specific lock implementations can be found at the end of the file.
+    """
+
     @classmethod
     def _init_conf_(cls, config: dict[str, Any]):
         assert (
