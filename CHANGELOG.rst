@@ -7,6 +7,8 @@ https://semver.org/spec/v2.0.0.html. The most important bits are:
 Changelog
 =========
 
+- implement DatabaseLockManager: lock manager based on locking mechanism provided by database.
+
 0.4.0 (2023-06-08)
 ------------------
 - update public interface

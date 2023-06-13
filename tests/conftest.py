@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import os
 import itertools
+import os
 from collections import defaultdict
 from pathlib import Path
 

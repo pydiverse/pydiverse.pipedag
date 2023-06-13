@@ -68,6 +68,7 @@ class SQLTableStore(BaseTableStore):
     """
 
     METADATA_SCHEMA = "pipedag_metadata"
+    LOCK_SCHEMA = "pipedag_locks"
 
     @classmethod
     def _init_conf_(cls, config: dict[str, Any]):
@@ -1483,6 +1484,14 @@ class SQLTableStore(BaseTableStore):
             ).all()
             result = [row[0] for row in result]
         return compute_cache_key(*result)
+
+    # DatabaseLockManager
+
+    def get_engine_for_locking(self) -> sa.Engine:
+        return self._connect(self.engine_url, self.schema_prefix, self.schema_suffix)
+
+    def get_lock_schema(self) -> Schema:
+        return self.get_schema(self.LOCK_SCHEMA)
 
 
 @SQLTableStore.register_table()

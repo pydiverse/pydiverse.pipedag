@@ -98,6 +98,7 @@ instances:
       table_store_connection: postgres
 
   local_table_cache:
+    instance_id: local_table_cache
     table_store:
       local_table_cache:
         class: "pydiverse.pipedag.backend.table_cache.ParquetTableCache"
@@ -105,6 +106,7 @@ instances:
           base_path: "/tmp/pipedag/table_cache"
 
   local_table_cache_inout:
+    instance_id: local_table_cache_inout
     table_store:
       local_table_cache:
         store_input: true
@@ -115,6 +117,7 @@ instances:
           base_path: "/tmp/pipedag/table_cache"
 
   local_table_store:
+    instance_id: local_table_store
     table_store:
       local_table_cache:
         store_input: true
