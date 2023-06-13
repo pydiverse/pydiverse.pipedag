@@ -2046,11 +2046,9 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
 try:
     # optional dependency to ibis
     import ibis
-    import ibis.expr.types as ibis_types
 except ImportError as e:
     warnings.warn(str(e), ImportWarning)
     ibis = None
-    ibis_types = None
 
 
 @SQLTableStore.register_table(ibis)
@@ -2089,17 +2087,17 @@ class IbisTableHook(TableHook[SQLTableStore]):
     @classmethod
     def can_materialize(cls, type_) -> bool:
         # Operations on a table like mutate() or join() don't change the type
-        return issubclass(type_, ibis_types.Table)
+        return issubclass(type_, ibis.expr.types.Table)
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        return issubclass(type_, ibis_types.Table)
+        return issubclass(type_, ibis.expr.types.Table)
 
     @classmethod
     def materialize(
         cls,
         store,
-        table: Table[ibis_types.Table],
+        table: Table[ibis.expr.types.Table],
         stage_name,
         task_info: TaskInfo | None,
     ):
@@ -2114,9 +2112,9 @@ class IbisTableHook(TableHook[SQLTableStore]):
         store: SQLTableStore,
         table: Table,
         stage_name: str,
-        as_type: type[ibis_types.Table],
+        as_type: type[ibis.expr.types.Table],
         namer: NameDisambiguator | None = None,
-    ) -> ibis_types.Table:
+    ) -> ibis.expr.types.Table:
         con = cls.get_con(store)
         table_name = table.name
         schema = store.get_schema(stage_name).get()
@@ -2138,14 +2136,14 @@ class IbisTableHook(TableHook[SQLTableStore]):
         return tbl
 
     @classmethod
-    def auto_table(cls, obj: ibis_types.Table):
+    def auto_table(cls, obj: ibis.expr.types.Table):
         if obj.has_name():
             return Table(obj, obj.get_name())
         else:
             return super().auto_table(obj)
 
     @classmethod
-    def lazy_query_str(cls, store, obj: ibis_types.Table) -> str:
+    def lazy_query_str(cls, store, obj: ibis.expr.types.Table) -> str:
         return str(ibis.to_sql(obj, cls.get_con(store).name))
 
 
