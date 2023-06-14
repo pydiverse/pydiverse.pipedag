@@ -1597,7 +1597,7 @@ def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0
     schema = ibm_db_sa_fix_name(schema)
     tbl = sa.Table("SYSTABLES", sa.MetaData(), schema="SYSIBM", autoload_with=conn)
     query = (
-        sa_select([tbl.c.base_name, tbl.c.base_schema])
+        sa.select(tbl.c.base_name, tbl.c.base_schema)
         .select_from(tbl)
         .where(
             (tbl.c.creator == schema) & (tbl.c.name == table_name) & (tbl.c.TYPE == "A")
@@ -1812,7 +1812,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
                         {c.name: c for c in sql_table.c}, store.engine.dialect.name
                     )
                     dtype_map.update({col: pd.Int16Dtype() for col in year_cols})
-                    query = sa_select(cols.values()).select_from(sql_table)
+                    query = sa.select(*cols.values()).select_from(sql_table)
                     try:
                         # works only from pandas 2.0.0 on
                         df = pd.read_sql(
@@ -2145,15 +2145,3 @@ class IbisTableHook(TableHook[SQLTableStore]):
     @classmethod
     def lazy_query_str(cls, store, obj: ibis.expr.types.Table) -> str:
         return str(ibis.to_sql(obj, cls.get_con(store).name))
-
-
-def sa_select(*args, **kwargs):
-    """Run sa.select in 'old' way compatible with sqlalchemy>=2.0."""
-    try:
-        return sa.select(*args, **kwargs)
-    except sa.exc.ArgumentError:
-        if len(args) == 1 and isinstance(args[0], Iterable) and len(kwargs) == 0:
-            # for sqlalchemy 2.0, we need to unpack columns
-            return sa.select(*args[0])
-        else:
-            raise

@@ -8,7 +8,6 @@ import sqlalchemy as sa
 import structlog
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize, ConfigContext
-from pydiverse.pipedag.backend.table.sql import sa_select
 from pydiverse.pipedag.context import RunContext, StageLockContext
 from pydiverse.pipedag.core.config import PipedagConfig
 
@@ -405,7 +404,7 @@ def _lazy_task_2():
 
 @materialize(lazy=True, input_type=sa.Table)
 def _lazy_join(src1: sa.Table, src2: sa.Table):
-    query = sa_select([src1.c.x, src2.c.x.label("x2")]).select_from(
+    query = sa.select(src1.c.x, src2.c.x.label("x2")).select_from(
         src1.outerjoin(src2, src1.c.x == src2.c.x)
     )
     return Table(query, "t3_%%", indexes=[["x2"], ["x", "x2"]])
@@ -418,14 +417,15 @@ def _sql_task_1():
 
 @materialize(version="1.0", nout=2)
 def _sql_task_2():
-    return Table(select_as(1, "x"), name="t21", indexes=[["x"]]), Table(
-        select_as(2, "x"), name="t22", primary_key=["x"]
+    return (
+        Table(select_as(1, "x"), name="t21", indexes=[["x"]]),
+        Table(select_as(2, "x"), name="t22", primary_key=["x"]),
     )
 
 
 @materialize(version="1.0", input_type=sa.Table)
 def _sql_join(src1: sa.Table, src2: sa.Table):
-    query = sa_select([src1.c.x, src2.c.x.label("x2")]).select_from(
+    query = sa.select(src1.c.x, src2.c.x.label("x2")).select_from(
         src1.outerjoin(src2, src1.c.x == src2.c.x)
     )
     return Table(query, "t3_%%", indexes=[["x2"], ["x", "x2"]])
@@ -441,8 +441,9 @@ def _eager_task_1():
 def _eager_task_2():
     df1 = pd.DataFrame(dict(x=[1]))
     df2 = pd.DataFrame(dict(x=[2]))
-    return Table(df1, name="t21", indexes=[["x"]]), Table(
-        df2, name="t22", primary_key=["x"]
+    return (
+        Table(df1, name="t21", indexes=[["x"]]),
+        Table(df2, name="t22", primary_key=["x"]),
     )
 
 
