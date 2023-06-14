@@ -42,8 +42,9 @@ setup_logging()
 @pytest.fixture(autouse=True, scope="session")
 def structlog_test_info(request):
     """Add testcase information to structlog context"""
-    if "DEBUG" not in os.environ:
+    if not os.environ.get("DEBUG", ""):
         yield
+        return
 
     import structlog
 
