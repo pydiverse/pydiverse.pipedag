@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import pandas as pd
 
-from pydiverse.pipedag import Blob, Flow, Stage, Table
+from pydiverse.pipedag import Blob, Flow, Stage, Table, ConfigContext
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import materialize
-from pydiverse.pipedag.core import PipedagConfig
 
 from tests.util import select_as, compile_sql, tasks_library as m
 from tests.util.spy import spy_task
@@ -575,13 +574,11 @@ def test_change_version_table(mocker):
 
 
 def test_ignore_task_version(mocker):
-    cfg = PipedagConfig.default.get("ignore_task_version")
-
-    input_list = [1]
+    cfg = ConfigContext.get().evolve(ignore_task_version=True)
 
     with Flow() as flow:
         with Stage("stage_1"):
-            out = m.noop(input_list)
+            out = m.noop([1])
             child = m.noop2(out)
 
     # Initial Call

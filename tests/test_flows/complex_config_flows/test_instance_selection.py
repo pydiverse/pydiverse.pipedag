@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -10,6 +12,29 @@ from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.backend.table.util.pandas import adj_pandas_types
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.core.config import PipedagConfig
+
+
+@pytest.fixture(
+    scope="function",
+    params=[
+        "pipedag_complex.yaml",
+        "pipedag_anchor.yaml",
+    ],
+)
+def cfg_file_path(request):
+    password_cfg_path = str(Path(__file__).parent / "postgres_password.yaml")
+
+    old_environ = dict(os.environ)
+    os.environ["POSTGRES_PASSWORD_CFG"] = password_cfg_path
+
+    yield Path(__file__).parent / request.param
+
+    os.environ.clear()
+    os.environ.update(old_environ)
+
+
+########################################################################################
+
 
 dfA_source = pd.DataFrame(
     {
@@ -149,8 +174,8 @@ def _check_result(result, out1, out2, *, head=999):
     pd.testing.assert_frame_equal(dfA_source_adj.head(head) * 4, v_out2)
 
 
-# In the future, the following test functions should be auto-generatable via pydiverse.pipetest library
-# based on tags in pipedag_complax.yaml
+# In the future, the following test functions should be auto-generatable
+# via pydiverse.pipetest library based on tags in pipedag_complex.yaml
 
 
 @pytest.mark.slow5

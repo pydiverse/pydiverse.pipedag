@@ -32,18 +32,16 @@ def double_values(df: pd.DataFrame):
     return Table(df)
 
 
-# noinspection DuplicatedCode
 @materialize(input_type=sa.Table, lazy=True)
 def join_on_a(left: sa.Table, right: sa.Table):
     return Table(left.select().join(right, left.c.a == right.c.a))
 
 
 # noinspection PyTypeChecker
-def _get_flow(name="default"):
-    with Flow(name) as flow:
+def get_flow():
+    with Flow() as flow:
         with Stage("simple_flow_stage1"):
             a, b = inputs()
-
             a2 = double_values(a)
 
         with Stage("simple_flow_stage2"):
@@ -54,7 +52,7 @@ def _get_flow(name="default"):
 
 
 def test_simple_flow():
-    flow = _get_flow()
+    flow = get_flow()
     result = flow.run()  # this will use the default configuration instance=__any__
     assert result.successful
 
@@ -62,25 +60,25 @@ def test_simple_flow():
 def test_alternative_way_to_load_config():
     # this will use the default configuration instance=__any__
     cfg = PipedagConfig.default.get()
-    flow = _get_flow(cfg.pipedag_name)
+    flow = get_flow()
     result = flow.run(cfg)
     assert result.successful
 
 
 @pytest.mark.mssql
+@pytest.mark.parallelize("mssql")
 def test_mssql():
-    # this will use the default configuration instance=__any__
     cfg = PipedagConfig.default.get(instance="mssql")
-    flow = _get_flow(cfg.pipedag_name)
+    flow = get_flow()
     result = flow.run(cfg)
     assert result.successful
 
 
 @pytest.mark.ibm_db2
+@pytest.mark.parallelize("ibm_db2")
 def test_ibm_db2():
-    # this will use the default configuration instance=__any__
     cfg = PipedagConfig.default.get(instance="ibm_db2")
-    flow = _get_flow(cfg.pipedag_name)
+    flow = get_flow()
     result = flow.run(cfg)
     assert result.successful
 

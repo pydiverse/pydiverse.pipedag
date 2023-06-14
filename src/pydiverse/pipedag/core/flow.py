@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
@@ -236,7 +237,9 @@ class Flow:
             Result object that gives information whether run was successful
         """
 
-        # TODO: implement running only a subset of stages (see parameter stages)
+        if stages is not None:
+            # TODO: implement running only a subset of stages (see parameter stages)
+            warnings.warn("flow.run(stages=...) isn't yet supported")
 
         # Get the ConfigContext to use
         if config_context is None:

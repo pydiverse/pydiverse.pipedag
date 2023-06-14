@@ -5,9 +5,10 @@ from pathlib import Path
 import pytest
 import sqlalchemy as sa
 
-from pydiverse.pipedag import Flow, Stage, materialize, PipedagConfig
+from pydiverse.pipedag import Flow, Stage, materialize
 from pydiverse.pipedag.context import ConfigContext, StageLockContext
 from pydiverse.pipedag.materialize.container import RawSql
+from tests.fixtures.instances import with_instances
 
 """
 Attention: Wrapping Raw SQL statements should always be just the first step of pipedag adoption.
@@ -52,9 +53,11 @@ def raw_sql_bind_schema(
     return sql
 
 
-def _test_raw_sql(instance):
-    cfg = PipedagConfig.default.get(instance=instance)
-    parent_dir = Path(__file__).parent / "raw_sql_scripts" / instance
+@with_instances("mssql")
+def test_raw_sql():
+    instance_name = ConfigContext.get().instance_name
+    parent_dir = Path(__file__).parent / "raw_sql_scripts" / instance_name
+
     with Flow() as flow:
         with Stage("helper") as out_stage:
             helper = tsql("create_db_helpers.sql", parent_dir, out_stage=out_stage)
@@ -75,51 +78,41 @@ def _test_raw_sql(instance):
                 "more_tables.sql", _dir, in_sql=raw, out_stage=prep_stage, depend=prep
             )
             _ = prep
+
     # on a fresh database, this will create indexes with Raw-SQL
-    _run_and_check(cfg, flow, prep_stage)
+    _run_and_check(flow, prep_stage)
     # make sure cached execution creates the same indexes
-    _run_and_check(cfg, flow, prep_stage)
+    _run_and_check(flow, prep_stage)
 
 
-def _run_and_check(cfg, flow, prep_stage):
+def _run_and_check(flow, prep_stage):
+    config_ctx = ConfigContext.get()
+
     with StageLockContext():
-        flow_result = flow.run(cfg)
+        flow_result = flow.run()
         assert flow_result.successful
-        with flow_result.config_context as config_ctx:
-            schema = config_ctx.store.table_store.get_schema(prep_stage.name).get()
-            inspector = sa.inspect(config_ctx.store.table_store.engine)
-            # these constraints might be a bit too harsh in case this test is extended
-            # to more databases
-            assert set(inspector.get_table_names(schema=schema)) == {
-                "raw01A",
-                "table01",
-            }
-            pk = inspector.get_pk_constraint("raw01A", schema=schema)
-            assert pk["constrained_columns"] == ["entity", "start_date"]
-            assert pk["name"].startswith("PK__raw01A__")
-            pk = inspector.get_pk_constraint("table01", schema=schema)
-            assert pk["constrained_columns"] == ["entity", "reason"]
-            assert pk["name"].startswith("PK__table01__")
-            assert len(inspector.get_indexes("table01", schema=schema)) == 0
-            indexes = inspector.get_indexes("raw01A", schema=schema)
-            assert indexes[0]["name"] == "raw_start_date"
-            assert indexes[0]["column_names"] == ["start_date"]
-            assert indexes[1]["name"] == "raw_start_date_end_date"
-            assert indexes[1]["column_names"] == ["end_date", "start_date"]
 
+        schema = config_ctx.store.table_store.get_schema(prep_stage.name).get()
+        inspector = sa.inspect(config_ctx.store.table_store.engine)
 
-@pytest.mark.mssql
-# pytsql is currently not ready for this code
-# @pytest.mark.parametrize("instance", ["mssql", "mssql_pytsql", "mssql_pytsql_isolate"])
-@pytest.mark.parametrize("instance", ["mssql"])
-def test_raw_sql_mssql(instance):
-    _test_raw_sql(instance)
+        # these constraints might be a bit too harsh in case this test is extended
+        # to more databases
+        assert set(inspector.get_table_names(schema=schema)) == {
+            "raw01A",
+            "table01",
+        }
 
+        pk = inspector.get_pk_constraint("raw01A", schema=schema)
+        assert pk["constrained_columns"] == ["entity", "start_date"]
+        assert pk["name"].startswith("PK__raw01A__")
 
-# @pytest.mark.ibm_db2
-# def test_raw_sql_ibm_db2():
-#     _test_raw_sql("ibm_db2")
-#
-#
-# def test_raw_sql_mssql_postgres():
-#     _test_raw_sql("postgres")
+        pk = inspector.get_pk_constraint("table01", schema=schema)
+        assert pk["constrained_columns"] == ["entity", "reason"]
+        assert pk["name"].startswith("PK__table01__")
+        assert len(inspector.get_indexes("table01", schema=schema)) == 0
+
+        indexes = inspector.get_indexes("raw01A", schema=schema)
+        assert indexes[0]["name"] == "raw_start_date"
+        assert indexes[0]["column_names"] == ["start_date"]
+        assert indexes[1]["name"] == "raw_start_date_end_date"
+        assert indexes[1]["column_names"] == ["end_date", "start_date"]

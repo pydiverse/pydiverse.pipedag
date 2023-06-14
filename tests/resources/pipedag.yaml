@@ -91,12 +91,6 @@ instances:
       args:
         avoid_drop_create_schema: true
 
-  ignore_task_version:
-    instance_id: pd_postgres
-    ignore_task_version: true
-    table_store:
-      table_store_connection: postgres
-
   local_table_cache:
     instance_id: local_table_cache
     table_store:
