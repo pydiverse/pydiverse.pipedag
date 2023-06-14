@@ -45,8 +45,10 @@ def pytest_generate_tests(metafunc: pytest.Metafunc):
     #     global level.
 
     instances = {}
+    kwargs = {}
     if mark := metafunc.definition.get_closest_marker("instances"):
         instances = dict.fromkeys(mark.args)
+        kwargs = dict(mark.kwargs)
     if mark := metafunc.definition.get_closest_marker("skip_instances"):
         for instance in mark.args:
             if instance in instances:
@@ -56,9 +58,11 @@ def pytest_generate_tests(metafunc: pytest.Metafunc):
         params = []
         for instance in instances:
             if instance in INSTANCE_MARKS:
-                params.append(pytest.param(instance, marks=INSTANCE_MARKS[instance]))
+                params.append(
+                    pytest.param((instance, kwargs), marks=INSTANCE_MARKS[instance])
+                )
             else:
-                params.append(instance)
+                params.append((instance, kwargs))
 
         metafunc.parametrize("run_with_instance", params, indirect=True)
 
@@ -86,7 +90,6 @@ def pytest_collection_modifyitems(config: pytest.Config, items):
 def pytest_parallelize_group_items(config, items):
     groups = defaultdict(list)
     auto_group_iter = itertools.cycle([f"auto_{i}" for i in range(os.cpu_count() or 4)])
-
     for item in items:
         group = "DEFAULT"
 
@@ -99,7 +102,8 @@ def pytest_parallelize_group_items(config, items):
 
         if hasattr(item, "callspec"):
             if instance := item.callspec.params.get("run_with_instance"):
-                group = instance
+                # instance is a tuple of (instance_name, config_kwargs)
+                group = instance[0]
 
         groups[group].append(item)
     return groups

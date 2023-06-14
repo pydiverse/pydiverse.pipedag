@@ -38,9 +38,13 @@ ALL_INSTANCES = (
 )
 
 
-def with_instances(*instances):
-    """Decorator to run a test with a specific set of instances"""
-    return pytest.mark.instances(*flatten(instances))
+def with_instances(*instances, **kwargs):
+    """Decorator to run a test with a specific set of instances
+
+    :param instances: Names of the instances to use.
+    :param kwargs: keyword arguments passed to PipedagConfig.default.get()
+    """
+    return pytest.mark.instances(*flatten(instances), **kwargs)
 
 
 def skip_instances(*instances):
@@ -63,8 +67,8 @@ def flatten(it):
 def fixture_run_with_instance(request):
     """Fixture that runs test with different config instances"""
     if hasattr(request, "param"):
-        instance = request.param
-        config = PipedagConfig.default.get(instance=instance)
+        instance, kwargs = request.param
+        config = PipedagConfig.default.get(instance=instance, **kwargs)
         with config:
             yield instance
     else:
