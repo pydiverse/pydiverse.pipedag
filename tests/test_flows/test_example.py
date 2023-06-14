@@ -1,74 +1,27 @@
-from pydiverse.pipedag import materialize, Table, Flow, Stage
-import sqlalchemy as sa
-import pandas as pd
-
-from pydiverse.pipedag.backend.table.sql import sa_select
-from pydiverse.pipedag.context import StageLockContext
+import sys
+import os
+from pathlib import Path
 
 
 def test_example_flow():
-    @materialize(lazy=True)
-    def lazy_task_1():
-        return sa_select([sa.literal(1).label("x"), sa.literal(2).label("y")])
+    """
+    This test just runs the example pipeline that we provide in example/run_pipeline.py
+    """
 
-    @materialize(lazy=True, input_type=sa.Table)
-    def lazy_task_2(input1: sa.Table, input2: sa.Table):
-        query = sa_select([(input1.c.x * 5).label("x5"), input2.c.a]).select_from(
-            input1.outerjoin(input2, input2.c.x == input1.c.x)
-        )
-        return Table(query, name="task_2_out", primary_key=["a"])
+    example_path = str(Path(__file__).parent / ".." / ".." / "example")
+    sys.path.insert(0, example_path)
+    from example.run_pipeline import main
 
-    @materialize(lazy=True, input_type=sa.Table)
-    def lazy_task_3(input: sa.Table):
-        return sa.text(f"SELECT * FROM {input.original.schema}.{input.name}")
-
-    @materialize(lazy=True, input_type=sa.Table)
-    def lazy_task_4(input: sa.Table):
-        return sa.text(f"SELECT * FROM {input.original.schema}.{input.name}")
-
-    @materialize(nout=2, version="1.0.0")
-    def eager_inputs():
-        dfA = pd.DataFrame(
-            {
-                "a": [0, 1, 2, 4],
-                "b": [9, 8, 7, 6],
-            }
-        )
-        dfB = pd.DataFrame(
-            {
-                "a": [2, 1, 0, 1],
-                "x": [1, 1, 2, 2],
-            }
-        )
-        return Table(dfA, "dfA"), Table(dfB, "dfB_%%")
-
-    @materialize(version="1.0.0", input_type=pd.DataFrame)
-    def eager_task(tbl1: pd.DataFrame, tbl2: pd.DataFrame):
-        return tbl1.merge(tbl2, on="x")
-
-    def main():
-        with Flow() as f:
-            with Stage("stage_1"):
-                lazy_1 = lazy_task_1()
-                a, b = eager_inputs()
-
-            with Stage("stage_2"):
-                lazy_2 = lazy_task_2(lazy_1, b)
-                lazy_3 = lazy_task_3(lazy_2)
-                eager = eager_task(lazy_1, b)
-
-            with Stage("stage_3"):
-                lazy_4 = lazy_task_4(lazy_2)
-            _ = lazy_3, lazy_4, eager  # unused terminal output tables
-
-        # Run flow
-        result = f.run()
-        assert result.successful
-
-        # Run in a different way for testing
-        with StageLockContext():
-            result = f.run()
-            assert result.successful
-            assert result.get(lazy_1, as_type=pd.DataFrame)["x"][0] == 1
+    old_environ = dict(os.environ)
+    os.environ.update(
+        {
+            "PIPEDAG_CONFIG": example_path,
+            "POSTGRES_USERNAME": "sa",
+            "POSTGRES_PASSWORD": "Pydiverse23",
+        }
+    )
 
     main()
+
+    os.environ.clear()
+    os.environ.update(old_environ)

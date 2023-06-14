@@ -105,34 +105,39 @@ Afterwards you can run `pytest --ibm_db2`.
 A flow can look like this (see `example/run_pipeline.py`):
 
 ```python
-from pydiverse.pipedag import materialize, Table, Flow, Stage
-import sqlalchemy as sa
 import pandas as pd
+import sqlalchemy as sa
 
-from pydiverse.pipedag.context import StageLockContext, RunContext
+from pydiverse.pipedag import Flow, Stage, Table, materialize
+from pydiverse.pipedag.context import StageLockContext
 
 
 @materialize(lazy=True)
 def lazy_task_1():
-    return sa.select([sa.literal(1).label("x"), sa.literal(2).label("y")])
+    return sa.select(
+        sa.literal(1).label("x"),
+        sa.literal(2).label("y"),
+    )
 
 
 @materialize(lazy=True, input_type=sa.Table)
 def lazy_task_2(input1: sa.Table, input2: sa.Table):
-    query = sa.select([(input1.c.x * 5).label("x5"), input2.c.a]).select_from(
-        input1.outerjoin(input2, input2.c.x == input1.c.x)
-    )
+    query = sa.select(
+        (input1.c.x * 5).label("x5"),
+        input2.c.a,
+    ).select_from(input1.outerjoin(input2, input2.c.x == input1.c.x))
+
     return Table(query, name="task_2_out", primary_key=["a"])
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_3(input: sa.Table):
-    return sa.text(f"SELECT * FROM {input.original.schema}.{input.name}")
+def lazy_task_3(input1: sa.Table):
+    return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.name}")
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_4(input: sa.Table):
-    return sa.text(f"SELECT * FROM {input.original.schema}.{input.name}")
+def lazy_task_4(input1: sa.Table):
+    return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.name}")
 
 
 @materialize(nout=2, version="1.0.0")

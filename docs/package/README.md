@@ -1,6 +1,6 @@
 # pydiverse.pipedag
 
-[![CI](https://github.com/pydiverse/pydiverse.pipedag/actions/workflows/ci.yml/badge.svg)](https://github.com/pydiverse/pydiverse.pipedag/actions/workflows/ci.yml)
+[![CI](https://github.com/pydiverse/pydiverse.pipedag/actions/workflows/tests.yml/badge.svg)](https://github.com/pydiverse/pydiverse.pipedag/actions/workflows/tests.yml)
 
 A pipeline orchestration library executing tasks within one python session. It takes care of SQL table
 (de)materialization, caching and cache invalidation. Blob storage is supported as well for example
@@ -20,34 +20,39 @@ with `conda install pydiverse-pipedag -c conda-forge`.
 A flow can look like this (i.e. put this in a file named `run_pipeline.py`):
 
 ```python
-from pydiverse.pipedag import materialize, Table, Flow, Stage
-import sqlalchemy as sa
 import pandas as pd
+import sqlalchemy as sa
 
-from pydiverse.pipedag.context import StageLockContext, RunContext
+from pydiverse.pipedag import Flow, Stage, Table, materialize
+from pydiverse.pipedag.context import StageLockContext
 
 
 @materialize(lazy=True)
 def lazy_task_1():
-    return sa.select([sa.literal(1).label("x"), sa.literal(2).label("y")])
+    return sa.select(
+        sa.literal(1).label("x"),
+        sa.literal(2).label("y"),
+    )
 
 
 @materialize(lazy=True, input_type=sa.Table)
 def lazy_task_2(input1: sa.Table, input2: sa.Table):
-    query = sa.select([(input1.c.x * 5).label("x5"), input2.c.a]).select_from(
-        input1.outerjoin(input2, input2.c.x == input1.c.x)
-    )
+    query = sa.select(
+        (input1.c.x * 5).label("x5"),
+        input2.c.a,
+    ).select_from(input1.outerjoin(input2, input2.c.x == input1.c.x))
+
     return Table(query, name="task_2_out", primary_key=["a"])
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_3(input: sa.Table, my_stage: Stage):
-    return sa.text(f"SELECT * FROM {my_stage.transaction_name}.{input.name}")
+def lazy_task_3(input1: sa.Table):
+    return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.name}")
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_4(input: sa.Table, prev_stage: Stage):
-    return sa.text(f"SELECT * FROM {prev_stage.name}.{input.name}")
+def lazy_task_4(input1: sa.Table):
+    return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.name}")
 
 
 @materialize(nout=2, version="1.0.0")
@@ -78,13 +83,13 @@ def main():
             lazy_1 = lazy_task_1()
             a, b = eager_inputs()
 
-        with Stage("stage_2") as stage2:
+        with Stage("stage_2"):
             lazy_2 = lazy_task_2(lazy_1, b)
-            lazy_3 = lazy_task_3(lazy_2, stage2)
+            lazy_3 = lazy_task_3(lazy_2)
             eager = eager_task(lazy_1, b)
 
         with Stage("stage_3"):
-            lazy_4 = lazy_task_4(lazy_2, stage2)
+            lazy_4 = lazy_task_4(lazy_2)
         _ = lazy_3, lazy_4, eager  # unused terminal output tables
 
     # Run flow
