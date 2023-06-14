@@ -39,6 +39,18 @@ setup_logging()
 # Pytest Configuration
 
 
+@pytest.fixture(autouse=True, scope="session")
+def structlog_test_info(request):
+    """Add testcase information to structlog context"""
+    if "DEBUG" not in os.environ:
+        yield
+
+    import structlog
+
+    with structlog.contextvars.bound_contextvars(testcase=request.node.name):
+        yield
+
+
 def pytest_generate_tests(metafunc: pytest.Metafunc):
     # Parametrize tests based on `instances` and `skip_instances` mark.
     # Depends on the `fixture_run_with_instance` fixture to be imported at a
