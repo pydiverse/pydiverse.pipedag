@@ -11,13 +11,13 @@ pytestmark = [pytest.mark.ibis, with_instances(DATABASE_INSTANCES)]
 
 try:
     import ibis
-    from ibis.expr.types import Table as IbisTable
 except ImportError as _e:
     ibis = None
-    IbisTable = None
 
 
 def test_table_store():
+    IbisTable = ibis.expr.types.Table
+
     @materialize()
     def in_table():
         return Table(
