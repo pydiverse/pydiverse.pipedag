@@ -153,7 +153,6 @@ class Stage:
         state = self.__dict__.copy()
         state.pop("tasks", None)
         state.pop("commit_task", None)
-        state.pop("outer_stage", None)
         state.pop("logger", None)
         return state
 

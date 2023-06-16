@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import logging
 import os
 from collections import defaultdict
 from pathlib import Path
@@ -11,6 +12,7 @@ from pydiverse.pipedag.util.structlog import setup_logging
 
 # Load the `run_with_instances` fixture, so it gets applied to all tests
 from tests.fixtures.instances import INSTANCE_MARKS, fixture_run_with_instance
+from tests.util.dask_patch import *  # noqa: F401,F403
 
 _ = fixture_run_with_instance
 
@@ -33,7 +35,9 @@ def setup_environ():
 
 
 setup_environ()
-setup_logging()
+
+log_level = logging.INFO if not os.environ.get("DEBUG", "") else logging.DEBUG
+setup_logging(log_level=log_level)
 
 
 # Pytest Configuration
@@ -70,12 +74,14 @@ def pytest_generate_tests(metafunc: pytest.Metafunc):
     if len(instances):
         params = []
         for instance in instances:
-            if instance in INSTANCE_MARKS:
-                params.append(
-                    pytest.param((instance, kwargs), marks=INSTANCE_MARKS[instance])
+            marks = INSTANCE_MARKS.get(instance, ())
+            params.append(
+                pytest.param(
+                    (instance, kwargs),
+                    marks=marks,
+                    id=instance,
                 )
-            else:
-                params.append((instance, kwargs))
+            )
 
         metafunc.parametrize("run_with_instance", params, indirect=True)
 

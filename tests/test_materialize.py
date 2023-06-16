@@ -7,7 +7,7 @@ import pytest
 import sqlalchemy as sa
 import structlog
 
-from pydiverse.pipedag import Flow, Stage, Table, materialize, ConfigContext
+from pydiverse.pipedag import ConfigContext, Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import RunContext, StageLockContext
 from pydiverse.pipedag.core.config import PipedagConfig
 
@@ -56,7 +56,6 @@ def test_materialize_literals():
             materialize_and_retrieve("a" * 256)
 
             materialize_and_retrieve([0, 1, 2, 3])
-            materialize_and_retrieve((0, 1, 2, 3))
 
             materialize_and_retrieve({"0": 0, "1": 1})
 

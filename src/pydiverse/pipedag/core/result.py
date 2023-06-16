@@ -23,7 +23,7 @@ class Result:
     config_context: ConfigContext | None
 
     task_values: dict[Task, Any]
-    exception: Exception = None
+    exception: Exception | None = None
 
     def get(self, task: Task | TaskGetItem, as_type: type = None) -> Materializable:
         """Load the results of a task from the database.

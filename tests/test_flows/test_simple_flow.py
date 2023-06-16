@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 import sqlalchemy as sa
 
-from pydiverse.pipedag import Flow, Stage, Table, materialize, PipedagConfig
+from pydiverse.pipedag import Flow, Stage, Table, materialize
+from tests.fixtures.instances import with_instances, DATABASE_INSTANCES
 
 
 @materialize(nout=2, version="1.1")
-@pytest.mark.skipif()
 def inputs():
     df_a = pd.DataFrame(
         {
@@ -51,35 +50,10 @@ def get_flow():
     return flow
 
 
+@with_instances(DATABASE_INSTANCES, "dask_engine")
 def test_simple_flow():
     flow = get_flow()
-    result = flow.run()  # this will use the default configuration instance=__any__
-    assert result.successful
-
-
-def test_alternative_way_to_load_config():
-    # this will use the default configuration instance=__any__
-    cfg = PipedagConfig.default.get()
-    flow = get_flow()
-    result = flow.run(cfg)
-    assert result.successful
-
-
-@pytest.mark.mssql
-@pytest.mark.parallelize("mssql")
-def test_mssql():
-    cfg = PipedagConfig.default.get(instance="mssql")
-    flow = get_flow()
-    result = flow.run(cfg)
-    assert result.successful
-
-
-@pytest.mark.ibm_db2
-@pytest.mark.parallelize("ibm_db2")
-def test_ibm_db2():
-    cfg = PipedagConfig.default.get(instance="ibm_db2")
-    flow = get_flow()
-    result = flow.run(cfg)
+    result = flow.run()
     assert result.successful
 
 

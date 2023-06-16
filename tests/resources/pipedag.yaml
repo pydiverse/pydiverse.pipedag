@@ -57,6 +57,8 @@ instances:
 
   # Instances used by pytest
 
+  ## Database Instances
+
   postgres:
     instance_id: pd_postgres
     table_store:
@@ -91,6 +93,8 @@ instances:
       args:
         avoid_drop_create_schema: true
 
+  ## Table Cache Instances
+
   local_table_cache:
     instance_id: local_table_cache
     table_store:
@@ -120,3 +124,12 @@ instances:
         class: "pydiverse.pipedag.backend.table_cache.ParquetTableCache"
         args:
           base_path: "/tmp/pipedag/table_cache"
+
+  ## Orchestration Engine Instances
+
+  dask_engine:
+    instance_id: dask_engine
+    orchestration:
+      class: "pydiverse.pipedag.engine.DaskEngine"
+      args:
+        num_workers: 8

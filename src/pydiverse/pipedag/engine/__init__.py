@@ -1,4 +1,5 @@
 from .base import OrchestrationEngine
+from .dask import DaskEngine
 from .prefect import PrefectEngine, PrefectOneEngine, PrefectTwoEngine
 from .sequential import SequentialEngine
 
@@ -8,4 +9,5 @@ __all__ = [
     "PrefectOneEngine",
     "PrefectTwoEngine",
     "SequentialEngine",
+    "DaskEngine",
 ]
