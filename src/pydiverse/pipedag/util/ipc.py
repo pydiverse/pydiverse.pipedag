@@ -69,6 +69,9 @@ class IPCServer(threading.Thread):
         context = None
         context_id = 0
 
+        threads = set()
+        active_threads = 0
+
         try:
             context = self.socket.new_context()
             context_id += 1
@@ -114,6 +117,7 @@ class IPCServer(threading.Thread):
                     )
 
                     thread.start()
+                    threads.add(thread)
 
                     context = self.socket.new_context()
                     context_id += 1
@@ -121,9 +125,26 @@ class IPCServer(threading.Thread):
                     pass
                 except Exception:
                     self.logger.exception("Exception occurred in run_loop")
+
+                # Clear list of active threads
+                if len(threads) >= active_threads + 25:
+                    active_threads = 0
+                    for thread in list(threads):
+                        if thread.is_alive():
+                            active_threads += 1
+                        else:
+                            self.logger.debug("Joining thread", thread=thread.ident)
+                            thread.join()
+                            threads.remove(thread)
+
         finally:
             if context is not None:
                 context.close()  # close the open request-response context
+
+            for thread in threads:
+                self.logger.debug("Joining thread", thread=thread.ident)
+                thread.join()
+
             self.socket.close()
             self.logger.info("Stopped IPCServer")
 
@@ -149,6 +170,7 @@ class IPCServer(threading.Thread):
 
         try:
             socket.send(reply)
+            socket.close()
         except Exception:
             thread_logger.exception("Failed to send reply")
 
