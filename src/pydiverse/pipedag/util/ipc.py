@@ -42,64 +42,40 @@ class IPCServer(threading.Thread):
         self._fernet = Fernet(Fernet.generate_key())
 
         self.__stop_flag = False
-        self.__thread = None
-        self.logger = structlog.get_logger(logger_name=type(self).__name__)
+        self.logger = structlog.get_logger(
+            logger_name=type(self).__name__, address=self.address
+        )
 
         self.msg_default = msg_default
         self.msg_ext_hook = msg_ext_hook
 
-    def _get_id(self, ctx_id=0):
-        return dict(
-            address=self.address,
-            thread=threading.get_ident(),
-            ctx_id=ctx_id,
-        )
-
     def run(self):
-        self.logger.info("Starting IPCServer", **self._get_id())
+        self.logger.info("Starting IPCServer")
         self.run_loop()
 
     def stop(self):
         self.__stop_flag = True
-        self.logger.debug("Request IPCServer to stop", **self._get_id())
+        self.logger.debug("Request IPCServer to stop")
 
     def __enter__(self):
-        self.__thread = self
-        self.__thread.start()
-        self.logger.debug("Started IPCServer thread", thread=self.__thread.ident)
+        self.start()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop()
-        if self.__thread is not None:
-            self.logger.debug("Stop IPCServer thread", thread=self.__thread.ident)
-            self.__thread.join()
+        self.join()
 
     def run_loop(self):
-        """
-        Run main loop for responding to client requests to this server process.
+        context = None
+        context_id = 0
 
-        We rely on a fixed request-response pattern of pynng library (Req0/Rep0)
-        which requires us to open a context for every request-response pair.
-        We create threads for determining and sending responses and we keep 10
-        such threads in-flight. At the end we join all 10 threads even though
-        some threads might actually already have completed and may even share the
-        same ident number. We log thread IDs as hash(thread.ident) % 100 for
-        receiving human processable numbers.
-        """
-        max_threads_in_flight = 10  # keep up to 10 threads in flight
-
-        socket = None
-        ctx_id = 0
-        threads = []
         try:
-            socket = self.socket.new_context()
-            ctx_id += 1
-            self.logger.debug("New socket context", **self._get_id(ctx_id))
+            context = self.socket.new_context()
+            context_id += 1
+
             while not self.__stop_flag:
-                # noinspection PyBroadException
                 try:
-                    data = socket.recv()
+                    data = context.recv()
                     data = self._fernet.decrypt(data)
                     unpacker = msgpack.Unpacker(
                         use_list=False, ext_hook=self.msg_ext_hook
@@ -112,6 +88,7 @@ class IPCServer(threading.Thread):
                             "Expected request to contain exactly two fields:"
                             " nonce and payload."
                         )
+
                     nonce = unpacker.unpack()
                     nonce_hex = nonce.hex()
 
@@ -120,46 +97,35 @@ class IPCServer(threading.Thread):
                         self.logger.warning(
                             "Already processing request",
                             nonce=nonce_hex,
-                            **self._get_id(ctx_id),
                         )
-                        socket = self.socket.new_context()
-                        ctx_id += 1
-                        self.logger.debug("Next socket context", **self._get_id(ctx_id))
+
+                        context = self.socket.new_context()
+                        context_id += 1
                         continue
 
-                    self.nonces.add(nonce)
-
-                    if len(threads) >= max_threads_in_flight:
-                        self.logger.debug("Joining thread", thread=threads[0].ident)
-                        threads[0].join()
-                        del threads[0]
                     thread_logger = structlog.get_logger(
-                        logger_name="IPC Worker", nonce=nonce_hex, ctx_id=ctx_id
+                        logger_name="IPC Worker", nonce=nonce_hex, id=context_id
                     )
                     thread = threading.Thread(
                         name="IPC Worker",
                         target=self._serve,
-                        args=[thread_logger, socket, unpacker],
+                        args=[thread_logger, context, unpacker],
                         daemon=True,
                     )
-                    socket = self.socket.new_context()
-                    ctx_id += 1
-                    self.logger.debug("next socket context", **self._get_id(ctx_id))
-                    threads.append(thread)
+
                     thread.start()
+
+                    context = self.socket.new_context()
+                    context_id += 1
                 except pynng.Timeout:
                     pass
                 except Exception:
                     self.logger.exception("Exception occurred in run_loop")
         finally:
-            for thread in threads:
-                self.logger.debug("Joining thread", thread=thread.ident)
-                thread.join()
-            self.logger.debug("Closing socket", **self._get_id())
-            if socket is not None:
-                socket.close()  # close the open request-response context
+            if context is not None:
+                context.close()  # close the open request-response context
             self.socket.close()
-            self.logger.info("Stopped IPCServer", **self._get_id())
+            self.logger.info("Stopped IPCServer")
 
     def _serve(self, thread_logger, socket: pynng.Socket, unpacker):
         try:
@@ -218,10 +184,7 @@ class IPCServer(threading.Thread):
 
 class IPCClient:
     def __init__(self, addr: str, fernet: Fernet, msg_default=None, msg_ext_hook=None):
-        self.logger = structlog.get_logger(
-            logger_name=type(self).__name__,
-            thread=threading.get_ident(),
-        )
+        self.logger = structlog.get_logger(logger_name=type(self).__name__)
         self.addr = addr
         self._fernet = fernet
         self.msg_default = msg_default
@@ -235,18 +198,18 @@ class IPCClient:
 
     def request(self, payload: Any) -> Any:
         with self.socket.new_context() as socket:
-            self.logger.debug("Client request")
+            self.logger.debug("Client request", payload=payload)
             nonce = uuid.uuid4().bytes[:16]
             msg = msgpack.packb((nonce, payload), default=self.msg_default)
             msg = self._fernet.encrypt(msg)
             socket.send(msg)
 
             response = socket.recv()
-            self.logger.debug("Client got response")
             response = self._fernet.decrypt(response)
             response = msgpack.unpackb(
                 response, use_list=False, ext_hook=self.msg_ext_hook
             )
+            self.logger.debug("Client got response", response=response)
             return response
 
     def __getstate__(self):
