@@ -87,7 +87,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc):
 
 
 def pytest_addoption(parser):
-    for opt in ["mssql", "ibm_db2", "pdtransform", "ibis", "polars"]:
+    for opt in ["mssql", "ibm_db2", "pdtransform", "ibis", "polars", "dask"]:
         parser.addoption(
             "--" + opt,
             action="store_true",
@@ -97,7 +97,7 @@ def pytest_addoption(parser):
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items):
-    for opt in ["mssql", "ibm_db2", "pdtransform", "ibis", "polars"]:
+    for opt in ["mssql", "ibm_db2", "pdtransform", "ibis", "polars", "dask"]:
         if not config.getoption("--" + opt):
             skip = pytest.mark.skip(reason=f"{opt} not selected")
             for item in items:

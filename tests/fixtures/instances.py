@@ -19,6 +19,7 @@ INSTANCE_MARKS = {
     "mssql_pytsql": pytest.mark.mssql,
     "ibm_db2": pytest.mark.ibm_db2,
     "ibm_db2_avoid_schema": pytest.mark.ibm_db2,
+    "dask_engine": [pytest.mark.dask, pytest.mark.postgres],
 }
 
 # Collection of instances that represent different database technologies

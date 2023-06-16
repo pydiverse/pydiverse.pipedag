@@ -16,7 +16,7 @@ from tests.fixtures.instances import ALL_INSTANCES, with_instances
 from tests.util import select_as
 from tests.util import tasks_library as m
 
-pytestmark = [with_instances(ALL_INSTANCES)]
+pytestmark = [with_instances(ALL_INSTANCES, "dask_engine")]
 
 
 def test_materialize_literals():

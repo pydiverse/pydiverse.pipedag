@@ -63,7 +63,7 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/test
         with:
-          arguments: --workers 2
+          arguments: --workers 4
 
   db2_test:
     name: "DB2 Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
@@ -159,4 +159,4 @@ jobs:
         uses: ./.github/actions/test
         with:
           # --polars currently fails with sqlalchemy 2.0 (connectorx)
-          arguments: --workers 4 --mssql --pdtransform --ibis
+          arguments: --workers 4 --mssql --pdtransform --ibis --dask
