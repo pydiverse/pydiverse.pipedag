@@ -6,6 +6,7 @@ from threading import Thread
 from multiprocessing import Process, Queue
 from queue import Empty
 import time
+import signal
 
 import pytest
 from _pytest.python import Config
@@ -46,6 +47,9 @@ class Session:
             self.num_workers = num_workers
         except ValueError:
             raise ValueError('workers can only be an integer or "auto"')
+
+        signal.signal(signal.SIGINT, self.exit_gracefully)
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
 
     def pytest_runtestloop(self, session):
         if (
@@ -167,7 +171,7 @@ class Session:
                     args,
                     option_dict,
                 ),
-                daemon=True,
+                daemon=False,
             )
             worker.start()
 
@@ -188,3 +192,10 @@ class Session:
     def shutdown(self, reason: str):
         self._shutdown_reason = reason
         self._should_shutdown = True
+
+    def exit_gracefully(self, signum, frame):
+        for worker in self.workers:
+            worker.terminate()
+
+        signame = signal.Signals(signum).name
+        pytest.exit(f"Received signal {signame}")
