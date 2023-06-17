@@ -7,7 +7,10 @@ https://semver.org/spec/v2.0.0.html. The most important bits are:
 Changelog
 =========
 
-- implement DatabaseLockManager: lock manager based on locking mechanism provided by database.
+0.4.1 (2023-06-17)
+------------------
+- implement DaskEngine: orchestration engine for running multiple tasks in parallel
+- implement DatabaseLockManager: lock manager based on locking mechanism provided by database
 
 0.4.0 (2023-06-08)
 ------------------
