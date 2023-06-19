@@ -377,6 +377,14 @@ class BaseTableStore(TableHookResolver):
         :raises CacheError: if no metadata for this task can be found.
         """
 
+    @abstractmethod
+    def retrieve_all_task_metadata(self, task: MaterializingTask) -> list[TaskMetadata]:
+        """Retrieves all metadata objects associated with a task from the store
+
+        As long as a metadata entry has the same task and stage name, it should
+        get returned.
+        """
+
     # Lazy Table Metadata
 
     @abstractmethod

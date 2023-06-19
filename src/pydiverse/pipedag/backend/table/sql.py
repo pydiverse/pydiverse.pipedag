@@ -1320,6 +1320,32 @@ class SQLTableStore(BaseTableStore):
             output_json=result.output_json,
         )
 
+    def retrieve_all_task_metadata(self, task: MaterializingTask) -> list[TaskMetadata]:
+        with self.engine_connect() as conn:
+            results = (
+                conn.execute(
+                    self.tasks_table.select()
+                    .where(self.tasks_table.c.name == task.name)
+                    .where(self.tasks_table.c.stage == task.stage.name)
+                )
+                .mappings()
+                .all()
+            )
+
+        return [
+            TaskMetadata(
+                name=result.name,
+                stage=result.stage,
+                version=result.version,
+                timestamp=result.timestamp,
+                run_id=result.run_id,
+                input_hash=result.input_hash,
+                cache_fn_hash=result.cache_fn_hash,
+                output_json=result.output_json,
+            )
+            for result in results
+        ]
+
     def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
         if not self.disable_caching:
             with self.engine_connect() as conn:
