@@ -134,7 +134,7 @@ class Task:
 
         with run_context, config_context:
             try:
-                result = self._run(inputs)
+                result, task_context = self._run(inputs)
             except Exception as e:
                 if config_context._swallow_exceptions:
                     # PIPEDAG INTERNAL
@@ -144,10 +144,13 @@ class Task:
                 self.did_finish(FinalTaskState.FAILED)
                 raise e
             else:
-                self.did_finish(FinalTaskState.COMPLETED)
+                if task_context.is_cache_valid:
+                    self.did_finish(FinalTaskState.CACHE_VALID)
+                else:
+                    self.did_finish(FinalTaskState.COMPLETED)
                 return result
 
-    def _run(self, inputs: [int, Any]):
+    def _run(self, inputs: [int, Any]) -> tuple[Any, TaskContext]:
         args = self._bound_args.args
         kwargs = self._bound_args.kwargs
 
@@ -164,13 +167,13 @@ class Task:
         args = deep_map(args, task_result_mapper)
         kwargs = deep_map(kwargs, task_result_mapper)
 
-        with TaskContext(task=self):
+        with TaskContext(task=self) as task_context:
             result = self.fn(*args, **kwargs)
 
-        return result
+        return result, task_context
 
     def did_finish(self, state: FinalTaskState):
-        if state == FinalTaskState.COMPLETED:
+        if state.is_successful():
             self.logger.info("Task finished successfully", state=state)
         RunContext.get().did_finish_task(self, state)
 

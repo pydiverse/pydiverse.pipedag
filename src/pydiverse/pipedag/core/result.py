@@ -14,6 +14,7 @@ from pydiverse.pipedag.util import deep_map
 
 if TYPE_CHECKING:
     from pydiverse.pipedag._typing import Materializable
+    from pydiverse.pipedag.context.run_context import FinalTaskState
 
 
 @frozen
@@ -23,6 +24,7 @@ class Result:
     config_context: ConfigContext | None
 
     task_values: dict[Task, Any]
+    task_states: dict[Task, FinalTaskState]
     exception: Exception | None = None
 
     def get(self, task: Task | TaskGetItem, as_type: type = None) -> Materializable:

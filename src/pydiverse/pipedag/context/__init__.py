@@ -4,7 +4,11 @@ from pydiverse.pipedag.context.context import (
     StageLockContext,
     TaskContext,
 )
-from pydiverse.pipedag.context.run_context import RunContext, RunContextServer
+from pydiverse.pipedag.context.run_context import (
+    FinalTaskState,
+    RunContext,
+    RunContextServer,
+)
 
 __all__ = [
     "DAGContext",
@@ -13,4 +17,5 @@ __all__ = [
     "RunContext",
     "RunContextServer",
     "StageLockContext",
+    "FinalTaskState",
 ]
