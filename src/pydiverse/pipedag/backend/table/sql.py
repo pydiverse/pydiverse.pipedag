@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import itertools
 import json
 import re
@@ -1794,8 +1795,8 @@ class PandasTableHook(TableHook[SQLTableStore]):
     def _fix_cols(cols: dict[str, Any], dialect_name):
         cols = cols.copy()
         year_cols = []
-        min_date = "1900-01-01"
-        max_date = "2199-12-31"
+        min_date = datetime.datetime(1900, 1, 1, 0, 0, 0)
+        max_date = datetime.datetime(2199, 12, 31, 23, 59, 59)
         for name, col in list(cols.items()):
             if isinstance(col.type, sa.Date) or isinstance(col.type, sa.DateTime):
                 if name + "_year" not in cols:

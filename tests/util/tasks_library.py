@@ -188,7 +188,7 @@ def _get_df(data: dict[str, list], use_ext_dtype=False, cap_dates=False):
             data[col] = [dt.datetime.combine(d, dt.time()) for d in data[col]]
         if cap_dates:
             min_datetime = dt.datetime(1900, 1, 1, 0, 0, 0)
-            max_datetime = dt.datetime(2199, 12, 31, 0, 0, 0)
+            max_datetime = dt.datetime(2199, 12, 31, 23, 59, 59)
             min_date = dt.date(1900, 1, 1)
             max_date = dt.date(2199, 12, 31)
             if type(data[col][0]) == dt.date:
