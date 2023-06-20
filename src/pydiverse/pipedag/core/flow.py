@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 import networkx as nx
+import pydot
 import structlog
 
 from pydiverse.pipedag.context import (
@@ -17,8 +18,6 @@ from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 
 if TYPE_CHECKING:
-    import pydot
-
     from pydiverse.pipedag.core import Result, Stage, Task
     from pydiverse.pipedag.core.stage import CommitStageTask
     from pydiverse.pipedag.core.task import TaskGetItem
@@ -89,6 +88,15 @@ class Flow:
         self.graph.add_edge(from_, to)
 
     def visualize(self, result: Result | None = None):
+        dot = self.visualize_pydot(result)
+        _display_pydot(dot)
+        return dot
+
+    def visualize_url(self, result: Result | None = None) -> str:
+        dot = self.visualize_pydot(result)
+        return _pydot_url(dot)
+
+    def visualize_pydot(self, result: Result | None = None) -> pydot.Dot:
         task_style = {}
         if result:
             for task in self.tasks:
@@ -108,7 +116,7 @@ class Flow:
             graph=self.graph,
             task_style=task_style,
         )
-        _display_pydot(dot)
+
         return dot
 
     def build_graph(self) -> nx.DiGraph:
@@ -248,6 +256,9 @@ class Flow:
                 orchestration_engine = config.create_orchestration_engine()
             result = orchestration_engine.run(subflow, **kwargs)
 
+        visualization_url = self.visualize_url(result)
+        self.logger.info("Flow visualization", url=visualization_url)
+
         if not result.successful and config.fail_fast:
             raise result.exception or Exception("Flow run failed")
 
@@ -305,6 +316,15 @@ class Subflow:
                 yield parent_task
 
     def visualize(self):
+        dot = self.visualize_pydot()
+        _display_pydot(dot)
+        return dot
+
+    def visualize_url(self) -> str:
+        dot = self.visualize_pydot()
+        return _pydot_url(dot)
+
+    def visualize_pydot(self) -> pydot.Dot:
         graph = nx.DiGraph()
 
         relevant_stages = set()
@@ -352,7 +372,7 @@ class Subflow:
                     "color": "#909090",
                 }
 
-        dot = _build_pydot(
+        return _build_pydot(
             stages=sorted(relevant_stages, key=lambda s: s.id),
             tasks=list(relevant_tasks),
             graph=graph,
@@ -360,8 +380,6 @@ class Subflow:
             task_style=task_style,
             edge_style=edge_style,
         )
-        _display_pydot(dot)
-        return dot
 
 
 # Visualization Helper
@@ -375,8 +393,6 @@ def _build_pydot(
     task_style: dict[Task, dict] = None,
     edge_style: dict[tuple[Task, Task], dict] = None,
 ) -> pydot.Dot:
-    import pydot
-
     if stage_style is None:
         stage_style = {}
     if task_style is None:
@@ -447,3 +463,13 @@ def _display_pydot(dot: pydot.Dot):
 
         # Keep alive to prevent immediate deletion of file
         globals()["__pipedag_tmp_file_reference__"] = f
+
+
+def _pydot_url(dot: pydot.Dot) -> str:
+    import base64
+    import zlib
+
+    query_data = zlib.compress(str(dot).encode("utf-8"), 9)
+    query = base64.urlsafe_b64encode(query_data).decode("ascii")
+
+    return f"https://kroki.io/graphviz/svg/{query}"
