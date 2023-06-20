@@ -202,6 +202,12 @@ class Flow:
         keyword. If no engine is provided, the engine specified in the config
         file is used.
 
+        :param components: An optional selection of tasks or stages that should
+            get executed. If no value is provided, all tasks and stages get executed.
+            If you specify a subset of tasks, those tasks get executed even when
+            they are cache valid, and they don't get committed.
+            If you specify a subset of stages, all tasks and substages of those stages
+            get executed and committed.
         :param config: A configuration context with information about
             the pipe-DAG instance.
         :param orchestration_engine: The orchestration engine to use.

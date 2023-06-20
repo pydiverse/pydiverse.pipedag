@@ -7,6 +7,9 @@ https://semver.org/spec/v2.0.0.html. The most important bits are:
 Changelog
 =========
 
+- support execution of subflow
+- store final state of task in flow result object
+
 0.4.1 (2023-06-17)
 ------------------
 - implement DaskEngine: orchestration engine for running multiple tasks in parallel
