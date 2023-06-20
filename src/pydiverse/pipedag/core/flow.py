@@ -97,19 +97,7 @@ class Flow:
         return _pydot_url(dot)
 
     def visualize_pydot(self, result: Result | None = None) -> pydot.Dot:
-        task_style = {}
-        if result:
-            for task in self.tasks:
-                final_state = result.task_states.get(task, FinalTaskState.UNKNOWN)
-                if final_state == FinalTaskState.COMPLETED:
-                    task_style[task] = {"fillcolor": "#adef9b"}
-                elif final_state == FinalTaskState.CACHE_VALID:
-                    task_style[task] = {"fillcolor": "#e8ffc6"}
-                elif final_state == FinalTaskState.FAILED:
-                    task_style[task] = {"fillcolor": "#ff453a"}
-                elif final_state == FinalTaskState.SKIPPED:
-                    task_style[task] = {"fillcolor": "#fccb83"}
-
+        task_style = _generate_task_style(self.tasks, result)
         dot = _build_pydot(
             stages=list(self.stages.values()),
             tasks=self.tasks,
@@ -256,7 +244,7 @@ class Flow:
                 orchestration_engine = config.create_orchestration_engine()
             result = orchestration_engine.run(subflow, **kwargs)
 
-        visualization_url = self.visualize_url(result)
+        visualization_url = subflow.visualize_url(result)
         self.logger.info("Flow visualization", url=visualization_url)
 
         if not result.successful and config.fail_fast:
@@ -277,7 +265,7 @@ class Subflow:
                 " to run, but not both."
             )
         elif not tasks and not stages:
-            self.selected_stages = set(flow.stages)
+            self.selected_stages = set(flow.stages.values())
             self.selected_tasks = set(flow.tasks)
             return
 
@@ -315,16 +303,16 @@ class Subflow:
             if parent_task in self.selected_tasks:
                 yield parent_task
 
-    def visualize(self):
-        dot = self.visualize_pydot()
+    def visualize(self, result: Result | None = None):
+        dot = self.visualize_pydot(result)
         _display_pydot(dot)
         return dot
 
-    def visualize_url(self) -> str:
-        dot = self.visualize_pydot()
+    def visualize_url(self, result: Result | None = None) -> str:
+        dot = self.visualize_pydot(result)
         return _pydot_url(dot)
 
-    def visualize_pydot(self) -> pydot.Dot:
+    def visualize_pydot(self, result: Result | None = None) -> pydot.Dot:
         graph = nx.DiGraph()
 
         relevant_stages = set()
@@ -344,13 +332,13 @@ class Subflow:
                 graph.add_edge(input_task, task)
 
         stage_style = {}
-        task_style = {}
+        task_style = _generate_task_style(relevant_tasks, result)
         edge_style = {}
 
         for stage in relevant_stages:
             if stage not in self.selected_stages:
                 stage_style[stage] = {
-                    "style": "dashed",
+                    "style": '"dashed"',
                     "bgcolor": "#0000000A",
                     "color": "#909090",
                     "fontcolor": "#909090",
@@ -385,6 +373,22 @@ class Subflow:
 # Visualization Helper
 
 
+def _generate_task_style(tasks: Iterable[Task], result: Result | None) -> dict:
+    task_style = {}
+    if result:
+        for task in tasks:
+            final_state = result.task_states.get(task, FinalTaskState.UNKNOWN)
+            if final_state == FinalTaskState.COMPLETED:
+                task_style[task] = {"fillcolor": "#adef9b"}
+            elif final_state == FinalTaskState.CACHE_VALID:
+                task_style[task] = {"fillcolor": "#e8ffc6"}
+            elif final_state == FinalTaskState.FAILED:
+                task_style[task] = {"fillcolor": "#ff453a"}
+            elif final_state == FinalTaskState.SKIPPED:
+                task_style[task] = {"fillcolor": "#fccb83"}
+    return task_style
+
+
 def _build_pydot(
     stages: list[Stage],
     tasks: list[Task],
@@ -406,7 +410,10 @@ def _build_pydot(
 
     for stage in stages:
         style = dict(
+            style="solid",
             bgcolor="#00000020",
+            color="black",
+            fontcolor="black",
         ) | (stage_style.get(stage, {}))
 
         s = pydot.Subgraph(f"cluster_{stage.name}", label=stage.name, **style)
