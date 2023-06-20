@@ -127,10 +127,11 @@ class SQLTableStore(BaseTableStore):
         self.no_db_locking = no_db_locking
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
 
-        self._init_database(engine_url, create_database_if_not_exists)
         self.engine_url = sa.engine.make_url(engine_url)
-        self.engine = self._connect(engine_url, self.schema_prefix, self.schema_suffix)
+        self.engine = self._create_engine()
         self.engines_other = dict()  # i.e. for IBIS connection
+
+        self._init_database()
 
         # Set up metadata tables and schema
         from sqlalchemy import CLOB, BigInteger, Boolean, Column, DateTime, String
@@ -145,10 +146,26 @@ class SQLTableStore(BaseTableStore):
         # Stage Table is unique for stage
         # (we currently cannot version changes of this metadata table when using
         # stage_commit_tequnique=read_views)
+
+        def autoincrement_pk(name: str, seq_name: str):
+            if self.engine.dialect.name == "duckdb":
+                sequence = sqlalchemy.Sequence(
+                    f"{seq_name}_{name}_seq", schema=self.metadata_schema.get()
+                )
+                return Column(
+                    name,
+                    BigInteger,
+                    sequence,
+                    server_default=sequence.next_value(),
+                    primary_key=True,
+                )
+
+            return Column(name, BigInteger, primary_key=True, autoincrement=True)
+
         self.stage_table = sa.Table(
             "stages",
             self.sql_metadata,
-            Column("id", BigInteger, primary_key=True, autoincrement=True),
+            autoincrement_pk("id", "stages"),
             Column("stage", String(64)),
             Column("cur_transaction_name", String(256)),
             schema=self.metadata_schema.get(),
@@ -169,7 +186,7 @@ class SQLTableStore(BaseTableStore):
         self.tasks_table = sa.Table(
             "tasks",
             self.sql_metadata,
-            Column("id", BigInteger, primary_key=True, autoincrement=True),
+            autoincrement_pk("id", "tasks"),
             Column("name", String(128)),
             Column("stage", String(64)),
             Column("version", String(64)),
@@ -187,7 +204,7 @@ class SQLTableStore(BaseTableStore):
         self.lazy_cache_table = sa.Table(
             "lazy_tables",
             self.sql_metadata,
-            Column("id", BigInteger, primary_key=True, autoincrement=True),
+            autoincrement_pk("id", "lazy_tables"),
             Column("name", String(128)),
             Column("stage", String(64)),
             Column("query_hash", String(20)),
@@ -200,7 +217,7 @@ class SQLTableStore(BaseTableStore):
         self.raw_sql_cache_table = sa.Table(
             "raw_sql_tables",
             self.sql_metadata,
-            Column("id", BigInteger, primary_key=True, autoincrement=True),
+            autoincrement_pk("id", "raw_sql_tables"),
             Column("prev_tables", String(256)),
             Column("tables", String(256)),
             Column("stage", String(64)),
@@ -217,49 +234,75 @@ class SQLTableStore(BaseTableStore):
             schema_suffix=self.schema_suffix,
         )
 
-    @staticmethod
-    def _init_database(engine_url: str, create_database_if_not_exists: bool):
-        if not create_database_if_not_exists:
+    @engine_dispatch
+    def _init_database(self):
+        if not self.create_database_if_not_exists:
             return
 
-        engine = sa.create_engine(engine_url)
-        if engine.dialect.name in ["mssql", "ibm_db_sa"]:
+        raise NotImplementedError(
+            "create_database_if_not_exists is only implemented for this engine"
+        )
+
+    @_init_database.dialect("postgresql")
+    def _init_database_postgresql(self):
+        if not self.create_database_if_not_exists:
+            return
+
+        try:
+            # Check if database exists
+            with self.engine.connect() as conn:
+                conn.execute(sa.text("SELECT 1"))
+            return
+        except sa.exc.DBAPIError:
+            # Database doesn't exist
+            pass
+
+        # Create new database using temporary engine object
+        postgres_db_url = self.engine_url.set(database="postgres")
+        tmp_engine = sa.create_engine(postgres_db_url)
+
+        try:
+            with tmp_engine.connect() as conn:
+                conn.execute(sa.text("COMMIT"))
+                conn.execute(CreateDatabase(self.engine_url.database))
+        except sa.exc.DBAPIError:
+            # This happens if multiple instances try to create the database
+            # at the same time.
+            with self.engine.connect() as conn:
+                # Verify database actually exists
+                conn.execute(sa.text("SELECT 1"))
+
+    @_init_database.dialect("duckdb")
+    def _init_database_duckdb(self):
+        # Duckdb already creates the database file automatically
+        pass
+
+    def _create_engine(self):
+        engine = sa.create_engine(self.engine_url)
+
+        if engine.dialect.name == "mssql":
             engine.dispose()
-            return
-
-        # Attention: This is a really hacky way to create a generic engine for
-        #            creating a database before one can open a connection to
-        #            self.engine_url which references a database and will fail
-        #            if the database does not exist
-        url = sa.engine.make_url(engine_url)
-
-        if engine.dialect.name == "postgresql":
-            try:
-                with engine.connect() as conn:
-                    # try whether connection with database in connect string works
-                    conn.execute(sa.text("SELECT 1"))
-            except sa.exc.DBAPIError:
-                postgres_db_url = url.set(database="postgres")
-                tmp_engine = sa.create_engine(postgres_db_url)
-                try:
-                    with tmp_engine.connect() as conn:
-                        conn.execute(sa.text("COMMIT"))
-                        conn.execute(CreateDatabase(url.database))
-                except sa.exc.DBAPIError:
-                    # This happens if multiple instances try to create the database
-                    # at the same time.
-                    with engine.connect() as conn:
-                        # Verify database actually exists
-                        conn.execute(sa.text("SELECT 1"))
-        else:
-            raise NotImplementedError(
-                "create_database_if_not_exists is only implemented for postgres, yet"
+            # this is needed to allow for CREATE DATABASE statements
+            # (we don't rely on database transactions anyways)
+            engine = sa.create_engine(
+                self.engine_url, connect_args={"autocommit": True}
             )
-        engine.dispose()
 
-    @staticmethod
-    def _connect(engine_url, schema_prefix, schema_suffix):
-        engine = sa.create_engine(engine_url)
+            if "." in self.schema_prefix and "." in self.schema_suffix:
+                raise AttributeError(
+                    "Config Error: It is not allowed to have a dot in both"
+                    " schema_prefix and schema_suffix for SQL Server / mssql database:"
+                    f' schema_prefix="{self.schema_prefix}","'
+                    f' schema_suffix="{self.schema_suffix}"'
+                )
+
+            if (self.schema_prefix + self.schema_suffix).count(".") != 1:
+                raise AttributeError(
+                    "Config Error: There must be exactly dot in both schema_prefix and"
+                    " schema_suffix together for SQL Server / mssql database:"
+                    f' schema_prefix="{self.schema_prefix}",'
+                    f' schema_suffix="{self.schema_suffix}"'
+                )
 
         # if engine.dialect.name == "ibm_db_sa":
         #     engine.dispose()
@@ -270,35 +313,18 @@ class SQLTableStore(BaseTableStore):
         #     )
         # sqlalchemy 2 has create_engine().execution_options()
 
-        if engine.dialect.name == "mssql":
-            engine.dispose()
-            # this is needed to allow for CREATE DATABASE statements
-            # (we don't rely on database transactions anyways)
-            engine = sa.create_engine(engine_url, connect_args={"autocommit": True})
-
-        if engine.dialect.name == "mssql":
-            if "." in schema_prefix and "." in schema_suffix:
-                raise AttributeError(
-                    "Config Error: It is not allowed to have a dot in both"
-                    " schema_prefix and schema_suffix for SQL Server / mssql database:"
-                    f' schema_prefix="{schema_prefix}", schema_suffix="{schema_suffix}"'
-                )
-
-            if (schema_prefix + schema_suffix).count(".") != 1:
-                raise AttributeError(
-                    "Config Error: There must be exactly dot in both schema_prefix and"
-                    " schema_suffix together for SQL Server / mssql database:"
-                    f' schema_prefix="{schema_prefix}", schema_suffix="{schema_suffix}"'
-                )
         return engine
 
     @contextmanager
-    def engine_connect(self):
+    @engine_dispatch
+    def engine_connect(self) -> sa.Connection:
         if self.engine.dialect.name == "ibm_db_sa":
             conn = self.engine.connect()
         else:
             # sqlalchemy 2.0 uses this (except for dialect ibm_db_sa)
-            conn = self.engine.connect().execution_options(isolation_level="AUTOCOMMIT")
+            conn = (
+                self.engine.connect()
+            )  # .execution_options(isolation_level="AUTOCOMMIT")
         try:
             yield conn
         finally:
@@ -306,7 +332,6 @@ class SQLTableStore(BaseTableStore):
                 # sqlalchemy 2.0 + ibm_db_sa needs this
                 conn.commit()
             except AttributeError:
-                # sqlalchemy 1.x does not have this function and does not need it
                 pass
 
     def get_schema(self, name):
@@ -391,9 +416,6 @@ class SQLTableStore(BaseTableStore):
         early_not_null_possible: bool = False,
     ):
         _ = early_not_null_possible  # only used for some dialects
-        self.execute(
-            ChangeColumnNullable(table_name, schema, key_columns, nullable=False)
-        )
         self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
 
     @engine_dispatch
@@ -1520,7 +1542,7 @@ class SQLTableStore(BaseTableStore):
     # DatabaseLockManager
 
     def get_engine_for_locking(self) -> sa.Engine:
-        return self._connect(self.engine_url, self.schema_prefix, self.schema_suffix)
+        return self._create_engine()
 
     def get_lock_schema(self) -> Schema:
         return self.get_schema(self.LOCK_SCHEMA)
@@ -1812,7 +1834,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
                         sa.func.extract("year", cols[name]), sa.Integer
                     ).label(name + "_year")
                     year_cols.append(name + "_year")
-                # Todo: do better abstraction of dialect specific code
+                # TODO: do better abstraction of dialect specific code
                 if dialect_name == "mssql":
                     cap_min = sa.func.iif(cols[name] < min_val, min_val, cols[name])
                     cols[name] = sa.func.iif(cap_min > max_val, max_val, cap_min).label(

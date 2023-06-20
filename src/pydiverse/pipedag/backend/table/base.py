@@ -297,7 +297,18 @@ class BaseTableStore(TableHookResolver):
         the query, it just copies the previous result to the commit stage.
         """
         _ = task
-        query_hash = stable_hash("RAW-SQL", raw_sql.sql)
+
+        # hacky way to canonicalize query (despite __tmp/__even/__odd suffixes
+        # and alias resolution)
+        import re
+
+        query_str = raw_sql.sql
+        query_str = re.sub(r'["\[\]]', "", query_str)
+        query_str = re.sub(
+            r'(__tmp|__even|__odd)(?=[ \t\n.;"]|$)', "", query_str.lower()
+        )
+
+        query_hash = stable_hash("RAW-SQL", query_str)
 
         table_cache_info = CacheManager.raw_sql_cache_lookup(
             self, task_info.task_cache_info, raw_sql, query_hash

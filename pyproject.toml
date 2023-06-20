@@ -60,6 +60,8 @@ pre-commit = ">=2.20.0"
 kazoo = ">=2.8.0"
 dask = ">=2022.1.0"
 psycopg2 = ">=2.9.3"
+duckdb = "^0.8.1"
+duckdb-engine = "^0.7.3"
 
 [tool.poetry.group.tests]
 optional = true

@@ -7,6 +7,7 @@ https://semver.org/spec/v2.0.0.html. The most important bits are:
 Changelog
 =========
 
+- add support for DuckDB
 - support execution of subflow
 - store final state of task in flow result object
 - tasks now have a `position_hash` associated with them to identify them purely based on their position (e.g. stage, name and input wiring) inside a flow.
