@@ -146,7 +146,7 @@ def test_instance_selection(cfg_file_path):
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
 
     with StageLockContext():
-        result = flow.run(cfg)
+        result = flow.run(config=cfg)
         _check_result(result, out1, out2)
 
     cfg = pipedag_config.get(instance="midi")
@@ -154,7 +154,7 @@ def test_instance_selection(cfg_file_path):
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
 
     with StageLockContext():
-        result = flow.run(cfg)
+        result = flow.run(config=cfg)
         _check_result(result, out1, out2, head=2)
 
     cfg = pipedag_config.get(instance="mini")
@@ -162,7 +162,7 @@ def test_instance_selection(cfg_file_path):
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
 
     with StageLockContext():
-        result = flow.run(cfg)
+        result = flow.run(config=cfg)
         _check_result(result, out1, out2, head=1)
 
 
@@ -185,7 +185,7 @@ def test_run_full_instance(cfg_file_path):
 
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
 
-    flow.run(cfg)
+    flow.run(config=cfg)
 
 
 @pytest.mark.slow4
@@ -195,7 +195,7 @@ def test_run_midi_instance(cfg_file_path):
 
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
 
-    flow.run(cfg)
+    flow.run(config=cfg)
 
 
 @pytest.mark.slow3
@@ -205,7 +205,7 @@ def test_midi_instance_stages(cfg_file_path):
 
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
 
-    flow.run(cfg, stages=["simple_flow_stage2"])
+    flow.run(config=cfg, stages=["simple_flow_stage2"])
 
 
 @pytest.mark.slow2
@@ -215,7 +215,7 @@ def test_run_mini_instance(cfg_file_path):
 
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
 
-    flow.run(cfg)
+    flow.run(config=cfg)
 
 
 @pytest.mark.slow1
@@ -225,4 +225,4 @@ def test_mini_instance_stages(cfg_file_path):
 
     flow, out1, out2 = get_flow(cfg.attrs, pipedag_config)
 
-    flow.run(cfg, stages=["simple_flow_stage2"])
+    flow.run(config=cfg, stages=["simple_flow_stage2"])

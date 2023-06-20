@@ -27,10 +27,9 @@ from pydiverse.pipedag.util import Disposable
 from pydiverse.pipedag.util.ipc import IPCServer
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag import Flow, Stage
     from pydiverse.pipedag._typing import T
     from pydiverse.pipedag.backend import BaseLockManager, LockState
-    from pydiverse.pipedag.core import Task
+    from pydiverse.pipedag.core import Stage, Subflow, Task
     from pydiverse.pipedag.materialize import Blob, Table
 
 
@@ -65,7 +64,7 @@ class RunContextServer(IPCServer):
     and deserialization in case of multi-node execution of tasks in pipedag graph.
     """
 
-    def __init__(self, flow: Flow):
+    def __init__(self, subflow: Subflow):
         config_ctx = ConfigContext.get()
         interface = config_ctx.network_interface
 
@@ -75,7 +74,8 @@ class RunContextServer(IPCServer):
             msg_ext_hook=_msg_ext_hook,
         )
 
-        self.flow = flow
+        self.flow = subflow.flow
+        self.subflow = subflow
         self.config_ctx = config_ctx
         self.run_id = uuid.uuid4().hex[:20]
 

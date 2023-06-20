@@ -13,7 +13,7 @@ from pydiverse.pipedag.engine.base import OrchestrationEngine
 from pydiverse.pipedag.util import requires
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag.core import Flow, Task
+    from pydiverse.pipedag.core import Subflow, Task
 
 try:
     import prefect
@@ -38,8 +38,7 @@ class PrefectOneEngine(OrchestrationEngine):
         self.flow_kwargs = flow_kwargs or {}
         self.logger = structlog.get_logger(stage=self)
 
-    def construct_prefect_flow(self, f: Flow):
-        g = f.explicit_graph
+    def construct_prefect_flow(self, f: Subflow):
         run_context = RunContext.get()
         config_context = ConfigContext.get()
 
@@ -67,8 +66,9 @@ class PrefectOneEngine(OrchestrationEngine):
                 ),
             )
 
-        for u, v in g.edges:
-            flow.add_edge(tasks[u], tasks[v])
+        for task in f.get_tasks():
+            for parent in f.get_parent_tasks(task):
+                flow.add_edge(tasks[parent], tasks[task])
 
         project_name = config_context.pipedag_name + "-" + config_context.instance_id
         try:
@@ -78,7 +78,7 @@ class PrefectOneEngine(OrchestrationEngine):
 
         return flow, tasks
 
-    def run(self, flow: Flow, **run_kwargs):
+    def run(self, flow: Subflow, **run_kwargs):
         prefect_flow, tasks_map = self.construct_prefect_flow(flow)
         result = prefect_flow.run(**run_kwargs)
 
@@ -105,6 +105,7 @@ class PrefectOneEngine(OrchestrationEngine):
             successful=result.is_successful(),
             config_context=ConfigContext.get(),
             task_values=task_values,
+            task_states=RunContext.get().get_task_states(),
             exception=exception,
         )
 
@@ -120,10 +121,9 @@ class PrefectTwoEngine(OrchestrationEngine):
     def __init__(self, flow_kwargs: dict[str, Any] = None):
         self.flow_kwargs = flow_kwargs or {}
 
-    def construct_prefect_flow(self, f: Flow):
+    def construct_prefect_flow(self, f: Subflow):
         from pydiverse.pipedag.materialize.core import MaterializingTask
 
-        g = f.explicit_graph
         run_context = RunContext.get()
         config_context = ConfigContext.get()
 
@@ -137,14 +137,14 @@ class PrefectTwoEngine(OrchestrationEngine):
         def pipedag_flow():
             futures: dict[Task, prefect.futures.PrefectFuture] = {}
 
-            for t in f.tasks:
+            for t in f.get_tasks():
                 task_kwargs = {"name": t.name}
                 if isinstance(t, MaterializingTask):
                     task_kwargs["version"] = t.version
 
                 task = prefect.task(**task_kwargs)(t.run)
 
-                parents = [futures[p] for p, _ in g.in_edges(t)]
+                parents = [futures[p] for p in f.get_parent_tasks(t)]
                 inputs = {in_id: futures[in_t] for in_id, in_t in t.input_tasks.items()}
                 futures[t] = task.submit(
                     inputs=inputs,
@@ -157,7 +157,7 @@ class PrefectTwoEngine(OrchestrationEngine):
 
         return pipedag_flow
 
-    def run(self, flow: Flow, **kwargs):
+    def run(self, flow: Subflow, **kwargs):
         if kwargs:
             raise TypeError(f"{type(self).__name__}.run doesn't take kwargs.")
         prefect_flow = self.construct_prefect_flow(flow)
@@ -183,6 +183,7 @@ class PrefectTwoEngine(OrchestrationEngine):
             successful=successful,
             config_context=ConfigContext.get(),
             task_values=result,
+            task_states=RunContext.get().get_task_states(),
             exception=exception,
         )
 

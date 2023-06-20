@@ -241,6 +241,52 @@ class TestDAGConstruction:
             ]
         ] == list(range(12))
 
+    def test_subflow(self):
+        with Flow("f") as f:
+            with Stage("stage_0"):
+                t00 = t("00")(0)
+                t01 = t("01")(t00)
+                t02 = t("02")(t01)
+
+            with Stage("stage_1") as s1:
+                t10 = t("10")(t02)
+                with Stage("stage_2") as s2:
+                    t20 = t("20")(t10)
+                t11 = t("11")(t20)
+                t12 = t("12")(t10, t20, t11)
+
+        # Entire Flow as Subflow
+        sf = f.get_subflow()
+        assert not sf.is_tasks_subflow
+        assert set(sf.get_tasks()) == set(f.tasks)
+
+        # Stage Subflow
+        sf = f.get_subflow(s2)
+        assert not sf.is_tasks_subflow
+        assert set(sf.get_tasks()) == {t20, s2.commit_task}
+        assert set(sf.get_parent_tasks(t20)) == set()
+
+        # Stage Subflow
+        sf = f.get_subflow(s1)
+        assert not sf.is_tasks_subflow
+        assert set(sf.get_tasks()) == {
+            t10,
+            t11,
+            t12,
+            t20,
+            s1.commit_task,
+            s2.commit_task,
+        }
+        assert set(sf.get_parent_tasks(t10)) == set()
+        assert set(sf.get_parent_tasks(t11)) == {t20, s2.commit_task}
+
+        # Task Subflow
+        sf = f.get_subflow(t10, t12)
+        assert sf.is_tasks_subflow
+        assert set(sf.get_tasks()) == {t10, t12}
+        assert set(sf.get_parent_tasks(t10)) == set()
+        assert set(sf.get_parent_tasks(t12)) == {t10}
+
 
 class TestDAGConstructionExceptions:
     def test_duplicate_stage_name(self):

@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 import unittest.mock
 
-from pydiverse.pipedag.core.task import TaskGetItem
+from pydiverse.pipedag.core.task import Task, TaskGetItem
 from pydiverse.pipedag.materialize.core import MaterializingTask
 
 
@@ -48,10 +48,19 @@ class PipedagMock:
 def spy_task(mocker, task) -> PipedagMock:
     if isinstance(task, TaskGetItem):
         task = task.task
-    if not isinstance(task, MaterializingTask):
-        raise TypeError("Expected object of type MaterializingTask or TaskGetItem")
+    if isinstance(task, MaterializingTask):
+        task.fn = copy.copy(task.fn)
+        spy = mocker.spy(task.fn, "fn")
+    elif isinstance(task, Task):
+        task_fn = task.fn
 
-    task.fn = copy.copy(task.fn)
-    spy = mocker.spy(task.fn, "fn")
+        def fn(*args, **kwargs):
+            return task_fn(*args, **kwargs)
+
+        task.fn = fn
+        spy = mocker.spy(task, "fn")
+    else:
+        raise TypeError("Expected object of type Task or TaskGetItem")
+
     spy.mock.__dict__["_mock_name"] = task.name
     return PipedagMock(spy)

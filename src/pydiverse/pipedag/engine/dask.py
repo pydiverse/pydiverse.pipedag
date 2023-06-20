@@ -12,7 +12,7 @@ from pydiverse.pipedag.engine.base import OrchestrationEngine
 from pydiverse.pipedag.util import requires
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag.core import Flow, Task
+    from pydiverse.pipedag.core import Subflow, Task
 
 try:
     import dask
@@ -37,8 +37,7 @@ class DaskEngine(OrchestrationEngine):
 
         self.dask_compute_kwargs.update(dask_compute_kwargs)
 
-    def run(self, flow: Flow, **run_kwargs):
-        g = flow.explicit_graph
+    def run(self, flow: Subflow, **run_kwargs):
         run_context = RunContext.get()
         config_context = ConfigContext.get()
 
@@ -64,10 +63,10 @@ class DaskEngine(OrchestrationEngine):
             run.__name__ = t.name
             return dask.delayed(run, pure=False)
 
-        for task in flow.tasks:
+        for task in flow.get_tasks():
             results[task] = bind_run(task)(
                 parent_futures=[
-                    results[parent_task] for parent_task, _ in g.in_edges(task)
+                    results[parent] for parent in flow.get_parent_tasks(task)
                 ],
                 inputs={
                     in_id: results[in_t] for in_id, in_t in task.input_tasks.items()
@@ -88,5 +87,6 @@ class DaskEngine(OrchestrationEngine):
             successful=(exception is None),
             config_context=config_context,
             task_values=results,
+            task_states=run_context.get_task_states(),
             exception=exception,
         )

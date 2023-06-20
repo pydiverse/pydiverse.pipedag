@@ -7,7 +7,7 @@ from pydiverse.pipedag.core.result import Result
 from pydiverse.pipedag.engine.base import OrchestrationEngine
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag.core import Flow
+    from pydiverse.pipedag.core import Subflow
 
 
 class SequentialEngine(OrchestrationEngine):
@@ -17,7 +17,7 @@ class SequentialEngine(OrchestrationEngine):
     that they were defined in.
     """
 
-    def run(self, flow: Flow, **run_kwargs):
+    def run(self, flow: Subflow, **run_kwargs):
         run_context = RunContext.get()
         config_context = ConfigContext.get()
 
@@ -25,10 +25,12 @@ class SequentialEngine(OrchestrationEngine):
         exception = None
 
         try:
-            for task in flow.tasks:
+            for task in flow.get_tasks():
                 results[task] = task.run(
                     inputs={
-                        in_id: results[in_t] for in_id, in_t in task.input_tasks.items()
+                        in_id: results[in_t]
+                        for in_id, in_t in task.input_tasks.items()
+                        if in_t in results
                     },
                     run_context=run_context,
                     config_context=config_context,
@@ -44,5 +46,6 @@ class SequentialEngine(OrchestrationEngine):
             successful=(exception is None),
             config_context=ConfigContext.get(),
             task_values=results,
+            task_states=run_context.get_task_states(),
             exception=exception,
         )
