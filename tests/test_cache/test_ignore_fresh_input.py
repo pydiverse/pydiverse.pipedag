@@ -257,7 +257,8 @@ def test_blob(mocker):
         child_spy.assert_called_once()
 
 
-@skip_instances("mssql", "mssql_pytsql", "ibm_db2", "ibm_db2_avoid_schema")
+# TODO: Determine exactly why this test only works with postgres
+@skip_instances("mssql", "mssql_pytsql", "ibm_db2", "ibm_db2_avoid_schema", "duckdb")
 def test_raw_sql(mocker):
     cache_value = 0
     raw_value = 0

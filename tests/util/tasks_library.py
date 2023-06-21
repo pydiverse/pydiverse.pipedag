@@ -184,11 +184,9 @@ def _get_df(data: dict[str, list], use_ext_dtype=False, cap_dates=False):
     data = data.copy()
     dtypes = {}
     for col in list(data.keys()):
-        if type(data[col][0]) == dt.date:
-            data[col] = [dt.datetime.combine(d, dt.time()) for d in data[col]]
         if cap_dates:
             min_datetime = dt.datetime(1900, 1, 1, 0, 0, 0)
-            max_datetime = dt.datetime(2199, 12, 31, 0, 0, 0)
+            max_datetime = dt.datetime(2199, 12, 31, 23, 59, 59)
             min_date = dt.date(1900, 1, 1)
             max_date = dt.date(2199, 12, 31)
             if type(data[col][0]) == dt.date:
@@ -226,13 +224,13 @@ def pd_dataframe(data: dict[str, list], use_ext_dtype=False, cap_dates=False):
     kwargs = {}
     if not cap_dates:
         kwargs["type_map"] = {
-            col: sa.Date for col, items in data.items() if type(items[0]) in [dt.date]
+            col: sa.Date for col, items in data.items() if isinstance(items[0], dt.date)
         }
         kwargs["type_map"].update(
             {
                 col: sa.DateTime
                 for col, items in data.items()
-                if type(items[0]) in [dt.datetime]
+                if isinstance(items[0], dt.datetime)
             }
         )
     return Table(df, **kwargs)

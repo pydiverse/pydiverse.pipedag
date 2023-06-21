@@ -5,7 +5,7 @@ import pytest
 from pydiverse.pipedag import Flow, Stage
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.fixtures.instances import DATABASE_INSTANCES, with_instances, skip_instances
 from tests.util import tasks_library as m
 
 pytestmark = [with_instances(DATABASE_INSTANCES)]

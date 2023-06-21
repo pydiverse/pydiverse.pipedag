@@ -4,6 +4,7 @@ table_store_connections:
     args:
       # Postgres: this can be used after running `docker-compose up`
       url: "postgresql://{$POSTGRES_USERNAME}:{$POSTGRES_PASSWORD}@127.0.0.1:6543/{instance_id}"
+      create_database_if_not_exists: true
 
   mssql:
     args:
@@ -11,12 +12,18 @@ table_store_connections:
       url: "mssql+pyodbc://{$MSSQL_USERNAME}:{$MSSQL_PASSWORD}@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
       schema_prefix: "{instance_id}_"  # SQL Server needs database.schema
       schema_suffix: ".dbo"   # Alternatively SQL Server databases can be used as schemas with .dbo default schema
+      create_database_if_not_exists: false
 
   ibm_db2:
     args:
       # SQL Server: this can be used after running `docker-compose up`
       url: "db2+ibm_db://db2inst1:password@localhost:50000/testdb"
       schema_prefix: "{instance_id}_"
+      create_database_if_not_exists: false
+
+  duckdb:
+    args:
+      url: "duckdb:///{$TMPDIR}{instance_id}.duckdb"
 
 instances:
   __any__:
@@ -33,9 +40,6 @@ instances:
       table_store_connection: postgres
       class: "pydiverse.pipedag.backend.table.SQLTableStore"
       args:
-        # Postgres: this can be used after running `docker-compose up`
-        create_database_if_not_exists: true
-
         # print select statements before being encapsualted in materialize expressions and tables before writing to
         # database
         print_materialize: true
@@ -92,6 +96,12 @@ instances:
       table_store_connection: ibm_db2
       args:
         avoid_drop_create_schema: true
+
+  duckdb:
+    instance_id: pd_duckdb
+    stage_commit_technique: READ_VIEWS
+    table_store:
+      table_store_connection: duckdb
 
   ## Table Cache Instances
 

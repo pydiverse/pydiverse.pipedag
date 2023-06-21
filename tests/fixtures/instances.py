@@ -19,6 +19,7 @@ INSTANCE_MARKS = {
     "mssql_pytsql": pytest.mark.mssql,
     "ibm_db2": pytest.mark.ibm_db2,
     "ibm_db2_avoid_schema": pytest.mark.ibm_db2,
+    "duckdb": pytest.mark.duckdb,
     "dask_engine": [pytest.mark.dask, pytest.mark.postgres],
 }
 
@@ -27,6 +28,7 @@ DATABASE_INSTANCES = (
     "postgres",
     "mssql",
     "ibm_db2",
+    "duckdb",
 )
 
 # Extended collection of instances
@@ -36,6 +38,7 @@ ALL_INSTANCES = (
     "mssql_pytsql",
     "ibm_db2",
     "ibm_db2_avoid_schema",
+    "duckdb",
 )
 
 
