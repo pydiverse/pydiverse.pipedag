@@ -1330,6 +1330,7 @@ class SQLTableStore(BaseTableStore):
                     self.tasks_table.select()
                     .where(self.tasks_table.c.name == task.name)
                     .where(self.tasks_table.c.stage == task.stage.name)
+                    .where(self.tasks_table.c.position_hash == task.position_hash)
                 )
                 .mappings()
                 .all()

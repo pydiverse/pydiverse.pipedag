@@ -55,10 +55,12 @@ def test_run_specific_task(mocker):
     s2_spy.assert_not_called()
 
 
-@pytest.mark.xfail(readon="Ambiguous input", strict=True)
 def test_run_specific_task_ambiguous_input(mocker):
     with Flow() as f:
         with Stage("subflow_t1") as s1:
+            # The same task appears multiple times in the schema. As a result, we must
+            # use the tasks position hash to identify which instance of the noop task
+            # we want to use as input for y1
             x1 = m.noop(1)
             x2 = m.noop(2)
 
@@ -72,12 +74,6 @@ def test_run_specific_task_ambiguous_input(mocker):
     s1_spy = spy_task(mocker, s1.commit_task)
     y1_spy = spy_task(mocker, y1)
     s2_spy = spy_task(mocker, s2.commit_task)
-
-    # This is expected to fail because the task y1 has the task x1 as input. However,
-    # because we need to fetch inputs for y1 from cache, we can only do so by
-    # referencing the names and stages of the input tasks.
-    # But in stage s1 there are two `noop` tasks, thus it isn't clear which one
-    # to use as input for y1.
 
     f.run(y1)
 
@@ -155,7 +151,6 @@ def test_run_specific_stage(mocker):
     s3_spy.assert_called_once()
 
 
-@pytest.mark.xfail(reason="Ambiguous input", strict=True)
 def test_run_specific_stage_ambiguous_input(mocker):
     with Flow() as f:
         with Stage("subflow_s1") as s1:
@@ -173,10 +168,11 @@ def test_run_specific_stage_ambiguous_input(mocker):
     y1_spy = spy_task(mocker, y1)
     s2_spy = spy_task(mocker, s2.commit_task)
 
-    # Run multiple stages
     # This test is non-trivial, because the task y1 has to fetch its inputs from
     # the cache. However, there are two `create_tuple` tasks in stage s1.
     # Consequently, it isn't clear which of the two tasks should be used.
+    # To solve this, we use the position hash to identify which instance of a specific
+    # task we are referring to.
 
     f.run(s2)
 

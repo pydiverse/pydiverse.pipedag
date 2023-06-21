@@ -103,7 +103,7 @@ class DictTableStore(BaseTableStore):
             *self.metadata[task.stage].values(),
             *self.t_metadata[task.stage].values(),
         ):
-            if m.name == task.name:
+            if m.name == task.name and m.position_hash == task.position_hash:
                 task_metadata.append(m)
         return task_metadata
 

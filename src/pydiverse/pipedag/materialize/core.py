@@ -126,18 +126,25 @@ class MaterializingTask(Task):
             if in_id in inputs:
                 continue
 
+            # This returns all metadata objects with the same name, stage, AND position
+            # hash as `in_task`. We utilize the position hash to identify a specific
+            # task instance, if the same task appears multiple times in a stage.
             store = ConfigContext.get().store
             metadata = store.table_store.retrieve_all_task_metadata(in_task)
 
             if not metadata:
-                raise CacheError(f"Couldn't find cached output for task {in_task}.")
+                raise CacheError(
+                    f"Couldn't find cached output for task {in_task}"
+                    " with matching position hash."
+                )
 
             output_json = {m.output_json for m in metadata}
             if len(output_json) > 1:
                 raise RuntimeError(
-                    f"Found multiple cached versions of task with name '{in_task.name}'"
-                    f" in stage '{in_task.stage}'. Couldn't determine which one"
-                    f" to use for loading inputs for task {self}."
+                    f"Found multiple matching cached versions of task '{in_task.name}'"
+                    f" in stage '{in_task.stage}' with different outputs."
+                    f" Couldn't determine which one to use for loading"
+                    f" inputs for task {self}."
                 )
 
             # Choose newest entry
