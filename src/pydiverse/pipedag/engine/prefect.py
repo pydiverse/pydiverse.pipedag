@@ -50,7 +50,7 @@ class PrefectOneEngine(OrchestrationEngine):
         flow = prefect.Flow(**flow_kwargs)
         tasks: dict[Task, prefect.Task] = {}
 
-        for t in f.tasks:
+        for t in f.get_tasks():
             task = prefect.task(name=t.name)(t.run)
             tasks[t] = task
 
@@ -100,12 +100,11 @@ class PrefectOneEngine(OrchestrationEngine):
                     f"Prefect run failed with message: {result.message}"
                 )
 
-        return Result(
+        return Result.init_from(
+            subflow=flow,
             underlying=result,
             successful=result.is_successful(),
-            config_context=ConfigContext.get(),
             task_values=task_values,
-            task_states=RunContext.get().get_task_states(),
             exception=exception,
         )
 
@@ -178,12 +177,11 @@ class PrefectTwoEngine(OrchestrationEngine):
                     exception = prefect.states.get_state_exception(state)
                     break
 
-        return Result(
+        return Result.init_from(
+            subflow=flow,
             underlying=result,
             successful=successful,
-            config_context=ConfigContext.get(),
             task_values=result,
-            task_states=RunContext.get().get_task_states(),
             exception=exception,
         )
 

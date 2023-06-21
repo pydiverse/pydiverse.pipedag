@@ -41,11 +41,10 @@ class SequentialEngine(OrchestrationEngine):
                 raise e
             exception = e
 
-        return Result(
+        return Result.init_from(
+            subflow=flow,
             underlying=results,
             successful=(exception is None),
-            config_context=ConfigContext.get(),
             task_values=results,
-            task_states=run_context.get_task_states(),
             exception=exception,
         )

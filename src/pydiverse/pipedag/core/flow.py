@@ -244,7 +244,7 @@ class Flow:
                 orchestration_engine = config.create_orchestration_engine()
             result = orchestration_engine.run(subflow, **kwargs)
 
-        visualization_url = subflow.visualize_url(result)
+        visualization_url = result.visualize_url()
         self.logger.info("Flow visualization", url=visualization_url)
 
         if not result.successful and config.fail_fast:
@@ -287,6 +287,8 @@ class Subflow:
     def get_tasks(self) -> Iterable[Task]:
         """
         All tasks that should get executed as part of this sub flow.
+        Guaranteed to be in the same order as they were added to the flow
+        (they will be ordered topologically).
         """
         for task in self.flow.tasks:
             if task in self.selected_tasks:

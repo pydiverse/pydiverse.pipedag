@@ -82,11 +82,10 @@ class DaskEngine(OrchestrationEngine):
                 raise e
             exception = e
 
-        return Result(
+        return Result.init_from(
+            subflow=flow,
             underlying=results,
             successful=(exception is None),
-            config_context=config_context,
             task_values=results,
-            task_states=run_context.get_task_states(),
             exception=exception,
         )
