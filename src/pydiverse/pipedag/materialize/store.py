@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import itertools
-import json
 from typing import Any, Callable
 
 import structlog
@@ -15,7 +14,6 @@ from pydiverse.pipedag.errors import DuplicateNameError, StageError
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import MaterializingTask, TaskInfo
 from pydiverse.pipedag.materialize.metadata import TaskMetadata
-from pydiverse.pipedag.materialize.util import json as json_util
 from pydiverse.pipedag.util import Disposable, deep_map
 from pydiverse.pipedag.util.naming import NameDisambiguator
 
@@ -42,14 +40,11 @@ class PipeDAGStore(Disposable):
         self.local_table_cache = local_table_cache
 
         self.logger = structlog.get_logger()
-        self.json_encoder = json.JSONEncoder(
-            ensure_ascii=False,
-            allow_nan=False,
-            separators=(",", ":"),
-            sort_keys=True,
-            default=json_util.json_default,
-        )
-        self.json_decoder = json.JSONDecoder(object_hook=json_util.json_object_hook)
+
+        from pydiverse.pipedag.util.json import PipedagJSONDecoder, PipedagJSONEncoder
+
+        self.json_encoder = PipedagJSONEncoder()
+        self.json_decoder = PipedagJSONDecoder()
 
     def dispose(self):
         """

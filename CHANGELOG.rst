@@ -7,6 +7,12 @@ https://semver.org/spec/v2.0.0.html. The most important bits are:
 Changelog
 =========
 
+- support execution of subflow
+- store final state of task in flow result object
+- tasks now have a `position_hash` associated with them to identify them purely based on their position (e.g. stage, name and input wiring) inside a flow.
+- breaking change to metadata: added position_hash to `tasks` metadata table and change type of hash columns from String(32) to String(20).
+- `Flow`, `Subflow`, and `Result` objects now provide additional options for visualizing them
+
 0.4.1 (2023-06-17)
 ------------------
 - implement DaskEngine: orchestration engine for running multiple tasks in parallel

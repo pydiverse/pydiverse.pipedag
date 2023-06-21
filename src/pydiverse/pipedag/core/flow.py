@@ -1,19 +1,26 @@
 from __future__ import annotations
 
-import warnings
 from collections import defaultdict
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 import networkx as nx
+import pydot
 import structlog
 
-from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContextServer
+from pydiverse.pipedag.context import (
+    ConfigContext,
+    DAGContext,
+    FinalTaskState,
+    RunContextServer,
+)
 from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import Result, Stage, Task
     from pydiverse.pipedag.core.stage import CommitStageTask
+    from pydiverse.pipedag.core.task import TaskGetItem
     from pydiverse.pipedag.engine import OrchestrationEngine
 
 
@@ -80,74 +87,23 @@ class Flow:
 
         self.graph.add_edge(from_, to)
 
-    # noinspection PyPackageRequirements
-    def visualize(self):
-        # TODO: Also allow visualizing the run result
-        #       Successful tasks in green, failed in red, skipped orange
-        import pydot
+    def visualize(self, result: Result | None = None):
+        dot = self.visualize_pydot(result)
+        _display_pydot(dot)
+        return dot
 
-        dot = pydot.Dot()
-        subgraphs: dict[Stage, pydot.Subgraph] = {}
-        nodes: dict[Task, pydot.Node] = {}
+    def visualize_url(self, result: Result | None = None) -> str:
+        dot = self.visualize_pydot(result)
+        return _pydot_url(dot)
 
-        for stage in self.stages.values():
-            s = pydot.Subgraph(
-                f"cluster_{stage.name}",
-                label=stage.name,
-                bgcolor="#00000011",
-            )
-            subgraphs[stage] = s
-
-            if stage.outer_stage is None:
-                dot.add_subgraph(s)
-            else:
-                subgraphs[stage.outer_stage].add_subgraph(s)
-
-        for task in self.tasks:
-            # noinspection PyProtectedMember
-            if task._visualize_hidden:
-                continue
-
-            node = pydot.Node(
-                task.id,
-                label=task.name,
-                fillcolor="#FFFFFF",
-                style="filled",
-            )
-            nodes[task] = node
-            subgraphs[task.stage].add_node(node)
-
-        for nx_edge in self.graph.edges:
-            edge = pydot.Edge(nodes[nx_edge[0]], nodes[nx_edge[1]])
-            dot.add_edge(edge)
-
-        # Display
-        # Either as svg in ipython
-        # Or as PDF in default pdf viewer
-        try:
-            # noinspection PyUnresolvedReferences
-            from IPython import get_ipython
-
-            # noinspection PyUnresolvedReferences
-            from IPython.display import SVG, display
-
-            ipython = get_ipython()
-            if ipython is None or ipython.config.get("IPKernelApp") is None:
-                raise RuntimeError(
-                    "Either IPython isn't running or SVG aren't supported."
-                )
-
-            display(SVG(dot.create_svg()))  # type: ignore
-        except (ImportError, RuntimeError):
-            import tempfile
-            import webbrowser
-
-            f = tempfile.NamedTemporaryFile(suffix=".pdf")
-            f.write(dot.create_pdf())  # type: ignore
-            webbrowser.open_new("file://" + f.name)
-
-            # Keep alive to prevent immediate deletion of file
-            globals()["__pipedag_tmp_file_reference__"] = f
+    def visualize_pydot(self, result: Result | None = None) -> pydot.Dot:
+        task_style = _generate_task_style(self.tasks, result)
+        dot = _build_pydot(
+            stages=list(self.stages.values()),
+            tasks=self.tasks,
+            graph=self.graph,
+            task_style=task_style,
+        )
 
         return dot
 
@@ -209,13 +165,31 @@ class Flow:
 
         return explicit_graph
 
+    def get_subflow(self, *components: Task | TaskGetItem | Stage) -> Subflow:
+        from pydiverse.pipedag.core.stage import Stage
+        from pydiverse.pipedag.core.task import Task, TaskGetItem
+
+        tasks = []
+        stages = []
+        for component in components:
+            if isinstance(component, Task):
+                tasks.append(component)
+            elif isinstance(component, TaskGetItem):
+                tasks.append(component.task)
+            elif isinstance(component, Stage):
+                stages.append(component)
+            else:
+                raise TypeError(f"Unexpected object of type {type(component).__name__}")
+
+        return Subflow(self, tasks=tasks, stages=stages)
+
     def run(
         self,
-        config_context: ConfigContext = None,
+        *components: Task | TaskGetItem | Stage,
+        config: ConfigContext = None,
         orchestration_engine: OrchestrationEngine = None,
         fail_fast: bool | None = None,
         ignore_fresh_input: bool = False,
-        stages: list[str] = None,
         **kwargs,
     ) -> Result:
         """Execute a flow
@@ -224,7 +198,13 @@ class Flow:
         keyword. If no engine is provided, the engine specified in the config
         file is used.
 
-        :param config_context: A configuration context with information about
+        :param components: An optional selection of tasks or stages that should
+            get executed. If no value is provided, all tasks and stages get executed.
+            If you specify a subset of tasks, those tasks get executed even when
+            they are cache valid, and they don't get committed.
+            If you specify a subset of stages, all tasks and substages of those stages
+            get executed and committed.
+        :param config: A configuration context with information about
             the pipe-DAG instance.
         :param orchestration_engine: The orchestration engine to use.
         :param fail_fast: True means that errors should be raised as exceptions
@@ -237,32 +217,268 @@ class Flow:
             Result object that gives information whether run was successful
         """
 
-        if stages is not None:
-            # TODO: implement running only a subset of stages (see parameter stages)
-            warnings.warn("flow.run(stages=...) isn't yet supported")
+        subflow = self.get_subflow(*components)
 
         # Get the ConfigContext to use
-        if config_context is None:
+        if config is None:
             try:
-                config_context = ConfigContext.get()
+                config = ConfigContext.get()
             except LookupError:
-                config_context = PipedagConfig.default.get()
+                config = PipedagConfig.default.get()
 
         # Evolve config using the arguments passed to flow.run
-        config_context = config_context.evolve(
-            fail_fast=(
-                fail_fast if fail_fast is not None else config_context.fail_fast
-            ),
+        config = config.evolve(
+            fail_fast=(fail_fast if fail_fast is not None else config.fail_fast),
             ignore_fresh_input=ignore_fresh_input,
+            ignore_task_version=(
+                # If subflow consists of a subset of tasks (-> not a subset of stages)
+                # then we want to ignore the task version to ensure the tasks always
+                # get executed.
+                subflow.is_tasks_subflow
+                or config.ignore_task_version
+            ),
         )
 
-        with config_context, RunContextServer(self):
+        with config, RunContextServer(subflow):
             if orchestration_engine is None:
-                orchestration_engine = config_context.create_orchestration_engine()
-            result = orchestration_engine.run(flow=self, **kwargs)
+                orchestration_engine = config.create_orchestration_engine()
+            result = orchestration_engine.run(subflow, **kwargs)
 
-        fail_fast = config_context.fail_fast
-        if not result.successful and fail_fast:
+        visualization_url = result.visualize_url()
+        self.logger.info("Flow visualization", url=visualization_url)
+
+        if not result.successful and config.fail_fast:
             raise result.exception or Exception("Flow run failed")
 
         return result
+
+
+class Subflow:
+    def __init__(self, flow: Flow, tasks: list[Task], stages: list[Stage]):
+        self.flow = flow
+        self.name = flow.name
+        self.is_tasks_subflow = len(tasks) > 0
+
+        if tasks and stages:
+            raise ValueError(
+                "You can only specify either a subset of tasks OR subset of stages"
+                " to run, but not both."
+            )
+        elif not tasks and not stages:
+            self.selected_stages = set(flow.stages.values())
+            self.selected_tasks = set(flow.tasks)
+            return
+
+        # Preprocessing
+        self.selected_stages = set(stages)
+        for stage in self.flow.stages.values():
+            if stage.outer_stage in self.selected_stages:
+                self.selected_stages.add(stage)
+
+        # Construct set of selected tasks
+        self.selected_tasks = set(tasks)
+
+        if not tasks:
+            for stage in self.selected_stages:
+                for task in stage.tasks:
+                    self.selected_tasks.add(task)
+                self.selected_tasks.add(stage.commit_task)
+
+    def get_tasks(self) -> Iterable[Task]:
+        """
+        All tasks that should get executed as part of this sub flow.
+        Guaranteed to be in the same order as they were added to the flow
+        (they will be ordered topologically).
+        """
+        for task in self.flow.tasks:
+            if task in self.selected_tasks:
+                yield task
+
+    def get_parent_tasks(self, task: Task) -> Iterable[Task]:
+        """
+        Returns tasks that must be executed before `task`.
+        """
+        if task not in self.selected_tasks:
+            return
+
+        for parent_task, _ in self.flow.explicit_graph.in_edges(task):
+            if parent_task in self.selected_tasks:
+                yield parent_task
+
+    def visualize(self, result: Result | None = None):
+        dot = self.visualize_pydot(result)
+        _display_pydot(dot)
+        return dot
+
+    def visualize_url(self, result: Result | None = None) -> str:
+        dot = self.visualize_pydot(result)
+        return _pydot_url(dot)
+
+    def visualize_pydot(self, result: Result | None = None) -> pydot.Dot:
+        graph = nx.DiGraph()
+
+        relevant_stages = set()
+        relevant_tasks = set()
+
+        for task in self.get_tasks():
+            graph.add_node(task)
+            relevant_stages.add(task.stage)
+            relevant_tasks.add(task)
+
+            for input_task in task.input_tasks.values():
+                relevant_stages.add(input_task.stage)
+                relevant_tasks.add(input_task)
+
+                if input_task in self.selected_tasks:
+                    graph.add_node(input_task)
+                graph.add_edge(input_task, task)
+
+        stage_style = {}
+        task_style = _generate_task_style(relevant_tasks, result)
+        edge_style = {}
+
+        for stage in relevant_stages:
+            if stage not in self.selected_stages:
+                stage_style[stage] = {
+                    "style": '"dashed"',
+                    "bgcolor": "#0000000A",
+                    "color": "#909090",
+                    "fontcolor": "#909090",
+                }
+
+        for task in relevant_tasks:
+            if task not in self.selected_tasks:
+                task_style[task] = {
+                    "style": '"filled,dashed"',
+                    "fillcolor": "#FFFFFF80",
+                    "color": "#808080",
+                    "fontcolor": "#909090",
+                }
+
+        for edge in graph.edges:
+            if edge[0] not in self.selected_tasks:
+                edge_style[edge] = {
+                    "style": "dashed",
+                    "color": "#909090",
+                }
+
+        return _build_pydot(
+            stages=sorted(relevant_stages, key=lambda s: s.id),
+            tasks=list(relevant_tasks),
+            graph=graph,
+            stage_style=stage_style,
+            task_style=task_style,
+            edge_style=edge_style,
+        )
+
+
+# Visualization Helper
+
+
+def _generate_task_style(tasks: Iterable[Task], result: Result | None) -> dict:
+    task_style = {}
+    if result:
+        for task in tasks:
+            final_state = result.task_states.get(task, FinalTaskState.UNKNOWN)
+            if final_state == FinalTaskState.COMPLETED:
+                task_style[task] = {"fillcolor": "#adef9b"}
+            elif final_state == FinalTaskState.CACHE_VALID:
+                task_style[task] = {"fillcolor": "#e8ffc6"}
+            elif final_state == FinalTaskState.FAILED:
+                task_style[task] = {"fillcolor": "#ff453a"}
+            elif final_state == FinalTaskState.SKIPPED:
+                task_style[task] = {"fillcolor": "#fccb83"}
+    return task_style
+
+
+def _build_pydot(
+    stages: list[Stage],
+    tasks: list[Task],
+    graph: nx.Graph,
+    stage_style: dict[Stage, dict] = None,
+    task_style: dict[Task, dict] = None,
+    edge_style: dict[tuple[Task, Task], dict] = None,
+) -> pydot.Dot:
+    if stage_style is None:
+        stage_style = {}
+    if task_style is None:
+        task_style = {}
+    if edge_style is None:
+        edge_style = {}
+
+    dot = pydot.Dot()
+    subgraphs: dict[Stage, pydot.Subgraph] = {}
+    nodes: dict[Task, pydot.Node] = {}
+
+    for stage in stages:
+        style = dict(
+            style="solid",
+            bgcolor="#00000020",
+            color="black",
+            fontcolor="black",
+        ) | (stage_style.get(stage, {}))
+
+        s = pydot.Subgraph(f"cluster_{stage.name}", label=stage.name, **style)
+        subgraphs[stage] = s
+
+        if stage.outer_stage in stages:
+            subgraphs[stage.outer_stage].add_subgraph(s)
+        else:
+            dot.add_subgraph(s)
+
+    for task in tasks:
+        if task._visualize_hidden:
+            continue
+
+        style = dict(
+            fillcolor="#FFFFFF",
+            style='"filled"',
+        ) | (task_style.get(task, {}))
+
+        node = pydot.Node(task.id, label=task.name, **style)
+        nodes[task] = node
+        subgraphs[task.stage].add_node(node)
+
+    for nx_edge in graph.edges:
+        style = edge_style.get(nx_edge, {})
+        edge = pydot.Edge(nodes[nx_edge[0]], nodes[nx_edge[1]], **style)
+        dot.add_edge(edge)
+
+    return dot
+
+
+def _display_pydot(dot: pydot.Dot):
+    """Display a pydot.Dot graph
+
+    - Either as svg in ipython
+    - Or as PDF in default pdf viewer
+    """
+
+    try:
+        from IPython import get_ipython
+        from IPython.display import SVG, display
+
+        ipython = get_ipython()
+        if ipython is None or ipython.config.get("IPKernelApp") is None:
+            raise RuntimeError("Either IPython isn't running or SVG aren't supported.")
+        display(SVG(dot.create_svg()))  # type: ignore
+    except (ImportError, RuntimeError):
+        import tempfile
+        import webbrowser
+
+        f = tempfile.NamedTemporaryFile(suffix=".pdf")
+        f.write(dot.create_pdf())  # type: ignore
+        webbrowser.open_new("file://" + f.name)
+
+        # Keep alive to prevent immediate deletion of file
+        globals()["__pipedag_tmp_file_reference__"] = f
+
+
+def _pydot_url(dot: pydot.Dot) -> str:
+    import base64
+    import zlib
+
+    query_data = zlib.compress(str(dot).encode("utf-8"), 9)
+    query = base64.urlsafe_b64encode(query_data).decode("ascii")
+
+    return f"https://kroki.io/graphviz/svg/{query}"

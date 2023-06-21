@@ -10,6 +10,7 @@ from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext, Tas
 from pydiverse.pipedag.context.run_context import FinalTaskState
 from pydiverse.pipedag.errors import FlowError, StageError
 from pydiverse.pipedag.util import deep_map
+from pydiverse.pipedag.util.hashing import stable_hash
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import Flow, Stage
@@ -56,6 +57,7 @@ class Task:
 
         self._signature = inspect.signature(fn)
         self._bound_args: inspect.BoundArguments = None  # type: ignore
+        self.position_hash: str = None  # type: ignore
 
         self.logger = structlog.get_logger(logger_name=f"Task '{self.name}'", task=self)
         self._visualize_hidden = False
@@ -91,6 +93,7 @@ class Task:
         new.logger = new.logger.bind(logger_name=f"Task '{new.name}'", task=new)
 
         new._bound_args = new._signature.bind(*args, **kwargs)
+        new.position_hash = new.__compute_position_hash()
 
         new.flow.add_task(new)
         new.stage.tasks.append(new)
@@ -134,7 +137,7 @@ class Task:
 
         with run_context, config_context:
             try:
-                result = self._run(inputs)
+                result, task_context = self._run(inputs)
             except Exception as e:
                 if config_context._swallow_exceptions:
                     # PIPEDAG INTERNAL
@@ -144,10 +147,13 @@ class Task:
                 self.did_finish(FinalTaskState.FAILED)
                 raise e
             else:
-                self.did_finish(FinalTaskState.COMPLETED)
+                if task_context.is_cache_valid:
+                    self.did_finish(FinalTaskState.CACHE_VALID)
+                else:
+                    self.did_finish(FinalTaskState.COMPLETED)
                 return result
 
-    def _run(self, inputs: [int, Any]):
+    def _run(self, inputs: [int, Any]) -> tuple[Any, TaskContext]:
         args = self._bound_args.args
         kwargs = self._bound_args.kwargs
 
@@ -164,13 +170,32 @@ class Task:
         args = deep_map(args, task_result_mapper)
         kwargs = deep_map(kwargs, task_result_mapper)
 
-        with TaskContext(task=self):
+        with TaskContext(task=self) as task_context:
             result = self.fn(*args, **kwargs)
 
-        return result
+        return result, task_context
+
+    def __compute_position_hash(self) -> str:
+        """
+        The position hash encodes the position & wiring of a task within a flow.
+        If two tasks have the same position hash, this means that their inputs are
+        derived in the same way.
+        """
+
+        from pydiverse.pipedag.util.json import PipedagJSONEncoder
+
+        def visitor(x):
+            if isinstance(x, (Task, TaskGetItem)):
+                return x.position_hash
+            return x
+
+        arguments = deep_map(self._bound_args.arguments, visitor)
+        input_json = PipedagJSONEncoder().encode(arguments)
+
+        return stable_hash("POS_TASK", self.name, self.stage.name, input_json)
 
     def did_finish(self, state: FinalTaskState):
-        if state == FinalTaskState.COMPLETED:
+        if state.is_successful():
             self.logger.info("Task finished successfully", state=state)
         RunContext.get().did_finish_task(self, state)
 
@@ -187,6 +212,10 @@ class TaskGetItem:
         self.task = task
         self.parent = parent
         self.item = item
+
+        self.position_hash = stable_hash(
+            "POS_GET_ITEM", parent.position_hash, repr(self.item)
+        )
 
     def __getitem__(self, item):
         return TaskGetItem(self.task, self, item)

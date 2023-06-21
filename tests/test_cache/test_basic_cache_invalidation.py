@@ -583,7 +583,7 @@ def test_ignore_task_version(mocker):
 
     # Initial Call
     with StageLockContext():
-        result = flow.run(cfg)
+        result = flow.run(config=cfg)
         assert result.get(out)[0] == 1
         assert result.get(child)[0] == 1
 
@@ -592,7 +592,7 @@ def test_ignore_task_version(mocker):
     child_spy = spy_task(mocker, child)
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(cfg)
+            result = flow.run(config=cfg)
             assert result.get(out)[0] == 1
             assert result.get(child)[0] == 1
             out_spy.assert_called_once()

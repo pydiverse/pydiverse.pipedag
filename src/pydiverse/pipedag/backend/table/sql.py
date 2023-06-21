@@ -54,7 +54,7 @@ from pydiverse.pipedag.materialize.metadata import (
     RawSqlMetadata,
     TaskMetadata,
 )
-from pydiverse.pipedag.materialize.util import compute_cache_key
+from pydiverse.pipedag.util.hashing import stable_hash
 from pydiverse.pipedag.util.naming import NameDisambiguator
 
 
@@ -156,7 +156,7 @@ class SQLTableStore(BaseTableStore):
         # Store version number for metadata table schema evolution.
         # We disable caching in case of version mismatch.
         self.disable_caching = False
-        self.metadata_version = "0.2.0"  # Increase version if metadata table changes
+        self.metadata_version = "0.3.0"  # Increase version if metadata table changes
         self.version_table = sa.Table(
             "metadata_version",
             self.sql_metadata,
@@ -173,9 +173,10 @@ class SQLTableStore(BaseTableStore):
             Column("stage", String(64)),
             Column("version", String(64)),
             Column("timestamp", DateTime),
-            Column("run_id", String(32)),
-            Column("input_hash", String(32)),
-            Column("cache_fn_hash", String(32)),
+            Column("run_id", String(20)),
+            Column("position_hash", String(20)),
+            Column("input_hash", String(20)),
+            Column("cache_fn_hash", String(20)),
             Column("output_json", clob_type),
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
@@ -188,8 +189,8 @@ class SQLTableStore(BaseTableStore):
             Column("id", BigInteger, primary_key=True, autoincrement=True),
             Column("name", String(128)),
             Column("stage", String(64)),
-            Column("query_hash", String(32)),
-            Column("task_hash", String(32)),
+            Column("query_hash", String(20)),
+            Column("task_hash", String(20)),
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
         )
@@ -202,8 +203,8 @@ class SQLTableStore(BaseTableStore):
             Column("prev_tables", String(256)),
             Column("tables", String(256)),
             Column("stage", String(64)),
-            Column("query_hash", String(32)),
-            Column("task_hash", String(32)),
+            Column("query_hash", String(20)),
+            Column("task_hash", String(20)),
             Column("in_transaction_schema", Boolean),
             schema=self.metadata_schema.get(),
         )
@@ -1267,6 +1268,7 @@ class SQLTableStore(BaseTableStore):
                         version=metadata.version,
                         timestamp=metadata.timestamp,
                         run_id=metadata.run_id,
+                        position_hash=metadata.position_hash,
                         input_hash=metadata.input_hash,
                         cache_fn_hash=metadata.cache_fn_hash,
                         output_json=metadata.output_json,
@@ -1315,10 +1317,39 @@ class SQLTableStore(BaseTableStore):
             version=result.version,
             timestamp=result.timestamp,
             run_id=result.run_id,
+            position_hash=result.position_hash,
             input_hash=result.input_hash,
             cache_fn_hash=result.cache_fn_hash,
             output_json=result.output_json,
         )
+
+    def retrieve_all_task_metadata(self, task: MaterializingTask) -> list[TaskMetadata]:
+        with self.engine_connect() as conn:
+            results = (
+                conn.execute(
+                    self.tasks_table.select()
+                    .where(self.tasks_table.c.name == task.name)
+                    .where(self.tasks_table.c.stage == task.stage.name)
+                    .where(self.tasks_table.c.position_hash == task.position_hash)
+                )
+                .mappings()
+                .all()
+            )
+
+        return [
+            TaskMetadata(
+                name=result.name,
+                stage=result.stage,
+                version=result.version,
+                timestamp=result.timestamp,
+                run_id=result.run_id,
+                position_hash=result.position_hash,
+                input_hash=result.input_hash,
+                cache_fn_hash=result.cache_fn_hash,
+                output_json=result.output_json,
+            )
+            for result in results
+        ]
 
     def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
         if not self.disable_caching:
@@ -1483,7 +1514,7 @@ class SQLTableStore(BaseTableStore):
                 .order_by(self.tasks_table.c.output_json)
             ).all()
             result = [row[0] for row in result]
-        return compute_cache_key(*result)
+        return stable_hash(*result)
 
     # DatabaseLockManager
 

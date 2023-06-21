@@ -4,15 +4,16 @@ import functools
 import inspect
 from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from pydiverse.pipedag._typing import CallableT
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.core.task import Task
+from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.cache import CacheManager, TaskCacheInfo
 from pydiverse.pipedag.materialize.container import Blob, Table
-from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.util import deep_map
+from pydiverse.pipedag.util.hashing import stable_hash
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Stage
@@ -116,6 +117,46 @@ class MaterializingTask(Task):
         self.cache = cache
         self.lazy = lazy
 
+    def run(self, inputs: dict[int, Any], **kwargs):
+        # When running only a subset of an entire flow, not all inputs
+        # get calculated during flow execution. As a consequence, we must load
+        # those inputs from the cache.
+
+        for in_id, in_task in self.input_tasks.items():
+            if in_id in inputs:
+                continue
+
+            # This returns all metadata objects with the same name, stage, AND position
+            # hash as `in_task`. We utilize the position hash to identify a specific
+            # task instance, if the same task appears multiple times in a stage.
+            store = ConfigContext.get().store
+            metadata = store.table_store.retrieve_all_task_metadata(in_task)
+
+            if not metadata:
+                raise CacheError(
+                    f"Couldn't find cached output for task {in_task}"
+                    " with matching position hash."
+                )
+
+            output_json = {m.output_json for m in metadata}
+            if len(output_json) > 1:
+                raise RuntimeError(
+                    f"Found multiple matching cached versions of task '{in_task.name}'"
+                    f" in stage '{in_task.stage}' with different outputs."
+                    f" Couldn't determine which one to use for loading"
+                    f" inputs for task {self}."
+                )
+
+            # Choose newest entry
+            metadata = sorted(metadata, key=lambda m: m.timestamp)[-1]
+            cached_output = store.json_decode(metadata.output_json)
+
+            # Load inputs from database
+            inputs[in_id] = cached_output
+
+        self.logger.info("inputs", inputs=inputs)
+        return super().run(inputs, **kwargs)
+
 
 @dataclass
 class TaskInfo:
@@ -165,12 +206,12 @@ class MaterializationWrapper:
 
         # Compute the cache key for the task inputs
         input_json = store.json_encode(bound.arguments)
-        input_hash = compute_cache_key("INPUT", input_json)
+        input_hash = stable_hash("INPUT", input_json)
 
         cache_fn_hash = ""
         if task.cache is not None:
             cache_fn_output = store.json_encode(task.cache(*args, **kwargs))
-            cache_fn_hash = compute_cache_key("CACHE_FN", cache_fn_output)
+            cache_fn_hash = stable_hash("CACHE_FN", cache_fn_output)
 
         memo_cache_key = CacheManager.task_cache_key(task, input_hash, cache_fn_hash)
 
@@ -191,12 +232,17 @@ class MaterializationWrapper:
             )
             if not task.lazy:
                 ctx = RunContext.get()
+                TaskContext.get().is_cache_valid = task_cache_info.is_cache_valid()
                 if task_cache_info.is_cache_valid():
                     ctx.store_task_memo(
                         task, memo_cache_key, task_cache_info.get_cached_output()
                     )
                     # Task isn't lazy -> copy cache to transaction stage
                     return task_cache_info.get_cached_output()
+            else:
+                # For lazy tasks, is_cache_valid gets set to false during the
+                # store.materialize_task procedure
+                TaskContext.get().is_cache_valid = True
 
             # Not found in cache / lazy -> Evaluate Function
             args, kwargs, input_tables = store.dematerialize_task_inputs(

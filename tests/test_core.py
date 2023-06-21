@@ -12,6 +12,10 @@ def t(name: str, **kwargs):
     return Task((lambda *a: a), name=f"task-{name}", **kwargs)
 
 
+def t_kw(name: str, **kwargs):
+    return Task((lambda **kw: kw), name=f"task-kw-{name}", **kwargs)
+
+
 def validate_dependencies(flow: Flow):
     # Tasks outside a stage can only run if all
     # tasks inside the stage have finished.
@@ -241,6 +245,52 @@ class TestDAGConstruction:
             ]
         ] == list(range(12))
 
+    def test_subflow(self):
+        with Flow("f") as f:
+            with Stage("stage_0"):
+                t00 = t("00")(0)
+                t01 = t("01")(t00)
+                t02 = t("02")(t01)
+
+            with Stage("stage_1") as s1:
+                t10 = t("10")(t02)
+                with Stage("stage_2") as s2:
+                    t20 = t("20")(t10)
+                t11 = t("11")(t20)
+                t12 = t("12")(t10, t20, t11)
+
+        # Entire Flow as Subflow
+        sf = f.get_subflow()
+        assert not sf.is_tasks_subflow
+        assert set(sf.get_tasks()) == set(f.tasks)
+
+        # Stage Subflow
+        sf = f.get_subflow(s2)
+        assert not sf.is_tasks_subflow
+        assert set(sf.get_tasks()) == {t20, s2.commit_task}
+        assert set(sf.get_parent_tasks(t20)) == set()
+
+        # Stage Subflow
+        sf = f.get_subflow(s1)
+        assert not sf.is_tasks_subflow
+        assert set(sf.get_tasks()) == {
+            t10,
+            t11,
+            t12,
+            t20,
+            s1.commit_task,
+            s2.commit_task,
+        }
+        assert set(sf.get_parent_tasks(t10)) == set()
+        assert set(sf.get_parent_tasks(t11)) == {t20, s2.commit_task}
+
+        # Task Subflow
+        sf = f.get_subflow(t10, t12)
+        assert sf.is_tasks_subflow
+        assert set(sf.get_tasks()) == {t10, t12}
+        assert set(sf.get_parent_tasks(t10)) == set()
+        assert set(sf.get_parent_tasks(t12)) == {t10}
+
 
 class TestDAGConstructionExceptions:
     def test_duplicate_stage_name(self):
@@ -311,6 +361,86 @@ class TestDAGConstructionExceptions:
                     t("bad task")(task)
 
 
+class TestPositionHash:
+    def test_single_task(self):
+        with Flow():
+            with Stage("stage_0"):
+                x = t("0")(0)
+                y = t("0")(0)
+
+                z0 = t("0")(1)  # Different input
+                z1 = t("1")(0)  # Different name
+
+            with Stage("stage_1"):
+                z2 = t("0")(0)  # Different stage
+
+        assert x.position_hash == y.position_hash
+
+        assert x.position_hash != z0.position_hash
+        assert x.position_hash != z1.position_hash
+        assert x.position_hash != z2.position_hash
+
+    def test_multiple_tasks(self):
+        with Flow():
+            with Stage("stage_0"):
+                x0 = t("0")(0)
+                y0 = t("0")(0)
+
+                z0_0 = t("1")(0)  # Wrong task name
+
+            with Stage("stage_1"):
+                x1 = t("1")(2, x0)
+                y1 = t("1")(2, y0)
+
+                z1_0 = t("1")(2, z0_0)  # z0_0 has different position hash
+                z1_1 = t("1")(1, x1)  # Different input: 1 != 2
+
+            with Stage("stage_2"):
+                x2 = t_kw("2")(a=1, b=2, c=[x1, y1])
+                y2 = t_kw("2")(b=2, a=1, c=[y1, x1])
+
+                z2_0 = t_kw("2")(A=1, b=2, c=[x1, y1])  # Different kwarg name
+                z2_1 = t_kw("2")(a=1, b=2, c=[z1_0, z1_1])  # Inputs different pos hash
+
+        assert x0.position_hash == y0.position_hash
+        assert x0.position_hash != z0_0.position_hash
+
+        assert x1.position_hash == y1.position_hash
+        assert x1.position_hash != z1_0.position_hash
+        assert x1.position_hash != z1_1.position_hash
+
+        assert x2.position_hash == y2.position_hash
+        assert x2.position_hash != z2_0.position_hash
+        assert x2.position_hash != z2_1.position_hash
+
+    def test_get_item(self):
+        with Flow():
+            with Stage("stage_0"):
+                inputs = t_kw("inputs")(a=1, b=2)
+
+                x0 = t("0")(inputs["a"])
+                y0 = t("0")(inputs["a"])
+                z0 = t("0")(inputs["b"])
+
+            with Stage("stage_1"):
+                inputs = t("inputs")(1, 2)
+
+                x1 = t("0")(inputs[0])
+                y1 = t("0")(inputs[0])
+                z1 = t("0")(inputs[1])
+
+        assert x0.position_hash == y0.position_hash
+        assert x0.position_hash != z0.position_hash
+
+        assert x1.position_hash == y1.position_hash
+        assert x1.position_hash != z1.position_hash
+
+        assert inputs["1"].position_hash != inputs[1].position_hash
+        assert inputs[1].position_hash != inputs[1.0].position_hash
+        assert inputs[1][1].position_hash != inputs[1][0].position_hash
+        assert inputs[1][1].position_hash != inputs[0][1].position_hash
+
+
 def test_task_nout():
     with Flow("flow"):
         with Stage("stage"):
@@ -335,7 +465,8 @@ def test_task_getitem():
         with Stage("stage"):
             task = t("task")()
 
-            _ = task[0]
-            _ = task[1]
-            _ = task[0][0]
-            _ = task["something"][0:8]
+    assert task.resolve_value((1, 2)) == (1, 2)
+    assert task[0].resolve_value((1, 2)) == 1
+    assert task[1].resolve_value((1, 2)) == 2
+    assert task[1][0].resolve_value(((1, 2), (3, 4))) == 3
+    assert task["x"][1:3].resolve_value({"x": [1, 2, 3, 4]}) == [2, 3]

@@ -7,7 +7,7 @@ import structlog
 from typing_extensions import Self
 
 from pydiverse.pipedag._typing import StoreT, T
-from pydiverse.pipedag.context import RunContext
+from pydiverse.pipedag.context import RunContext, TaskContext
 from pydiverse.pipedag.materialize.cache import CacheManager
 from pydiverse.pipedag.materialize.container import RawSql, Table
 from pydiverse.pipedag.materialize.metadata import (
@@ -15,8 +15,8 @@ from pydiverse.pipedag.materialize.metadata import (
     RawSqlMetadata,
     TaskMetadata,
 )
-from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.util import Disposable, requires
+from pydiverse.pipedag.util.hashing import stable_hash
 from pydiverse.pipedag.util.naming import NameDisambiguator
 
 if TYPE_CHECKING:
@@ -267,7 +267,7 @@ class BaseTableStore(TableHookResolver):
         try:
             hook = self.get_m_table_hook(type(table.obj))
             query_str = hook.lazy_query_str(self, table.obj)
-            query_hash = compute_cache_key("LAZY-TABLE", query_str)
+            query_hash = stable_hash("LAZY-TABLE", query_str)
         except TypeError:
             # This table type doesn't provide a query string
             # -> Fallback to default implementation
@@ -277,6 +277,7 @@ class BaseTableStore(TableHookResolver):
             self, task_info.task_cache_info, table, query_hash
         )
         if not table_cache_info.is_cache_valid():
+            TaskContext.get().is_cache_valid = False
             self.store_table(table, task, task_info)
 
         # At this point we MUST also update the cache info, so that any downstream
@@ -296,12 +297,13 @@ class BaseTableStore(TableHookResolver):
         the query, it just copies the previous result to the commit stage.
         """
         _ = task
-        query_hash = compute_cache_key("RAW-SQL", raw_sql.sql)
+        query_hash = stable_hash("RAW-SQL", raw_sql.sql)
 
         table_cache_info = CacheManager.raw_sql_cache_lookup(
             self, task_info.task_cache_info, raw_sql, query_hash
         )
         if not table_cache_info.is_cache_valid():
+            TaskContext.get().is_cache_valid = False
             RunContext.get().set_stage_has_changed(task.stage)
             prev_tables = self.list_tables(raw_sql.stage, include_everything=True)
             self.execute_raw_sql(raw_sql)
@@ -375,6 +377,14 @@ class BaseTableStore(TableHookResolver):
         """Retrieve a task's metadata from the store
 
         :raises CacheError: if no metadata for this task can be found.
+        """
+
+    @abstractmethod
+    def retrieve_all_task_metadata(self, task: MaterializingTask) -> list[TaskMetadata]:
+        """Retrieves all metadata objects associated with a task from the store
+
+        As long as a metadata entry has the same task and stage name, as well
+        as the same position hash as the `task` object, it should get returned.
         """
 
     # Lazy Table Metadata

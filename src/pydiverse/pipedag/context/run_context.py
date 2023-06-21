@@ -27,10 +27,9 @@ from pydiverse.pipedag.util import Disposable
 from pydiverse.pipedag.util.ipc import IPCServer
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag import Flow, Stage
     from pydiverse.pipedag._typing import T
     from pydiverse.pipedag.backend import BaseLockManager, LockState
-    from pydiverse.pipedag.core import Task
+    from pydiverse.pipedag.core import Stage, Subflow, Task
     from pydiverse.pipedag.materialize import Blob, Table
 
 
@@ -65,7 +64,7 @@ class RunContextServer(IPCServer):
     and deserialization in case of multi-node execution of tasks in pipedag graph.
     """
 
-    def __init__(self, flow: Flow):
+    def __init__(self, subflow: Subflow):
         config_ctx = ConfigContext.get()
         interface = config_ctx.network_interface
 
@@ -75,7 +74,8 @@ class RunContextServer(IPCServer):
             msg_ext_hook=_msg_ext_hook,
         )
 
-        self.flow = flow
+        self.flow = subflow.flow
+        self.subflow = subflow
         self.config_ctx = config_ctx
         self.run_id = uuid.uuid4().hex[:20]
 
@@ -88,6 +88,7 @@ class RunContextServer(IPCServer):
 
         # STATE
         self.ref_count = [0] * num_stages
+        self.task_state = [FinalTaskState.UNKNOWN] * len(self.tasks)
         self.stage_state = [StageState.UNINITIALIZED] * num_stages
 
         self.table_names = [set() for _ in range(num_stages)]
@@ -384,14 +385,12 @@ class RunContextServer(IPCServer):
     # TASK
 
     def did_finish_task(self, task_id: int, final_state_value: int):
-        # TODO: Do something with the final state.
-        #       For example: The object returned by flow.run could have a list
-        #       of tasks and their final states.
-        _final_state = FinalTaskState(final_state_value)
+        final_state = FinalTaskState(final_state_value)
         task = self.tasks[task_id]
 
-        stages_to_release = []
+        self.task_state[task_id] = final_state
 
+        stages_to_release = []
         with self.ref_count_lock:
             for stage in task.upstream_stages:
                 self.ref_count[stage.id] -= 1
@@ -409,6 +408,9 @@ class RunContextServer(IPCServer):
         if not self.keep_stages_locked:
             for stage in stages_to_release:
                 self.lock_manager.release(stage)
+
+    def get_task_states(self) -> list[int]:
+        return [state.value for state in self.task_state]
 
     def enter_task_memo(self, task_id: int, cache_key: str) -> tuple[bool, Any]:
         task = self.tasks[task_id]
@@ -594,6 +596,10 @@ class RunContext(BaseContext):
     def did_finish_task(self, task: Task, final_state: FinalTaskState):
         self._request("did_finish_task", task.id, final_state.value)
 
+    def get_task_states(self) -> dict[Task, FinalTaskState]:
+        states = [FinalTaskState(value) for value in self._request("get_task_states")]
+        return {task: states[task.id] for task in self.flow.tasks}
+
     @contextmanager
     def task_memo(self, task: Task, cache_key: str):
         success, memo = self._request("enter_task_memo", task.id, cache_key)
@@ -740,8 +746,15 @@ class FinalTaskState(Enum):
     UNKNOWN = 0
 
     COMPLETED = 1
-    FAILED = 2
-    SKIPPED = 3
+    CACHE_VALID = 2
+    FAILED = 10
+    SKIPPED = 20
+
+    def is_successful(self) -> bool:
+        return self in (FinalTaskState.COMPLETED, FinalTaskState.CACHE_VALID)
+
+    def is_failure(self) -> bool:
+        return self in (FinalTaskState.FAILED,)
 
 
 class MemoState(Enum):

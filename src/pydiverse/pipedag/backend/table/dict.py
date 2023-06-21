@@ -97,6 +97,16 @@ class DictTableStore(BaseTableStore):
                 f"'{task.name}' with cache key '{task.input_hash}', yet"
             ) from None
 
+    def retrieve_all_task_metadata(self, task: MaterializingTask) -> list[TaskMetadata]:
+        task_metadata = []
+        for m in (
+            *self.metadata[task.stage].values(),
+            *self.t_metadata[task.stage].values(),
+        ):
+            if m.name == task.name and m.position_hash == task.position_hash:
+                task_metadata.append(m)
+        return task_metadata
+
     def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
         cache_key = metadata.query_hash + metadata.task_hash
         self.t_lazy_table_metadata[metadata.stage][cache_key] = metadata

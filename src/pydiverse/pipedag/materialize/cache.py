@@ -14,7 +14,7 @@ from pydiverse.pipedag.materialize.metadata import (
     RawSqlMetadata,
     TaskMetadata,
 )
-from pydiverse.pipedag.materialize.util import compute_cache_key
+from pydiverse.pipedag.util.hashing import stable_hash
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Stage, Table
@@ -57,6 +57,7 @@ class TaskCacheInfo:
             version=self._task.version,
             timestamp=datetime.now(),
             run_id=ctx.run_id,
+            position_hash=self._task.position_hash,
             input_hash=self._input_hash,
             cache_fn_hash=self._cache_fn_hash,
             output_json=output_json,
@@ -231,7 +232,7 @@ class CacheManager:
         :return: The hash / cache key (str).
         """
 
-        return compute_cache_key(
+        return stable_hash(
             "TASK",
             task.name,
             task.version,
@@ -241,7 +242,7 @@ class CacheManager:
 
     @staticmethod
     def lazy_table_cache_key(task_hash: str, query_hash: str):
-        return compute_cache_key(
+        return stable_hash(
             "LAZY_TABLE",
             task_hash,
             query_hash,

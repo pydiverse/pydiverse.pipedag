@@ -6,7 +6,7 @@ import structlog
 from attrs import frozen
 
 from pydiverse.pipedag.context import ConfigContext, StageLockContext
-from pydiverse.pipedag.context.run_context import DematerializeRunContext
+from pydiverse.pipedag.context.run_context import DematerializeRunContext, RunContext
 from pydiverse.pipedag.core.task import Task, TaskGetItem
 from pydiverse.pipedag.errors import LockError
 from pydiverse.pipedag.materialize.core import MaterializingTask
@@ -14,16 +14,42 @@ from pydiverse.pipedag.util import deep_map
 
 if TYPE_CHECKING:
     from pydiverse.pipedag._typing import Materializable
+    from pydiverse.pipedag.context.run_context import FinalTaskState
+    from pydiverse.pipedag.core import Flow, Subflow
 
 
 @frozen
 class Result:
+    flow: Flow
+    subflow: Subflow
+
     underlying: Any
     successful: bool
     config_context: ConfigContext | None
 
     task_values: dict[Task, Any]
-    exception: Exception | None = None
+    task_states: dict[Task, FinalTaskState]
+    exception: Exception | None
+
+    @staticmethod
+    def init_from(
+        *,
+        subflow: Subflow,
+        underlying: Any,
+        successful: bool,
+        task_values: dict[Task, Any],
+        exception: Exception | None,
+    ) -> Result:
+        return Result(
+            flow=subflow.flow,
+            subflow=subflow,
+            underlying=underlying,
+            successful=successful,
+            config_context=ConfigContext.get(),
+            task_values=task_values,
+            task_states=RunContext.get().get_task_states(),
+            exception=exception,
+        )
 
     def get(self, task: Task | TaskGetItem, as_type: type = None) -> Materializable:
         """Load the results of a task from the database.
@@ -70,3 +96,12 @@ class Result:
 
             task_value = self.task_values[root_task]
             return deep_map(task.resolve_value(task_value), dematerialize_mapper)
+
+    def visualize(self):
+        return self.subflow.visualize(result=self)
+
+    def visualize_url(self):
+        return self.subflow.visualize_url(result=self)
+
+    def visualize_pydot(self):
+        return self.subflow.visualize_pydot(result=self)
