@@ -9,6 +9,7 @@ Changelog
 
 - support execution of subflow
 - store final state of task in flow result object
+- breaking change to metadata: added position_hash to `tasks` metadata table and change type of hash columns from String(32) to String(20).
 
 0.4.1 (2023-06-17)
 ------------------
