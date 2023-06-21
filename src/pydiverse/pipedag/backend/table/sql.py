@@ -1795,10 +1795,18 @@ class PandasTableHook(TableHook[SQLTableStore]):
     def _fix_cols(cols: dict[str, Any], dialect_name):
         cols = cols.copy()
         year_cols = []
-        min_date = datetime.datetime(1900, 1, 1, 0, 0, 0)
-        max_date = datetime.datetime(2199, 12, 31, 23, 59, 59)
+
         for name, col in list(cols.items()):
-            if isinstance(col.type, sa.Date) or isinstance(col.type, sa.DateTime):
+            if isinstance(col.type, (sa.Date, sa.DateTime)):
+                if isinstance(col.type, sa.Date):
+                    min_val = datetime.date(1900, 1, 1)
+                    max_val = datetime.date(2199, 12, 31)
+                elif isinstance(col.type, sa.DateTime):
+                    min_val = datetime.datetime(1900, 1, 1, 0, 0, 0)
+                    max_val = datetime.datetime(2199, 12, 31, 23, 59, 59)
+                else:
+                    raise
+
                 if name + "_year" not in cols:
                     cols[name + "_year"] = sa.cast(
                         sa.func.extract("year", cols[name]), sa.Integer
@@ -1806,13 +1814,13 @@ class PandasTableHook(TableHook[SQLTableStore]):
                     year_cols.append(name + "_year")
                 # Todo: do better abstraction of dialect specific code
                 if dialect_name == "mssql":
-                    cap_min = sa.func.iif(cols[name] < min_date, min_date, cols[name])
-                    cols[name] = sa.func.iif(
-                        cap_min > max_date, max_date, cap_min
-                    ).label(name)
+                    cap_min = sa.func.iif(cols[name] < min_val, min_val, cols[name])
+                    cols[name] = sa.func.iif(cap_min > max_val, max_val, cap_min).label(
+                        name
+                    )
                 else:
                     cols[name] = sa.func.least(
-                        max_date, sa.func.greatest(min_date, cols[name])
+                        max_val, sa.func.greatest(min_val, cols[name])
                     ).label(name)
         return cols, year_cols
 
