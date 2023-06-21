@@ -10,6 +10,7 @@ from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext, Tas
 from pydiverse.pipedag.context.run_context import FinalTaskState
 from pydiverse.pipedag.errors import FlowError, StageError
 from pydiverse.pipedag.util import deep_map
+from pydiverse.pipedag.util.hashing import stable_hash
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import Flow, Stage
@@ -56,6 +57,7 @@ class Task:
 
         self._signature = inspect.signature(fn)
         self._bound_args: inspect.BoundArguments = None  # type: ignore
+        self.position_hash: str = None  # type: ignore
 
         self.logger = structlog.get_logger(logger_name=f"Task '{self.name}'", task=self)
         self._visualize_hidden = False
@@ -91,6 +93,7 @@ class Task:
         new.logger = new.logger.bind(logger_name=f"Task '{new.name}'", task=new)
 
         new._bound_args = new._signature.bind(*args, **kwargs)
+        new.position_hash = new.__compute_position_hash()
 
         new.flow.add_task(new)
         new.stage.tasks.append(new)
@@ -172,6 +175,25 @@ class Task:
 
         return result, task_context
 
+    def __compute_position_hash(self) -> str:
+        """
+        The position hash encodes the position & wiring of a task within a flow.
+        If two tasks have the same position hash, this means that their inputs are
+        derived in the same way.
+        """
+
+        from pydiverse.pipedag.util.json import PipedagJSONEncoder
+
+        def visitor(x):
+            if isinstance(x, (Task, TaskGetItem)):
+                return x.position_hash
+            return x
+
+        arguments = deep_map(self._bound_args.arguments, visitor)
+        input_json = PipedagJSONEncoder().encode(arguments)
+
+        return stable_hash("POS_TASK", self.name, self.stage.name, input_json)
+
     def did_finish(self, state: FinalTaskState):
         if state.is_successful():
             self.logger.info("Task finished successfully", state=state)
@@ -190,6 +212,10 @@ class TaskGetItem:
         self.task = task
         self.parent = parent
         self.item = item
+
+        self.position_hash = stable_hash(
+            "POS_GET_ITEM", parent.position_hash, repr(self.item)
+        )
 
     def __getitem__(self, item):
         return TaskGetItem(self.task, self, item)

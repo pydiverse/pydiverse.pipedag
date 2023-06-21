@@ -54,7 +54,7 @@ from pydiverse.pipedag.materialize.metadata import (
     RawSqlMetadata,
     TaskMetadata,
 )
-from pydiverse.pipedag.materialize.util import compute_cache_key
+from pydiverse.pipedag.util.hashing import stable_hash
 from pydiverse.pipedag.util.naming import NameDisambiguator
 
 
@@ -1509,7 +1509,7 @@ class SQLTableStore(BaseTableStore):
                 .order_by(self.tasks_table.c.output_json)
             ).all()
             result = [row[0] for row in result]
-        return compute_cache_key(*result)
+        return stable_hash(*result)
 
     # DatabaseLockManager
 

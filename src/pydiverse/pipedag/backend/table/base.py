@@ -15,8 +15,8 @@ from pydiverse.pipedag.materialize.metadata import (
     RawSqlMetadata,
     TaskMetadata,
 )
-from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.util import Disposable, requires
+from pydiverse.pipedag.util.hashing import stable_hash
 from pydiverse.pipedag.util.naming import NameDisambiguator
 
 if TYPE_CHECKING:
@@ -267,7 +267,7 @@ class BaseTableStore(TableHookResolver):
         try:
             hook = self.get_m_table_hook(type(table.obj))
             query_str = hook.lazy_query_str(self, table.obj)
-            query_hash = compute_cache_key("LAZY-TABLE", query_str)
+            query_hash = stable_hash("LAZY-TABLE", query_str)
         except TypeError:
             # This table type doesn't provide a query string
             # -> Fallback to default implementation
@@ -297,7 +297,7 @@ class BaseTableStore(TableHookResolver):
         the query, it just copies the previous result to the commit stage.
         """
         _ = task
-        query_hash = compute_cache_key("RAW-SQL", raw_sql.sql)
+        query_hash = stable_hash("RAW-SQL", raw_sql.sql)
 
         table_cache_info = CacheManager.raw_sql_cache_lookup(
             self, task_info.task_cache_info, raw_sql, query_hash

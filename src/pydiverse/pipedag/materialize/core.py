@@ -12,8 +12,8 @@ from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.cache import CacheManager, TaskCacheInfo
 from pydiverse.pipedag.materialize.container import Blob, Table
-from pydiverse.pipedag.materialize.util import compute_cache_key
 from pydiverse.pipedag.util import deep_map
+from pydiverse.pipedag.util.hashing import stable_hash
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Stage
@@ -199,12 +199,12 @@ class MaterializationWrapper:
 
         # Compute the cache key for the task inputs
         input_json = store.json_encode(bound.arguments)
-        input_hash = compute_cache_key("INPUT", input_json)
+        input_hash = stable_hash("INPUT", input_json)
 
         cache_fn_hash = ""
         if task.cache is not None:
             cache_fn_output = store.json_encode(task.cache(*args, **kwargs))
-            cache_fn_hash = compute_cache_key("CACHE_FN", cache_fn_output)
+            cache_fn_hash = stable_hash("CACHE_FN", cache_fn_output)
 
         memo_cache_key = CacheManager.task_cache_key(task, input_hash, cache_fn_hash)
 
