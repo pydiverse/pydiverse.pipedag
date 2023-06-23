@@ -5,7 +5,9 @@ import datetime as dt
 
 from pydiverse.pipedag import Blob, Table, materialize
 import sqlalchemy as sa
+import sqlalchemy.dialects
 
+from pydiverse.pipedag.backend.table.util.pandas import adjust_pandas_types
 from pydiverse.pipedag.context import ConfigContext
 
 
@@ -180,65 +182,80 @@ def simple_lazy_table_with_indexes():
     return Table(query, indexes=[["col2"], ["col2", "col1"]])
 
 
-def _get_df(data: dict[str, list], use_ext_dtype=False, cap_dates=False):
-    data = data.copy()
-    dtypes = {}
-    for col in list(data.keys()):
+def _get_df(data: dict[str, list], cap_dates=False):
+    """Constructs a pandas dataframe from a dictionary"""
+    df_data = data.copy()
+    df_dtypes = {}
+
+    min_datetime = dt.datetime(1700, 1, 1, 0, 0, 0)
+    max_datetime = dt.datetime(2200, 1, 1, 0, 0, 0)
+    min_date = dt.date(1700, 1, 1)
+    max_date = dt.date(2200, 1, 1)
+
+    for col in data:
         if cap_dates:
-            min_datetime = dt.datetime(1900, 1, 1, 0, 0, 0)
-            max_datetime = dt.datetime(2199, 12, 31, 23, 59, 59)
-            min_date = dt.date(1900, 1, 1)
-            max_date = dt.date(2199, 12, 31)
             if type(data[col][0]) == dt.date:
-                data[col + "_year"] = [d.year for d in data[col]]
-                dtypes[col + "_year"] = pd.Int16Dtype()
-                data[col] = [max(min(v, max_date), min_date) for v in data[col]]
-                dtypes[col] = "datetime64[ns]"
+                df_data[col + "_year"] = [getattr(d, "year", None) for d in data[col]]
+                df_dtypes[col + "_year"] = pd.Int16Dtype()
+                df_data[col] = [
+                    max(min(v, max_date), min_date) if v is not None else None
+                    for v in data[col]
+                ]
+                df_dtypes[col] = "datetime64[ns]"
             elif type(data[col][0]) == dt.datetime:
-                data[col + "_year"] = [d.year for d in data[col]]
-                dtypes[col + "_year"] = pd.Int16Dtype()
-                data[col] = [max(min(v, max_datetime), min_datetime) for v in data[col]]
-                dtypes[col] = "datetime64[ns]"
-        if use_ext_dtype:
-            if type(data[col][0]) == str:
-                dtypes[col] = pd.StringDtype()
-            elif type(data[col][0]) == int:
-                dtypes[col] = pd.Int64Dtype()
-            elif type(data[col][0]) == bool:
-                dtypes[col] = pd.BooleanDtype()
-    return pd.DataFrame(
+                df_data[col + "_year"] = [getattr(d, "year", None) for d in data[col]]
+                df_dtypes[col + "_year"] = pd.Int16Dtype()
+                df_data[col] = [
+                    max(min(v, max_datetime), min_datetime) if v is not None else None
+                    for v in data[col]
+                ]
+                df_dtypes[col] = "datetime64[ns]"
+
+        if type(data[col][0]) == bool:
+            df_dtypes[col] = pd.BooleanDtype()
+
+    df = pd.DataFrame(
         {
-            col: (
-                pd.Series(values, dtype=dtypes[col])
-                if col in dtypes
-                else pd.Series(values)
-            )
-            for col, values in data.items()
+            name: pd.Series(val, dtype=df_dtypes.get(name))
+            for name, val in df_data.items()
         }
     )
 
+    return df
+
 
 @materialize(version="1.0")
-def pd_dataframe(data: dict[str, list], use_ext_dtype=False, cap_dates=False):
-    df = _get_df(data, use_ext_dtype, cap_dates)
-    kwargs = {}
+def pd_dataframe(data: dict[str, list], cap_dates=False):
+    df = _get_df(data, cap_dates)
+    type_map = {}
     if not cap_dates:
-        kwargs["type_map"] = {
-            col: sa.Date for col, items in data.items() if isinstance(items[0], dt.date)
-        }
-        kwargs["type_map"].update(
+        type_map.update(
             {
-                col: sa.DateTime
+                col: sa.Date()
+                for col, items in data.items()
+                if isinstance(items[0], dt.date)
+            }
+        )
+        type_map.update(
+            {
+                col: sa.DateTime()
                 for col, items in data.items()
                 if isinstance(items[0], dt.datetime)
             }
         )
-    return Table(df, **kwargs)
+
+    if ConfigContext.get().store.table_store.engine.dialect.name == "mssql":
+        for col, type_ in type_map.items():
+            if isinstance(type_, sa.DateTime):
+                type_map[col] = sa.dialects.mssql.DATETIME2()
+
+    return Table(df, type_map=type_map)
 
 
-@materialize(input_type=pd.DataFrame, version="1.0")
+@materialize(input_type=pd.DataFrame)
 def pd_dataframe_assert(df_actual: pd.DataFrame, data: dict[str, list]):
-    df_expected = _get_df(data, use_ext_dtype=True, cap_dates=True)
+    df_expected = _get_df(data, cap_dates=True)
+    df_expected = adjust_pandas_types(df_expected)
     if ConfigContext.get().store.table_store.engine.dialect.name == "ibm_db_sa":
         for col in data:
             if type(data[col][0]) == bool:

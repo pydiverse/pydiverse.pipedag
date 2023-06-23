@@ -5,7 +5,7 @@ import sqlalchemy as sa
 from pandas.testing import assert_frame_equal
 
 from pydiverse.pipedag import Blob, Flow, Stage, Table, materialize
-from pydiverse.pipedag.backend.table.util.pandas import adj_pandas_types
+from pydiverse.pipedag.backend.table.util.pandas import adjust_pandas_types
 from pydiverse.pipedag.context import StageLockContext
 
 dfA = pd.DataFrame(
@@ -79,14 +79,13 @@ def test_simple_flow():
         assert result.successful
 
         # Check result.get works
-        assert_frame_equal(result.get(a, as_type=pd.DataFrame), adj_pandas_types(dfA))
-        assert_frame_equal(result.get(b, as_type=pd.DataFrame), adj_pandas_types(dfB))
-        assert_frame_equal(
-            result.get(inp, as_type=pd.DataFrame)[0], adj_pandas_types(dfA)
-        )
-        assert_frame_equal(
-            result.get(inp, as_type=pd.DataFrame)[1], adj_pandas_types(dfB)
-        )
+        dfA_adj = adjust_pandas_types(dfA)
+        dfB_adj = adjust_pandas_types(dfB)
+
+        assert_frame_equal(result.get(a, as_type=pd.DataFrame), dfA_adj)
+        assert_frame_equal(result.get(b, as_type=pd.DataFrame), dfB_adj)
+        assert_frame_equal(result.get(inp, as_type=pd.DataFrame)[0], dfA_adj)
+        assert_frame_equal(result.get(inp, as_type=pd.DataFrame)[1], dfB_adj)
         assert_frame_equal(
             result.get(joined, as_type=pd.DataFrame) * 2,
             result.get(joined_times_2, as_type=pd.DataFrame),

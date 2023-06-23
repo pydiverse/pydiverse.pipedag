@@ -8,13 +8,19 @@ from typing import Any
 
 import pandas as pd
 import sqlalchemy as sa
-from sqlalchemy.dialects.mssql import DATETIME2
+import sqlalchemy.dialects
+from packaging.version import Version
 
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.table.base import TableHook
 from pydiverse.pipedag.backend.table.sql import SQLTableStore
+from pydiverse.pipedag.backend.table.util import (
+    DType,
+    classmethod_engine_argument_dispatch,
+)
 from pydiverse.pipedag.backend.table.util.sql_ddl import (
     CreateTableAsSelect,
+    Schema,
     ibm_db_sa_fix_name,
 )
 from pydiverse.pipedag.materialize import Table
@@ -123,26 +129,6 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
 @SQLTableStore.register_table(pd)
 class PandasTableHook(TableHook[SQLTableStore]):
-    """
-    Materalize pandas->sql and retrieve sql->pandas.
-
-    We like to limit the use of types, so operations can be implemented reliably
-    without the use of pandas dtype=object where every row can have different type:
-      - string/varchar/clob: pd.StringDType
-      - date: datetime64[ns] (we cap year in 1900..2199 and save original year
-            in separate column)
-      - datetime: datetime64[ns] (we cap year in 1900..2199 and save original year
-            in separate column)
-      - int: pd.Int64DType
-      - boolean: pd.BooleanDType
-
-    Dialect specific aspects:
-      * ibm_db_sa:
-        - DB2 does not support boolean type -> integer
-        - We limit string columns to 256 characters since larger columns have
-          trouble with adding indexes/primary keys
-    """
-
     @classmethod
     def can_materialize(cls, type_) -> bool:
         return issubclass(type_, pd.DataFrame)
@@ -152,110 +138,175 @@ class PandasTableHook(TableHook[SQLTableStore]):
         return type_ == pd.DataFrame
 
     @classmethod
+    def auto_table(cls, obj: pd.DataFrame):
+        if name := obj.attrs.get("name"):
+            return Table(obj, name)
+        return super().auto_table(obj)
+
+    @classmethod
     def materialize(
         cls,
-        store,
+        store: SQLTableStore,
         table: Table[pd.DataFrame],
         stage_name,
         task_info: TaskInfo | None,
     ):
-        # we might try to avoid this copy for speedup / saving RAM
-        df = table.obj.copy()
+        df = table.obj.copy(deep=False)
         schema = store.get_schema(stage_name)
+
         if store.print_materialize:
             store.logger.info(
-                f"Writing table '{schema.get()}.{table.name}'",
-                table_obj=table.obj,
+                f"Writing table '{schema.get()}.{table.name}'", table_obj=table.obj
             )
-        dtype_map = {}
-        table_name = table.name
-        str_type = sa.String()
-        if store.engine.dialect.name == "ibm_db_sa":
-            # Default string target is CLOB which can't be used for indexing.
-            # We could use VARCHAR(32000), but if we change this to VARCHAR(256)
-            # for indexed columns, DB2 hangs.
-            str_type = sa.VARCHAR(256)
-            table_name = ibm_db_sa_fix_name(table_name)
-        # force dtype=object to string (we require dates to be stored in datetime64[ns])
-        for col in df.dtypes.loc[lambda x: x == object].index:
-            if table.type_map is None or col not in table.type_map:
-                df[col] = df[col].astype(str)
-                dtype_map[col] = str_type
-        for col in df.dtypes.loc[
-            lambda x: (x != object) & x.isin([pd.Int32Dtype, pd.UInt16Dtype])
-        ].index:
-            dtype_map[col] = sa.INTEGER()
-        for col in df.dtypes.loc[
-            lambda x: (x != object)
-            & x.isin([pd.Int16Dtype, pd.Int8Dtype, pd.UInt8Dtype])
-        ].index:
-            dtype_map[col] = sa.SMALLINT()
-        if table.type_map is not None:
-            dtype_map.update(table.type_map)
-        # Todo: do better abstraction of dialect specific code
-        if store.engine.dialect.name == "mssql":
-            for col, _type in dtype_map.items():
-                if _type == sa.DateTime:
-                    dtype_map[col] = DATETIME2()
-        df.to_sql(
-            table_name,
-            store.engine,
-            schema=schema.get(),
-            index=False,
-            dtype=dtype_map,
-            chunksize=100_000,
+
+        dtypes = {name: DType.from_pandas(dtype) for name, dtype in df.dtypes.items()}
+        cls._execute_materialize(
+            table=table,
+            schema=schema,
+            engine=store.engine,
+            dtypes=dtypes,
         )
         store.add_indexes(table, schema)
 
-    @staticmethod
-    def _pandas_type(sql_type):
-        if isinstance(sql_type, sa.SmallInteger):
-            return pd.Int16Dtype()
-        elif isinstance(sql_type, sa.BigInteger):
-            return pd.Int64Dtype()
-        elif isinstance(sql_type, sa.Integer):
-            return pd.Int32Dtype()
-        elif isinstance(sql_type, sa.Boolean):
-            return pd.BooleanDtype()
-        elif isinstance(sql_type, sa.String):
-            return pd.StringDtype()
-        elif isinstance(sql_type, sa.Date):
-            return "datetime64[ns]"
-        elif isinstance(sql_type, sa.DateTime):
-            return "datetime64[ns]"
+    @classmethod_engine_argument_dispatch
+    def _execute_materialize(
+        cls,
+        table: Table[pd.DataFrame],
+        schema: Schema,
+        engine: sa.Engine,
+        dtypes: dict[str, DType],
+    ):
+        dtypes = {name: dtype.to_sql() for name, dtype in dtypes.items()}
+        if table.type_map:
+            dtypes.update(table.type_map)
 
-    @staticmethod
-    def _fix_cols(cols: dict[str, Any], dialect_name):
-        cols = cols.copy()
-        year_cols = []
+        df = table.obj
+        df.to_sql(
+            table.name,
+            engine,
+            schema=schema.get(),
+            index=False,
+            dtype=dtypes,
+            chunksize=100_000,
+        )
 
-        for name, col in list(cols.items()):
-            if isinstance(col.type, (sa.Date, sa.DateTime)):
-                if isinstance(col.type, sa.Date):
-                    min_val = datetime.date(1900, 1, 1)
-                    max_val = datetime.date(2199, 12, 31)
-                elif isinstance(col.type, sa.DateTime):
-                    min_val = datetime.datetime(1900, 1, 1, 0, 0, 0)
-                    max_val = datetime.datetime(2199, 12, 31, 23, 59, 59)
-                else:
-                    raise
+    @_execute_materialize.dialect("postgresql")
+    def _execute_materialize_postgres(
+        cls,
+        table: Table[pd.DataFrame],
+        schema: Schema,
+        engine: sa.Engine,
+        dtypes: dict[str, DType],
+    ):
+        import csv
+        from io import StringIO
 
-                if name + "_year" not in cols:
-                    cols[name + "_year"] = sa.cast(
-                        sa.func.extract("year", cols[name]), sa.Integer
-                    ).label(name + "_year")
-                    year_cols.append(name + "_year")
-                # TODO: do better abstraction of dialect specific code
-                if dialect_name == "mssql":
-                    cap_min = sa.func.iif(cols[name] < min_val, min_val, cols[name])
-                    cols[name] = sa.func.iif(cap_min > max_val, max_val, cap_min).label(
-                        name
-                    )
-                else:
-                    cols[name] = sa.func.least(
-                        max_val, sa.func.greatest(min_val, cols[name])
-                    ).label(name)
-        return cols, year_cols
+        dtypes = {name: dtype.to_sql() for name, dtype in dtypes.items()}
+        if table.type_map:
+            dtypes.update(table.type_map)
+
+        df = table.obj
+
+        # Create empty table
+        df[:0].to_sql(
+            table.name,
+            engine,
+            schema=schema.get(),
+            index=False,
+            dtype=dtypes,
+        )
+
+        # COPY data
+        # TODO: For python 3.12, there is csv.QUOTE_STRINGS
+        #       This would make everything a bit safer, because then we could represent
+        #       the string "\\N" (backslash + capital n).
+        s_buf = StringIO()
+        df.to_csv(
+            s_buf,
+            na_rep="\\N",
+            header=False,
+            index=False,
+            quoting=csv.QUOTE_MINIMAL,
+        )
+        s_buf.seek(0)
+
+        dbapi_conn = engine.raw_connection()
+        try:
+            with dbapi_conn.cursor() as cur:
+                sql = (
+                    f"COPY {schema.get()}.{table.name} FROM STDIN"
+                    " WITH (FORMAT CSV, NULL '\\N')"
+                )
+                cur.copy_expert(sql=sql, file=s_buf)
+            dbapi_conn.commit()
+        finally:
+            dbapi_conn.close()
+
+    @_execute_materialize.dialect("mssql")
+    def _execute_materialize_mssql(
+        cls,
+        table: Table[pd.DataFrame],
+        schema: Schema,
+        engine: sa.Engine,
+        dtypes: dict[str, DType],
+    ):
+        dtypes = ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
+            {
+                name: sa.dialects.mssql.DATETIME2()
+                for name, dtype in dtypes.items()
+                if dtype == DType.DATETIME
+            }
+        )
+
+        if table.type_map:
+            dtypes.update(table.type_map)
+
+        df = table.obj
+        df.to_sql(
+            table.name,
+            engine,
+            schema=schema.get(),
+            index=False,
+            dtype=dtypes,
+            chunksize=100_000,
+        )
+
+    @_execute_materialize.dialect("ibm_db_sa")
+    def _execute_materialize_mssql(
+        cls,
+        table: Table[pd.DataFrame],
+        schema: Schema,
+        engine: sa.Engine,
+        dtypes: dict[str, DType],
+    ):
+        # Default string target is CLOB which can't be used for indexing.
+        # -> Convert indexed string columns to VARCHAR(256)
+        index_columns = set()
+        if indexes := table.indexes:
+            index_columns |= {col for index in indexes for col in index}
+        if primary_key := table.primary_key:
+            index_columns |= set(primary_key)
+
+        dtypes = ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
+            {
+                name: sa.String(length=256) if name in index_columns else sa.CLOB()
+                for name, dtype in dtypes.items()
+                if dtype == DType.STRING
+            }
+        )
+
+        if table.type_map:
+            dtypes.update(table.type_map)
+
+        df = table.obj
+        df.to_sql(
+            ibm_db_sa_fix_name(table.name),
+            engine,
+            schema=schema.get(),
+            index=False,
+            dtype=dtypes,
+            chunksize=100_000,
+        )
 
     @classmethod
     def retrieve(
@@ -266,49 +317,95 @@ class PandasTableHook(TableHook[SQLTableStore]):
         as_type: type[pd.DataFrame],
         namer: NameDisambiguator | None = None,
     ) -> pd.DataFrame:
-        schema = store.get_schema(stage_name).get()
-        with store.engine.connect() as conn:
-            table_name = table.name
-            table_name, schema = store.resolve_aliases(table_name, schema)
-            for retry_iteration in range(4):
-                # retry operation since it might have been terminated as a
-                # deadlock victim
-                try:
-                    sql_table = sa.Table(
-                        table_name,
-                        sa.MetaData(),
-                        schema=schema,
-                        autoload_with=store.engine,
-                    ).alias("tbl")
-                    dtype_map = {c.name: cls._pandas_type(c.type) for c in sql_table.c}
-                    cols, year_cols = cls._fix_cols(
-                        {c.name: c for c in sql_table.c}, store.engine.dialect.name
-                    )
-                    dtype_map.update({col: pd.Int16Dtype() for col in year_cols})
-                    query = sa.select(*cols.values()).select_from(sql_table)
-                    try:
-                        # works only from pandas 2.0.0 on
-                        df = pd.read_sql(
-                            query,
-                            con=conn,
-                            dtype=dtype_map,
-                        )
-                    except TypeError:
-                        df = pd.read_sql(query, con=conn)
-                        for col, _type in dtype_map.items():
-                            df[col] = df[col].astype(_type)
-                    break
-                except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
-                    if retry_iteration == 3:
-                        raise
-                    time.sleep(retry_iteration * retry_iteration * 1.3)
-            return df
+        query, dtypes = cls._build_retrieve_query(store, table, stage_name)
+        dataframe = cls._execute_query_retrieve(query, dtypes, store.engine)
+        return dataframe
 
     @classmethod
-    def auto_table(cls, obj: pd.DataFrame):
-        if name := obj.attrs.get("name"):
-            return Table(obj, name)
-        return super().auto_table(obj)
+    def _build_retrieve_query(
+        cls,
+        store: SQLTableStore,
+        table: Table,
+        stage_name: str,
+    ) -> tuple[Any, dict[str, DType]]:
+        engine = store.engine
+        schema = store.get_schema(stage_name).get()
+        table_name = table.name
+        table_name, schema = store.resolve_aliases(table_name, schema)
+
+        sql_table = sa.Table(
+            table_name,
+            sa.MetaData(),
+            schema=schema,
+            autoload_with=engine,
+        ).alias("tbl")
+
+        cols = {col.name: col for col in sql_table.columns}
+        dtypes = {name: DType.from_sql(col.type) for name, col in cols.items()}
+
+        cols, dtypes = cls._adjust_cols_retrieve(cols, dtypes, engine)
+
+        query = sa.select(*cols.values()).select_from(sql_table)
+        return query, dtypes
+
+    @classmethod
+    def _adjust_cols_retrieve(
+        cls, cols: dict, dtypes: dict, engine: sa.Engine
+    ) -> tuple[dict, dict]:
+        res_cols = cols.copy()
+        res_dtypes = dtypes.copy()
+
+        for name, col in cols.items():
+            # Pandas datetime64[ns] can represent dates between 1678 AD - 2262 AD.
+            # As such, when reading dates from a database, we must ensure that those
+            # dates don't overflow the range of representable dates by pandas.
+            # This is done by clipping the date to a predefined range and adding a
+            # years column.
+            if isinstance(col.type, (sa.Date, sa.DateTime)):
+                if isinstance(col.type, sa.Date):
+                    min_val = datetime.date(1700, 1, 1)
+                    max_val = datetime.date(2200, 1, 1)
+                elif isinstance(col.type, sa.DateTime):
+                    min_val = datetime.datetime(1700, 1, 1, 0, 0, 0)
+                    max_val = datetime.datetime(2200, 1, 1, 0, 0, 0)
+                else:
+                    raise
+
+                # Year column
+                year_col_name = f"{name}_year"
+                if year_col_name not in cols:
+                    year_col = sa.cast(sa.func.extract("year", col), sa.Integer)
+                    year_col = year_col.label(year_col_name)
+                    res_cols[year_col_name] = year_col
+                    res_dtypes[year_col_name] = DType.INT16
+
+                # Clamp date range
+                clamped_col = sa.case(
+                    (col.is_(None), None),
+                    (col < min_val, min_val),
+                    (col > max_val, max_val),
+                    else_=col,
+                ).label(name)
+                res_cols[name] = clamped_col
+
+        return res_cols, res_dtypes
+
+    @classmethod_engine_argument_dispatch
+    def _execute_query_retrieve(
+        cls, query: Any, dtypes: dict[str, DType], engine: sa.Engine
+    ) -> pd.DataFrame:
+        dtypes = {name: dtype.to_pandas() for name, dtype in dtypes.items()}
+        pd_version = Version(pd.__version__)
+
+        with engine.connect() as conn:
+            if pd_version >= Version("2.0"):
+                df = pd.read_sql(query, con=conn, dtype=dtypes)
+            else:
+                df = pd.read_sql(query, con=conn)
+                for col, dtype in dtypes.items():
+                    df[col] = df[col].astype(dtype)
+
+        return df
 
 
 # endregion
@@ -469,20 +566,17 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
     def materialize(
         cls, store, table: Table[pdt.Table], stage_name, task_info: TaskInfo | None
     ):
+        from pydiverse.transform.core.verbs import collect
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
 
         t = table.obj
         table = table.copy_without_obj()
         if isinstance(t._impl, PandasTableImpl):
-            from pydiverse.transform.core.verbs import collect
-
             table.obj = t >> collect()
-            # noinspection PyTypeChecker
             return PandasTableHook.materialize(store, table, stage_name, task_info)
         if isinstance(t._impl, SQLTableImpl):
             table.obj = t._impl.build_select()
-            # noinspection PyTypeChecker
             return SQLAlchemyTableHook.materialize(store, table, stage_name, task_info)
         raise NotImplementedError
 

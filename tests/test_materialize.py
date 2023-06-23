@@ -77,7 +77,6 @@ def test_materialize_table():
     with Flow("flow") as f:
         with Stage("stage"):
             x = m.simple_dataframe()
-
             m.assert_table_equal(x, x)
 
     assert f.run().successful
@@ -88,14 +87,22 @@ def test_materialize_table_values():
         "x": [0, 1],
         "x32": [-2147483648, 2147483647],
         "x64": [-9223372036854775808, 9223372036854775807],
-        "str256": ["", "a" * 256],
+        "str256": ["", "A" * 256],
+        "strChars": ["\r\n\t", "".join(chr(i) for i in range(32, 127))],
         "f32": [3e38, 3.14159],
         "f64": [1e300, 3.14159],
         "b": [True, False],
-        "d": [dt.date(1900, 1, 1), dt.date(2199, 12, 31)],
-        "dt": [dt.datetime(1900, 1, 1, 0, 0, 0), dt.datetime(2199, 12, 31, 23, 59, 59)],
+        "d": [dt.date(1700, 1, 1), dt.date(2200, 1, 1)],
+        "dt": [dt.datetime(1700, 1, 1, 0, 0, 0), dt.datetime(2200, 1, 1, 0, 0, 0)],
         "d2": [dt.date(1, 1, 1), dt.date(9999, 12, 31)],
         "dt2": [dt.datetime(1, 1, 1, 0, 0, 0), dt.datetime(9999, 12, 31, 23, 59, 59)],
+        # NULL Types
+        "strNA": ["", None],
+        "fNA": [3.14159, None],
+        "bNA_f": [False, None],
+        "bNA_t": [True, None],
+        "dNA": [dt.date(2000, 1, 1), None],
+        "dtNA": [dt.datetime(2000, 1, 1, 0, 0, 0), None],
     }
 
     with Flow("flow") as f:
@@ -110,6 +117,26 @@ def test_materialize_table_values():
                 m.pd_dataframe_assert(t, values_dict_of_lists)
 
     assert f.run().successful
+
+
+@pytest.mark.xfail(
+    reason=(
+        "The string '\\N' can't be materialized using the "
+        "COPY FROM STDIN WITH CSV technique."
+    ),
+    strict=True,
+)
+@with_instances("postgres")
+def test_materialize_table_postgres_null_string():
+    data = {"strNA": ["", None, "\\N"]}
+
+    with Flow() as f:
+        with Stage("stage_0"):
+            t = m.pd_dataframe(data)
+            m.pd_dataframe_assert(t, data)
+
+    with ConfigContext.get().evolve(swallow_exceptions=True):
+        f.run()
 
 
 def test_materialize_table_twice():

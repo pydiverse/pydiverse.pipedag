@@ -154,7 +154,6 @@ class MaterializingTask(Task):
             # Load inputs from database
             inputs[in_id] = cached_output
 
-        self.logger.info("inputs", inputs=inputs)
         return super().run(inputs, **kwargs)
 
 
