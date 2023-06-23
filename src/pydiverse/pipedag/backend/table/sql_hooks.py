@@ -289,7 +289,11 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
         dtypes = ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
             {
-                name: sa.String(length=256) if name in index_columns else sa.CLOB()
+                name: (
+                    sa.String(length=256)
+                    if name in index_columns
+                    else sa.String(length=32_672)
+                )
                 for name, dtype in dtypes.items()
                 if dtype == DType.STRING
             }
