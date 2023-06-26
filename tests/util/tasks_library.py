@@ -182,85 +182,9 @@ def simple_lazy_table_with_indexes():
     return Table(query, indexes=[["col2"], ["col2", "col1"]])
 
 
-def _get_df(data: dict[str, list], cap_dates=False):
-    """Constructs a pandas dataframe from a dictionary"""
-    df_data = data.copy()
-    df_dtypes = {}
-
-    min_datetime = dt.datetime(1700, 1, 1, 0, 0, 0)
-    max_datetime = dt.datetime(2200, 1, 1, 0, 0, 0)
-    min_date = dt.date(1700, 1, 1)
-    max_date = dt.date(2200, 1, 1)
-
-    for col in data:
-        if cap_dates:
-            if type(data[col][0]) == dt.date:
-                df_data[col + "_year"] = [getattr(d, "year", None) for d in data[col]]
-                df_dtypes[col + "_year"] = pd.Int16Dtype()
-                df_data[col] = [
-                    max(min(v, max_date), min_date) if v is not None else None
-                    for v in data[col]
-                ]
-                df_dtypes[col] = "datetime64[ns]"
-            elif type(data[col][0]) == dt.datetime:
-                df_data[col + "_year"] = [getattr(d, "year", None) for d in data[col]]
-                df_dtypes[col + "_year"] = pd.Int16Dtype()
-                df_data[col] = [
-                    max(min(v, max_datetime), min_datetime) if v is not None else None
-                    for v in data[col]
-                ]
-                df_dtypes[col] = "datetime64[ns]"
-
-        if type(data[col][0]) == bool:
-            df_dtypes[col] = pd.BooleanDtype()
-
-    df = pd.DataFrame(
-        {
-            name: pd.Series(val, dtype=df_dtypes.get(name))
-            for name, val in df_data.items()
-        }
-    )
-
-    return df
-
-
 @materialize(version="1.0")
-def pd_dataframe(data: dict[str, list], cap_dates=False):
-    df = _get_df(data, cap_dates)
-    type_map = {}
-    if not cap_dates:
-        type_map.update(
-            {
-                col: sa.Date()
-                for col, items in data.items()
-                if isinstance(items[0], dt.date)
-            }
-        )
-        type_map.update(
-            {
-                col: sa.DateTime()
-                for col, items in data.items()
-                if isinstance(items[0], dt.datetime)
-            }
-        )
-
-    if ConfigContext.get().store.table_store.engine.dialect.name == "mssql":
-        for col, type_ in type_map.items():
-            if isinstance(type_, sa.DateTime):
-                type_map[col] = sa.dialects.mssql.DATETIME2()
-
-    return Table(df, type_map=type_map)
-
-
-@materialize(input_type=pd.DataFrame)
-def pd_dataframe_assert(df_actual: pd.DataFrame, data: dict[str, list]):
-    df_expected = _get_df(data, cap_dates=True)
-    df_expected = adjust_pandas_types(df_expected)
-    if ConfigContext.get().store.table_store.engine.dialect.name == "ibm_db_sa":
-        for col in data:
-            if type(data[col][0]) == bool:
-                df_expected[col] = df_expected[col].astype(pd.Int16Dtype())
-    pd.testing.assert_frame_equal(df_expected, df_actual)
+def pd_dataframe(data: dict[str, list]):
+    return pd.DataFrame(data)
 
 
 @materialize(version="1.0")

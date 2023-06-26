@@ -9,7 +9,7 @@ import sqlalchemy as sa
 
 
 class PandasDTypeBackend(str, Enum):
-    PANDAS = "pandas"
+    NUMPY = "numpy"
     ARROW = "arrow"
 
 
@@ -177,7 +177,7 @@ class DType(Enum):
         }[self]
 
     def to_pandas(self, backend: PandasDTypeBackend = PandasDTypeBackend.ARROW):
-        if backend == PandasDTypeBackend.PANDAS:
+        if backend == PandasDTypeBackend.NUMPY:
             return self.to_pandas_nullable()
         if backend == PandasDTypeBackend.ARROW:
             return pd.ArrowDtype(self.to_arrow())

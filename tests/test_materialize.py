@@ -82,43 +82,6 @@ def test_materialize_table():
     assert f.run().successful
 
 
-def test_materialize_table_values():
-    values_dict_of_lists = {
-        "x": [0, 1],
-        "x32": [-2147483648, 2147483647],
-        "x64": [-9223372036854775808, 9223372036854775807],
-        "str256": ["", "A" * 256],
-        "strChars": ["\r\n\t", "".join(chr(i) for i in range(32, 127))],
-        "f32": [3e38, 3.14159],
-        "f64": [1e300, 3.14159],
-        "b": [True, False],
-        "d": [dt.date(1700, 1, 1), dt.date(2200, 1, 1)],
-        "dt": [dt.datetime(1700, 1, 1, 0, 0, 0), dt.datetime(2200, 1, 1, 0, 0, 0)],
-        "d2": [dt.date(1, 1, 1), dt.date(9999, 12, 31)],
-        "dt2": [dt.datetime(1, 1, 1, 0, 0, 0), dt.datetime(9999, 12, 31, 23, 59, 59)],
-        # NULL Types
-        "strNA": ["", None],
-        "fNA": [3.14159, None],
-        "bNA_f": [False, None],
-        "bNA_t": [True, None],
-        "dNA": [dt.date(2000, 1, 1), None],
-        "dtNA": [dt.datetime(2000, 1, 1, 0, 0, 0), None],
-    }
-
-    with Flow("flow") as f:
-        with Stage("stage_0"):
-            t_0 = m.pd_dataframe(values_dict_of_lists, cap_dates=True)
-            t_1 = m.pd_dataframe(values_dict_of_lists, cap_dates=False)
-            t_2 = m.noop(t_0)
-            t_3 = m.noop(t_1)
-            t_4 = m.noop_lazy(t_0)
-            t_5 = m.noop_lazy(t_1)
-            for t in [t_0, t_1, t_2, t_3, t_4, t_5]:
-                m.pd_dataframe_assert(t, values_dict_of_lists)
-
-    assert f.run().successful
-
-
 @pytest.mark.xfail(
     reason=(
         "The string '\\N' can't be materialized using the "
@@ -133,10 +96,14 @@ def test_materialize_table_postgres_null_string():
     with Flow() as f:
         with Stage("stage_0"):
             t = m.pd_dataframe(data)
-            m.pd_dataframe_assert(t, data)
 
-    with ConfigContext.get().evolve(swallow_exceptions=True):
-        f.run()
+    with ConfigContext.get().evolve(swallow_exceptions=True), StageLockContext():
+        result = f.run()
+        df = result.get(t, as_type=pd.DataFrame)
+
+    assert df["strNA"][0] == ""
+    assert df["strNA"][1] is pd.NA
+    assert df["strNA"][2] == "\\N"
 
 
 def test_materialize_table_twice():

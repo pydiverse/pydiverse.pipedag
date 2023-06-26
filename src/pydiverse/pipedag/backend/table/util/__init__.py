@@ -3,4 +3,4 @@ from .engine_dispatch import (
     engine_argument_dispatch,
     engine_dispatch,
 )
-from .pandas import DType
+from .pandas import DType, PandasDTypeBackend

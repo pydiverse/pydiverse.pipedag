@@ -112,11 +112,11 @@ class ConfigContext(BaseAttrsContext):
     connections and render this object unusable afterwards.
     """
 
-    config_dict: dict
+    _config_dict: dict
 
     # names
     pipedag_name: str
-    flow_name: str
+    flow_name: str | None
     instance_name: str
 
     # per instance attributes
@@ -137,28 +137,30 @@ class ConfigContext(BaseAttrsContext):
 
     @cached_property
     def auto_table(self) -> tuple[type, ...]:
-        return tuple(map(import_object, self.config_dict.get("auto_table", ())))
+        return tuple(map(import_object, self._config_dict.get("auto_table", ())))
 
     @cached_property
     def auto_blob(self) -> tuple[type, ...]:
-        return tuple(map(import_object, self.config_dict.get("auto_blob", ())))
+        return tuple(map(import_object, self._config_dict.get("auto_blob", ())))
 
     @cached_property
     def store(self):
+        from pydiverse.pipedag.backend.table_cache import LocalTableCache
+        from pydiverse.pipedag.materialize.store import PipeDAGStore
+
         # Load objects referenced in config
         try:
-            from pydiverse.pipedag.backend.table_cache import LocalTableCache
-
-            table_store = load_object(self.config_dict["table_store"])
-            if "local_table_cache" in self.config_dict["table_store"]:
-                local_cache_cfg = self.config_dict["table_store"]["local_table_cache"]
+            table_store_config = self._config_dict["table_store"]
+            table_store = load_object(table_store_config)
+            if "local_table_cache" in table_store_config:
+                local_cache_config = table_store_config["local_table_cache"]
                 local_table_cache = LocalTableCache(
-                    load_object(local_cache_cfg),
-                    local_cache_cfg.get("store_input", True),
-                    local_cache_cfg.get("store_output", False),
-                    local_cache_cfg.get("use_stored_input_as_cache", True),
+                    load_object(local_cache_config),
+                    local_cache_config.get("store_input", True),
+                    local_cache_config.get("store_output", False),
+                    local_cache_config.get("use_stored_input_as_cache", True),
                 )
-                unknown_attributes = set(local_cache_cfg.keys()) - {
+                unknown_attributes = set(local_cache_config.keys()) - {
                     "class",
                     "args",
                     "store_input",
@@ -183,10 +185,9 @@ class ConfigContext(BaseAttrsContext):
             raise RuntimeError("Failed loading table_store") from e
 
         try:
-            blob_store = load_object(self.config_dict["blob_store"])
+            blob_store = load_object(self._config_dict["blob_store"])
         except Exception as e:
             raise RuntimeError("Failed loading blob_store") from e
-        from pydiverse.pipedag.materialize.store import PipeDAGStore
 
         return PipeDAGStore(
             table=table_store,
@@ -199,10 +200,10 @@ class ConfigContext(BaseAttrsContext):
         return evolve(self, **changes)
 
     def create_lock_manager(self) -> BaseLockManager:
-        return load_object(self.config_dict["lock_manager"])
+        return load_object(self._config_dict["lock_manager"])
 
     def create_orchestration_engine(self) -> OrchestrationEngine:
-        return load_object(self.config_dict["orchestration"])
+        return load_object(self._config_dict["orchestration"])
 
     def close(self):
         # If the store has been initialized (and thus cached in the __dict__),

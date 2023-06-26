@@ -16,6 +16,7 @@ from pydiverse.pipedag.backend.table.base import TableHook
 from pydiverse.pipedag.backend.table.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import (
     DType,
+    PandasDTypeBackend,
     classmethod_engine_argument_dispatch,
 )
 from pydiverse.pipedag.backend.table.util.sql_ddl import (
@@ -129,6 +130,8 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
 @SQLTableStore.register_table(pd)
 class PandasTableHook(TableHook[SQLTableStore]):
+    pd_version = Version(pd.__version__)
+
     @classmethod
     def can_materialize(cls, type_) -> bool:
         return issubclass(type_, pd.DataFrame)
@@ -281,8 +284,9 @@ class PandasTableHook(TableHook[SQLTableStore]):
         )
 
     @_execute_materialize.dialect("ibm_db_sa")
-    def _execute_materialize_mssql(
+    def _execute_materialize_ibm_db_sa(
         cls,
+        df: pd.DataFrame,
         table: Table[pd.DataFrame],
         schema: Schema,
         engine: sa.Engine,
@@ -311,7 +315,6 @@ class PandasTableHook(TableHook[SQLTableStore]):
         if table.type_map:
             dtypes.update(table.type_map)
 
-        df = table.obj
         df.to_sql(
             ibm_db_sa_fix_name(table.name),
             engine,
@@ -327,11 +330,25 @@ class PandasTableHook(TableHook[SQLTableStore]):
         store: SQLTableStore,
         table: Table,
         stage_name: str,
-        as_type: type[pd.DataFrame],
+        as_type: type[pd.DataFrame] | tuple | dict,
         namer: NameDisambiguator | None = None,
     ) -> pd.DataFrame:
-        query, dtypes = cls._build_retrieve_query(store, table, stage_name)
-        dataframe = cls._execute_query_retrieve(query, dtypes, store.engine)
+        # Config
+        if PandasTableHook.pd_version >= Version("2.0"):
+            backend_str = "arrow"
+        else:
+            backend_str = "numpy"
+
+        if isinstance(as_type, tuple):
+            backend_str = as_type[1]
+        elif isinstance(as_type, dict):
+            backend_str = as_type["backend"]
+
+        backend = PandasDTypeBackend(backend_str)
+
+        # Retrieve
+        query, dtypes = cls._build_retrieve_query(store, table, stage_name, backend)
+        dataframe = cls._execute_query_retrieve(query, dtypes, store.engine, backend)
         return dataframe
 
     @classmethod
@@ -340,6 +357,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         store: SQLTableStore,
         table: Table,
         stage_name: str,
+        backend: PandasDTypeBackend,
     ) -> tuple[Any, dict[str, DType]]:
         engine = store.engine
         schema = store.get_schema(stage_name).get()
@@ -356,24 +374,30 @@ class PandasTableHook(TableHook[SQLTableStore]):
         cols = {col.name: col for col in sql_table.columns}
         dtypes = {name: DType.from_sql(col.type) for name, col in cols.items()}
 
-        cols, dtypes = cls._adjust_cols_retrieve(cols, dtypes, engine)
+        cols, dtypes = cls._adjust_cols_retrieve(cols, dtypes, backend)
 
         query = sa.select(*cols.values()).select_from(sql_table)
         return query, dtypes
 
     @classmethod
     def _adjust_cols_retrieve(
-        cls, cols: dict, dtypes: dict, engine: sa.Engine
+        cls, cols: dict, dtypes: dict, backend: PandasDTypeBackend
     ) -> tuple[dict, dict]:
+        if backend == PandasDTypeBackend.ARROW:
+            return cols, dtypes
+
+        assert backend == PandasDTypeBackend.NUMPY
+
+        # Pandas datetime64[ns] can represent dates between 1678 AD - 2262 AD.
+        # As such, when reading dates from a database, we must ensure that those
+        # dates don't overflow the range of representable dates by pandas.
+        # This is done by clipping the date to a predefined range and adding a
+        # years column.
+
         res_cols = cols.copy()
         res_dtypes = dtypes.copy()
 
         for name, col in cols.items():
-            # Pandas datetime64[ns] can represent dates between 1678 AD - 2262 AD.
-            # As such, when reading dates from a database, we must ensure that those
-            # dates don't overflow the range of representable dates by pandas.
-            # This is done by clipping the date to a predefined range and adding a
-            # years column.
             if isinstance(col.type, (sa.Date, sa.DateTime)):
                 if isinstance(col.type, sa.Date):
                     min_val = datetime.date(1700, 1, 1)
@@ -405,13 +429,18 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
     @classmethod_engine_argument_dispatch
     def _execute_query_retrieve(
-        cls, query: Any, dtypes: dict[str, DType], engine: sa.Engine
+        cls,
+        query: Any,
+        dtypes: dict[str, DType],
+        engine: sa.Engine,
+        backend: PandasDTypeBackend,
     ) -> pd.DataFrame:
-        dtypes = {name: dtype.to_pandas() for name, dtype in dtypes.items()}
-        pd_version = Version(pd.__version__)
+        dtypes = {
+            name: dtype.to_pandas(backend=backend) for name, dtype in dtypes.items()
+        }
 
         with engine.connect() as conn:
-            if pd_version >= Version("2.0"):
+            if PandasTableHook.pd_version >= Version("2.0"):
                 df = pd.read_sql(query, con=conn, dtype=dtypes)
             else:
                 df = pd.read_sql(query, con=conn)

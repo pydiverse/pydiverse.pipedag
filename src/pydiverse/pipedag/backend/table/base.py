@@ -96,8 +96,13 @@ class TableHookResolver(Disposable, metaclass=_TableStoreMeta):
                 return hook
         raise TypeError(f"Can't materialize Table with underlying type {type_}")
 
-    def get_r_table_hook(self: Self, type_: type[T]) -> TableHook[Self]:
+    def get_r_table_hook(self: Self, type_: type[T] | tuple | dict) -> TableHook[Self]:
         """Get a table hook that can retrieve the specified type"""
+        if isinstance(type_, tuple):
+            type_ = type_[0]
+        elif isinstance(type_, dict):
+            type_ = type_["type"]
+
         if type_ in self._R_TABLE_CACHE:
             return self._R_TABLE_CACHE[type_]
         for hook in self._REGISTERED_TABLES:
@@ -529,7 +534,7 @@ class TableHook(Generic[StoreT], ABC):
         store: StoreT,
         table: Table,
         stage_name: str,
-        as_type: type[T],
+        as_type: type[T] | tuple | dict[str, Any],
         namer: NameDisambiguator | None = None,
     ) -> T:
         """Retrieve a table from the store
