@@ -105,14 +105,10 @@ def test_source_invalidation():
         assert result.successful
 
         v_out1, v_out2 = result.get(out1), result.get(out2)
-        pd.testing.assert_frame_equal(
-            (dfA_source_adj + pd.DataFrame(dict(a=[10, 10, 10, 10], b=0))) * 2,
-            v_out1,
-        )
-        pd.testing.assert_frame_equal(
-            (dfA_source_adj + pd.DataFrame(dict(a=[10, 10, 10, 10], b=0))) * 4,
-            v_out2,
-        )
+
+        adj_dfA = adjust_pandas_types(dfA)
+        pd.testing.assert_frame_equal(adj_dfA * 2, v_out1)
+        pd.testing.assert_frame_equal(adj_dfA * 4, v_out2)
 
 
 if __name__ == "__main__":

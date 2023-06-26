@@ -13,7 +13,6 @@ from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.util import deep_map
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag._typing import Materializable
     from pydiverse.pipedag.context.run_context import FinalTaskState
     from pydiverse.pipedag.core import Flow, Subflow
 
@@ -51,7 +50,7 @@ class Result:
             exception=exception,
         )
 
-    def get(self, task: Task | TaskGetItem, as_type: type = None) -> Materializable:
+    def get(self, task: Task | TaskGetItem, as_type: type = None) -> Any:
         """Load the results of a task from the database.
 
         :param task: The task

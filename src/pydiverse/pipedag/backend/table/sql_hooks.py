@@ -160,7 +160,17 @@ class PandasTableHook(TableHook[SQLTableStore]):
             )
 
         dtypes = {name: DType.from_pandas(dtype) for name, dtype in df.dtypes.items()}
+
+        for col, dtype in dtypes.items():
+            # Currently, pandas' .to_sql fails for arrow date columns.
+            # -> Temporarily convert all dates to objects
+            # See: https://github.com/pandas-dev/pandas/issues/53854
+            # TODO: Remove this hack once pandas fixes this issue
+            if dtype == DType.DATE:
+                df[col] = df[col].astype(object)
+
         cls._execute_materialize(
+            df,
             table=table,
             schema=schema,
             engine=store.engine,
@@ -171,6 +181,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
     @classmethod_engine_argument_dispatch
     def _execute_materialize(
         cls,
+        df: pd.DataFrame,
         table: Table[pd.DataFrame],
         schema: Schema,
         engine: sa.Engine,
@@ -180,7 +191,6 @@ class PandasTableHook(TableHook[SQLTableStore]):
         if table.type_map:
             dtypes.update(table.type_map)
 
-        df = table.obj
         df.to_sql(
             table.name,
             engine,
@@ -193,6 +203,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
     @_execute_materialize.dialect("postgresql")
     def _execute_materialize_postgres(
         cls,
+        df: pd.DataFrame,
         table: Table[pd.DataFrame],
         schema: Schema,
         engine: sa.Engine,
@@ -204,8 +215,6 @@ class PandasTableHook(TableHook[SQLTableStore]):
         dtypes = {name: dtype.to_sql() for name, dtype in dtypes.items()}
         if table.type_map:
             dtypes.update(table.type_map)
-
-        df = table.obj
 
         # Create empty table
         df[:0].to_sql(
@@ -245,6 +254,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
     @_execute_materialize.dialect("mssql")
     def _execute_materialize_mssql(
         cls,
+        df: pd.DataFrame,
         table: Table[pd.DataFrame],
         schema: Schema,
         engine: sa.Engine,
@@ -261,7 +271,6 @@ class PandasTableHook(TableHook[SQLTableStore]):
         if table.type_map:
             dtypes.update(table.type_map)
 
-        df = table.obj
         df.to_sql(
             table.name,
             engine,
