@@ -4,7 +4,11 @@ from contextvars import ContextVar, Token
 from enum import Enum
 from functools import cached_property
 from threading import Lock
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar
+
+import structlog
+from attrs import define, evolve, frozen
+from box import Box
 
 from pydiverse.pipedag.util.import_ import import_object, load_object
 
@@ -14,9 +18,6 @@ if TYPE_CHECKING:
     from pydiverse.pipedag.context.run_context import StageLockStateHandler
     from pydiverse.pipedag.core import Flow, Stage, Task
     from pydiverse.pipedag.engine.base import OrchestrationEngine
-
-import structlog
-from attrs import define, evolve, frozen
 
 
 class BaseContext:
@@ -125,7 +126,7 @@ class ConfigContext(BaseAttrsContext):
     instance_id: str  # may be used as database name or locking ID
     stage_commit_technique: StageCommitTechnique
     network_interface: str
-    attrs: dict[str, Any]
+    attrs: Box
 
     # other configuration options
     ignore_fresh_input: bool = False
