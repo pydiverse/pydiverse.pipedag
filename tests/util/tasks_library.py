@@ -5,7 +5,9 @@ import datetime as dt
 
 from pydiverse.pipedag import Blob, Table, materialize
 import sqlalchemy as sa
+import sqlalchemy.dialects
 
+from pydiverse.pipedag.backend.table.util.pandas import adjust_pandas_types
 from pydiverse.pipedag.context import ConfigContext
 
 
@@ -180,70 +182,9 @@ def simple_lazy_table_with_indexes():
     return Table(query, indexes=[["col2"], ["col2", "col1"]])
 
 
-def _get_df(data: dict[str, list], use_ext_dtype=False, cap_dates=False):
-    data = data.copy()
-    dtypes = {}
-    for col in list(data.keys()):
-        if cap_dates:
-            min_datetime = dt.datetime(1900, 1, 1, 0, 0, 0)
-            max_datetime = dt.datetime(2199, 12, 31, 23, 59, 59)
-            min_date = dt.date(1900, 1, 1)
-            max_date = dt.date(2199, 12, 31)
-            if type(data[col][0]) == dt.date:
-                data[col + "_year"] = [d.year for d in data[col]]
-                dtypes[col + "_year"] = pd.Int16Dtype()
-                data[col] = [max(min(v, max_date), min_date) for v in data[col]]
-                dtypes[col] = "datetime64[ns]"
-            elif type(data[col][0]) == dt.datetime:
-                data[col + "_year"] = [d.year for d in data[col]]
-                dtypes[col + "_year"] = pd.Int16Dtype()
-                data[col] = [max(min(v, max_datetime), min_datetime) for v in data[col]]
-                dtypes[col] = "datetime64[ns]"
-        if use_ext_dtype:
-            if type(data[col][0]) == str:
-                dtypes[col] = pd.StringDtype()
-            elif type(data[col][0]) == int:
-                dtypes[col] = pd.Int64Dtype()
-            elif type(data[col][0]) == bool:
-                dtypes[col] = pd.BooleanDtype()
-    return pd.DataFrame(
-        {
-            col: (
-                pd.Series(values, dtype=dtypes[col])
-                if col in dtypes
-                else pd.Series(values)
-            )
-            for col, values in data.items()
-        }
-    )
-
-
 @materialize(version="1.0")
-def pd_dataframe(data: dict[str, list], use_ext_dtype=False, cap_dates=False):
-    df = _get_df(data, use_ext_dtype, cap_dates)
-    kwargs = {}
-    if not cap_dates:
-        kwargs["type_map"] = {
-            col: sa.Date for col, items in data.items() if isinstance(items[0], dt.date)
-        }
-        kwargs["type_map"].update(
-            {
-                col: sa.DateTime
-                for col, items in data.items()
-                if isinstance(items[0], dt.datetime)
-            }
-        )
-    return Table(df, **kwargs)
-
-
-@materialize(input_type=pd.DataFrame, version="1.0")
-def pd_dataframe_assert(df_actual: pd.DataFrame, data: dict[str, list]):
-    df_expected = _get_df(data, use_ext_dtype=True, cap_dates=True)
-    if ConfigContext.get().store.table_store.engine.dialect.name == "ibm_db_sa":
-        for col in data:
-            if type(data[col][0]) == bool:
-                df_expected[col] = df_expected[col].astype(pd.Int16Dtype())
-    pd.testing.assert_frame_equal(df_expected, df_actual)
+def pd_dataframe(data: dict[str, list]):
+    return pd.DataFrame(data)
 
 
 @materialize(version="1.0")

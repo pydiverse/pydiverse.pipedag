@@ -77,37 +77,33 @@ def test_materialize_table():
     with Flow("flow") as f:
         with Stage("stage"):
             x = m.simple_dataframe()
-
             m.assert_table_equal(x, x)
 
     assert f.run().successful
 
 
-def test_materialize_table_values():
-    values_dict_of_lists = {
-        "x": [0, 1],
-        "x32": [-2147483648, 2147483647],
-        "x64": [-9223372036854775808, 9223372036854775807],
-        "str256": ["", "a" * 256],
-        "b": [True, False],
-        "d": [dt.date(1900, 1, 1), dt.date(2199, 12, 31)],
-        "dt": [dt.datetime(1900, 1, 1, 0, 0, 0), dt.datetime(2199, 12, 31, 23, 59, 59)],
-        "d2": [dt.date(1, 1, 1), dt.date(9999, 12, 31)],
-        "dt2": [dt.datetime(1, 1, 1, 0, 0, 0), dt.datetime(9999, 12, 31, 23, 59, 59)],
-    }
+@pytest.mark.xfail(
+    reason=(
+        "The string '\\N' can't be materialized using the "
+        "COPY FROM STDIN WITH CSV technique."
+    ),
+    strict=True,
+)
+@with_instances("postgres")
+def test_materialize_table_postgres_null_string():
+    data = {"strNA": ["", None, "\\N"]}
 
-    with Flow("flow") as f:
+    with Flow() as f:
         with Stage("stage_0"):
-            t_0 = m.pd_dataframe(values_dict_of_lists, cap_dates=True)
-            t_1 = m.pd_dataframe(values_dict_of_lists, cap_dates=False)
-            t_2 = m.noop(t_0)
-            t_3 = m.noop(t_1)
-            t_4 = m.noop_lazy(t_0)
-            t_5 = m.noop_lazy(t_1)
-            for t in [t_0, t_1, t_2, t_3, t_4, t_5]:
-                m.pd_dataframe_assert(t, values_dict_of_lists)
+            t = m.pd_dataframe(data)
 
-    assert f.run().successful
+    with ConfigContext.get().evolve(swallow_exceptions=True), StageLockContext():
+        result = f.run()
+        df = result.get(t, as_type=pd.DataFrame)
+
+    assert df["strNA"][0] == ""
+    assert df["strNA"][1] is pd.NA
+    assert df["strNA"][2] == "\\N"
 
 
 def test_materialize_table_twice():

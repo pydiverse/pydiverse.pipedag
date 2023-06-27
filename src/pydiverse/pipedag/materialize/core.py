@@ -23,7 +23,7 @@ def materialize(
     fn: CallableT = None,
     *,
     name: str = None,
-    input_type: type = None,
+    input_type: type | tuple | dict[str, Any] = None,
     version: str = None,
     cache: Callable = None,
     lazy: bool = False,
@@ -154,7 +154,6 @@ class MaterializingTask(Task):
             # Load inputs from database
             inputs[in_id] = cached_output
 
-        self.logger.info("inputs", inputs=inputs)
         return super().run(inputs, **kwargs)
 
 

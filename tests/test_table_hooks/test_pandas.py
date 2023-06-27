@@ -1,0 +1,251 @@
+import datetime as dt
+import string
+
+import pandas as pd
+import pyarrow as pa
+import pytest
+import sqlalchemy as sa
+from packaging.version import Version
+
+from pydiverse.pipedag import *
+
+# Parameterize all tests in this file with several instance_id configurations
+from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+
+pytestmark = [with_instances(DATABASE_INSTANCES)]
+pd_version = Version(pd.__version__)
+
+
+class Values:
+    INT8 = [-128, 127]
+    INT16 = [-32768, 32767]
+    INT32 = [-2147483648, 2147483647]
+    INT64 = [-9223372036854775808, 9223372036854775807]
+
+    FLOAT32 = [3e38, 3.14159]
+    FLOAT64 = [1e300, 3.14159]
+
+    STR = ["", string.printable + string.whitespace]
+
+    BOOLEAN = [True, False]
+
+    DATE = [dt.date(1, 1, 1), dt.date(9999, 12, 31)]
+    DATE_NS = [dt.date(1700, 1, 1), dt.date(2200, 1, 1)]
+    TIME = [dt.time(0, 0, 0), dt.time(23, 59, 59)]
+    DATETIME = [dt.datetime(1, 1, 1, 0, 0, 0), dt.datetime(9999, 12, 31, 23, 59, 59)]
+    DATETIME_NS = [dt.datetime(1700, 1, 1), dt.datetime(2200, 1, 1)]
+
+
+class NoneValues:
+    INT = [0, None]
+    FLOAT = [0.0, None]
+    STR = ["", None]
+    BOOLEAN = [False, None]
+
+    DATE = [dt.date(1970, 1, 1), None]
+    TIME = [dt.time(0, 0, 0), None]
+    DATETIME = [dt.datetime(1970, 1, 1, 0, 0, 0), None]
+
+
+def get_dialect_name():
+    return ConfigContext.get().store.table_store.engine.dialect.name
+
+
+class TestPandasTableHookNumpy:
+    def test_basic(self):
+        df = pd.DataFrame(
+            {
+                "int8": pd.array(Values.INT8, dtype="Int8"),
+                "int16": pd.array(Values.INT16, dtype="Int16"),
+                "int32": pd.array(Values.INT32, dtype="Int32"),
+                "int64": pd.array(Values.INT64, dtype="Int64"),
+                "float32": pd.array(Values.FLOAT32, dtype="Float32"),
+                "float64": pd.array(Values.FLOAT32, dtype="Float64"),
+                "str": pd.array(Values.STR, dtype="string"),
+                "boolean": pd.array(Values.BOOLEAN, dtype="boolean"),
+            }
+        )
+
+        @materialize()
+        def numpy_input():
+            return df
+
+        @materialize(input_type=(pd.DataFrame, "numpy"))
+        def assert_expected(in_df):
+            pd.testing.assert_frame_equal(in_df, df, check_dtype=False)
+
+            allowed_dtypes = set(df.dtypes)
+            for dtype in in_df.dtypes:
+                assert dtype in allowed_dtypes
+
+        with Flow() as f:
+            with Stage("stage"):
+                t = numpy_input()
+                assert_expected(t)
+
+        assert f.run().successful
+
+    def test_none(self):
+        df = pd.DataFrame(
+            {
+                "int": pd.array(NoneValues.INT, dtype="Int64"),
+                "float": pd.array(NoneValues.FLOAT, dtype="Float64"),
+                "str": pd.array(NoneValues.STR, dtype="string"),
+                "boolean": pd.array(NoneValues.BOOLEAN, dtype="boolean"),
+            }
+        )
+
+        @materialize()
+        def numpy_input():
+            return df
+
+        @materialize(input_type=(pd.DataFrame, "numpy"))
+        def assert_expected(in_df):
+            pd.testing.assert_frame_equal(in_df, df, check_dtype=False)
+
+            allowed_dtypes = set(df.dtypes)
+            for col, dtype in in_df.dtypes.items():
+                if col == "boolean" and get_dialect_name() == "ibm_db_sa":
+                    assert dtype == pd.Int16Dtype()
+                else:
+                    assert dtype in allowed_dtypes
+
+        with Flow() as f:
+            with Stage("stage"):
+                t = numpy_input()
+                assert_expected(t)
+
+        assert f.run().successful
+
+    def test_datetime(self):
+        df = pd.DataFrame(
+            {
+                "date": Values.DATE,
+                "date_ns": Values.DATE_NS,
+                "date_none": NoneValues.DATE,
+                "datetime": Values.DATETIME,
+                "datetime_ns": Values.DATETIME_NS,
+                "datetime_none": NoneValues.DATETIME,
+            }
+        ).astype(object)
+
+        df_expected = pd.DataFrame(
+            {
+                "date": pd.array(Values.DATE_NS, dtype="datetime64[ns]"),
+                "date_ns": pd.array(Values.DATE_NS, dtype="datetime64[ns]"),
+                "date_none": pd.array(NoneValues.DATE, dtype="datetime64[ns]"),
+                "datetime": pd.array(Values.DATETIME_NS, dtype="datetime64[ns]"),
+                "datetime_ns": pd.array(Values.DATETIME_NS, dtype="datetime64[ns]"),
+                "datetime_none": pd.array(NoneValues.DATETIME, dtype="datetime64[ns]"),
+                "date_year": [d.year for d in Values.DATE],
+                "date_ns_year": [d.year for d in Values.DATE_NS],
+                "date_none_year": [1970, None],
+                "datetime_year": [d.year for d in Values.DATETIME],
+                "datetime_ns_year": [d.year for d in Values.DATETIME_NS],
+                "datetime_none_year": [1970, None],
+            }
+        )
+
+        @materialize()
+        def numpy_input():
+            datetime_dtype = (
+                sa.DateTime()
+                if (get_dialect_name() != "mssql")
+                else sa.dialects.mssql.DATETIME2()
+            )
+
+            return Table(
+                df,
+                type_map={
+                    "date": sa.Date(),
+                    "date_ns": sa.Date(),
+                    "date_none": sa.Date(),
+                    "datetime": datetime_dtype,
+                    "datetime_ns": datetime_dtype,
+                    "datetime_none": datetime_dtype,
+                },
+            )
+
+        @materialize(input_type=(pd.DataFrame, "numpy"))
+        def assert_expected(in_df):
+            pd.testing.assert_frame_equal(in_df, df_expected, check_dtype=False)
+
+        with Flow() as f:
+            with Stage("stage"):
+                t = numpy_input()
+                assert_expected(t)
+
+        assert f.run().successful
+
+
+@pytest.mark.skipif(pd_version < Version("2.0"), reason="Requires pandas v2.0")
+class TestPandasTableHookArrow:
+    def test_basic(self):
+        df = pd.DataFrame(
+            {
+                "int8": pd.array(Values.INT8, dtype="int8[pyarrow]"),
+                "int16": pd.array(Values.INT16, dtype="int16[pyarrow]"),
+                "int32": pd.array(Values.INT32, dtype="int32[pyarrow]"),
+                "int64": pd.array(Values.INT64, dtype="int64[pyarrow]"),
+                "float32": pd.array(Values.FLOAT32, dtype="float[pyarrow]"),
+                "float64": pd.array(Values.FLOAT32, dtype="double[pyarrow]"),
+                "str": pd.array(Values.STR, dtype=pd.ArrowDtype(pa.string())),
+                "boolean": pd.array(Values.BOOLEAN, dtype="bool[pyarrow]"),
+                "date": pd.array(Values.DATE, dtype=pd.ArrowDtype(pa.date32())),
+                "time": pd.array(Values.TIME, dtype=pd.ArrowDtype(pa.time32("ms"))),
+                "datetime": pd.array(
+                    Values.DATETIME, dtype=pd.ArrowDtype(pa.timestamp("ms"))
+                ),
+            }
+        )
+
+        @materialize()
+        def arrow_input():
+            return df
+
+        @materialize(input_type=(pd.DataFrame, "arrow"))
+        def assert_expected(in_df):
+            pd.testing.assert_frame_equal(in_df, df, check_dtype=False)
+            allowed_dtypes = set(df.dtypes)
+            for col, dtype in in_df.dtypes.items():
+                if col == "boolean" and get_dialect_name() == "ibm_db_sa":
+                    assert dtype == pd.ArrowDtype(pa.int16())
+                else:
+                    assert dtype in allowed_dtypes
+
+        with Flow() as f:
+            with Stage("stage"):
+                t = arrow_input()
+                assert_expected(t)
+
+        assert f.run().successful
+
+    def test_none(self):
+        df = pd.DataFrame(
+            {
+                "int": pd.array(NoneValues.INT, dtype="int64[pyarrow]"),
+                "float": pd.array(NoneValues.FLOAT, dtype="double[pyarrow]"),
+                "str": pd.array(NoneValues.STR, dtype=pd.ArrowDtype(pa.string())),
+                "boolean": pd.array(NoneValues.BOOLEAN, dtype="bool[pyarrow]"),
+                "date": pd.array(NoneValues.DATE, dtype=pd.ArrowDtype(pa.date32())),
+                "time": pd.array(NoneValues.TIME, dtype=pd.ArrowDtype(pa.time32("ms"))),
+                "datetime": pd.array(
+                    NoneValues.DATETIME, dtype=pd.ArrowDtype(pa.timestamp("ms"))
+                ),
+            }
+        )
+
+        @materialize()
+        def arrow_input():
+            return df
+
+        @materialize(input_type=(pd.DataFrame, "arrow"))
+        def assert_expected(in_df):
+            pd.testing.assert_frame_equal(in_df, df, check_dtype=False)
+
+        with Flow() as f:
+            with Stage("stage"):
+                t = arrow_input()
+                assert_expected(t)
+
+        assert f.run().successful

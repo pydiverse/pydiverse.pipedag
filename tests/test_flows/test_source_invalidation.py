@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
-from pydiverse.pipedag.backend.table.util.pandas import adj_pandas_types
+from pydiverse.pipedag.backend.table.util.pandas import adjust_pandas_types
 from pydiverse.pipedag.context import StageLockContext
 
 dfA_source = pd.DataFrame(
@@ -67,7 +67,7 @@ def test_source_invalidation():
 
     flow, out1, out2 = get_flow()
 
-    dfA_source_adj = adj_pandas_types(dfA_source)
+    dfA_source_adj = adjust_pandas_types(dfA_source)
     with StageLockContext():
         result = flow.run()
         assert result.successful
@@ -105,14 +105,10 @@ def test_source_invalidation():
         assert result.successful
 
         v_out1, v_out2 = result.get(out1), result.get(out2)
-        pd.testing.assert_frame_equal(
-            (dfA_source_adj + pd.DataFrame(dict(a=[10, 10, 10, 10], b=0))) * 2,
-            v_out1,
-        )
-        pd.testing.assert_frame_equal(
-            (dfA_source_adj + pd.DataFrame(dict(a=[10, 10, 10, 10], b=0))) * 4,
-            v_out2,
-        )
+
+        adj_dfA = adjust_pandas_types(dfA)
+        pd.testing.assert_frame_equal(adj_dfA * 2, v_out1)
+        pd.testing.assert_frame_equal(adj_dfA * 4, v_out2)
 
 
 if __name__ == "__main__":

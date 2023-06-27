@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import inspect
 import warnings
 from typing import TYPE_CHECKING, Callable, Protocol
 
@@ -15,18 +16,50 @@ if TYPE_CHECKING:
 
 __all__ = [
     "engine_dispatch",
+    "engine_argument_dispatch",
+    "classmethod_engine_argument_dispatch",
 ]
 
 
 def engine_dispatch(fn: CallableT) -> CallableT | EngineDispatchedFn:
     """Dispatch a function based on `self.engine.dialect.name`."""
+
+    def get_dialect(*args, **kwargs):
+        self_or_cls = args[0]
+        return self_or_cls.engine.dialect
+
+    return _engine_dispatch_generator(fn, get_dialect)
+
+
+def engine_argument_dispatch(fn: CallableT) -> CallableT | EngineDispatchedFn:
+    """Dispatch a function based on argument named `engine`"""
+    signature = inspect.signature(fn)
+
+    def get_dialect(*args, **kwargs):
+        bound = signature.bind(*args, **kwargs)
+        engine = bound.arguments["engine"]
+        return engine.dialect
+
+    return _engine_dispatch_generator(fn, get_dialect)
+
+
+def classmethod_engine_argument_dispatch(
+    fn: CallableT,
+) -> CallableT | EngineDispatchedFn | classmethod:
+    dispatched = engine_argument_dispatch(fn)
+    cm_dispatched = classmethod(dispatched)
+    cm_dispatched.dialect = dispatched.dialect
+    cm_dispatched.original = fn
+    return cm_dispatched
+
+
+def _engine_dispatch_generator(fn, dialect_getter):
     fn_variants = {}
 
     @functools.wraps(fn)
     def wrapped(*args, **kwargs):
-        self_or_cls = args[0]
-        dialect_name = self_or_cls.engine.dialect.name
-        dispatched_fn = fn_variants.get(dialect_name, fn)
+        dialect = dialect_getter(*args, **kwargs)
+        dispatched_fn = fn_variants.get(dialect.name, fn)
         return dispatched_fn(*args, **kwargs)
 
     def dialect_decorator(dialect):
