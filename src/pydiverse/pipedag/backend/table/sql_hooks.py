@@ -162,13 +162,28 @@ class PandasTableHook(TableHook[SQLTableStore]):
                 f"Writing table '{schema.get()}.{table.name}'", table_obj=table.obj
             )
 
-        dtypes = {name: DType.from_pandas(dtype) for name, dtype in df.dtypes.items()}
+        return cls.materialize_(df, None, store, table, schema)
+
+    @classmethod
+    def materialize_(
+        cls,
+        df: pd.DataFrame,
+        dtypes: dict[str:DType] | None,
+        store: SQLTableStore,
+        table: Table[Any],
+        schema: Schema,
+    ):
+        """Helper function that can be invoked by other hooks"""
+        if dtypes is None:
+            dtypes = {
+                name: DType.from_pandas(dtype) for name, dtype in df.dtypes.items()
+            }
 
         for col, dtype in dtypes.items():
             # Currently, pandas' .to_sql fails for arrow date columns.
             # -> Temporarily convert all dates to objects
             # See: https://github.com/pandas-dev/pandas/issues/53854
-            # TODO: Remove this hack once pandas fixes this issue
+            # TODO: Remove this once pandas 2.1 gets released (fixed by #53856)
             if dtype == DType.DATE:
                 df[col] = df[col].astype(object)
 
@@ -483,28 +498,28 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         stage_name,
         task_info: TaskInfo | None,
     ):
+        # Materialization for polars happens by first converting the dataframe to
+        # a pyarrow backed pandas dataframe, and then calling the PandasTableHook
+        # for materialization.
+
+        df = table.obj
         schema = store.get_schema(stage_name)
+
         if store.print_materialize:
             store.logger.info(
-                f"Writing table '{schema.get()}.{table.name}'",
-                table_obj=table.obj,
+                f"Writing table '{schema.get()}.{table.name}'", table_obj=table.obj
             )
-        table_name = table.name
-        # TODO:
-        # dtype_map = {}
-        # if store.engine.dialect.name == "ibm_db_sa":
-        #     # Default string target is CLOB which can't be used for indexing.
-        #     # We could use VARCHAR(32000), but if we change this to VARCHAR(256)
-        #     # for indexed columns, DB2 hangs.
-        #     dtype_map = {
-        #         col: sa.VARCHAR(256)
-        #         for col in table.obj.dtypes.loc[lambda x: x == object].index
-        #     }
-        #     table_name = ibm_db_sa_fix_name(table_name)
-        table.obj.to_pandas(use_pyarrow_extension_array=True).to_sql(
-            name=table_name, con=store.engine, schema=schema.get(), index=False
+
+        dtypes = dict(zip(df.columns, map(DType.from_polars, df.dtypes)))
+
+        pd_df = df.to_pandas(use_pyarrow_extension_array=True, zero_copy_only=True)
+        return PandasTableHook.materialize_(
+            df=pd_df,
+            dtypes=dtypes,
+            store=store,
+            table=table,
+            schema=schema,
         )
-        store.add_indexes(table, schema)
 
     @classmethod
     def retrieve(
