@@ -586,13 +586,13 @@ test-randomorder = ["pytest-randomly"]
 
 [[package]]
 name = "dask"
-version = "2023.6.0"
+version = "2023.6.1"
 description = "Parallel PyData with Task Scheduling"
 optional = false
 python-versions = ">=3.9"
 files = [
-    {file = "dask-2023.6.0-py3-none-any.whl", hash = "sha256:294f449108397c4ca7a3bca27e32cb0fe9c65599c57d6301b3b70f825c2457d4"},
-    {file = "dask-2023.6.0.tar.gz", hash = "sha256:980741966ef4d14c62dfb146f315f57d5eaaa6bedc52866f99687bc6054c2d4b"},
+    {file = "dask-2023.6.1-py3-none-any.whl", hash = "sha256:56ccfb800c09ac7048435392f2bca2919a39bb9da502f0fddd728c9214d00098"},
+    {file = "dask-2023.6.1.tar.gz", hash = "sha256:8077b708a8a6169da208714a8a9212937e7bed0326e5fa4681456a3538fc15a6"},
 ]
 
 [package.dependencies]
@@ -610,7 +610,7 @@ array = ["numpy (>=1.21)"]
 complete = ["dask[array,dataframe,diagnostics,distributed]", "lz4 (>=4.3.2)", "pyarrow (>=7.0)"]
 dataframe = ["numpy (>=1.21)", "pandas (>=1.3)"]
 diagnostics = ["bokeh (>=2.4.2)", "jinja2 (>=2.10.3)"]
-distributed = ["distributed (==2023.6.0)"]
+distributed = ["distributed (==2023.6.1)"]
 test = ["pandas[test]", "pre-commit", "pytest", "pytest-cov", "pytest-rerunfailures", "pytest-xdist"]
 
 [[package]]
@@ -626,19 +626,19 @@ files = [
 
 [[package]]
 name = "distributed"
-version = "2023.6.0"
+version = "2023.6.1"
 description = "Distributed scheduler for Dask"
 optional = false
 python-versions = ">=3.9"
 files = [
-    {file = "distributed-2023.6.0-py3-none-any.whl", hash = "sha256:dea5c199623aab6babaa5c6a9c98542723c1436d065d28c68ac324266978701b"},
-    {file = "distributed-2023.6.0.tar.gz", hash = "sha256:a5bdd4d15f3e7c8df98513b409753d46a39827a650620cc0c0c5ef2751561280"},
+    {file = "distributed-2023.6.1-py3-none-any.whl", hash = "sha256:d5e2591c2c361df925f2e2b0159b539055b7e32c483d32e2d8eeb8b37dff657a"},
+    {file = "distributed-2023.6.1.tar.gz", hash = "sha256:4a58468263dd7b00fce1d6abadfd9cb8433f9093693b18108d21d88c4463a8bb"},
 ]
 
 [package.dependencies]
 click = ">=8.0"
 cloudpickle = ">=1.5.0"
-dask = "2023.6.0"
+dask = "2023.6.1"
 jinja2 = ">=2.10.3"
 locket = ">=1.0.0"
 msgpack = ">=1.0.0"
@@ -2049,13 +2049,13 @@ files = [
 
 [[package]]
 name = "pydiverse-transform"
-version = "0.1.2"
+version = "0.1.3"
 description = "Pipe based dataframe manipulation library that can also transform data on SQL databases"
 optional = false
 python-versions = ">=3.9"
 files = [
-    {file = "pydiverse_transform-0.1.2-py3-none-any.whl", hash = "sha256:31e8ca20f37f5baebec5537144249ac46ede64ffb95f27a346e75523e5249f74"},
-    {file = "pydiverse_transform-0.1.2.tar.gz", hash = "sha256:d781a17f1adb7545202edfe29dc23823fe9c154e24cae6d9b894681eb80895fc"},
+    {file = "pydiverse_transform-0.1.3-py3-none-any.whl", hash = "sha256:f5805a4236eda0629e3350fe2d07fe511180e144aeb81ce1788f61b16dc72df9"},
+    {file = "pydiverse_transform-0.1.3.tar.gz", hash = "sha256:9c5bf1a153e67d13c40d300e747e0f6cc4c58412eafbb3bca755dd149b90c707"},
 ]
 
 [package.dependencies]
@@ -3403,4 +3403,4 @@ zookeeper = ["kazoo"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "49167e9db08fe7c2b71e928aef1abcf272edc97aaeac9fce7970f4299e7425f3"
+content-hash = "23a90958c83bef8525c72de654f775ea406d7d94bb2a69941af0c517529c2ac7"
