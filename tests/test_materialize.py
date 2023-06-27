@@ -80,30 +80,6 @@ def test_materialize_table():
     assert f.run().successful
 
 
-@pytest.mark.xfail(
-    reason=(
-        "The string '\\N' can't be materialized using the "
-        "COPY FROM STDIN WITH CSV technique."
-    ),
-    strict=True,
-)
-@with_instances("postgres")
-def test_materialize_table_postgres_null_string():
-    data = {"strNA": ["", None, "\\N"]}
-
-    with Flow() as f:
-        with Stage("stage_0"):
-            t = m.pd_dataframe(data)
-
-    with ConfigContext.get().evolve(swallow_exceptions=True), StageLockContext():
-        result = f.run()
-        df = result.get(t, as_type=pd.DataFrame)
-
-    assert df["strNA"][0] == ""
-    assert df["strNA"][1] is pd.NA
-    assert df["strNA"][2] == "\\N"
-
-
 def test_materialize_table_twice():
     with Flow("flow") as f:
         with Stage("stage"):

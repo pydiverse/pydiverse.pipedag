@@ -15,6 +15,7 @@ except ImportError:
     tp = None
 
 
+@pytest.mark.skipif(tp is None, reason="Test requires tidypolars to be installed")
 def test_table_store():
     @materialize()
     def in_table():
