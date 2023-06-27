@@ -4,7 +4,7 @@ import pandas as pd
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
-from tests.fixtures.instances import with_instances, DATABASE_INSTANCES
+from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
 
 
 @materialize(nout=2, version="1.1")

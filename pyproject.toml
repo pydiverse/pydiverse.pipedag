@@ -119,7 +119,7 @@ select = [
 ignore = [
     "B028",
 ]
-extend-exclude = ["tests/*", "docs/*"]
+extend-exclude = ["docs/*"]
 ignore-init-module-imports = true
 fix = true
 target-version = "py38"
@@ -127,6 +127,7 @@ target-version = "py38"
 [tool.ruff.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
 "src/pydiverse/pipedag/backend/table/util/sql_ddl.py" = ["F811"]
+"tests/*" = ["F403", "F405"]
 
 [tool.ruff.isort]
 known-first-party = ["pydiverse"]

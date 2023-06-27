@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import pandas as pd
 
-from pydiverse.pipedag import Blob, Flow, Stage, Table, ConfigContext
+from pydiverse.pipedag import Blob, ConfigContext, Flow, Stage, Table
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import materialize
 
-from tests.util import select_as, compile_sql, tasks_library as m
-from tests.util.spy import spy_task
-
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import with_instances, ALL_INSTANCES
+from tests.fixtures.instances import ALL_INSTANCES, with_instances
+from tests.util import compile_sql, select_as
+from tests.util import tasks_library as m
+from tests.util.spy import spy_task
 
 pytestmark = [with_instances(ALL_INSTANCES)]
 

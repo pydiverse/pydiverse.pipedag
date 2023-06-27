@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import sqlalchemy as sa
 
-from pydiverse.pipedag import Flow, Stage, Table, materialize, ConfigContext
+from pydiverse.pipedag import ConfigContext, Flow, Stage, Table, materialize
 from tests.fixtures.instances import with_instances
 
 

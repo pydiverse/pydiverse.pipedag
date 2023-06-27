@@ -1,8 +1,8 @@
+from itertools import chain
+
 import pytest
 
 from pydiverse.pipedag import PipedagConfig
-from itertools import chain
-
 
 __all__ = [
     "DATABASE_INSTANCES",

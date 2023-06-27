@@ -8,11 +8,11 @@ from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import materialize
 
-from tests.util import select_as, tasks_library as m
-from tests.util.spy import spy_task
-
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import with_instances, ALL_INSTANCES, skip_instances
+from tests.fixtures.instances import ALL_INSTANCES, skip_instances, with_instances
+from tests.util import select_as
+from tests.util import tasks_library as m
+from tests.util.spy import spy_task
 
 pytestmark = [with_instances(ALL_INSTANCES)]
 
@@ -270,7 +270,7 @@ def test_raw_sql(mocker):
     def raw_sql_task(stage):
         return RawSql(
             f"""
-            CREATE TABLE {stage.transaction_name}.raw_table AS 
+            CREATE TABLE {stage.transaction_name}.raw_table AS
             SELECT {raw_value} as x
             """,
             "raw_table",
@@ -278,8 +278,8 @@ def test_raw_sql(mocker):
         )
 
     @materialize(version="1.0")
-    def child_task(input):
-        return Table(sa.text(f"SELECT * FROM {input.stage.transaction_name}.raw_table"))
+    def child_task(x):
+        return Table(sa.text(f"SELECT * FROM {x.stage.transaction_name}.raw_table"))
 
     with Flow() as flow:
         with Stage("raw_sql_stage") as stage:

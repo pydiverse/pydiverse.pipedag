@@ -17,15 +17,11 @@ input_hash = hash(str(dfA))
 
 
 def has_new_input(dummy_arg):
-    """
-    Returns whether new input is available via input hash.
+    """Returns whether new input is available via input hash.
 
-    It is a test implementation which can be controlled via package scoped variable like is_changed.
-
-    :param dummy_arg:
-        Argument used to test that custom cache invalidation function gets same arguments as task function
-    :return:
-        hash value of input (stored hash must not exactly be input hash)
+    :param dummy_arg: Argument used to test that custom cache invalidation function
+        gets same arguments as task function
+    :return: hash value of input (stored hash must not exactly be input hash)
     """
     assert dummy_arg == "irrelevant"
     global input_hash
@@ -36,7 +32,6 @@ def has_new_input(dummy_arg):
 @materialize(nout=2, cache=has_new_input, version="1.0")
 def input_task(dummy_arg):
     global dfA
-    print(f"dummy_arg={dummy_arg}, dfA=\n{dfA}")
     return Table(dfA, "dfA"), Table(dfA, "dfB")
 
 

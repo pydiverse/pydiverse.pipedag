@@ -1,17 +1,17 @@
 import pytest
 
-from tests.util.tasks_library import assert_table_equal
 from pydiverse.pipedag import *
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import with_instances, DATABASE_INSTANCES
+from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.util.tasks_library import assert_table_equal
 
 pytestmark = [pytest.mark.polars, with_instances(DATABASE_INSTANCES)]
 
 
 try:
     import tidypolars as tp
-except ImportError as _e:
+except ImportError:
     tp = None
 
 

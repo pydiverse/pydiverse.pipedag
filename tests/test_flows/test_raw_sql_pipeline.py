@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, materialize
@@ -11,9 +10,10 @@ from pydiverse.pipedag.materialize.container import RawSql
 from tests.fixtures.instances import with_instances
 
 """
-Attention: Wrapping Raw SQL statements should always be just the first step of pipedag adoption.
-Ideally the next step is to extract individual transformations (SELECT statements) so they can 
-be gradually converted from text SQL to programmatically created SQL (python)
+Attention:
+Wrapping Raw SQL statements should always be just the first step of pipedag adoption.
+Ideally the next step is to extract individual transformations (SELECT statements) so
+they can be gradually converted from text SQL to programmatically created SQL (python).
 """
 
 
@@ -64,16 +64,11 @@ def test_raw_sql():
         with Stage("raw") as out_stage:
             _dir = parent_dir / "raw"
             raw = tsql("raw_views.sql", _dir, out_stage=out_stage, helper_sql=helper)
-        # with Stage("ref") as out_stage:
-        #     _dir = parent_dir / "ref"
-        #     ref = tsql("reference_claim_statistics.sql", _dir, in_sql=raw, out_stage=out_stage)
-        #     ref = tsql("reference_tables.sql", _dir, in_sql=raw, out_stage=out_stage, depend=ref)
         with Stage("prep") as prep_stage:
             _dir = parent_dir / "prep"
             prep = tsql(
                 "entity_checks.sql", _dir, in_sql=raw, out_stage=prep_stage, depend=raw
             )
-            # prep = tsql("entity_checks.sql", _dir, in_sql=raw, out_stage=out_stage, depend=ref)
             prep = tsql(
                 "more_tables.sql", _dir, in_sql=raw, out_stage=prep_stage, depend=prep
             )

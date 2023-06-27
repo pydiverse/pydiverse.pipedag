@@ -2,17 +2,16 @@ import shutil
 from pathlib import Path
 
 import filelock
+import pandas as pd
+import sqlalchemy as sa
 
 from pydiverse.pipedag import (
-    materialize,
-    Table,
+    ConfigContext,
     Flow,
     Stage,
-    ConfigContext,
+    Table,
+    materialize,
 )
-import sqlalchemy as sa
-import pandas as pd
-
 from pydiverse.pipedag.context import StageLockContext
 from tests.fixtures.instances import with_instances
 
@@ -25,16 +24,16 @@ def get_flow():
         )
 
     @materialize(lazy=True, input_type=sa.Table)
-    def lazy_task_2(input1: sa.Table, input2: sa.Table):
-        query = sa.select((input1.c.x * 5).label("x5"), input2.c.a).select_from(
-            input1.outerjoin(input2, input2.c.x == input1.c.x)
+    def lazy_task_2(tbl1: sa.Table, tbl2: sa.Table):
+        query = sa.select((tbl1.c.x * 5).label("x5"), tbl2.c.a).select_from(
+            tbl1.outerjoin(tbl2, tbl1.c.x == tbl2.c.x)
         )
         return Table(query, name="task_2_out", primary_key=["a"])
 
     @materialize(lazy=True, input_type=sa.Table)
-    def lazy_task_3(input: sa.Table, my_stage: Stage):
+    def lazy_task_3(tbl: sa.Table, my_stage: Stage):
         return Table(
-            sa.text(f"SELECT * FROM {my_stage.transaction_name}.{input.name}"), "lazy_3"
+            sa.text(f"SELECT * FROM {my_stage.transaction_name}.{tbl.name}"), "lazy_3"
         )
 
     @materialize(nout=2)

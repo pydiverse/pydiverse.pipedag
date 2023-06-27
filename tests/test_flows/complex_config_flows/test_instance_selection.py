@@ -47,23 +47,13 @@ input_hash = hash(str(dfA))
 
 
 def has_new_input():
-    """
-    Returns whether new input is available via input hash.
-
-    It is a test implementation which can be controlled via package scoped variable like is_changed.
-
-    :return:
-        hash value of input (stored hash must not exactly be input hash)
-    """
     global input_hash
     return input_hash
 
 
-# noinspection DuplicatedCode
 @materialize(nout=2, cache=has_new_input, version="1.0")
 def input_task():
     global dfA
-    print(f"dfA=\n{dfA}")
     return Table(dfA, "dfA"), Table(dfA, "dfB")
 
 
@@ -93,9 +83,10 @@ def copy_filtered_inputs(
 def _get_source_tbls(source, per_user, stage, pipedag_config):
     source_cfg = pipedag_config.get(instance=source, per_user=per_user)
     with source_cfg:
-        # This is just quick hack code to copy data from one pipeline instance to another in a filtered way.
-        # It justifies actually a complete pydiverse package called pydiverse.testdata. We want to achieve
-        # loose coupling by pipedag transporting uninterpreted attrs with user code feeding the
+        # This is just quick hack code to copy data from one pipeline instance to
+        # another in a filtered way. It justifies actually a complete pydiverse
+        # package called pydiverse.testdata. We want to achieve loose coupling by
+        # pipedag transporting uninterpreted attrs with user code feeding the
         # attributes in testdata functionality
         engine = source_cfg.store.table_store.engine
         schema = source_cfg.store.table_store.get_schema(stage.name)
@@ -139,7 +130,8 @@ def get_flow(attrs: dict[str, Any], pipedag_config):
 
 
 def test_instance_selection(cfg_file_path):
-    # at this point, an instance is chosen from multi-pipedag-instance configuration file
+    # At this point, an instance is chosen from multi-pipedag-instance
+    # configuration file
     pipedag_config = PipedagConfig(cfg_file_path)
     cfg = pipedag_config.get(instance="full")
 

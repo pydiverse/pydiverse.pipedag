@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import os
 import itertools
-from threading import Thread
+import os
+import signal
+import time
 from multiprocessing import Process, Queue
 from queue import Empty
-import time
-import signal
+from threading import Thread
 
 import pytest
 from _pytest.python import Config
@@ -46,7 +46,7 @@ class Session:
                 num_workers = 1
             self.num_workers = num_workers
         except ValueError:
-            raise ValueError('workers can only be an integer or "auto"')
+            raise ValueError('workers can only be an integer or "auto"') from None
 
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)

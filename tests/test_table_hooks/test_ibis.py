@@ -1,17 +1,18 @@
-import pytest
 import pandas as pd
-from tests.util.tasks_library import assert_table_equal
+import pytest
+
 from pydiverse.pipedag import *
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import with_instances, skip_instances, DATABASE_INSTANCES
+from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.util.tasks_library import assert_table_equal
 
 pytestmark = [pytest.mark.ibis, with_instances(DATABASE_INSTANCES)]
 
 
 try:
     import ibis
-except ImportError as _e:
+except ImportError:
     ibis = None
 
 

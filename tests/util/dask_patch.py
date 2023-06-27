@@ -27,6 +27,6 @@ class _EncodedFile:
 
     def __setstate__(self, state):
         assert isinstance(self, EncodedFile)
-        setattr(self, "encoding", state["encoding"])
+        self.encoding = state["encoding"]
         buffer = BytesIO(state["value"])
-        setattr(self, "buffer", buffer)
+        self.buffer = buffer

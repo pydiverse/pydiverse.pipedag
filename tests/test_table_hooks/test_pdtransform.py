@@ -1,21 +1,20 @@
+import pandas as pd
 import pytest
 
-import pandas as pd
-
-from tests.util.tasks_library import assert_table_equal
 from pydiverse.pipedag import *
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import with_instances, DATABASE_INSTANCES
+from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.util.tasks_library import assert_table_equal
 
 pytestmark = [pytest.mark.pdtransform, with_instances(DATABASE_INSTANCES)]
 
 
 try:
-    from pydiverse.transform.lazy import SQLTableImpl
-    from pydiverse.transform.eager import PandasTableImpl
     from pydiverse.transform.core.verbs import mutate
-except ImportError as _e:
+    from pydiverse.transform.eager import PandasTableImpl
+    from pydiverse.transform.lazy import SQLTableImpl
+except ImportError:
     SQLTableImpl = None
     PandasTableImpl = None
 

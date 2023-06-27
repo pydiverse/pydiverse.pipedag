@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import pytest
-from _pytest.config import Config, _prepareconfig
 from multiprocessing import Queue
+
+import pytest
+from _pytest.config import Config
 
 
 def start_worker(

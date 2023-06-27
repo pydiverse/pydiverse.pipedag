@@ -1,1 +1,1 @@
-from tests.util.sql import select_as, compile_sql
+from tests.util.sql import compile_sql, select_as
