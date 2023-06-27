@@ -8,6 +8,7 @@ Changelog
 =========
 
 - add support for DuckDB
+- add support for pyarrow backed pandas dataframes
 - support execution of subflow
 - store final state of task in flow result object
 - tasks now have a `position_hash` associated with them to identify them purely based on their position (e.g. stage, name and input wiring) inside a flow.
