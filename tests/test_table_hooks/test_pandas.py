@@ -193,9 +193,9 @@ class TestPandasTableHookArrow:
                 "str": pd.array(Values.STR, dtype=pd.ArrowDtype(pa.string())),
                 "boolean": pd.array(Values.BOOLEAN, dtype="bool[pyarrow]"),
                 "date": pd.array(Values.DATE, dtype=pd.ArrowDtype(pa.date32())),
-                "time": pd.array(Values.TIME, dtype=pd.ArrowDtype(pa.time32("ms"))),
+                "time": pd.array(Values.TIME, dtype=pd.ArrowDtype(pa.time64("us"))),
                 "datetime": pd.array(
-                    Values.DATETIME, dtype=pd.ArrowDtype(pa.timestamp("ms"))
+                    Values.DATETIME, dtype=pd.ArrowDtype(pa.timestamp("us"))
                 ),
             }
         )
@@ -229,9 +229,9 @@ class TestPandasTableHookArrow:
                 "str": pd.array(NoneValues.STR, dtype=pd.ArrowDtype(pa.string())),
                 "boolean": pd.array(NoneValues.BOOLEAN, dtype="bool[pyarrow]"),
                 "date": pd.array(NoneValues.DATE, dtype=pd.ArrowDtype(pa.date32())),
-                "time": pd.array(NoneValues.TIME, dtype=pd.ArrowDtype(pa.time32("ms"))),
+                "time": pd.array(NoneValues.TIME, dtype=pd.ArrowDtype(pa.time64("us"))),
                 "datetime": pd.array(
-                    NoneValues.DATETIME, dtype=pd.ArrowDtype(pa.timestamp("ms"))
+                    NoneValues.DATETIME, dtype=pd.ArrowDtype(pa.timestamp("us"))
                 ),
             }
         )

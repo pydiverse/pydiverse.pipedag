@@ -21,6 +21,7 @@ class DType(Enum):
         DType <-> SQLAlchemy
         DType <-> Pandas
         DType <-> Arrow
+        DType <-> Polars
 
     """
 
@@ -157,6 +158,28 @@ class DType(Enum):
             return DType.TIME
         raise TypeError
 
+    @staticmethod
+    def from_polars(type_) -> DType:
+        import polars as pl
+
+        return {
+            pl.Int64: DType.INT64,
+            pl.Int32: DType.INT32,
+            pl.Int16: DType.INT16,
+            pl.Int8: DType.INT8,
+            pl.UInt64: DType.UINT64,
+            pl.UInt32: DType.UINT32,
+            pl.UInt16: DType.UINT16,
+            pl.UInt8: DType.UINT8,
+            pl.Float64: DType.FLOAT64,
+            pl.Float32: DType.FLOAT32,
+            pl.Utf8: DType.STRING,
+            pl.Boolean: DType.BOOLEAN,
+            pl.Datetime: DType.DATETIME,
+            pl.Time: DType.TIME,
+            pl.Date: DType.DATE,
+        }[type_.base_type()]
+
     def to_sql(self):
         return {
             DType.INT8: sa.SmallInteger(),
@@ -216,18 +239,27 @@ class DType(Enum):
             DType.STRING: pa.string(),
             DType.BOOLEAN: pa.bool_(),
             DType.DATE: pa.date32(),
-            DType.TIME: pa.time32("ms"),
-            DType.DATETIME: pa.timestamp("ms"),
+            DType.TIME: pa.time64("us"),
+            DType.DATETIME: pa.timestamp("us"),
         }[self]
 
+    def to_polars(self):
+        import polars as pl
 
-def adjust_pandas_types(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Normalizes the dtypes of a dataframe to match those expected by the
-    DType conversion enum.
-    """
-    df = df.copy(deep=False)
-    for col in df:
-        dtype = DType.from_pandas(df[col].dtype).to_pandas()
-        df[col] = df[col].astype(dtype)
-    return df
+        return {
+            DType.INT64: pl.Int64,
+            DType.INT32: pl.Int32,
+            DType.INT16: pl.Int16,
+            DType.INT8: pl.Int8,
+            DType.UINT64: pl.UInt64,
+            DType.UINT32: pl.UInt32,
+            DType.UINT16: pl.UInt16,
+            DType.UINT8: pl.UInt8,
+            DType.FLOAT64: pl.Float64,
+            DType.FLOAT32: pl.Float32,
+            DType.STRING: pl.Utf8,
+            DType.BOOLEAN: pl.Boolean,
+            DType.DATETIME: pl.Datetime("us"),
+            DType.TIME: pl.Time("us"),
+            DType.DATE: pl.Date,
+        }[self]

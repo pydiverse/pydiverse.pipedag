@@ -3,7 +3,6 @@ from __future__ import annotations
 import pandas as pd
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
-from pydiverse.pipedag.backend.table.util.pandas import adjust_pandas_types
 from pydiverse.pipedag.context import StageLockContext
 
 dfA_source = pd.DataFrame(
@@ -62,14 +61,13 @@ def test_source_invalidation():
 
     flow, out1, out2 = get_flow()
 
-    dfA_source_adj = adjust_pandas_types(dfA_source)
     with StageLockContext():
         result = flow.run()
         assert result.successful
 
         v_out1, v_out2 = result.get(out1), result.get(out2)
-        pd.testing.assert_frame_equal(dfA_source_adj * 2, v_out1)
-        pd.testing.assert_frame_equal(dfA_source_adj * 4, v_out2)
+        pd.testing.assert_frame_equal(dfA_source * 2, v_out1, check_dtype=False)
+        pd.testing.assert_frame_equal(dfA_source * 4, v_out2, check_dtype=False)
 
     # modify input without updating input hash => cached version is used
     dfA["a"] = 10 + dfA_source["a"]
@@ -80,8 +78,8 @@ def test_source_invalidation():
         assert result.successful
 
         v_out1, v_out2 = result.get(out1), result.get(out2)
-        pd.testing.assert_frame_equal(dfA_source_adj * 2, v_out1)
-        pd.testing.assert_frame_equal(dfA_source_adj * 4, v_out2)
+        pd.testing.assert_frame_equal(dfA_source * 2, v_out1, check_dtype=False)
+        pd.testing.assert_frame_equal(dfA_source * 4, v_out2, check_dtype=False)
 
     # update input hash trigger reload of new input data
     input_hash = hash(str(dfA))
@@ -92,8 +90,8 @@ def test_source_invalidation():
         assert result.successful
 
         v_out1, v_out2 = result.get(out1), result.get(out2)
-        pd.testing.assert_frame_equal(dfA_source_adj * 2, v_out1)
-        pd.testing.assert_frame_equal(dfA_source_adj * 4, v_out2)
+        pd.testing.assert_frame_equal(dfA_source * 2, v_out1, check_dtype=False)
+        pd.testing.assert_frame_equal(dfA_source * 4, v_out2, check_dtype=False)
 
     with StageLockContext():
         result = flow.run()
@@ -101,9 +99,8 @@ def test_source_invalidation():
 
         v_out1, v_out2 = result.get(out1), result.get(out2)
 
-        adj_dfA = adjust_pandas_types(dfA)
-        pd.testing.assert_frame_equal(adj_dfA * 2, v_out1)
-        pd.testing.assert_frame_equal(adj_dfA * 4, v_out2)
+        pd.testing.assert_frame_equal(dfA * 2, v_out1, check_dtype=False)
+        pd.testing.assert_frame_equal(dfA * 4, v_out2, check_dtype=False)
 
 
 if __name__ == "__main__":

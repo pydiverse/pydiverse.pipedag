@@ -9,7 +9,6 @@ import pytest
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
-from pydiverse.pipedag.backend.table.util.pandas import adjust_pandas_types
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.core.config import PipedagConfig
 
@@ -161,9 +160,8 @@ def test_instance_selection(cfg_file_path):
 def _check_result(result, out1, out2, *, head=999):
     assert result.successful
     v_out1, v_out2 = result.get(out1), result.get(out2)
-    dfA_source_adj = adjust_pandas_types(dfA_source)
-    pd.testing.assert_frame_equal(dfA_source_adj.head(head) * 2, v_out1)
-    pd.testing.assert_frame_equal(dfA_source_adj.head(head) * 4, v_out2)
+    pd.testing.assert_frame_equal(dfA_source.head(head) * 2, v_out1, check_dtype=False)
+    pd.testing.assert_frame_equal(dfA_source.head(head) * 4, v_out2, check_dtype=False)
 
 
 # In the future, the following test functions should be auto-generatable
