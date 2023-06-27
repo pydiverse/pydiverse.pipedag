@@ -73,6 +73,7 @@ class SQLTableStore(BaseTableStore):
     def __init__(
         self,
         engine_url: str,
+        *,
         create_database_if_not_exists: bool = False,
         schema_prefix: str = "",
         schema_suffix: str = "",
@@ -82,6 +83,7 @@ class SQLTableStore(BaseTableStore):
         print_materialize: bool = False,
         print_sql: bool = False,
         no_db_locking: bool = True,
+        unlogged_tables: bool = False,
     ):
         """
         Construct table store.
@@ -106,6 +108,8 @@ class SQLTableStore(BaseTableStore):
             whether to print final SQL statements (except for metadata)
         :param no_db_locking:
             speed up database by telling it we will not rely on it's locking mechanisms
+        :param unlogged_tables:
+            whether to use UNLOGGED tables or not (dialect postgresql only)
         """
         super().__init__()
 
@@ -118,6 +122,7 @@ class SQLTableStore(BaseTableStore):
         self.print_materialize = print_materialize
         self.print_sql = print_sql
         self.no_db_locking = no_db_locking
+        self.unlogged_tables = unlogged_tables
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
 
         self.engine_url = sa.engine.make_url(engine_url)

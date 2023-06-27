@@ -94,6 +94,7 @@ class CreateTableAsSelect(DDLElement):
         *,
         early_not_null: None | str | list[str] = None,
         source_tables: None | list[dict[str, str]] = None,
+        unlogged: bool = False,
     ):
         self.name = name
         self.schema = schema
@@ -101,8 +102,11 @@ class CreateTableAsSelect(DDLElement):
         # some dialects may choose to set NOT-NULL constraint in the middle of
         # create table as select
         self.early_not_null = early_not_null
-        # some dialects may lock source and destimation tables
+        # some dialects may lock source and destination tables
         self.source_tables = source_tables
+        # Postgres supports creating unlogged tables. Flag should get ignored by
+        # other dialects
+        self.unlogged = unlogged
 
 
 class CreateViewAsSelect(DDLElement):
@@ -274,6 +278,26 @@ class ChangeColumnNullable(DDLElement):
         self.schema = schema
         self.column_names = column_names
         self.nullable = nullable
+
+
+class ChangeTableLogged(DDLElement):
+    """Changes a postgres table from LOGGED to UNLOGGED (or vice-versa)
+
+    This reduces safety in case of a crash or unclean shutdown, but can significantly
+    increase write performance:
+
+    https://www.postgresql.org/docs/9.5/sql-createtable.html#SQL-CREATETABLE-UNLOGGED
+    """
+
+    def __init__(
+        self,
+        table_name: str,
+        schema: Schema,
+        logged: bool,
+    ):
+        self.table_name = table_name
+        self.schema = schema
+        self.logged = logged
 
 
 @compiles(CreateSchema)
@@ -500,6 +524,16 @@ def _visit_create_obj_as_select(create, compiler, _type, kw, *, prefix="", suffi
 @compiles(CreateTableAsSelect)
 def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
     return _visit_create_obj_as_select(create, compiler, "TABLE", kw)
+
+
+@compiles(CreateTableAsSelect, "postgresql")
+def visit_create_table_as_select_postgresql(
+    create: CreateTableAsSelect, compiler, **kw
+):
+    if create.unlogged:
+        return _visit_create_obj_as_select(create, compiler, "UNLOGGED TABLE", kw)
+    else:
+        return _visit_create_obj_as_select(create, compiler, "TABLE", kw)
 
 
 @compiles(CreateTableAsSelect, "mssql")
@@ -1183,6 +1217,15 @@ def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
 
     statements = _get_nullable_change_statements(change, compiler)
     return join_ddl_statements(statements, compiler, **kw)
+
+
+@compiles(ChangeTableLogged, "postgresql")
+def visit_change_table_logged(change: ChangeTableLogged, compiler, **kw):
+    _ = kw
+    table_name = compiler.preparer.quote_identifier(change.table_name)
+    schema = compiler.preparer.format_schema(change.schema.get())
+    logged = "LOGGED" if change.logged else "UNLOGGED"
+    return f"ALTER TABLE {schema}.{table_name} SET {logged}"
 
 
 def _get_nullable_change_statements(change, compiler):

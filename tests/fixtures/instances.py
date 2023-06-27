@@ -15,6 +15,7 @@ __all__ = [
 # Pytest markers associated with specific instance name
 INSTANCE_MARKS = {
     "postgres": pytest.mark.postgres,
+    "postgres_unlogged": pytest.mark.postgres,
     "mssql": pytest.mark.mssql,
     "mssql_pytsql": pytest.mark.mssql,
     "ibm_db2": pytest.mark.ibm_db2,
@@ -34,6 +35,7 @@ DATABASE_INSTANCES = (
 # Extended collection of instances
 ALL_INSTANCES = (
     "postgres",
+    "postgres_unlogged",
     "mssql",
     "mssql_pytsql",
     "ibm_db2",

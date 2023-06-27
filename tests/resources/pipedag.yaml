@@ -67,6 +67,15 @@ instances:
     instance_id: pd_postgres
     table_store:
       table_store_connection: postgres
+      args:
+        unlogged_tables: false
+
+  postgres_unlogged:
+    instance_id: pd_postgres_unlogged
+    table_store:
+      table_store_connection: postgres
+      args:
+        unlogged_tables: true
 
   mssql:
     instance_id: pd_mssql

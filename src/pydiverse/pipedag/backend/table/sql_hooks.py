@@ -20,6 +20,7 @@ from pydiverse.pipedag.backend.table.util import (
     classmethod_engine_argument_dispatch,
 )
 from pydiverse.pipedag.backend.table.util.sql_ddl import (
+    ChangeTableLogged,
     CreateTableAsSelect,
     Schema,
     ibm_db_sa_fix_name,
@@ -74,6 +75,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                 obj,
                 early_not_null=table.primary_key,
                 source_tables=source_tables,
+                unlogged=store.unlogged_tables,
             )
         )
         store.add_indexes(table, schema, early_not_null_possible=True)
@@ -189,6 +191,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
         cls._execute_materialize(
             df,
+            store=store,
             table=table,
             schema=schema,
             engine=store.engine,
@@ -200,6 +203,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
     def _execute_materialize(
         cls,
         df: pd.DataFrame,
+        store: SQLTableStore,
         table: Table[pd.DataFrame],
         schema: Schema,
         engine: sa.Engine,
@@ -222,6 +226,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
     def _execute_materialize_postgres(
         cls,
         df: pd.DataFrame,
+        store: SQLTableStore,
         table: Table[pd.DataFrame],
         schema: Schema,
         engine: sa.Engine,
@@ -242,6 +247,10 @@ class PandasTableHook(TableHook[SQLTableStore]):
             index=False,
             dtype=dtypes,
         )
+
+        if store.unlogged_tables:
+            with engine.connect() as conn:
+                conn.execute(ChangeTableLogged(table.name, schema, False))
 
         # COPY data
         # TODO: For python 3.12, there is csv.QUOTE_STRINGS
@@ -273,6 +282,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
     def _execute_materialize_mssql(
         cls,
         df: pd.DataFrame,
+        store: SQLTableStore,
         table: Table[pd.DataFrame],
         schema: Schema,
         engine: sa.Engine,
@@ -302,6 +312,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
     def _execute_materialize_ibm_db_sa(
         cls,
         df: pd.DataFrame,
+        store: SQLTableStore,
         table: Table[pd.DataFrame],
         schema: Schema,
         engine: sa.Engine,
