@@ -145,6 +145,8 @@ class DType(Enum):
                 return DType.FLOAT64
             if pa.types.is_float32(type_):
                 return DType.FLOAT32
+            if pa.types.is_float16(type_):
+                return DType.FLOAT32
             raise TypeError
         if pa.types.is_string(type_):
             return DType.STRING
@@ -206,6 +208,9 @@ class DType(Enum):
             return pd.ArrowDtype(self.to_arrow())
 
     def to_pandas_nullable(self):
+        if self == DType.TIME:
+            raise TypeError("pandas doesn't have a native time dtype")
+
         return {
             DType.INT8: pd.Int8Dtype(),
             DType.INT16: pd.Int16Dtype(),
@@ -220,7 +225,7 @@ class DType(Enum):
             DType.STRING: pd.StringDtype(),
             DType.BOOLEAN: pd.BooleanDtype(),
             DType.DATE: "datetime64[ns]",
-            DType.TIME: "datetime64[ns]",  # TODO: Check if this is correct
+            # DType.TIME not supported
             DType.DATETIME: "datetime64[ns]",
         }[self]
 
@@ -260,6 +265,6 @@ class DType(Enum):
             DType.STRING: pl.Utf8,
             DType.BOOLEAN: pl.Boolean,
             DType.DATETIME: pl.Datetime("us"),
-            DType.TIME: pl.Time("us"),
+            DType.TIME: pl.Time,
             DType.DATE: pl.Date,
         }[self]
