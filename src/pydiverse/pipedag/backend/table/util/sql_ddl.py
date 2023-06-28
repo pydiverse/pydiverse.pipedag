@@ -514,7 +514,7 @@ def visit_drop_database(drop: DropDatabase, compiler, **kw):
 
 
 def _visit_create_obj_as_select(create, compiler, _type, kw, *, prefix="", suffix=""):
-    name = compiler.preparer.quote_identifier(create.name)
+    name = compiler.preparer.quote(create.name)
     schema = compiler.preparer.format_schema(create.schema.get())
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(create.query, **kw)
@@ -538,7 +538,7 @@ def visit_create_table_as_select_postgresql(
 
 @compiles(CreateTableAsSelect, "mssql")
 def visit_create_table_as_select_mssql(create: CreateTableAsSelect, compiler, **kw):
-    name = compiler.preparer.quote_identifier(create.name)
+    name = compiler.preparer.quote(create.name)
     full_name = create.schema.get()
     # it was already checked that there is exactly one dot in schema prefix + suffix
     database_name, schema_name = full_name.split(".")
@@ -553,8 +553,8 @@ def visit_create_table_as_select_mssql(create: CreateTableAsSelect, compiler, **
 
 def ref_ibm_db_sa(tbl: dict[str, str], compiler):
     return (
-        f"{compiler.preparer.quote_identifier(ibm_db_sa_fix_name(tbl['schema']))}."
-        f"{compiler.preparer.quote_identifier(ibm_db_sa_fix_name(tbl['name']))}"
+        f"{compiler.preparer.format_schema(ibm_db_sa_fix_name(tbl['schema']))}."
+        f"{compiler.preparer.quote(ibm_db_sa_fix_name(tbl['name']))}"
     )
 
 
@@ -585,7 +585,7 @@ def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler
     else:
         not_null_statements = []
 
-    name = compiler.preparer.quote_identifier(create.name)
+    name = compiler.preparer.quote(create.name)
     schema = compiler.preparer.format_schema(create.schema.get())
 
     lock_statements = [f"LOCK TABLE {schema}.{name} IN EXCLUSIVE MODE"]
@@ -669,15 +669,11 @@ def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
 
 @compiles(CreateAlias, "mssql")
 def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
-    from_name = compiler.preparer.quote_identifier(
-        ibm_db_sa_fix_name(create_alias.from_name)
-    )
+    from_name = compiler.preparer.quote(ibm_db_sa_fix_name(create_alias.from_name))
     from_database, from_schema = _get_mssql_database_schema(
         create_alias.from_schema, compiler
     )
-    to_name = compiler.preparer.quote_identifier(
-        ibm_db_sa_fix_name(create_alias.to_name)
-    )
+    to_name = compiler.preparer.quote(ibm_db_sa_fix_name(create_alias.to_name))
     to_database, to_schema = _get_mssql_database_schema(
         create_alias.to_schema, compiler
     )
@@ -695,15 +691,11 @@ def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
 
 @compiles(CreateAlias, "ibm_db_sa")
 def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
-    from_name = compiler.preparer.quote_identifier(
-        ibm_db_sa_fix_name(create_alias.from_name)
-    )
+    from_name = compiler.preparer.quote(ibm_db_sa_fix_name(create_alias.from_name))
     from_schema = compiler.preparer.format_schema(
         ibm_db_sa_fix_name(create_alias.from_schema.get())
     )
-    to_name = compiler.preparer.quote_identifier(
-        ibm_db_sa_fix_name(create_alias.to_name)
-    )
+    to_name = compiler.preparer.quote(ibm_db_sa_fix_name(create_alias.to_name))
     to_schema = compiler.preparer.format_schema(
         ibm_db_sa_fix_name(create_alias.to_schema.get())
     )
@@ -716,7 +708,7 @@ def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
 
 @compiles(CopyTable)
 def visit_copy_table(copy_table: CopyTable, compiler, **kw):
-    from_name = compiler.preparer.quote_identifier(copy_table.from_name)
+    from_name = compiler.preparer.quote(copy_table.from_name)
     from_schema = compiler.preparer.format_schema(copy_table.from_schema.get())
     query = sa.select("*").select_from(sa.text(f"{from_schema}.{from_name}"))
     create = CreateTableAsSelect(
@@ -734,7 +726,7 @@ def visit_copy_table(copy_table: CopyTable, compiler, **kw):
 # noinspection SqlDialectInspection
 @compiles(CopyTable, "mssql")
 def visit_copy_table_mssql(copy_table: CopyTable, compiler, **kw):
-    from_name = compiler.preparer.quote_identifier(copy_table.from_name)
+    from_name = compiler.preparer.quote(copy_table.from_name)
     database, schema = _get_mssql_database_schema(copy_table.from_schema, compiler)
     query = sa.text(f"SELECT * FROM {database}.{schema}.{from_name}")
     create = CreateTableAsSelect(
@@ -758,8 +750,8 @@ def visit_copy_table_ibm_db_sa(copy_table: CopyTable, compiler, **kw):
 @compiles(RenameTable)
 def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     _ = kw
-    from_table = compiler.preparer.quote_identifier(rename_table.from_name)
-    to_table = compiler.preparer.quote_identifier(rename_table.to_name)
+    from_table = compiler.preparer.quote(rename_table.from_name)
+    to_table = compiler.preparer.quote(rename_table.to_name)
     schema = compiler.preparer.format_schema(rename_table.schema.get())
     return f"ALTER TABLE {schema}.{from_table} RENAME TO {to_table}"
 
@@ -770,7 +762,7 @@ def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     _ = kw
     database, schema = _get_mssql_database_schema(rename_table.schema, compiler)
 
-    from_table = compiler.preparer.quote_identifier(rename_table.from_name)
+    from_table = compiler.preparer.quote(rename_table.from_name)
     to_table = rename_table.to_name  # no quoting is intentional
     statements = [
         f"USE [{database}]",
@@ -788,8 +780,8 @@ def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     rename_table.from_name = ibm_db_sa_fix_name(rename_table.from_name)
     rename_table.to_name = ibm_db_sa_fix_name(rename_table.to_name)
 
-    from_table = compiler.preparer.quote_identifier(rename_table.from_name)
-    to_table = compiler.preparer.quote_identifier(rename_table.to_name)
+    from_table = compiler.preparer.quote(rename_table.from_name)
+    to_table = compiler.preparer.quote(rename_table.to_name)
     schema = compiler.preparer.format_schema(rename_table.schema.get())
     return f"RENAME TABLE {schema}.{from_table} TO {to_table}"
 
@@ -882,7 +874,7 @@ def _visit_drop_anything(
     if dont_quote_table:
         table = drop.name
     else:
-        table = compiler.preparer.quote_identifier(drop.name)
+        table = compiler.preparer.quote(drop.name)
     schema = compiler.preparer.format_schema(drop.schema.get())
     text = [f"DROP {_type}"]
     if drop.if_exists:
@@ -898,7 +890,7 @@ def _visit_drop_anything_mssql(
     **kw,
 ):
     _ = kw
-    table = compiler.preparer.quote_identifier(drop.name)
+    table = compiler.preparer.quote(drop.name)
     database, schema = _get_mssql_database_schema(drop.schema, compiler)
     statements = []
     text = [f"DROP {_type}"]
@@ -918,9 +910,9 @@ def _visit_drop_anything_mssql(
 @compiles(AddPrimaryKey)
 def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
     _ = kw
-    table = compiler.preparer.quote_identifier(add_primary_key.table_name)
+    table = compiler.preparer.quote(add_primary_key.table_name)
     schema = compiler.preparer.format_schema(add_primary_key.schema.get())
-    pk_name = compiler.preparer.quote_identifier(
+    pk_name = compiler.preparer.quote(
         add_primary_key.name
         if add_primary_key.name is not None
         else "pk_"
@@ -928,9 +920,7 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
         + "_"
         + add_primary_key.table_name.lower()
     )
-    cols = ",".join(
-        [compiler.preparer.quote_identifier(col) for col in add_primary_key.key]
-    )
+    cols = ",".join([compiler.preparer.quote(col) for col in add_primary_key.key])
     return f"ALTER TABLE {schema}.{table} ADD CONSTRAINT {pk_name} PRIMARY KEY ({cols})"
 
 
@@ -938,9 +928,9 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
 @compiles(AddPrimaryKey, "duckdb")
 def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
     _ = kw
-    table = compiler.preparer.quote_identifier(add_primary_key.table_name)
+    table = compiler.preparer.quote(add_primary_key.table_name)
     schema = compiler.preparer.format_schema(add_primary_key.schema.get())
-    pk_name = compiler.preparer.quote_identifier(
+    pk_name = compiler.preparer.quote(
         add_primary_key.name
         if add_primary_key.name is not None
         else "pk_"
@@ -948,9 +938,7 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
         + "_"
         + add_primary_key.table_name.lower()
     )
-    cols = ",".join(
-        [compiler.preparer.quote_identifier(col) for col in add_primary_key.key]
-    )
+    cols = ",".join([compiler.preparer.quote(col) for col in add_primary_key.key])
     return f"CREATE UNIQUE INDEX {pk_name} ON {schema}.{table} ({cols})"
 
 
@@ -960,8 +948,8 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
     _ = kw
     database, schema = _get_mssql_database_schema(add_primary_key.schema, compiler)
 
-    table = compiler.preparer.quote_identifier(add_primary_key.table_name)
-    pk_name = compiler.preparer.quote_identifier(
+    table = compiler.preparer.quote(add_primary_key.table_name)
+    pk_name = compiler.preparer.quote(
         add_primary_key.name
         if add_primary_key.name is not None
         else "pk_"
@@ -969,9 +957,7 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
         + "_"
         + add_primary_key.table_name.lower()
     )
-    cols = ",".join(
-        [compiler.preparer.quote_identifier(col) for col in add_primary_key.key]
-    )
+    cols = ",".join([compiler.preparer.quote(col) for col in add_primary_key.key])
     return (
         f"ALTER TABLE {database}.{schema}.{table} ADD CONSTRAINT {pk_name} PRIMARY KEY"
         f" ({cols})"
@@ -986,9 +972,9 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
     add_primary_key = copy.deepcopy(add_primary_key)
     add_primary_key.table_name = ibm_db_sa_fix_name(add_primary_key.table_name)
 
-    table = compiler.preparer.quote_identifier(add_primary_key.table_name)
+    table = compiler.preparer.quote(add_primary_key.table_name)
     schema = compiler.preparer.format_schema(add_primary_key.schema.get())
-    pk_name = compiler.preparer.quote_identifier(
+    pk_name = compiler.preparer.quote(
         add_primary_key.name
         if add_primary_key.name is not None
         else "pk_"
@@ -998,7 +984,7 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
     )
     cols = ",".join(
         [
-            compiler.preparer.quote_identifier(ibm_db_sa_fix_name(col))
+            compiler.preparer.quote(ibm_db_sa_fix_name(col))
             for col in add_primary_key.key
         ]
     )
@@ -1009,9 +995,9 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
 @compiles(AddIndex)
 def visit_add_index(add_index: AddIndex, compiler, **kw):
     _ = kw
-    table = compiler.preparer.quote_identifier(add_index.table_name)
+    table = compiler.preparer.quote(add_index.table_name)
     schema = compiler.preparer.format_schema(add_index.schema.get())
-    index_name = compiler.preparer.quote_identifier(
+    index_name = compiler.preparer.quote(
         add_index.name
         if add_index.name is not None
         else "idx_"
@@ -1019,9 +1005,7 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
         + "_"
         + add_index.table_name.lower()
     )
-    cols = ",".join(
-        [compiler.preparer.quote_identifier(col) for col in add_index.index]
-    )
+    cols = ",".join([compiler.preparer.quote(col) for col in add_index.index])
     return f"CREATE INDEX {index_name} ON {schema}.{table} ({cols})"
 
 
@@ -1031,8 +1015,8 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
     _ = kw
     database, schema = _get_mssql_database_schema(add_index.schema, compiler)
 
-    table = compiler.preparer.quote_identifier(add_index.table_name)
-    index_name = compiler.preparer.quote_identifier(
+    table = compiler.preparer.quote(add_index.table_name)
+    index_name = compiler.preparer.quote(
         add_index.name
         if add_index.name is not None
         else "idx_"
@@ -1040,9 +1024,7 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
         + "_"
         + add_index.table_name.lower()
     )
-    cols = ",".join(
-        [compiler.preparer.quote_identifier(col) for col in add_index.index]
-    )
+    cols = ",".join([compiler.preparer.quote(col) for col in add_index.index])
     return f"CREATE INDEX {index_name} ON {database}.{schema}.{table} ({cols})"
 
 
@@ -1054,9 +1036,9 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
     add_index = copy.deepcopy(add_index)
     add_index.table_name = ibm_db_sa_fix_name(add_index.table_name)
 
-    table = compiler.preparer.quote_identifier(add_index.table_name)
+    table = compiler.preparer.quote(add_index.table_name)
     schema = compiler.preparer.format_schema(add_index.schema.get())
-    index_name = compiler.preparer.quote_identifier(
+    index_name = compiler.preparer.quote(
         add_index.name
         if add_index.name is not None
         else "idx_"
@@ -1065,10 +1047,7 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
         + add_index.table_name.lower()
     )
     cols = ",".join(
-        [
-            compiler.preparer.quote_identifier(ibm_db_sa_fix_name(col))
-            for col in add_index.index
-        ]
+        [compiler.preparer.quote(ibm_db_sa_fix_name(col)) for col in add_index.index]
     )
     return f"CREATE INDEX {schema}.{index_name} ON {schema}.{table} ({cols})"
 
@@ -1077,11 +1056,11 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
 @compiles(ChangeColumnTypes)
 def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     _ = kw
-    table = compiler.preparer.quote_identifier(change.table_name)
+    table = compiler.preparer.quote(change.table_name)
     schema = compiler.preparer.format_schema(change.schema.get())
     alter_columns = ",".join(
         [
-            f"ALTER COLUMN {compiler.preparer.quote_identifier(col)} SET DATA TYPE"
+            f"ALTER COLUMN {compiler.preparer.quote(col)} SET DATA TYPE"
             f" {compiler.type_compiler.process(_type)}"
             for col, _type, nullable in zip(
                 change.column_names, change.column_types, change.nullable
@@ -1089,7 +1068,7 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
         ]
         + [
             "ALTER COLUMN"
-            f" {compiler.preparer.quote_identifier(col)}"
+            f" {compiler.preparer.quote(col)}"
             f" {'SET' if not nullable else 'DROP'} NOT NULL"
             for col, nullable in zip(change.column_names, change.nullable)
             if nullable is not None
@@ -1101,17 +1080,17 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
 # noinspection SqlDialectInspection
 @compiles(ChangeColumnTypes, "duckdb")
 def visit_change_column_types_duckdb(change: ChangeColumnTypes, compiler, **kw):
-    table = compiler.preparer.quote_identifier(change.table_name)
+    table = compiler.preparer.quote(change.table_name)
     schema = compiler.preparer.format_schema(change.schema.get())
     alter_columns = [
-        f"ALTER COLUMN {compiler.preparer.quote_identifier(col)} SET DATA TYPE"
+        f"ALTER COLUMN {compiler.preparer.quote(col)} SET DATA TYPE"
         f" {compiler.type_compiler.process(_type)}"
         for col, _type, nullable in zip(
             change.column_names, change.column_types, change.nullable
         )
     ] + [
         "ALTER COLUMN"
-        f" {compiler.preparer.quote_identifier(col)}"
+        f" {compiler.preparer.quote(col)}"
         f" {'SET' if not nullable else 'DROP'} NOT NULL"
         for col, nullable in zip(change.column_names, change.nullable)
         if nullable is not None
@@ -1128,7 +1107,7 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     _ = kw
     database, schema = _get_mssql_database_schema(change.schema, compiler)
 
-    table = compiler.preparer.quote_identifier(change.table_name)
+    table = compiler.preparer.quote(change.table_name)
 
     def modify_type(_type):
         if change.cap_varchar_max is not None:
@@ -1142,7 +1121,7 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
 
     statements = [
         f"ALTER TABLE {database}.{schema}.{table} ALTER COLUMN"
-        f" {compiler.preparer.quote_identifier(col)} "
+        f" {compiler.preparer.quote(col)} "
         f"{compiler.type_compiler.process(modify_type(_type))}"
         f"{'' if nullable is None else ' NULL' if nullable else ' NOT NULL'}"
         for col, _type, nullable in zip(
@@ -1170,18 +1149,18 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
                 _type.length = change.cap_varchar_max
         return _type
 
-    table = compiler.preparer.quote_identifier(change.table_name)
+    table = compiler.preparer.quote(change.table_name)
     schema = compiler.preparer.format_schema(change.schema.get())
     statements = [
         f"ALTER TABLE {schema}.{table} ALTER COLUMN"
-        f" {compiler.preparer.quote_identifier(ibm_db_sa_fix_name(col))} SET DATA TYPE"
+        f" {compiler.preparer.quote(ibm_db_sa_fix_name(col))} SET DATA TYPE"
         f" {compiler.type_compiler.process(modify_type(_type))}"
         for col, _type, nullable in zip(
             change.column_names, change.column_types, change.nullable
         )
     ] + [
         f"ALTER TABLE {schema}.{table} ALTER COLUMN"
-        f" {compiler.preparer.quote_identifier(ibm_db_sa_fix_name(col))}"
+        f" {compiler.preparer.quote(ibm_db_sa_fix_name(col))}"
         f" {'SET' if not nullable else 'DROP'} NOT NULL"
         for col, nullable in zip(change.column_names, change.nullable)
         if nullable is not None
@@ -1194,12 +1173,12 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
 @compiles(ChangeColumnNullable)
 def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
     _ = kw
-    table = compiler.preparer.quote_identifier(change.table_name)
+    table = compiler.preparer.quote(change.table_name)
     schema = compiler.preparer.format_schema(change.schema.get())
     alter_columns = ",".join(
         [
             "ALTER COLUMN"
-            f" {compiler.preparer.quote_identifier(col)}"
+            f" {compiler.preparer.quote(col)}"
             f" {'SET' if not nullable else 'DROP'} NOT NULL"
             for col, nullable in zip(change.column_names, change.nullable)
         ]
@@ -1222,18 +1201,18 @@ def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
 @compiles(ChangeTableLogged, "postgresql")
 def visit_change_table_logged(change: ChangeTableLogged, compiler, **kw):
     _ = kw
-    table_name = compiler.preparer.quote_identifier(change.table_name)
+    table_name = compiler.preparer.quote(change.table_name)
     schema = compiler.preparer.format_schema(change.schema.get())
     logged = "LOGGED" if change.logged else "UNLOGGED"
     return f"ALTER TABLE {schema}.{table_name} SET {logged}"
 
 
 def _get_nullable_change_statements(change, compiler):
-    table = compiler.preparer.quote_identifier(change.table_name)
+    table = compiler.preparer.quote(change.table_name)
     schema = compiler.preparer.format_schema(change.schema.get())
     statements = [
         f"ALTER TABLE {schema}.{table} ALTER COLUMN"
-        f" {compiler.preparer.quote_identifier(ibm_db_sa_fix_name(col))}"
+        f" {compiler.preparer.quote(ibm_db_sa_fix_name(col))}"
         f" {'SET' if not nullable else 'DROP'} NOT NULL"
         for col, nullable in zip(change.column_names, change.nullable)
     ]
@@ -1242,9 +1221,8 @@ def _get_nullable_change_statements(change, compiler):
 
 
 def ibm_db_sa_fix_name(name):
-    # DB2 seems to create tables uppercase if all lowercase given
-    # TODO: consider moving this replacement to call in sql.py
-    return name.upper() if name.islower() else name
+    # TODO: Remove / Inline
+    return name
 
 
 STATEMENT_SEPERATOR = "; -- PYDIVERSE-PIPEDAG-SPLIT\n"
