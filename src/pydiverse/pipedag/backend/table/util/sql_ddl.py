@@ -402,6 +402,7 @@ def visit_drop_schema_mssql(drop: DropSchema, compiler, **kw):
 # noinspection SqlDialectInspection
 @compiles(DropSchema, "ibm_db_sa")
 def visit_drop_schema_ibm_db_sa(drop: DropSchema, compiler, **kw):
+    # TODO: refactor
     """
     Because IBM DB2 doesn't support CASCADE, we must manually drop all tables in
     the schema first.
@@ -554,10 +555,6 @@ def visit_create_table_as_select_mssql(create: CreateTableAsSelect, compiler, **
 # noinspection SqlDialectInspection
 @compiles(CreateTableAsSelect, "ibm_db_sa")
 def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler, **kw):
-    preparer = compiler.preparer
-    create = copy.deepcopy(create)
-    create.name = create.name
-
     prepare_statement = _visit_create_obj_as_select(
         create, compiler, "TABLE", kw, prefix="(", suffix=") DEFINITION ONLY"
     )
@@ -578,6 +575,7 @@ def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler
     else:
         not_null_statements = []
 
+    preparer = compiler.preparer
     name = preparer.quote(create.name)
     schema = preparer.format_schema(create.schema.get())
 
@@ -605,13 +603,6 @@ def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler
 
 @compiles(CreateViewAsSelect)
 def visit_create_view_as_select(create: CreateViewAsSelect, compiler, **kw):
-    return _visit_create_obj_as_select(create, compiler, "VIEW", kw)
-
-
-@compiles(CreateViewAsSelect, "ibm_db_sa")
-def visit_create_view_as_select_ibm_db_sa(create: CreateViewAsSelect, compiler, **kw):
-    create = copy.deepcopy(create)
-    create.name = create.name
     return _visit_create_obj_as_select(create, compiler, "VIEW", kw)
 
 
@@ -652,7 +643,9 @@ def insert_into_in_query(select_sql, database, schema, table):
 def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
     query = sa.select("*").select_from(
         sa.Table(
-            create_alias.from_name, sa.MetaData(), schema=create_alias.from_schema.get()
+            create_alias.from_name,
+            sa.MetaData(),
+            schema=create_alias.from_schema.get(),
         )
     )
     return visit_create_view_as_select(
@@ -687,11 +680,9 @@ def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
 @compiles(CreateAlias, "ibm_db_sa")
 def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
     from_name = compiler.preparer.quote(create_alias.from_name)
-    name = create_alias.from_schema.get()
-    from_schema = compiler.preparer.format_schema(name)
+    from_schema = compiler.preparer.format_schema(create_alias.from_schema.get())
     to_name = compiler.preparer.quote(create_alias.to_name)
-    name1 = create_alias.to_schema.get()
-    to_schema = compiler.preparer.format_schema(name1)
+    to_schema = compiler.preparer.format_schema(create_alias.to_schema.get())
     text = ["CREATE"]
     if create_alias.or_replace:
         text.append("OR REPLACE")
@@ -731,14 +722,6 @@ def visit_copy_table_mssql(copy_table: CopyTable, compiler, **kw):
     return compiler.process(create, **kw)
 
 
-@compiles(CopyTable, "ibm_db_sa")
-def visit_copy_table_ibm_db_sa(copy_table: CopyTable, compiler, **kw):
-    copy_table = copy.deepcopy(copy_table)
-    copy_table.from_name = copy_table.from_name
-    copy_table.to_name = copy_table.to_name
-    return visit_copy_table(copy_table, compiler, **kw)
-
-
 # noinspection SqlDialectInspection
 @compiles(RenameTable)
 def visit_rename_table(rename_table: RenameTable, compiler, **kw):
@@ -768,10 +751,6 @@ def visit_rename_table(rename_table: RenameTable, compiler, **kw):
 @compiles(RenameTable, "ibm_db_sa")
 def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     _ = kw
-    rename_table = copy.deepcopy(rename_table)
-    rename_table.from_name = rename_table.from_name
-    rename_table.to_name = rename_table.to_name
-
     from_table = compiler.preparer.quote(rename_table.from_name)
     to_table = compiler.preparer.quote(rename_table.to_name)
     schema = compiler.preparer.format_schema(rename_table.schema.get())
@@ -788,13 +767,6 @@ def visit_drop_table_mssql(drop: DropTable, compiler, **kw):
     return _visit_drop_anything_mssql(drop, "TABLE", compiler, **kw)
 
 
-@compiles(DropTable, "ibm_db_sa")
-def visit_drop_table_ibm_db_sa(drop: DropTable, compiler, **kw):
-    drop = copy.deepcopy(drop)
-    drop.name = drop.name
-    return _visit_drop_anything(drop, "TABLE", compiler, **kw)
-
-
 @compiles(DropView)
 def visit_drop_view(drop: DropView, compiler, **kw):
     return _visit_drop_anything(drop, "VIEW", compiler, **kw)
@@ -803,13 +775,6 @@ def visit_drop_view(drop: DropView, compiler, **kw):
 @compiles(DropView, "mssql")
 def visit_drop_view_mssql(drop: DropView, compiler, **kw):
     return _visit_drop_anything_mssql(drop, "VIEW", compiler, **kw)
-
-
-@compiles(DropView, "ibm_db_sa")
-def visit_drop_view_ibm_db_sa(drop: DropView, compiler, **kw):
-    drop = copy.deepcopy(drop)
-    drop.name = drop.name
-    return _visit_drop_anything(drop, "VIEW", compiler, **kw)
 
 
 @compiles(DropAlias)
@@ -823,13 +788,6 @@ def visit_drop_alias(drop: DropAlias, compiler, **kw):
 def visit_drop_alias_mssql(drop: DropAlias, compiler, **kw):
     # What is called ALIAS for dialect ibm_db_sa is called SYNONYM for mssql
     return _visit_drop_anything_mssql(drop, "SYNONYM", compiler, **kw)
-
-
-@compiles(DropAlias, "ibm_db_sa")
-def visit_drop_alias_ibm_db_sa(drop: DropAlias, compiler, **kw):
-    drop = copy.deepcopy(drop)
-    drop.name = drop.name
-    return _visit_drop_anything(drop, "ALIAS", compiler, **kw)
 
 
 @compiles(DropProcedure)
@@ -954,27 +912,6 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
 
 
 # noinspection SqlDialectInspection
-@compiles(AddPrimaryKey, "ibm_db_sa")
-def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
-    _ = kw
-    add_primary_key = copy.deepcopy(add_primary_key)
-    add_primary_key.table_name = add_primary_key.table_name
-
-    table = compiler.preparer.quote(add_primary_key.table_name)
-    schema = compiler.preparer.format_schema(add_primary_key.schema.get())
-    pk_name = compiler.preparer.quote(
-        add_primary_key.name
-        if add_primary_key.name is not None
-        else "pk_"
-        + "_".join([c.lower() for c in add_primary_key.key])
-        + "_"
-        + add_primary_key.table_name.lower()
-    )
-    cols = ",".join([compiler.preparer.quote(col) for col in add_primary_key.key])
-    return f"ALTER TABLE {schema}.{table} ADD CONSTRAINT {pk_name} PRIMARY KEY ({cols})"
-
-
-# noinspection SqlDialectInspection
 @compiles(AddIndex)
 def visit_add_index(add_index: AddIndex, compiler, **kw):
     _ = kw
@@ -1009,27 +946,6 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
     )
     cols = ",".join([compiler.preparer.quote(col) for col in add_index.index])
     return f"CREATE INDEX {index_name} ON {database}.{schema}.{table} ({cols})"
-
-
-# noinspection SqlDialectInspection
-@compiles(AddIndex, "ibm_db_sa")
-def visit_add_index(add_index: AddIndex, compiler, **kw):
-    _ = kw
-    add_index = copy.deepcopy(add_index)
-    add_index.table_name = add_index.table_name
-
-    table = compiler.preparer.quote(add_index.table_name)
-    schema = compiler.preparer.format_schema(add_index.schema.get())
-    index_name = compiler.preparer.quote(
-        add_index.name
-        if add_index.name is not None
-        else "idx_"
-        + "_".join([c.lower() for c in add_index.index])
-        + "_"
-        + add_index.table_name.lower()
-    )
-    cols = ",".join([compiler.preparer.quote(col) for col in add_index.index])
-    return f"CREATE INDEX {schema}.{index_name} ON {schema}.{table} ({cols})"
 
 
 # noinspection SqlDialectInspection
@@ -1115,8 +1031,6 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
 @compiles(ChangeColumnTypes, "ibm_db_sa")
 def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     _ = kw
-    change = copy.deepcopy(change)
-    change.table_name = change.table_name
 
     def modify_type(_type):
         if change.cap_varchar_max is not None:
@@ -1169,9 +1083,6 @@ def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
 @compiles(ChangeColumnNullable, "ibm_db_sa")
 def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
     _ = kw
-    change = copy.deepcopy(change)
-    change.table_name = change.table_name
-
     statements = _get_nullable_change_statements(change, compiler)
     return join_ddl_statements(statements, compiler, **kw)
 

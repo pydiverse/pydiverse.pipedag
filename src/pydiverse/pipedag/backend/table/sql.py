@@ -663,11 +663,10 @@ class SQLTableStore(BaseTableStore):
     @drop_all_dialect_specific.dialect("ibm_db_sa")
     def _drop_all_dialect_specific_ibm_db_sa(self, schema: Schema):
         with self.engine_connect() as conn:
-            name = schema.get()
             alias_names = conn.execute(
                 sa.text(
                     "SELECT NAME FROM SYSIBM.SYSTABLES WHERE CREATOR ="
-                    f" '{name}' and TYPE='A'"
+                    f" '{schema.get()}' and TYPE='A'"
                 )
             ).all()
         alias_names = [row[0] for row in alias_names]
