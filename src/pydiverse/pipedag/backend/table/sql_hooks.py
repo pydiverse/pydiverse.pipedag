@@ -23,7 +23,6 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     ChangeTableLogged,
     CreateTableAsSelect,
     Schema,
-    ibm_db_sa_fix_name,
 )
 from pydiverse.pipedag.materialize import Table
 from pydiverse.pipedag.materialize.core import TaskInfo
@@ -342,7 +341,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
             dtypes.update(table.type_map)
 
         df.to_sql(
-            ibm_db_sa_fix_name(table.name),
+            table.name,
             engine,
             schema=schema.get(),
             index=False,

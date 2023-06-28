@@ -31,7 +31,6 @@ __all__ = [
     "ChangeColumnNullable",
     "ChangeColumnTypes",
     "split_ddl_statement",
-    "ibm_db_sa_fix_name",
 ]
 
 
@@ -424,10 +423,11 @@ def visit_drop_schema_ibm_db_sa(drop: DropSchema, compiler, **kw):
             add_statements.append(DropView(view, schema=drop.schema))
         # see SQLTableStore.drop_all_dialect_specific()
         with drop.engine.connect() as conn:
+            name = drop.schema.get()
             alias_names = conn.execute(
                 sa.text(
                     "SELECT NAME FROM SYSIBM.SYSTABLES WHERE CREATOR ="
-                    f" '{ibm_db_sa_fix_name(drop.schema.get())}' and TYPE='A'"
+                    f" '{name}' and TYPE='A'"
                 ),
             ).all()
         alias_names = [row[0] for row in alias_names]
@@ -551,19 +551,12 @@ def visit_create_table_as_select_mssql(create: CreateTableAsSelect, compiler, **
     return insert_into_in_query(select, database, schema, name)
 
 
-def ref_ibm_db_sa(tbl: dict[str, str], compiler):
-    return (
-        f"{compiler.preparer.format_schema(ibm_db_sa_fix_name(tbl['schema']))}."
-        f"{compiler.preparer.quote(ibm_db_sa_fix_name(tbl['name']))}"
-    )
-
-
 # noinspection SqlDialectInspection
 @compiles(CreateTableAsSelect, "ibm_db_sa")
 def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler, **kw):
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
+    preparer = compiler.preparer
     create = copy.deepcopy(create)
-    create.name = ibm_db_sa_fix_name(create.name)
+    create.name = create.name
 
     prepare_statement = _visit_create_obj_as_select(
         create, compiler, "TABLE", kw, prefix="(", suffix=") DEFINITION ONLY"
@@ -585,12 +578,15 @@ def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler
     else:
         not_null_statements = []
 
-    name = compiler.preparer.quote(create.name)
-    schema = compiler.preparer.format_schema(create.schema.get())
+    name = preparer.quote(create.name)
+    schema = preparer.format_schema(create.schema.get())
 
     lock_statements = [f"LOCK TABLE {schema}.{name} IN EXCLUSIVE MODE"]
     if create.source_tables is not None:
-        src_tables = [f"{ref_ibm_db_sa(tbl, compiler)}" for tbl in create.source_tables]
+        src_tables = [
+            f"{preparer.format_schema(tbl['schema'])}.{preparer.quote(tbl['name'])}"
+            for tbl in create.source_tables
+        ]
         lock_statements += [f"LOCK TABLE {ref} IN SHARE MODE" for ref in src_tables]
 
     kw["literal_binds"] = True
@@ -614,9 +610,8 @@ def visit_create_view_as_select(create: CreateViewAsSelect, compiler, **kw):
 
 @compiles(CreateViewAsSelect, "ibm_db_sa")
 def visit_create_view_as_select_ibm_db_sa(create: CreateViewAsSelect, compiler, **kw):
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     create = copy.deepcopy(create)
-    create.name = ibm_db_sa_fix_name(create.name)
+    create.name = create.name
     return _visit_create_obj_as_select(create, compiler, "VIEW", kw)
 
 
@@ -669,11 +664,11 @@ def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
 
 @compiles(CreateAlias, "mssql")
 def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
-    from_name = compiler.preparer.quote(ibm_db_sa_fix_name(create_alias.from_name))
+    from_name = compiler.preparer.quote(create_alias.from_name)
     from_database, from_schema = _get_mssql_database_schema(
         create_alias.from_schema, compiler
     )
-    to_name = compiler.preparer.quote(ibm_db_sa_fix_name(create_alias.to_name))
+    to_name = compiler.preparer.quote(create_alias.to_name)
     to_database, to_schema = _get_mssql_database_schema(
         create_alias.to_schema, compiler
     )
@@ -691,14 +686,12 @@ def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
 
 @compiles(CreateAlias, "ibm_db_sa")
 def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
-    from_name = compiler.preparer.quote(ibm_db_sa_fix_name(create_alias.from_name))
-    from_schema = compiler.preparer.format_schema(
-        ibm_db_sa_fix_name(create_alias.from_schema.get())
-    )
-    to_name = compiler.preparer.quote(ibm_db_sa_fix_name(create_alias.to_name))
-    to_schema = compiler.preparer.format_schema(
-        ibm_db_sa_fix_name(create_alias.to_schema.get())
-    )
+    from_name = compiler.preparer.quote(create_alias.from_name)
+    name = create_alias.from_schema.get()
+    from_schema = compiler.preparer.format_schema(name)
+    to_name = compiler.preparer.quote(create_alias.to_name)
+    name1 = create_alias.to_schema.get()
+    to_schema = compiler.preparer.format_schema(name1)
     text = ["CREATE"]
     if create_alias.or_replace:
         text.append("OR REPLACE")
@@ -741,8 +734,8 @@ def visit_copy_table_mssql(copy_table: CopyTable, compiler, **kw):
 @compiles(CopyTable, "ibm_db_sa")
 def visit_copy_table_ibm_db_sa(copy_table: CopyTable, compiler, **kw):
     copy_table = copy.deepcopy(copy_table)
-    copy_table.from_name = ibm_db_sa_fix_name(copy_table.from_name)
-    copy_table.to_name = ibm_db_sa_fix_name(copy_table.to_name)
+    copy_table.from_name = copy_table.from_name
+    copy_table.to_name = copy_table.to_name
     return visit_copy_table(copy_table, compiler, **kw)
 
 
@@ -775,10 +768,9 @@ def visit_rename_table(rename_table: RenameTable, compiler, **kw):
 @compiles(RenameTable, "ibm_db_sa")
 def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     _ = kw
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     rename_table = copy.deepcopy(rename_table)
-    rename_table.from_name = ibm_db_sa_fix_name(rename_table.from_name)
-    rename_table.to_name = ibm_db_sa_fix_name(rename_table.to_name)
+    rename_table.from_name = rename_table.from_name
+    rename_table.to_name = rename_table.to_name
 
     from_table = compiler.preparer.quote(rename_table.from_name)
     to_table = compiler.preparer.quote(rename_table.to_name)
@@ -798,9 +790,8 @@ def visit_drop_table_mssql(drop: DropTable, compiler, **kw):
 
 @compiles(DropTable, "ibm_db_sa")
 def visit_drop_table_ibm_db_sa(drop: DropTable, compiler, **kw):
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     drop = copy.deepcopy(drop)
-    drop.name = ibm_db_sa_fix_name(drop.name)
+    drop.name = drop.name
     return _visit_drop_anything(drop, "TABLE", compiler, **kw)
 
 
@@ -816,9 +807,8 @@ def visit_drop_view_mssql(drop: DropView, compiler, **kw):
 
 @compiles(DropView, "ibm_db_sa")
 def visit_drop_view_ibm_db_sa(drop: DropView, compiler, **kw):
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     drop = copy.deepcopy(drop)
-    drop.name = ibm_db_sa_fix_name(drop.name)
+    drop.name = drop.name
     return _visit_drop_anything(drop, "VIEW", compiler, **kw)
 
 
@@ -837,9 +827,8 @@ def visit_drop_alias_mssql(drop: DropAlias, compiler, **kw):
 
 @compiles(DropAlias, "ibm_db_sa")
 def visit_drop_alias_ibm_db_sa(drop: DropAlias, compiler, **kw):
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     drop = copy.deepcopy(drop)
-    drop.name = ibm_db_sa_fix_name(drop.name)
+    drop.name = drop.name
     return _visit_drop_anything(drop, "ALIAS", compiler, **kw)
 
 
@@ -968,9 +957,8 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
 @compiles(AddPrimaryKey, "ibm_db_sa")
 def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
     _ = kw
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     add_primary_key = copy.deepcopy(add_primary_key)
-    add_primary_key.table_name = ibm_db_sa_fix_name(add_primary_key.table_name)
+    add_primary_key.table_name = add_primary_key.table_name
 
     table = compiler.preparer.quote(add_primary_key.table_name)
     schema = compiler.preparer.format_schema(add_primary_key.schema.get())
@@ -982,12 +970,7 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
         + "_"
         + add_primary_key.table_name.lower()
     )
-    cols = ",".join(
-        [
-            compiler.preparer.quote(ibm_db_sa_fix_name(col))
-            for col in add_primary_key.key
-        ]
-    )
+    cols = ",".join([compiler.preparer.quote(col) for col in add_primary_key.key])
     return f"ALTER TABLE {schema}.{table} ADD CONSTRAINT {pk_name} PRIMARY KEY ({cols})"
 
 
@@ -1032,9 +1015,8 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
 @compiles(AddIndex, "ibm_db_sa")
 def visit_add_index(add_index: AddIndex, compiler, **kw):
     _ = kw
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     add_index = copy.deepcopy(add_index)
-    add_index.table_name = ibm_db_sa_fix_name(add_index.table_name)
+    add_index.table_name = add_index.table_name
 
     table = compiler.preparer.quote(add_index.table_name)
     schema = compiler.preparer.format_schema(add_index.schema.get())
@@ -1046,9 +1028,7 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
         + "_"
         + add_index.table_name.lower()
     )
-    cols = ",".join(
-        [compiler.preparer.quote(ibm_db_sa_fix_name(col)) for col in add_index.index]
-    )
+    cols = ",".join([compiler.preparer.quote(col) for col in add_index.index])
     return f"CREATE INDEX {schema}.{index_name} ON {schema}.{table} ({cols})"
 
 
@@ -1135,9 +1115,8 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
 @compiles(ChangeColumnTypes, "ibm_db_sa")
 def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     _ = kw
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     change = copy.deepcopy(change)
-    change.table_name = ibm_db_sa_fix_name(change.table_name)
+    change.table_name = change.table_name
 
     def modify_type(_type):
         if change.cap_varchar_max is not None:
@@ -1153,14 +1132,14 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     schema = compiler.preparer.format_schema(change.schema.get())
     statements = [
         f"ALTER TABLE {schema}.{table} ALTER COLUMN"
-        f" {compiler.preparer.quote(ibm_db_sa_fix_name(col))} SET DATA TYPE"
+        f" {compiler.preparer.quote(col)} SET DATA TYPE"
         f" {compiler.type_compiler.process(modify_type(_type))}"
         for col, _type, nullable in zip(
             change.column_names, change.column_types, change.nullable
         )
     ] + [
         f"ALTER TABLE {schema}.{table} ALTER COLUMN"
-        f" {compiler.preparer.quote(ibm_db_sa_fix_name(col))}"
+        f" {compiler.preparer.quote(col)}"
         f" {'SET' if not nullable else 'DROP'} NOT NULL"
         for col, nullable in zip(change.column_names, change.nullable)
         if nullable is not None
@@ -1190,9 +1169,8 @@ def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
 @compiles(ChangeColumnNullable, "ibm_db_sa")
 def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
     _ = kw
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
     change = copy.deepcopy(change)
-    change.table_name = ibm_db_sa_fix_name(change.table_name)
+    change.table_name = change.table_name
 
     statements = _get_nullable_change_statements(change, compiler)
     return join_ddl_statements(statements, compiler, **kw)
@@ -1212,17 +1190,12 @@ def _get_nullable_change_statements(change, compiler):
     schema = compiler.preparer.format_schema(change.schema.get())
     statements = [
         f"ALTER TABLE {schema}.{table} ALTER COLUMN"
-        f" {compiler.preparer.quote(ibm_db_sa_fix_name(col))}"
+        f" {compiler.preparer.quote(col)}"
         f" {'SET' if not nullable else 'DROP'} NOT NULL"
         for col, nullable in zip(change.column_names, change.nullable)
     ]
     statements.append(f"call sysproc.admin_cmd('REORG TABLE {schema}.{table}')")
     return statements
-
-
-def ibm_db_sa_fix_name(name):
-    # TODO: Remove / Inline
-    return name
 
 
 STATEMENT_SEPERATOR = "; -- PYDIVERSE-PIPEDAG-SPLIT\n"

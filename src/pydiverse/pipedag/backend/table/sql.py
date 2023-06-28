@@ -35,7 +35,6 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     RenameSchema,
     RenameTable,
     Schema,
-    ibm_db_sa_fix_name,
     split_ddl_statement,
 )
 from pydiverse.pipedag.context import RunContext
@@ -664,10 +663,11 @@ class SQLTableStore(BaseTableStore):
     @drop_all_dialect_specific.dialect("ibm_db_sa")
     def _drop_all_dialect_specific_ibm_db_sa(self, schema: Schema):
         with self.engine_connect() as conn:
+            name = schema.get()
             alias_names = conn.execute(
                 sa.text(
                     "SELECT NAME FROM SYSIBM.SYSTABLES WHERE CREATOR ="
-                    f" '{ibm_db_sa_fix_name(schema.get())}' and TYPE='A'"
+                    f" '{name}' and TYPE='A'"
                 )
             ).all()
         alias_names = [row[0] for row in alias_names]
@@ -1553,8 +1553,8 @@ def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0
 
     # we need to resolve aliases since pandas.read_sql_table does not work for them
     # and sa.Table does not auto-reflect columns
-    table_name = ibm_db_sa_fix_name(table_name)
-    schema = ibm_db_sa_fix_name(schema)
+    table_name = table_name
+    schema = schema
     tbl = sa.Table("SYSTABLES", sa.MetaData(), schema="SYSIBM", autoload_with=conn)
     query = (
         sa.select(tbl.c.base_name, tbl.c.base_schema)

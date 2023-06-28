@@ -14,7 +14,6 @@ from pydiverse.pipedag.backend.table.util import engine_dispatch
 from pydiverse.pipedag.backend.table.util.sql_ddl import (
     CreateSchema,
     Schema,
-    ibm_db_sa_fix_name,
 )
 from pydiverse.pipedag.errors import LockError
 
@@ -315,12 +314,8 @@ class DB2Lock(Lock):
         self.schema = schema
 
     def acquire(self) -> bool:
-        table = self._engine.dialect.identifier_preparer.quote_identifier(
-            ibm_db_sa_fix_name(self.table)
-        )
-        schema = self._engine.dialect.identifier_preparer.format_schema(
-            ibm_db_sa_fix_name(self.schema)
-        )
+        table = self._engine.dialect.identifier_preparer.quote_identifier(self.table)
+        schema = self._engine.dialect.identifier_preparer.format_schema(self.schema)
 
         # CREATE TABLE IF NOT EXISTS
         with self._engine.begin() as conn:
