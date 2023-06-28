@@ -14,6 +14,7 @@ Changelog
 - tasks now have a `position_hash` associated with them to identify them purely based on their position (e.g. stage, name and input wiring) inside a flow.
 - breaking change to metadata: added position_hash to `tasks` metadata table and change type of hash columns from String(32) to String(20).
 - `Flow`, `Subflow`, and `Result` objects now provide additional options for visualizing them
+- created `pipedag-manage` command line utility with `clear-metadata` command to help with migrating between different pipedag metadata versions.
 
 0.4.1 (2023-06-17)
 ------------------
