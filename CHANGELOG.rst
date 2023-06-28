@@ -7,6 +7,8 @@ https://semver.org/spec/v2.0.0.html. The most important bits are:
 Changelog
 =========
 
+0.5.0 (2023-06-28)
+------------------
 - add support for DuckDB
 - add support for pyarrow backed pandas dataframes
 - support execution of subflow
@@ -14,6 +16,7 @@ Changelog
 - tasks now have a `position_hash` associated with them to identify them purely based on their position (e.g. stage, name and input wiring) inside a flow.
 - breaking change to metadata: added position_hash to `tasks` metadata table and change type of hash columns from String(32) to String(20).
 - `Flow`, `Subflow`, and `Result` objects now provide additional options for visualizing them
+- added `unlogged_tables` flag to SQLTableStore for creating UNLOGGED tables with Postgres.
 - created `pipedag-manage` command line utility with `clear-metadata` command to help with migrating between different pipedag metadata versions.
 
 0.4.1 (2023-06-17)
