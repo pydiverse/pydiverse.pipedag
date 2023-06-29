@@ -31,7 +31,6 @@ __all__ = [
     "ChangeColumnNullable",
     "ChangeColumnTypes",
     "split_ddl_statement",
-    "ibm_db_sa_fix_name",
 ]
 
 
@@ -70,6 +69,12 @@ class RenameSchema(DDLElement):
     def __init__(self, from_: Schema, to: Schema):
         self.from_ = from_
         self.to = to
+
+
+class DropSchemaContent(DDLElement):
+    def __init__(self, schema: Schema, engine: sa.Engine):
+        self.schema = schema
+        self.engine = engine
 
 
 class CreateDatabase(DDLElement):
@@ -357,10 +362,12 @@ def visit_create_schema_ibm_db_sa(create: CreateSchema, compiler, **kw):
     _ = kw
     schema = compiler.preparer.format_schema(create.schema.get())
     if create.if_not_exists:
-        return (
-            "BEGIN\ndeclare continue handler for sqlstate '42710' begin end;\n"
-            f"execute immediate 'CREATE SCHEMA {schema}';\nEND"
-        )
+        return f"""
+        BEGIN
+            declare continue handler for sqlstate '42710' begin end;
+            execute immediate 'CREATE SCHEMA {schema}';
+        END
+        """
     else:
         return f"CREATE SCHEMA {schema}"
 
@@ -400,13 +407,8 @@ def visit_drop_schema_mssql(drop: DropSchema, compiler, **kw):
     return " ".join(text)
 
 
-# noinspection SqlDialectInspection
 @compiles(DropSchema, "ibm_db_sa")
 def visit_drop_schema_ibm_db_sa(drop: DropSchema, compiler, **kw):
-    """
-    Because IBM DB2 doesn't support CASCADE, we must manually drop all tables in
-    the schema first.
-    """
     statements = []
     if drop.cascade:
         if drop.engine is None:
@@ -414,26 +416,7 @@ def visit_drop_schema_ibm_db_sa(drop: DropSchema, compiler, **kw):
                 "Using DropSchema with cascade=True for ibm_db2 requires passing"
                 " the engine kwarg to DropSchema."
             )
-
-        add_statements = []
-        # see SQLTableStore._init_stage_schema_swap()
-        inspector = sa.inspect(drop.engine)
-        for table in inspector.get_table_names(schema=drop.schema.get()):
-            add_statements.append(DropTable(table, schema=drop.schema))
-        for view in inspector.get_view_names(schema=drop.schema.get()):
-            add_statements.append(DropView(view, schema=drop.schema))
-        # see SQLTableStore.drop_all_dialect_specific()
-        with drop.engine.connect() as conn:
-            alias_names = conn.execute(
-                sa.text(
-                    "SELECT NAME FROM SYSIBM.SYSTABLES WHERE CREATOR ="
-                    f" '{ibm_db_sa_fix_name(drop.schema.get())}' and TYPE='A'"
-                ),
-            ).all()
-        alias_names = [row[0] for row in alias_names]
-        for alias in alias_names:
-            add_statements.append(DropAlias(alias, drop.schema))
-        statements += [compiler.process(stmt) for stmt in add_statements]
+        statements.append(DropSchemaContent(drop.schema, drop.engine))
 
     # Compile DROP SCHEMA statement
     schema = compiler.preparer.format_schema(drop.schema.get())
@@ -486,6 +469,67 @@ def visit_rename_schema_mssql(rename: RenameSchema, compiler, **kw):
         return f"ALTER DATABASE {from_name} MODIFY NAME = {to_name}"
 
 
+@compiles(DropSchemaContent)
+def visit_drop_schema_content(drop: DropSchemaContent, compiler, **kw):
+    _ = kw
+    schema = drop.schema
+    engine = drop.engine
+    inspector = sa.inspect(engine)
+
+    statements = []
+
+    for table in inspector.get_table_names(schema=schema.get()):
+        statements.append(DropTable(table, schema=schema))
+    for view in inspector.get_view_names(schema=schema.get()):
+        statements.append(DropView(view, schema=schema))
+
+    return join_ddl_statements(statements, compiler, **kw)
+
+
+@compiles(DropSchemaContent, "mssql")
+def visit_drop_schema_content_mssql(drop: DropSchemaContent, compiler, **kw):
+    from pydiverse.pipedag.backend.table.util.sql_reflection import (
+        PipedagMSSqlReflection,
+    )
+
+    _ = kw
+    schema = drop.schema
+    engine = drop.engine
+    inspector = sa.inspect(engine)
+
+    statements = []
+
+    for table in inspector.get_table_names(schema=schema.get()):
+        statements.append(DropTable(table, schema=schema))
+    for view in inspector.get_view_names(schema=schema.get()):
+        statements.append(DropView(view, schema=schema))
+    for alias in PipedagMSSqlReflection.get_alias_names(engine, schema=schema.get()):
+        statements.append(DropAlias(alias, schema=drop.schema))
+
+    return join_ddl_statements(statements, compiler, **kw)
+
+
+@compiles(DropSchemaContent, "ibm_db_sa")
+def visit_drop_schema_content_ibm_db2(drop: DropSchemaContent, compiler, **kw):
+    from pydiverse.pipedag.backend.table.util.sql_reflection import PipedagDB2Reflection
+
+    _ = kw
+    schema = drop.schema
+    engine = drop.engine
+    inspector = sa.inspect(engine)
+
+    statements = []
+
+    for table in inspector.get_table_names(schema=schema.get()):
+        statements.append(DropTable(table, schema=schema))
+    for view in inspector.get_view_names(schema=schema.get()):
+        statements.append(DropView(view, schema=schema))
+    for alias in PipedagDB2Reflection.get_alias_names(engine, schema=schema.get()):
+        statements.append(DropAlias(alias, schema=drop.schema))
+
+    return join_ddl_statements(statements, compiler, **kw)
+
+
 @compiles(CreateDatabase)
 def visit_create_database(create: CreateDatabase, compiler, **kw):
     _ = kw
@@ -514,7 +558,7 @@ def visit_drop_database(drop: DropDatabase, compiler, **kw):
 
 
 def _visit_create_obj_as_select(create, compiler, _type, kw, *, prefix="", suffix=""):
-    name = compiler.preparer.quote_identifier(create.name)
+    name = compiler.preparer.quote(create.name)
     schema = compiler.preparer.format_schema(create.schema.get())
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(create.query, **kw)
@@ -538,7 +582,7 @@ def visit_create_table_as_select_postgresql(
 
 @compiles(CreateTableAsSelect, "mssql")
 def visit_create_table_as_select_mssql(create: CreateTableAsSelect, compiler, **kw):
-    name = compiler.preparer.quote_identifier(create.name)
+    name = compiler.preparer.quote(create.name)
     full_name = create.schema.get()
     # it was already checked that there is exactly one dot in schema prefix + suffix
     database_name, schema_name = full_name.split(".")
@@ -551,20 +595,9 @@ def visit_create_table_as_select_mssql(create: CreateTableAsSelect, compiler, **
     return insert_into_in_query(select, database, schema, name)
 
 
-def ref_ibm_db_sa(tbl: dict[str, str], compiler):
-    return (
-        f"{compiler.preparer.quote_identifier(ibm_db_sa_fix_name(tbl['schema']))}."
-        f"{compiler.preparer.quote_identifier(ibm_db_sa_fix_name(tbl['name']))}"
-    )
-
-
 # noinspection SqlDialectInspection
 @compiles(CreateTableAsSelect, "ibm_db_sa")
 def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler, **kw):
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
-    create = copy.deepcopy(create)
-    create.name = ibm_db_sa_fix_name(create.name)
-
     prepare_statement = _visit_create_obj_as_select(
         create, compiler, "TABLE", kw, prefix="(", suffix=") DEFINITION ONLY"
     )
@@ -585,12 +618,16 @@ def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler
     else:
         not_null_statements = []
 
-    name = compiler.preparer.quote_identifier(create.name)
-    schema = compiler.preparer.format_schema(create.schema.get())
+    preparer = compiler.preparer
+    name = preparer.quote(create.name)
+    schema = preparer.format_schema(create.schema.get())
 
     lock_statements = [f"LOCK TABLE {schema}.{name} IN EXCLUSIVE MODE"]
     if create.source_tables is not None:
-        src_tables = [f"{ref_ibm_db_sa(tbl, compiler)}" for tbl in create.source_tables]
+        src_tables = [
+            f"{preparer.format_schema(tbl['schema'])}.{preparer.quote(tbl['name'])}"
+            for tbl in create.source_tables
+        ]
         lock_statements += [f"LOCK TABLE {ref} IN SHARE MODE" for ref in src_tables]
 
     kw["literal_binds"] = True
@@ -609,14 +646,6 @@ def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler
 
 @compiles(CreateViewAsSelect)
 def visit_create_view_as_select(create: CreateViewAsSelect, compiler, **kw):
-    return _visit_create_obj_as_select(create, compiler, "VIEW", kw)
-
-
-@compiles(CreateViewAsSelect, "ibm_db_sa")
-def visit_create_view_as_select_ibm_db_sa(create: CreateViewAsSelect, compiler, **kw):
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
-    create = copy.deepcopy(create)
-    create.name = ibm_db_sa_fix_name(create.name)
     return _visit_create_obj_as_select(create, compiler, "VIEW", kw)
 
 
@@ -657,27 +686,23 @@ def insert_into_in_query(select_sql, database, schema, table):
 def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
     query = sa.select("*").select_from(
         sa.Table(
-            create_alias.from_name, sa.MetaData(), schema=create_alias.from_schema.get()
+            create_alias.from_name,
+            sa.MetaData(),
+            schema=create_alias.from_schema.get(),
         )
     )
-    return visit_create_view_as_select(
-        CreateViewAsSelect(create_alias.to_name, create_alias.to_schema, query),
-        compiler,
-        **kw,
+    return compiler.process(
+        CreateViewAsSelect(create_alias.to_name, create_alias.to_schema, query), **kw
     )
 
 
 @compiles(CreateAlias, "mssql")
 def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
-    from_name = compiler.preparer.quote_identifier(
-        ibm_db_sa_fix_name(create_alias.from_name)
-    )
+    from_name = compiler.preparer.quote(create_alias.from_name)
     from_database, from_schema = _get_mssql_database_schema(
         create_alias.from_schema, compiler
     )
-    to_name = compiler.preparer.quote_identifier(
-        ibm_db_sa_fix_name(create_alias.to_name)
-    )
+    to_name = compiler.preparer.quote(create_alias.to_name)
     to_database, to_schema = _get_mssql_database_schema(
         create_alias.to_schema, compiler
     )
@@ -695,18 +720,10 @@ def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
 
 @compiles(CreateAlias, "ibm_db_sa")
 def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
-    from_name = compiler.preparer.quote_identifier(
-        ibm_db_sa_fix_name(create_alias.from_name)
-    )
-    from_schema = compiler.preparer.format_schema(
-        ibm_db_sa_fix_name(create_alias.from_schema.get())
-    )
-    to_name = compiler.preparer.quote_identifier(
-        ibm_db_sa_fix_name(create_alias.to_name)
-    )
-    to_schema = compiler.preparer.format_schema(
-        ibm_db_sa_fix_name(create_alias.to_schema.get())
-    )
+    from_name = compiler.preparer.quote(create_alias.from_name)
+    from_schema = compiler.preparer.format_schema(create_alias.from_schema.get())
+    to_name = compiler.preparer.quote(create_alias.to_name)
+    to_schema = compiler.preparer.format_schema(create_alias.to_schema.get())
     text = ["CREATE"]
     if create_alias.or_replace:
         text.append("OR REPLACE")
@@ -716,7 +733,7 @@ def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
 
 @compiles(CopyTable)
 def visit_copy_table(copy_table: CopyTable, compiler, **kw):
-    from_name = compiler.preparer.quote_identifier(copy_table.from_name)
+    from_name = compiler.preparer.quote(copy_table.from_name)
     from_schema = compiler.preparer.format_schema(copy_table.from_schema.get())
     query = sa.select("*").select_from(sa.text(f"{from_schema}.{from_name}"))
     create = CreateTableAsSelect(
@@ -734,7 +751,7 @@ def visit_copy_table(copy_table: CopyTable, compiler, **kw):
 # noinspection SqlDialectInspection
 @compiles(CopyTable, "mssql")
 def visit_copy_table_mssql(copy_table: CopyTable, compiler, **kw):
-    from_name = compiler.preparer.quote_identifier(copy_table.from_name)
+    from_name = compiler.preparer.quote(copy_table.from_name)
     database, schema = _get_mssql_database_schema(copy_table.from_schema, compiler)
     query = sa.text(f"SELECT * FROM {database}.{schema}.{from_name}")
     create = CreateTableAsSelect(
@@ -746,20 +763,12 @@ def visit_copy_table_mssql(copy_table: CopyTable, compiler, **kw):
     return compiler.process(create, **kw)
 
 
-@compiles(CopyTable, "ibm_db_sa")
-def visit_copy_table_ibm_db_sa(copy_table: CopyTable, compiler, **kw):
-    copy_table = copy.deepcopy(copy_table)
-    copy_table.from_name = ibm_db_sa_fix_name(copy_table.from_name)
-    copy_table.to_name = ibm_db_sa_fix_name(copy_table.to_name)
-    return visit_copy_table(copy_table, compiler, **kw)
-
-
 # noinspection SqlDialectInspection
 @compiles(RenameTable)
 def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     _ = kw
-    from_table = compiler.preparer.quote_identifier(rename_table.from_name)
-    to_table = compiler.preparer.quote_identifier(rename_table.to_name)
+    from_table = compiler.preparer.quote(rename_table.from_name)
+    to_table = compiler.preparer.quote(rename_table.to_name)
     schema = compiler.preparer.format_schema(rename_table.schema.get())
     return f"ALTER TABLE {schema}.{from_table} RENAME TO {to_table}"
 
@@ -770,7 +779,7 @@ def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     _ = kw
     database, schema = _get_mssql_database_schema(rename_table.schema, compiler)
 
-    from_table = compiler.preparer.quote_identifier(rename_table.from_name)
+    from_table = compiler.preparer.quote(rename_table.from_name)
     to_table = rename_table.to_name  # no quoting is intentional
     statements = [
         f"USE [{database}]",
@@ -783,13 +792,8 @@ def visit_rename_table(rename_table: RenameTable, compiler, **kw):
 @compiles(RenameTable, "ibm_db_sa")
 def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     _ = kw
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
-    rename_table = copy.deepcopy(rename_table)
-    rename_table.from_name = ibm_db_sa_fix_name(rename_table.from_name)
-    rename_table.to_name = ibm_db_sa_fix_name(rename_table.to_name)
-
-    from_table = compiler.preparer.quote_identifier(rename_table.from_name)
-    to_table = compiler.preparer.quote_identifier(rename_table.to_name)
+    from_table = compiler.preparer.quote(rename_table.from_name)
+    to_table = compiler.preparer.quote(rename_table.to_name)
     schema = compiler.preparer.format_schema(rename_table.schema.get())
     return f"RENAME TABLE {schema}.{from_table} TO {to_table}"
 
@@ -804,14 +808,6 @@ def visit_drop_table_mssql(drop: DropTable, compiler, **kw):
     return _visit_drop_anything_mssql(drop, "TABLE", compiler, **kw)
 
 
-@compiles(DropTable, "ibm_db_sa")
-def visit_drop_table_ibm_db_sa(drop: DropTable, compiler, **kw):
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
-    drop = copy.deepcopy(drop)
-    drop.name = ibm_db_sa_fix_name(drop.name)
-    return _visit_drop_anything(drop, "TABLE", compiler, **kw)
-
-
 @compiles(DropView)
 def visit_drop_view(drop: DropView, compiler, **kw):
     return _visit_drop_anything(drop, "VIEW", compiler, **kw)
@@ -820,14 +816,6 @@ def visit_drop_view(drop: DropView, compiler, **kw):
 @compiles(DropView, "mssql")
 def visit_drop_view_mssql(drop: DropView, compiler, **kw):
     return _visit_drop_anything_mssql(drop, "VIEW", compiler, **kw)
-
-
-@compiles(DropView, "ibm_db_sa")
-def visit_drop_view_ibm_db_sa(drop: DropView, compiler, **kw):
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
-    drop = copy.deepcopy(drop)
-    drop.name = ibm_db_sa_fix_name(drop.name)
-    return _visit_drop_anything(drop, "VIEW", compiler, **kw)
 
 
 @compiles(DropAlias)
@@ -844,10 +832,7 @@ def visit_drop_alias_mssql(drop: DropAlias, compiler, **kw):
 
 
 @compiles(DropAlias, "ibm_db_sa")
-def visit_drop_alias_ibm_db_sa(drop: DropAlias, compiler, **kw):
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
-    drop = copy.deepcopy(drop)
-    drop.name = ibm_db_sa_fix_name(drop.name)
+def visit_drop_alias_mssql(drop: DropAlias, compiler, **kw):
     return _visit_drop_anything(drop, "ALIAS", compiler, **kw)
 
 
@@ -882,7 +867,7 @@ def _visit_drop_anything(
     if dont_quote_table:
         table = drop.name
     else:
-        table = compiler.preparer.quote_identifier(drop.name)
+        table = compiler.preparer.quote(drop.name)
     schema = compiler.preparer.format_schema(drop.schema.get())
     text = [f"DROP {_type}"]
     if drop.if_exists:
@@ -898,7 +883,7 @@ def _visit_drop_anything_mssql(
     **kw,
 ):
     _ = kw
-    table = compiler.preparer.quote_identifier(drop.name)
+    table = compiler.preparer.quote(drop.name)
     database, schema = _get_mssql_database_schema(drop.schema, compiler)
     statements = []
     text = [f"DROP {_type}"]
@@ -918,9 +903,9 @@ def _visit_drop_anything_mssql(
 @compiles(AddPrimaryKey)
 def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
     _ = kw
-    table = compiler.preparer.quote_identifier(add_primary_key.table_name)
+    table = compiler.preparer.quote(add_primary_key.table_name)
     schema = compiler.preparer.format_schema(add_primary_key.schema.get())
-    pk_name = compiler.preparer.quote_identifier(
+    pk_name = compiler.preparer.quote(
         add_primary_key.name
         if add_primary_key.name is not None
         else "pk_"
@@ -928,9 +913,7 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
         + "_"
         + add_primary_key.table_name.lower()
     )
-    cols = ",".join(
-        [compiler.preparer.quote_identifier(col) for col in add_primary_key.key]
-    )
+    cols = ",".join([compiler.preparer.quote(col) for col in add_primary_key.key])
     return f"ALTER TABLE {schema}.{table} ADD CONSTRAINT {pk_name} PRIMARY KEY ({cols})"
 
 
@@ -938,9 +921,9 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
 @compiles(AddPrimaryKey, "duckdb")
 def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
     _ = kw
-    table = compiler.preparer.quote_identifier(add_primary_key.table_name)
+    table = compiler.preparer.quote(add_primary_key.table_name)
     schema = compiler.preparer.format_schema(add_primary_key.schema.get())
-    pk_name = compiler.preparer.quote_identifier(
+    pk_name = compiler.preparer.quote(
         add_primary_key.name
         if add_primary_key.name is not None
         else "pk_"
@@ -948,9 +931,7 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
         + "_"
         + add_primary_key.table_name.lower()
     )
-    cols = ",".join(
-        [compiler.preparer.quote_identifier(col) for col in add_primary_key.key]
-    )
+    cols = ",".join([compiler.preparer.quote(col) for col in add_primary_key.key])
     return f"CREATE UNIQUE INDEX {pk_name} ON {schema}.{table} ({cols})"
 
 
@@ -960,8 +941,8 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
     _ = kw
     database, schema = _get_mssql_database_schema(add_primary_key.schema, compiler)
 
-    table = compiler.preparer.quote_identifier(add_primary_key.table_name)
-    pk_name = compiler.preparer.quote_identifier(
+    table = compiler.preparer.quote(add_primary_key.table_name)
+    pk_name = compiler.preparer.quote(
         add_primary_key.name
         if add_primary_key.name is not None
         else "pk_"
@@ -969,9 +950,7 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
         + "_"
         + add_primary_key.table_name.lower()
     )
-    cols = ",".join(
-        [compiler.preparer.quote_identifier(col) for col in add_primary_key.key]
-    )
+    cols = ",".join([compiler.preparer.quote(col) for col in add_primary_key.key])
     return (
         f"ALTER TABLE {database}.{schema}.{table} ADD CONSTRAINT {pk_name} PRIMARY KEY"
         f" ({cols})"
@@ -979,39 +958,12 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
 
 
 # noinspection SqlDialectInspection
-@compiles(AddPrimaryKey, "ibm_db_sa")
-def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
-    _ = kw
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
-    add_primary_key = copy.deepcopy(add_primary_key)
-    add_primary_key.table_name = ibm_db_sa_fix_name(add_primary_key.table_name)
-
-    table = compiler.preparer.quote_identifier(add_primary_key.table_name)
-    schema = compiler.preparer.format_schema(add_primary_key.schema.get())
-    pk_name = compiler.preparer.quote_identifier(
-        add_primary_key.name
-        if add_primary_key.name is not None
-        else "pk_"
-        + "_".join([c.lower() for c in add_primary_key.key])
-        + "_"
-        + add_primary_key.table_name.lower()
-    )
-    cols = ",".join(
-        [
-            compiler.preparer.quote_identifier(ibm_db_sa_fix_name(col))
-            for col in add_primary_key.key
-        ]
-    )
-    return f"ALTER TABLE {schema}.{table} ADD CONSTRAINT {pk_name} PRIMARY KEY ({cols})"
-
-
-# noinspection SqlDialectInspection
 @compiles(AddIndex)
 def visit_add_index(add_index: AddIndex, compiler, **kw):
     _ = kw
-    table = compiler.preparer.quote_identifier(add_index.table_name)
+    table = compiler.preparer.quote(add_index.table_name)
     schema = compiler.preparer.format_schema(add_index.schema.get())
-    index_name = compiler.preparer.quote_identifier(
+    index_name = compiler.preparer.quote(
         add_index.name
         if add_index.name is not None
         else "idx_"
@@ -1019,9 +971,7 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
         + "_"
         + add_index.table_name.lower()
     )
-    cols = ",".join(
-        [compiler.preparer.quote_identifier(col) for col in add_index.index]
-    )
+    cols = ",".join([compiler.preparer.quote(col) for col in add_index.index])
     return f"CREATE INDEX {index_name} ON {schema}.{table} ({cols})"
 
 
@@ -1031,8 +981,8 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
     _ = kw
     database, schema = _get_mssql_database_schema(add_index.schema, compiler)
 
-    table = compiler.preparer.quote_identifier(add_index.table_name)
-    index_name = compiler.preparer.quote_identifier(
+    table = compiler.preparer.quote(add_index.table_name)
+    index_name = compiler.preparer.quote(
         add_index.name
         if add_index.name is not None
         else "idx_"
@@ -1040,48 +990,19 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
         + "_"
         + add_index.table_name.lower()
     )
-    cols = ",".join(
-        [compiler.preparer.quote_identifier(col) for col in add_index.index]
-    )
+    cols = ",".join([compiler.preparer.quote(col) for col in add_index.index])
     return f"CREATE INDEX {index_name} ON {database}.{schema}.{table} ({cols})"
-
-
-# noinspection SqlDialectInspection
-@compiles(AddIndex, "ibm_db_sa")
-def visit_add_index(add_index: AddIndex, compiler, **kw):
-    _ = kw
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
-    add_index = copy.deepcopy(add_index)
-    add_index.table_name = ibm_db_sa_fix_name(add_index.table_name)
-
-    table = compiler.preparer.quote_identifier(add_index.table_name)
-    schema = compiler.preparer.format_schema(add_index.schema.get())
-    index_name = compiler.preparer.quote_identifier(
-        add_index.name
-        if add_index.name is not None
-        else "idx_"
-        + "_".join([c.lower() for c in add_index.index])
-        + "_"
-        + add_index.table_name.lower()
-    )
-    cols = ",".join(
-        [
-            compiler.preparer.quote_identifier(ibm_db_sa_fix_name(col))
-            for col in add_index.index
-        ]
-    )
-    return f"CREATE INDEX {schema}.{index_name} ON {schema}.{table} ({cols})"
 
 
 # noinspection SqlDialectInspection
 @compiles(ChangeColumnTypes)
 def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     _ = kw
-    table = compiler.preparer.quote_identifier(change.table_name)
+    table = compiler.preparer.quote(change.table_name)
     schema = compiler.preparer.format_schema(change.schema.get())
     alter_columns = ",".join(
         [
-            f"ALTER COLUMN {compiler.preparer.quote_identifier(col)} SET DATA TYPE"
+            f"ALTER COLUMN {compiler.preparer.quote(col)} SET DATA TYPE"
             f" {compiler.type_compiler.process(_type)}"
             for col, _type, nullable in zip(
                 change.column_names, change.column_types, change.nullable
@@ -1089,7 +1010,7 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
         ]
         + [
             "ALTER COLUMN"
-            f" {compiler.preparer.quote_identifier(col)}"
+            f" {compiler.preparer.quote(col)}"
             f" {'SET' if not nullable else 'DROP'} NOT NULL"
             for col, nullable in zip(change.column_names, change.nullable)
             if nullable is not None
@@ -1101,17 +1022,17 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
 # noinspection SqlDialectInspection
 @compiles(ChangeColumnTypes, "duckdb")
 def visit_change_column_types_duckdb(change: ChangeColumnTypes, compiler, **kw):
-    table = compiler.preparer.quote_identifier(change.table_name)
+    table = compiler.preparer.quote(change.table_name)
     schema = compiler.preparer.format_schema(change.schema.get())
     alter_columns = [
-        f"ALTER COLUMN {compiler.preparer.quote_identifier(col)} SET DATA TYPE"
+        f"ALTER COLUMN {compiler.preparer.quote(col)} SET DATA TYPE"
         f" {compiler.type_compiler.process(_type)}"
         for col, _type, nullable in zip(
             change.column_names, change.column_types, change.nullable
         )
     ] + [
         "ALTER COLUMN"
-        f" {compiler.preparer.quote_identifier(col)}"
+        f" {compiler.preparer.quote(col)}"
         f" {'SET' if not nullable else 'DROP'} NOT NULL"
         for col, nullable in zip(change.column_names, change.nullable)
         if nullable is not None
@@ -1128,7 +1049,7 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     _ = kw
     database, schema = _get_mssql_database_schema(change.schema, compiler)
 
-    table = compiler.preparer.quote_identifier(change.table_name)
+    table = compiler.preparer.quote(change.table_name)
 
     def modify_type(_type):
         if change.cap_varchar_max is not None:
@@ -1142,7 +1063,7 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
 
     statements = [
         f"ALTER TABLE {database}.{schema}.{table} ALTER COLUMN"
-        f" {compiler.preparer.quote_identifier(col)} "
+        f" {compiler.preparer.quote(col)} "
         f"{compiler.type_compiler.process(modify_type(_type))}"
         f"{'' if nullable is None else ' NULL' if nullable else ' NOT NULL'}"
         for col, _type, nullable in zip(
@@ -1156,9 +1077,6 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
 @compiles(ChangeColumnTypes, "ibm_db_sa")
 def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     _ = kw
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
-    change = copy.deepcopy(change)
-    change.table_name = ibm_db_sa_fix_name(change.table_name)
 
     def modify_type(_type):
         if change.cap_varchar_max is not None:
@@ -1170,18 +1088,18 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
                 _type.length = change.cap_varchar_max
         return _type
 
-    table = compiler.preparer.quote_identifier(change.table_name)
+    table = compiler.preparer.quote(change.table_name)
     schema = compiler.preparer.format_schema(change.schema.get())
     statements = [
         f"ALTER TABLE {schema}.{table} ALTER COLUMN"
-        f" {compiler.preparer.quote_identifier(ibm_db_sa_fix_name(col))} SET DATA TYPE"
+        f" {compiler.preparer.quote(col)} SET DATA TYPE"
         f" {compiler.type_compiler.process(modify_type(_type))}"
         for col, _type, nullable in zip(
             change.column_names, change.column_types, change.nullable
         )
     ] + [
         f"ALTER TABLE {schema}.{table} ALTER COLUMN"
-        f" {compiler.preparer.quote_identifier(ibm_db_sa_fix_name(col))}"
+        f" {compiler.preparer.quote(col)}"
         f" {'SET' if not nullable else 'DROP'} NOT NULL"
         for col, nullable in zip(change.column_names, change.nullable)
         if nullable is not None
@@ -1194,12 +1112,12 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
 @compiles(ChangeColumnNullable)
 def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
     _ = kw
-    table = compiler.preparer.quote_identifier(change.table_name)
+    table = compiler.preparer.quote(change.table_name)
     schema = compiler.preparer.format_schema(change.schema.get())
     alter_columns = ",".join(
         [
             "ALTER COLUMN"
-            f" {compiler.preparer.quote_identifier(col)}"
+            f" {compiler.preparer.quote(col)}"
             f" {'SET' if not nullable else 'DROP'} NOT NULL"
             for col, nullable in zip(change.column_names, change.nullable)
         ]
@@ -1211,10 +1129,6 @@ def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
 @compiles(ChangeColumnNullable, "ibm_db_sa")
 def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
     _ = kw
-    # DB2 stores capitalized table names but sqlalchemy reflects them lowercase
-    change = copy.deepcopy(change)
-    change.table_name = ibm_db_sa_fix_name(change.table_name)
-
     statements = _get_nullable_change_statements(change, compiler)
     return join_ddl_statements(statements, compiler, **kw)
 
@@ -1222,29 +1136,23 @@ def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
 @compiles(ChangeTableLogged, "postgresql")
 def visit_change_table_logged(change: ChangeTableLogged, compiler, **kw):
     _ = kw
-    table_name = compiler.preparer.quote_identifier(change.table_name)
+    table_name = compiler.preparer.quote(change.table_name)
     schema = compiler.preparer.format_schema(change.schema.get())
     logged = "LOGGED" if change.logged else "UNLOGGED"
     return f"ALTER TABLE {schema}.{table_name} SET {logged}"
 
 
 def _get_nullable_change_statements(change, compiler):
-    table = compiler.preparer.quote_identifier(change.table_name)
+    table = compiler.preparer.quote(change.table_name)
     schema = compiler.preparer.format_schema(change.schema.get())
     statements = [
         f"ALTER TABLE {schema}.{table} ALTER COLUMN"
-        f" {compiler.preparer.quote_identifier(ibm_db_sa_fix_name(col))}"
+        f" {compiler.preparer.quote(col)}"
         f" {'SET' if not nullable else 'DROP'} NOT NULL"
         for col, nullable in zip(change.column_names, change.nullable)
     ]
     statements.append(f"call sysproc.admin_cmd('REORG TABLE {schema}.{table}')")
     return statements
-
-
-def ibm_db_sa_fix_name(name):
-    # DB2 seems to create tables uppercase if all lowercase given
-    # TODO: consider moving this replacement to call in sql.py
-    return name.upper() if name.islower() else name
 
 
 STATEMENT_SEPERATOR = "; -- PYDIVERSE-PIPEDAG-SPLIT\n"
@@ -1264,7 +1172,11 @@ def join_ddl_statements(statements, compiler, **kw):
 
 def split_ddl_statement(statement: str):
     """Split previously combined DDL statements apart"""
-    return statement.split(STATEMENT_SEPERATOR)
+    return [
+        statement
+        for statement in statement.split(STATEMENT_SEPERATOR)
+        if statement.strip() != ""
+    ]
 
 
 def _get_mssql_database_schema(schema: Schema, compiler):

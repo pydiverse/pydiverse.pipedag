@@ -25,17 +25,16 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     CreateAlias,
     CreateDatabase,
     CreateSchema,
-    CreateViewAsSelect,
     DropAlias,
     DropFunction,
     DropProcedure,
     DropSchema,
+    DropSchemaContent,
     DropTable,
     DropView,
     RenameSchema,
     RenameTable,
     Schema,
-    ibm_db_sa_fix_name,
     split_ddl_statement,
 )
 from pydiverse.pipedag.context import RunContext
@@ -378,17 +377,6 @@ class SQLTableStore(BaseTableStore):
 
         return self._execute(query, conn)
 
-    @engine_dispatch
-    def name_adj(self, name: str):
-        # some dialects need to replace all lowercase names by uppercase because
-        # they create uppercase table names by default
-        return name
-
-    @name_adj.dialect("ibm_db_sa")
-    def _name_adj_ibm_db_sa(self, name: str):
-        # DB2 creates tables uppercase if all lowercase given
-        return name.upper() if name.islower() else name
-
     def add_indexes(
         self, table: Table, schema: Schema, *, early_not_null_possible: bool = False
     ):
@@ -498,20 +486,11 @@ class SQLTableStore(BaseTableStore):
                     time.sleep(retry_iteration * retry_iteration * 1.1)
         self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
 
-    # @add_index.dialect("ibm_db_sa")
-    # def _add_index_ibm_db_sa(
-    #     self, table_name: str, schema: Schema, index: list[str],
-    #     name: str | None = None
-    # ):
-    #     self.execute(AddIndex(table_name, schema, index, name))
-
     def copy_indexes(
         self, src_table: str, src_schema: Schema, dest_table: str, dest_schema: Schema
     ):
         inspector = sa.inspect(self.engine)
-        pk_constraint = inspector.get_pk_constraint(
-            self.name_adj(src_table), schema=self.name_adj(src_schema.get())
-        )
+        pk_constraint = inspector.get_pk_constraint(src_table, schema=src_schema.get())
         if len(pk_constraint["constrained_columns"]) > 0:
             self.add_primary_key(
                 dest_table,
@@ -519,9 +498,7 @@ class SQLTableStore(BaseTableStore):
                 pk_constraint["constrained_columns"],
                 name=pk_constraint["name"],
             )
-        indexes = inspector.get_indexes(
-            self.name_adj(src_table), schema=self.name_adj(src_schema.get())
-        )
+        indexes = inspector.get_indexes(src_table, schema=src_schema.get())
         for index in indexes:
             if len(index["include_columns"]) > 0:
                 self.logger.warning(
@@ -548,9 +525,7 @@ class SQLTableStore(BaseTableStore):
         self, col_names: Iterable[str], table_name: str, schema: Schema
     ):
         inspector = sa.inspect(self.engine)
-        columns = inspector.get_columns(
-            self.name_adj(table_name), schema=self.name_adj(schema.get())
-        )
+        columns = inspector.get_columns(table_name, schema=schema.get())
         types = {d["name"]: d["type"] for d in columns}
         sql_types = [types[col] for col in col_names]
         return sql_types
@@ -658,23 +633,6 @@ class SQLTableStore(BaseTableStore):
         raise ValueError(f"Invalid stage commit technique: {stage_commit_technique}")
 
     @engine_dispatch
-    def drop_all_dialect_specific(self, schema: Schema):
-        pass
-
-    @drop_all_dialect_specific.dialect("ibm_db_sa")
-    def _drop_all_dialect_specific_ibm_db_sa(self, schema: Schema):
-        with self.engine_connect() as conn:
-            alias_names = conn.execute(
-                sa.text(
-                    "SELECT NAME FROM SYSIBM.SYSTABLES WHERE CREATOR ="
-                    f" '{ibm_db_sa_fix_name(schema.get())}' and TYPE='A'"
-                )
-            ).all()
-        alias_names = [row[0] for row in alias_names]
-        for alias in alias_names:
-            self.execute(DropAlias(alias, schema))
-
-    @engine_dispatch
     def _init_stage_schema_swap(self, stage: Stage):
         schema = self.get_schema(stage.name)
         transaction_schema = self.get_schema(stage.transaction_name)
@@ -687,19 +645,9 @@ class SQLTableStore(BaseTableStore):
 
         with self.engine_connect() as conn:
             if self.avoid_drop_create_schema:
-                # empty tansaction_schema by deleting all tables and views
-                # Attention: similar code in sql_ddl.py:visit_drop_schema_ibm_db_sa
-                # for drop.cascade=True
-                inspector = sa.inspect(self.engine)
-                for table in inspector.get_table_names(
-                    schema=self.name_adj(transaction_schema.get())
-                ):
-                    self.execute(DropTable(table, schema=transaction_schema))
-                for view in inspector.get_view_names(
-                    schema=self.name_adj(transaction_schema.get())
-                ):
-                    self.execute(DropView(view, schema=transaction_schema))
-                self.drop_all_dialect_specific(schema=transaction_schema)
+                self.execute(
+                    DropSchemaContent(transaction_schema, self.engine), conn=conn
+                )
             else:
                 self.execute(cs_base, conn=conn)
                 self.execute(ds_trans, conn=conn)
@@ -869,18 +817,13 @@ class SQLTableStore(BaseTableStore):
         src_schema = self.get_schema(stage.transaction_name)
 
         with self.engine_connect() as conn:
-            # Delete all read views in visible (destination) schema
-            views = self.get_view_names(dest_schema.get())
-            for view in views:
-                self.execute(DropView(view, schema=dest_schema), conn=conn)
-            self.drop_all_dialect_specific(schema=dest_schema)
+            # Clear contents of destination schema
+            self.execute(DropSchemaContent(dest_schema, self.engine), conn=conn)
 
-            # Create views for all tables in transaction schema
-            src_meta = sa.MetaData()
-            src_meta.reflect(bind=self.engine, schema=src_schema.get())
-            self._create_read_views(
-                conn, dest_schema, src_schema, src_meta.tables.values()
-            )
+            # Create aliases for all tables in transaction schema
+            inspector = sa.inspect(self.engine)
+            for table in inspector.get_table_names(schema=src_schema.get()):
+                self.execute(CreateAlias(table, src_schema, table, dest_schema))
 
             # Update metadata
             stage_metadata_exists = (
@@ -905,35 +848,6 @@ class SQLTableStore(BaseTableStore):
                 )
 
             self._commit_stage_update_metadata(stage, conn=conn)
-
-    @engine_dispatch
-    def _create_read_views(
-        self,
-        conn,
-        dest_schema: Schema,
-        src_schema: Schema,
-        src_tables: Iterable[sa.Table],
-    ):
-        _ = src_schema  # only needed by other dialects
-        for table in src_tables:
-            self.execute(
-                CreateViewAsSelect(
-                    table.name, dest_schema, sa.select("*").select_from(table)
-                ),
-                conn=conn,
-            )
-
-    @_create_read_views.dialect("ibm_db_sa")
-    def _create_read_views_ibm_db_sa(
-        self, conn, dest_schema, src_schema: Schema, src_tables: Iterable[sa.Table]
-    ):
-        # Instead of views create aliases which can be locked like tables and
-        # have primary keys
-        for table in src_tables:
-            self.execute(
-                CreateAlias(table.name, src_schema, table.name, dest_schema),
-                conn=conn,
-            )
 
     def _commit_stage_update_metadata(self, stage: Stage, conn: sa.engine.Connection):
         if not self.disable_caching:
@@ -973,14 +887,11 @@ class SQLTableStore(BaseTableStore):
 
     def _copy_table(self, table: Table, from_schema: Schema, from_name: str):
         """Copies the table immediately"""
-        has_table = sa.inspect(self.engine).has_table(
-            self.name_adj(from_name), schema=self.name_adj(from_schema.get())
-        )
+        inspector = sa.inspect(self.engine)
+        has_table = inspector.has_table(from_name, schema=from_schema.get())
 
         if not has_table:
-            available_tables = sa.inspect(self.engine).get_table_names(
-                self.name_adj(from_schema.get())
-            )
+            available_tables = inspector.get_table_names(from_schema.get())
             msg = (
                 f"Can't copy table '{from_name}' (schema: '{from_schema}') to "
                 f"transaction because no such table exists.\n"
@@ -1021,13 +932,10 @@ class SQLTableStore(BaseTableStore):
         """
         assert from_schema == self.get_schema(table.stage.name)
 
-        has_table = sa.inspect(self.engine).has_table(
-            self.name_adj(from_name), schema=self.name_adj(from_schema.get())
-        )
+        inspector = sa.inspect(self.engine)
+        has_table = inspector.has_table(from_name, schema=from_schema.get())
         if not has_table:
-            available_tables = sa.inspect(self.engine).get_table_names(
-                self.name_adj(from_schema.get())
-            )
+            available_tables = inspector.get_table_names(from_schema.get())
             msg = (
                 f"Can't deferred copy table '{from_name}' (schema: '{from_schema}') to "
                 f"transaction because no such table exists.\n"
@@ -1140,14 +1048,12 @@ class SQLTableStore(BaseTableStore):
         """
         _ = include_everything  # not used in this implementation
         inspector = sa.inspect(self.engine)
-        return inspector.get_view_names(self.name_adj(schema))
+        return inspector.get_view_names(schema)
 
     @get_view_names.dialect("mssql")
     def _get_view_names_mssql(self, schema: str, *, include_everything=False):
         if not include_everything:
-            return self.get_view_names.original(
-                self, schema, include_everything=include_everything
-            )
+            return self.get_view_names.original(self, schema)
         return list(self._get_mssql_sql_modules(schema).keys())
 
     # noinspection SqlDialectInspection
@@ -1486,13 +1392,19 @@ class SQLTableStore(BaseTableStore):
 
     @resolve_aliases.dialect("ibm_db_sa")
     def resolve_aliases_ibm_db_sa(self, table_name, schema):
-        with self.engine_connect() as conn:
-            return _resolve_alias_ibm_db_sa(conn, table_name, schema)
+        from pydiverse.pipedag.backend.table.util.sql_reflection import (
+            PipedagDB2Reflection,
+        )
+
+        return PipedagDB2Reflection.resolve_alias(self.engine, table_name, schema)
 
     @resolve_aliases.dialect("mssql")
     def resolve_aliases_mssql(self, table_name, schema):
-        with self.engine_connect() as conn:
-            return _resolve_alias_mssql(conn, table_name, schema)
+        from pydiverse.pipedag.backend.table.util.sql_reflection import (
+            PipedagMSSqlReflection,
+        )
+
+        return PipedagMSSqlReflection.resolve_alias(self.engine, table_name, schema)
 
     def list_tables(self, stage: Stage, *, include_everything=False):
         """
@@ -1513,7 +1425,7 @@ class SQLTableStore(BaseTableStore):
         inspector = sa.inspect(self.engine)
         schema = self.get_schema(stage.transaction_name).get()
 
-        table_names = inspector.get_table_names(self.name_adj(schema))
+        table_names = inspector.get_table_names(schema)
         view_names = self.get_view_names(schema, include_everything=include_everything)
 
         return table_names + view_names
@@ -1544,76 +1456,6 @@ class SQLTableStore(BaseTableStore):
 
     def get_lock_schema(self) -> Schema:
         return self.get_schema(self.LOCK_SCHEMA)
-
-
-def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0):
-    # TODO: consider speeding this up by caching information for complete schemas
-    #  instead of running at least two queries per source table; Ultimately problem can
-    #  also be fixed by upstream contribution to ibm_db_sa
-
-    # we need to resolve aliases since pandas.read_sql_table does not work for them
-    # and sa.Table does not auto-reflect columns
-    table_name = ibm_db_sa_fix_name(table_name)
-    schema = ibm_db_sa_fix_name(schema)
-    tbl = sa.Table("SYSTABLES", sa.MetaData(), schema="SYSIBM", autoload_with=conn)
-    query = (
-        sa.select(tbl.c.base_name, tbl.c.base_schema)
-        .select_from(tbl)
-        .where(
-            (tbl.c.creator == schema) & (tbl.c.name == table_name) & (tbl.c.TYPE == "A")
-        )
-    )
-    for retry_iteration in range(4):
-        # retry operation since it might have been terminated as a deadlock victim
-        try:
-            row = conn.execute(query).mappings().one_or_none()
-            break
-        except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
-            if retry_iteration == 3:
-                raise
-            time.sleep(retry_iteration * retry_iteration)
-    if row is not None:
-        assert _iteration < 3, f"Unexpected recursion looking up {schema}.{table_name}"
-        table_name, schema = _resolve_alias_ibm_db_sa(
-            conn, row["base_name"], row["base_schema"], _iteration=_iteration + 1
-        )
-    return table_name, schema
-
-
-def _resolve_alias_mssql(conn, table_name: str, schema: str, *, _iteration=0):
-    # TODO: consider speeding this up by caching information for complete schemas
-    #  instead of running at least two queries per source table; Ultimately problem can
-    #  also be fixed by upstream contribution to ibm_db_sa
-
-    # we need to resolve aliases since pandas.read_sql_table does not work for them
-    # and sa.Table does not auto-reflect columns
-    database, schema_only = schema.split(".")
-    conn.execute(sa.text(f"USE [{database}]"))
-    # include stored procedures in view names because they can also be recreated
-    # based on sys.sql_modules.description
-    sql = (
-        "select syn.base_object_name from sys.synonyms as syn left join sys.schemas as"
-        f" schem on schem.schema_id=syn.schema_id where schem.name='{schema_only}' and"
-        f" syn.name='{table_name}' and syn.type='SN'"
-    )
-    row = conn.execute(sa.text(sql)).mappings().one_or_none()
-    if row is not None:
-        parts = row["base_object_name"].split(".")
-        assert len(parts) == 3, (
-            "Unexpected number of '.' delimited parts when looking up synonym for "
-            f"{schema}.{table_name}: {row['base_object_name']}"
-        )
-        assert _iteration < 3, f"Unexpected recursion looking up {schema}.{table_name}"
-        parts = [
-            part[1:-1] if part.startswith("[") and part.endswith("]") else part
-            for part in parts
-        ]
-        schema = ".".join(parts[0:2])
-        table_name = parts[2]
-        table_name, schema = _resolve_alias_mssql(
-            conn, table_name, schema, _iteration=_iteration + 1
-        )
-    return table_name, schema
 
 
 # Load SQLTableStore Hooks
