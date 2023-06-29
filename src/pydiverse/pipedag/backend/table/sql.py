@@ -638,15 +638,11 @@ class SQLTableStore(BaseTableStore):
 
     @drop_all_dialect_specific.dialect("ibm_db_sa")
     def _drop_all_dialect_specific_ibm_db_sa(self, schema: Schema):
-        with self.engine_connect() as conn:
-            alias_names = conn.execute(
-                sa.text(
-                    "SELECT NAME FROM SYSIBM.SYSTABLES WHERE CREATOR ="
-                    f" '{schema.get()}' and TYPE='A'"
-                )
-            ).all()
-        alias_names = [row[0] for row in alias_names]
-        for alias in alias_names:
+        from pydiverse.pipedag.backend.table.util.sql_reflection import (
+            PipedagDB2Reflection,
+        )
+
+        for alias in PipedagDB2Reflection.get_alias_names(self.engine, schema.get()):
             self.execute(DropAlias(alias, schema))
 
     @engine_dispatch
@@ -1449,13 +1445,19 @@ class SQLTableStore(BaseTableStore):
 
     @resolve_aliases.dialect("ibm_db_sa")
     def resolve_aliases_ibm_db_sa(self, table_name, schema):
-        with self.engine_connect() as conn:
-            return _resolve_alias_ibm_db_sa(conn, table_name, schema)
+        from pydiverse.pipedag.backend.table.util.sql_reflection import (
+            PipedagDB2Reflection,
+        )
+
+        return PipedagDB2Reflection.resolve_alias(self.engine, table_name, schema)
 
     @resolve_aliases.dialect("mssql")
     def resolve_aliases_mssql(self, table_name, schema):
-        with self.engine_connect() as conn:
-            return _resolve_alias_mssql(conn, table_name, schema)
+        from pydiverse.pipedag.backend.table.util.sql_reflection import (
+            PipedagMSSqlReflection,
+        )
+
+        return PipedagMSSqlReflection.resolve_alias(self.engine, table_name, schema)
 
     def list_tables(self, stage: Stage, *, include_everything=False):
         """
@@ -1507,76 +1509,6 @@ class SQLTableStore(BaseTableStore):
 
     def get_lock_schema(self) -> Schema:
         return self.get_schema(self.LOCK_SCHEMA)
-
-
-def _resolve_alias_ibm_db_sa(conn, table_name: str, schema: str, *, _iteration=0):
-    # TODO: consider speeding this up by caching information for complete schemas
-    #  instead of running at least two queries per source table; Ultimately problem can
-    #  also be fixed by upstream contribution to ibm_db_sa
-
-    # we need to resolve aliases since pandas.read_sql_table does not work for them
-    # and sa.Table does not auto-reflect columns
-    table_name = table_name
-    schema = schema
-    tbl = sa.Table("SYSTABLES", sa.MetaData(), schema="SYSIBM", autoload_with=conn)
-    query = (
-        sa.select(tbl.c.base_name, tbl.c.base_schema)
-        .select_from(tbl)
-        .where(
-            (tbl.c.creator == schema) & (tbl.c.name == table_name) & (tbl.c.TYPE == "A")
-        )
-    )
-    for retry_iteration in range(4):
-        # retry operation since it might have been terminated as a deadlock victim
-        try:
-            row = conn.execute(query).mappings().one_or_none()
-            break
-        except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
-            if retry_iteration == 3:
-                raise
-            time.sleep(retry_iteration * retry_iteration)
-    if row is not None:
-        assert _iteration < 3, f"Unexpected recursion looking up {schema}.{table_name}"
-        table_name, schema = _resolve_alias_ibm_db_sa(
-            conn, row["base_name"], row["base_schema"], _iteration=_iteration + 1
-        )
-    return table_name, schema
-
-
-def _resolve_alias_mssql(conn, table_name: str, schema: str, *, _iteration=0):
-    # TODO: consider speeding this up by caching information for complete schemas
-    #  instead of running at least two queries per source table; Ultimately problem can
-    #  also be fixed by upstream contribution to ibm_db_sa
-
-    # we need to resolve aliases since pandas.read_sql_table does not work for them
-    # and sa.Table does not auto-reflect columns
-    database, schema_only = schema.split(".")
-    conn.execute(sa.text(f"USE [{database}]"))
-    # include stored procedures in view names because they can also be recreated
-    # based on sys.sql_modules.description
-    sql = (
-        "select syn.base_object_name from sys.synonyms as syn left join sys.schemas as"
-        f" schem on schem.schema_id=syn.schema_id where schem.name='{schema_only}' and"
-        f" syn.name='{table_name}' and syn.type='SN'"
-    )
-    row = conn.execute(sa.text(sql)).mappings().one_or_none()
-    if row is not None:
-        parts = row["base_object_name"].split(".")
-        assert len(parts) == 3, (
-            "Unexpected number of '.' delimited parts when looking up synonym for "
-            f"{schema}.{table_name}: {row['base_object_name']}"
-        )
-        assert _iteration < 3, f"Unexpected recursion looking up {schema}.{table_name}"
-        parts = [
-            part[1:-1] if part.startswith("[") and part.endswith("]") else part
-            for part in parts
-        ]
-        schema = ".".join(parts[0:2])
-        table_name = parts[2]
-        table_name, schema = _resolve_alias_mssql(
-            conn, table_name, schema, _iteration=_iteration + 1
-        )
-    return table_name, schema
 
 
 # Load SQLTableStore Hooks

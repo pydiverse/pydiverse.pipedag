@@ -356,10 +356,12 @@ def visit_create_schema_ibm_db_sa(create: CreateSchema, compiler, **kw):
     _ = kw
     schema = compiler.preparer.format_schema(create.schema.get())
     if create.if_not_exists:
-        return (
-            "BEGIN\ndeclare continue handler for sqlstate '42710' begin end;\n"
-            f"execute immediate 'CREATE SCHEMA {schema}';\nEND"
-        )
+        return f"""
+        BEGIN
+            declare continue handler for sqlstate '42710' begin end;
+            execute immediate 'CREATE SCHEMA {schema}';
+        END
+        """
     else:
         return f"CREATE SCHEMA {schema}"
 
@@ -399,14 +401,13 @@ def visit_drop_schema_mssql(drop: DropSchema, compiler, **kw):
     return " ".join(text)
 
 
-# noinspection SqlDialectInspection
 @compiles(DropSchema, "ibm_db_sa")
 def visit_drop_schema_ibm_db_sa(drop: DropSchema, compiler, **kw):
-    # TODO: refactor
-    """
-    Because IBM DB2 doesn't support CASCADE, we must manually drop all tables in
-    the schema first.
-    """
+    # Because IBM DB2 doesn't support CASCADE, we must first manually drop all tables in
+    # the schema.
+
+    from pydiverse.pipedag.backend.table.util.sql_reflection import PipedagDB2Reflection
+
     statements = []
     if drop.cascade:
         if drop.engine is None:
@@ -416,24 +417,16 @@ def visit_drop_schema_ibm_db_sa(drop: DropSchema, compiler, **kw):
             )
 
         add_statements = []
-        # see SQLTableStore._init_stage_schema_swap()
         inspector = sa.inspect(drop.engine)
         for table in inspector.get_table_names(schema=drop.schema.get()):
             add_statements.append(DropTable(table, schema=drop.schema))
         for view in inspector.get_view_names(schema=drop.schema.get()):
             add_statements.append(DropView(view, schema=drop.schema))
-        # see SQLTableStore.drop_all_dialect_specific()
-        with drop.engine.connect() as conn:
-            name = drop.schema.get()
-            alias_names = conn.execute(
-                sa.text(
-                    "SELECT NAME FROM SYSIBM.SYSTABLES WHERE CREATOR ="
-                    f" '{name}' and TYPE='A'"
-                ),
-            ).all()
-        alias_names = [row[0] for row in alias_names]
-        for alias in alias_names:
-            add_statements.append(DropAlias(alias, drop.schema))
+        for alias in PipedagDB2Reflection.get_alias_names(
+            drop.engine, schema=drop.schema.get()
+        ):
+            add_statements.append(DropAlias(alias, schema=drop.schema))
+
         statements += [compiler.process(stmt) for stmt in add_statements]
 
     # Compile DROP SCHEMA statement
@@ -788,6 +781,11 @@ def visit_drop_alias(drop: DropAlias, compiler, **kw):
 def visit_drop_alias_mssql(drop: DropAlias, compiler, **kw):
     # What is called ALIAS for dialect ibm_db_sa is called SYNONYM for mssql
     return _visit_drop_anything_mssql(drop, "SYNONYM", compiler, **kw)
+
+
+@compiles(DropAlias, "ibm_db_sa")
+def visit_drop_alias_mssql(drop: DropAlias, compiler, **kw):
+    return _visit_drop_anything(drop, "ALIAS", compiler, **kw)
 
 
 @compiles(DropProcedure)
