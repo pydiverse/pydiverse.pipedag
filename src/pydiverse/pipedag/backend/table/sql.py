@@ -25,11 +25,11 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     CreateAlias,
     CreateDatabase,
     CreateSchema,
-    CreateViewAsSelect,
     DropAlias,
     DropFunction,
     DropProcedure,
     DropSchema,
+    DropSchemaContent,
     DropTable,
     DropView,
     RenameSchema,
@@ -633,19 +633,6 @@ class SQLTableStore(BaseTableStore):
         raise ValueError(f"Invalid stage commit technique: {stage_commit_technique}")
 
     @engine_dispatch
-    def drop_all_dialect_specific(self, schema: Schema):
-        pass
-
-    @drop_all_dialect_specific.dialect("ibm_db_sa")
-    def _drop_all_dialect_specific_ibm_db_sa(self, schema: Schema):
-        from pydiverse.pipedag.backend.table.util.sql_reflection import (
-            PipedagDB2Reflection,
-        )
-
-        for alias in PipedagDB2Reflection.get_alias_names(self.engine, schema.get()):
-            self.execute(DropAlias(alias, schema))
-
-    @engine_dispatch
     def _init_stage_schema_swap(self, stage: Stage):
         schema = self.get_schema(stage.name)
         transaction_schema = self.get_schema(stage.transaction_name)
@@ -658,15 +645,9 @@ class SQLTableStore(BaseTableStore):
 
         with self.engine_connect() as conn:
             if self.avoid_drop_create_schema:
-                # empty tansaction_schema by deleting all tables and views
-                # Attention: similar code in sql_ddl.py:visit_drop_schema_ibm_db_sa
-                # for drop.cascade=True
-                inspector = sa.inspect(self.engine)
-                for table in inspector.get_table_names(schema=transaction_schema.get()):
-                    self.execute(DropTable(table, schema=transaction_schema))
-                for view in inspector.get_view_names(schema=transaction_schema.get()):
-                    self.execute(DropView(view, schema=transaction_schema))
-                self.drop_all_dialect_specific(schema=transaction_schema)
+                self.execute(
+                    DropSchemaContent(transaction_schema, self.engine), conn=conn
+                )
             else:
                 self.execute(cs_base, conn=conn)
                 self.execute(ds_trans, conn=conn)
@@ -836,18 +817,13 @@ class SQLTableStore(BaseTableStore):
         src_schema = self.get_schema(stage.transaction_name)
 
         with self.engine_connect() as conn:
-            # Delete all read views in visible (destination) schema
-            views = self.get_view_names(dest_schema.get())
-            for view in views:
-                self.execute(DropView(view, schema=dest_schema), conn=conn)
-            self.drop_all_dialect_specific(schema=dest_schema)
+            # Clear contents of destination schema
+            self.execute(DropSchemaContent(dest_schema, self.engine), conn=conn)
 
-            # Create views for all tables in transaction schema
-            src_meta = sa.MetaData()
-            src_meta.reflect(bind=self.engine, schema=src_schema.get())
-            self._create_read_views(
-                conn, dest_schema, src_schema, src_meta.tables.values()
-            )
+            # Create aliases for all tables in transaction schema
+            inspector = sa.inspect(self.engine)
+            for table in inspector.get_table_names(schema=src_schema.get()):
+                self.execute(CreateAlias(table, src_schema, table, dest_schema))
 
             # Update metadata
             stage_metadata_exists = (
@@ -872,35 +848,6 @@ class SQLTableStore(BaseTableStore):
                 )
 
             self._commit_stage_update_metadata(stage, conn=conn)
-
-    @engine_dispatch
-    def _create_read_views(
-        self,
-        conn,
-        dest_schema: Schema,
-        src_schema: Schema,
-        src_tables: Iterable[sa.Table],
-    ):
-        _ = src_schema  # only needed by other dialects
-        for table in src_tables:
-            self.execute(
-                CreateViewAsSelect(
-                    table.name, dest_schema, sa.select("*").select_from(table)
-                ),
-                conn=conn,
-            )
-
-    @_create_read_views.dialect("ibm_db_sa")
-    def _create_read_views_ibm_db_sa(
-        self, conn, dest_schema, src_schema: Schema, src_tables: Iterable[sa.Table]
-    ):
-        # Instead of views create aliases which can be locked like tables and
-        # have primary keys
-        for table in src_tables:
-            self.execute(
-                CreateAlias(table.name, src_schema, table.name, dest_schema),
-                conn=conn,
-            )
 
     def _commit_stage_update_metadata(self, stage: Stage, conn: sa.engine.Connection):
         if not self.disable_caching:

@@ -71,6 +71,12 @@ class RenameSchema(DDLElement):
         self.to = to
 
 
+class DropSchemaContent(DDLElement):
+    def __init__(self, schema: Schema, engine: sa.Engine):
+        self.schema = schema
+        self.engine = engine
+
+
 class CreateDatabase(DDLElement):
     def __init__(self, database: str, if_not_exists=False):
         self.database = database
@@ -403,11 +409,6 @@ def visit_drop_schema_mssql(drop: DropSchema, compiler, **kw):
 
 @compiles(DropSchema, "ibm_db_sa")
 def visit_drop_schema_ibm_db_sa(drop: DropSchema, compiler, **kw):
-    # Because IBM DB2 doesn't support CASCADE, we must first manually drop all tables in
-    # the schema.
-
-    from pydiverse.pipedag.backend.table.util.sql_reflection import PipedagDB2Reflection
-
     statements = []
     if drop.cascade:
         if drop.engine is None:
@@ -415,19 +416,7 @@ def visit_drop_schema_ibm_db_sa(drop: DropSchema, compiler, **kw):
                 "Using DropSchema with cascade=True for ibm_db2 requires passing"
                 " the engine kwarg to DropSchema."
             )
-
-        add_statements = []
-        inspector = sa.inspect(drop.engine)
-        for table in inspector.get_table_names(schema=drop.schema.get()):
-            add_statements.append(DropTable(table, schema=drop.schema))
-        for view in inspector.get_view_names(schema=drop.schema.get()):
-            add_statements.append(DropView(view, schema=drop.schema))
-        for alias in PipedagDB2Reflection.get_alias_names(
-            drop.engine, schema=drop.schema.get()
-        ):
-            add_statements.append(DropAlias(alias, schema=drop.schema))
-
-        statements += [compiler.process(stmt) for stmt in add_statements]
+        statements.append(DropSchemaContent(drop.schema, drop.engine))
 
     # Compile DROP SCHEMA statement
     schema = compiler.preparer.format_schema(drop.schema.get())
@@ -478,6 +467,67 @@ def visit_rename_schema_mssql(rename: RenameSchema, compiler, **kw):
         from_name = compiler.preparer.format_schema(from_database_name)
         to_name = compiler.preparer.format_schema(to_database_name)
         return f"ALTER DATABASE {from_name} MODIFY NAME = {to_name}"
+
+
+@compiles(DropSchemaContent)
+def visit_drop_schema_content(drop: DropSchemaContent, compiler, **kw):
+    _ = kw
+    schema = drop.schema
+    engine = drop.engine
+    inspector = sa.inspect(engine)
+
+    statements = []
+
+    for table in inspector.get_table_names(schema=schema.get()):
+        statements.append(DropTable(table, schema=schema))
+    for view in inspector.get_view_names(schema=schema.get()):
+        statements.append(DropView(view, schema=schema))
+
+    return join_ddl_statements(statements, compiler, **kw)
+
+
+@compiles(DropSchemaContent, "mssql")
+def visit_drop_schema_content_mssql(drop: DropSchemaContent, compiler, **kw):
+    from pydiverse.pipedag.backend.table.util.sql_reflection import (
+        PipedagMSSqlReflection,
+    )
+
+    _ = kw
+    schema = drop.schema
+    engine = drop.engine
+    inspector = sa.inspect(engine)
+
+    statements = []
+
+    for table in inspector.get_table_names(schema=schema.get()):
+        statements.append(DropTable(table, schema=schema))
+    for view in inspector.get_view_names(schema=schema.get()):
+        statements.append(DropView(view, schema=schema))
+    for alias in PipedagMSSqlReflection.get_alias_names(engine, schema=schema.get()):
+        statements.append(DropAlias(alias, schema=drop.schema))
+
+    return join_ddl_statements(statements, compiler, **kw)
+
+
+@compiles(DropSchemaContent, "ibm_db_sa")
+def visit_drop_schema_content_ibm_db2(drop: DropSchemaContent, compiler, **kw):
+    from pydiverse.pipedag.backend.table.util.sql_reflection import PipedagDB2Reflection
+
+    _ = kw
+    schema = drop.schema
+    engine = drop.engine
+    inspector = sa.inspect(engine)
+
+    statements = []
+
+    for table in inspector.get_table_names(schema=schema.get()):
+        statements.append(DropTable(table, schema=schema))
+    for view in inspector.get_view_names(schema=schema.get()):
+        statements.append(DropView(view, schema=schema))
+    for alias in PipedagDB2Reflection.get_alias_names(engine, schema=schema.get()):
+        statements.append(DropAlias(alias, schema=drop.schema))
+
+    return join_ddl_statements(statements, compiler, **kw)
 
 
 @compiles(CreateDatabase)
@@ -641,10 +691,8 @@ def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
             schema=create_alias.from_schema.get(),
         )
     )
-    return visit_create_view_as_select(
-        CreateViewAsSelect(create_alias.to_name, create_alias.to_schema, query),
-        compiler,
-        **kw,
+    return compiler.process(
+        CreateViewAsSelect(create_alias.to_name, create_alias.to_schema, query), **kw
     )
 
 
@@ -1124,7 +1172,11 @@ def join_ddl_statements(statements, compiler, **kw):
 
 def split_ddl_statement(statement: str):
     """Split previously combined DDL statements apart"""
-    return statement.split(STATEMENT_SEPERATOR)
+    return [
+        statement
+        for statement in statement.split(STATEMENT_SEPERATOR)
+        if statement.strip() != ""
+    ]
 
 
 def _get_mssql_database_schema(schema: Schema, compiler):
