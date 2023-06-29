@@ -26,12 +26,9 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     CreateDatabase,
     CreateSchema,
     DropAlias,
-    DropFunction,
-    DropProcedure,
     DropSchema,
     DropSchemaContent,
     DropTable,
-    DropView,
     RenameSchema,
     RenameTable,
     Schema,
@@ -248,7 +245,7 @@ class SQLTableStore(BaseTableStore):
         try:
             # Check if database exists
             with self.engine.connect() as conn:
-                conn.execute(sa.text("SELECT 1"))
+                conn.exec_driver_sql("SELECT 1")
             return
         except sa.exc.DBAPIError:
             # Database doesn't exist
@@ -256,50 +253,57 @@ class SQLTableStore(BaseTableStore):
 
         # Create new database using temporary engine object
         postgres_db_url = self.engine_url.set(database="postgres")
-        tmp_engine = sa.create_engine(postgres_db_url)
+        tmp_engine = sa.create_engine(
+            postgres_db_url, execution_options={"isolation_level": "AUTOCOMMIT"}
+        )
 
         try:
             with tmp_engine.connect() as conn:
-                conn.execute(sa.text("COMMIT"))
                 conn.execute(CreateDatabase(self.engine_url.database))
         except sa.exc.DBAPIError:
             # This happens if multiple instances try to create the database
             # at the same time.
             with self.engine.connect() as conn:
                 # Verify database actually exists
-                conn.execute(sa.text("SELECT 1"))
+                conn.exec_driver_sql("SELECT 1")
 
     @_init_database.dialect("duckdb")
     def _init_database_duckdb(self):
         # Duckdb already creates the database file automatically
         pass
 
+    @_init_database.dialect("mssql")
+    def _init_database_mssql(self):
+        if not self.create_database_if_not_exists:
+            return
+
+        try:
+            # Check if database exists
+            with self.engine.connect() as conn:
+                conn.exec_driver_sql("SELECT 1")
+            return
+        except sa.exc.DBAPIError:
+            # Database doesn't exist
+            pass
+
+        # Create new database using temporary engine object
+        master_db_url = self.engine_url.set(database="master")
+        tmp_engine = sa.create_engine(
+            master_db_url, execution_options={"isolation_level": "AUTOCOMMIT"}
+        )
+
+        try:
+            with tmp_engine.connect() as conn:
+                conn.execute(CreateDatabase(self.engine_url.database))
+        except sa.exc.DBAPIError:
+            # This happens if multiple instances try to create the database
+            # at the same time.
+            with self.engine.connect() as conn:
+                # Verify database actually exists
+                conn.exec_driver_sql("SELECT 1")
+
     def _create_engine(self):
         engine = sa.create_engine(self.engine_url)
-
-        if engine.dialect.name == "mssql":
-            engine.dispose()
-            # this is needed to allow for CREATE DATABASE statements
-            # (we don't rely on database transactions anyways)
-            engine = sa.create_engine(
-                self.engine_url, connect_args={"autocommit": True}
-            )
-
-            if "." in self.schema_prefix and "." in self.schema_suffix:
-                raise AttributeError(
-                    "Config Error: It is not allowed to have a dot in both"
-                    " schema_prefix and schema_suffix for SQL Server / mssql database:"
-                    f' schema_prefix="{self.schema_prefix}","'
-                    f' schema_suffix="{self.schema_suffix}"'
-                )
-
-            if (self.schema_prefix + self.schema_suffix).count(".") != 1:
-                raise AttributeError(
-                    "Config Error: There must be exactly dot in both schema_prefix and"
-                    " schema_suffix together for SQL Server / mssql database:"
-                    f' schema_prefix="{self.schema_prefix}",'
-                    f' schema_suffix="{self.schema_suffix}"'
-                )
 
         # if engine.dialect.name == "ibm_db_sa":
         #     engine.dispose()
@@ -665,78 +669,6 @@ class SQLTableStore(BaseTableStore):
                         .where(table.c.in_transaction_schema)
                     )
 
-    @_init_stage_schema_swap.dialect("mssql")
-    def _init_stage_schema_swap_mssql(self, stage: Stage):
-        if "." not in self.schema_suffix:
-            return self._init_stage_schema_swap.original(self, stage)
-
-        schema = self.get_schema(stage.name)
-        transaction_schema = self.get_schema(stage.transaction_name)
-
-        cs_base = CreateSchema(schema, if_not_exists=True)
-        cs_trans = CreateSchema(transaction_schema, if_not_exists=True)
-
-        # TODO: detect whether tmp_schema exists and rename it as base or
-        #       transaction schema if one is missing
-        database, trans_schema_only = transaction_schema.get().split(".")
-
-        # don't drop/create databases, just replace the schema underneath
-        # (files will keep name on renaming)
-        with self.engine_connect() as conn:
-            if not self.avoid_drop_create_schema:
-                self.execute(cs_base, conn=conn)
-                self.execute(cs_trans, conn=conn)
-            self.execute(f"USE [{database}]", conn=conn)
-            # clear tables in schema
-            self.execute(
-                f"""
-                EXEC sp_MSforeachtable
-                  @command1 = 'DROP TABLE ?'
-                , @whereand = 'AND SCHEMA_NAME(schema_id) = ''{trans_schema_only}'' '
-                """,
-                conn=conn,
-            )
-
-            # clear views and stored procedures
-            for view in self.get_view_names(transaction_schema.get()):
-                self.execute(
-                    DropView(view, transaction_schema, if_exists=True), conn=conn
-                )
-
-            modules = self._get_mssql_sql_modules(transaction_schema.get())
-            for name, _type in modules.items():
-                _type = _type.strip()
-                if _type == "P":
-                    self.execute(
-                        DropProcedure(name, transaction_schema, if_exists=True),
-                        conn=conn,
-                    )
-                elif _type == "FN":
-                    self.execute(
-                        DropFunction(name, transaction_schema, if_exists=True),
-                        conn=conn,
-                    )
-
-            synonyms = self._get_mssql_sql_synonyms(transaction_schema.get())
-            for name in synonyms.keys():
-                self.execute(
-                    DropAlias(name, transaction_schema, if_exists=True),
-                    conn=conn,
-                )
-
-            # Clear metadata
-            if not self.disable_caching:
-                for table in [
-                    self.tasks_table,
-                    self.lazy_cache_table,
-                    self.raw_sql_cache_table,
-                ]:
-                    conn.execute(
-                        table.delete()
-                        .where(table.c.stage == stage.name)
-                        .where(table.c.in_transaction_schema)
-                    )
-
     def _init_stage_read_views(self, stage: Stage):
         try:
             with self.engine_connect() as conn:
@@ -801,14 +733,21 @@ class SQLTableStore(BaseTableStore):
                 "combination with dialect mssql"
             )
             self.execute(
-                DropSchema(tmp_schema, if_exists=True, cascade=True), conn=conn
+                DropSchema(
+                    tmp_schema, if_exists=True, cascade=True, engine=self.engine
+                ),
+                conn=conn,
             )
             # TODO: in case "." is in self.schema_prefix, we need to implement
             #       schema renaming by creating the new schema and moving
             #       table objects over
-            self.execute(RenameSchema(schema, tmp_schema), conn=conn)
-            self.execute(RenameSchema(transaction_schema, schema), conn=conn)
-            self.execute(RenameSchema(tmp_schema, transaction_schema), conn=conn)
+            self.execute(RenameSchema(schema, tmp_schema, self.engine), conn=conn)
+            self.execute(
+                RenameSchema(transaction_schema, schema, self.engine), conn=conn
+            )
+            self.execute(
+                RenameSchema(tmp_schema, transaction_schema, self.engine), conn=conn
+            )
 
             self._commit_stage_update_metadata(stage, conn=conn)
 
@@ -1090,6 +1029,8 @@ class SQLTableStore(BaseTableStore):
     def copy_raw_sql_tables_to_transaction(
         self, metadata: RawSqlMetadata, target_stage: Stage
     ):
+        # TODO: IMPLEMENT
+        raise NotImplementedError
         src_schema = self.get_schema(metadata.stage)
         dest_schema = self.get_schema(target_stage.transaction_name)
 

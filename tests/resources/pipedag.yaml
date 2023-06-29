@@ -9,10 +9,8 @@ table_store_connections:
   mssql:
     args:
       # SQL Server: this can be used after running `docker-compose up`
-      url: "mssql+pyodbc://{$MSSQL_USERNAME}:{$MSSQL_PASSWORD}@127.0.0.1:1433/master?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
-      schema_prefix: "{instance_id}_"  # SQL Server needs database.schema
-      schema_suffix: ".dbo"   # Alternatively SQL Server databases can be used as schemas with .dbo default schema
-      create_database_if_not_exists: false
+      url: "mssql+pyodbc://{$MSSQL_USERNAME}:{$MSSQL_PASSWORD}@127.0.0.1:1433/{instance_id}?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
+      create_database_if_not_exists: true
 
   ibm_db2:
     args:

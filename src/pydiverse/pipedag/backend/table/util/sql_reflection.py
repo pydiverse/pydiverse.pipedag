@@ -64,18 +64,15 @@ class PipedagDB2Reflection:
 class PipedagMSSqlReflection:
     @staticmethod
     def get_alias_names(engine: sa.Engine, schema: str):
-        database, schema_only = schema.split(".")
-
         query = f"""
         SELECT syn.name
         FROM sys.synonyms AS syn
         LEFT JOIN sys.schemas AS schem
                ON syn.schema_id = schem.schema_id
-        WHERE schem.name = '{schema_only}'
+        WHERE schem.name = '{schema}'
         """
 
         with engine.connect() as conn:
-            conn.exec_driver_sql(f"USE [{database}]")
             result = conn.exec_driver_sql(query).scalars().all()
         return result
 
@@ -85,25 +82,21 @@ class PipedagMSSqlReflection:
     ) -> tuple[str, str] | tuple[None, None]:
         from sqlalchemy.dialects.mssql.base import _schema_elements
 
-        database, schema_only = schema.split(".")
-
         query = f"""
         SELECT syn.base_object_name
         FROM sys.synonyms AS syn
         LEFT JOIN sys.schemas AS schem
                ON syn.schema_id = schem.schema_id
-        WHERE schem.name = '{schema_only}'
+        WHERE schem.name = '{schema}'
           AND syn.name = '{name}'
           AND syn.type = 'SN'
         """
 
         with engine.connect() as conn:
-            conn.exec_driver_sql(f"USE [{database}]")
             base_object_name = conn.exec_driver_sql(query).scalar_one_or_none()
 
         if base_object_name:
             owner, table = _schema_elements(base_object_name)
-            dbname, owner = _schema_elements(owner)
-            return table, dbname + "." + owner
+            return table, owner
 
         return name, schema
