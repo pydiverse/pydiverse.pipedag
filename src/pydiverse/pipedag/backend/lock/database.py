@@ -221,16 +221,16 @@ class PostgresLock(Lock):
         self._locked = False
 
     def acquire(self) -> bool:
-        result = self._connection.execute(
-            sa.text(f"SELECT pg_catalog.pg_advisory_lock({self._id})")
+        result = self._connection.exec_driver_sql(
+            f"SELECT pg_catalog.pg_advisory_lock({self._id})"
         ).scalar()
         result = False if result is False else True
         self._locked = result
         return result
 
     def release(self) -> bool:
-        result = self._connection.execute(
-            sa.text(f"SELECT pg_catalog.pg_advisory_unlock({self._id})")
+        result = self._connection.exec_driver_sql(
+            f"SELECT pg_catalog.pg_advisory_unlock({self._id})"
         ).scalar()
         self._locked = False
         return False if result is False else True
@@ -314,20 +314,18 @@ class DB2Lock(Lock):
         self.schema = schema
 
     def acquire(self) -> bool:
-        table = self._engine.dialect.identifier_preparer.quote_identifier(self.table)
+        table = self._engine.dialect.identifier_preparer.quote(self.table)
         schema = self._engine.dialect.identifier_preparer.format_schema(self.schema)
 
         # CREATE TABLE IF NOT EXISTS
         with self._engine.begin() as conn:
-            conn.execute(
-                sa.text(
-                    f"""
-                    BEGIN
-                        DECLARE CONTINUE HANDLER FOR SQLSTATE '42710' BEGIN END;
-                        EXECUTE IMMEDIATE 'CREATE TABLE {schema}.{table} (x int)';
-                    END
-                    """
-                )
+            conn.exec_driver_sql(
+                f"""
+                BEGIN
+                    DECLARE CONTINUE HANDLER FOR SQLSTATE '42710' BEGIN END;
+                    EXECUTE IMMEDIATE 'CREATE TABLE {schema}.{table} (x int)';
+                END
+                """
             )
 
         # LOCK TABLE
@@ -335,8 +333,8 @@ class DB2Lock(Lock):
             self._connection = self._engine.connect()
             self._connection.begin()
 
-        self._connection.execute(
-            sa.text(f"LOCK TABLE {schema}.{table} IN EXCLUSIVE MODE")
+        self._connection.exec_driver_sql(
+            f"LOCK TABLE {schema}.{table} IN EXCLUSIVE MODE"
         )
 
         self._locked = True
