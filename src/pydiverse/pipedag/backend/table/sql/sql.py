@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import json
-import re
 import textwrap
-import time
+import warnings
 from collections.abc import Iterable
 from contextlib import contextmanager
 from typing import Any
@@ -17,8 +16,6 @@ from pydiverse.pipedag.backend.table.base import BaseTableStore
 from pydiverse.pipedag.backend.table.sql.ddl import (
     AddIndex,
     AddPrimaryKey,
-    ChangeColumnNullable,
-    ChangeColumnTypes,
     CopyTable,
     CreateAlias,
     CreateDatabase,
@@ -32,7 +29,6 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     Schema,
     split_ddl_statement,
 )
-from pydiverse.pipedag.backend.table.util import engine_dispatch
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.context.context import ConfigContext, StageCommitTechnique
 from pydiverse.pipedag.context.run_context import DeferredTableStoreOp
@@ -58,6 +54,16 @@ class SQLTableStore(BaseTableStore):
 
     METADATA_SCHEMA = "pipedag_metadata"
     LOCK_SCHEMA = "pipedag_locks"
+
+    _REGISTERED_DIALECTS = {}
+    _dialect_name: str
+
+    def __new__(cls, engine_url: str, *args, **kwargs):
+        # Dynamically instantiate the proper subclass based on the dialect found
+        # in the engine url.
+        dialect_name = sa.engine.make_url(engine_url).get_dialect().name
+        dialect_specific_cls = SQLTableStore._REGISTERED_DIALECTS.get(dialect_name, cls)
+        return super(SQLTableStore, dialect_specific_cls).__new__(dialect_specific_cls)
 
     @classmethod
     def _init_conf_(cls, config: dict[str, Any]):
@@ -121,6 +127,7 @@ class SQLTableStore(BaseTableStore):
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
 
         self.engine_url = sa.engine.make_url(engine_url)
+
         self.engine = self._create_engine()
         self.engines_other = dict()  # i.e. for IBIS connection
 
@@ -227,7 +234,20 @@ class SQLTableStore(BaseTableStore):
             schema_suffix=self.schema_suffix,
         )
 
-    @engine_dispatch
+    def __init_subclass__(cls, **kwargs):
+        dialect_name = getattr(cls, "_dialect_name", None)
+        if dialect_name is None:
+            raise ValueError(
+                "All subclasses of SQLTableStore must have a `_dialect_name` attribute."
+                f" But {cls.__name__}._dialect_name is None."
+            )
+
+        if dialect_name in SQLTableStore._REGISTERED_DIALECTS:
+            warnings.warn(
+                f"Already registered a SQLTableStore for dialect {dialect_name}"
+            )
+        SQLTableStore._REGISTERED_DIALECTS[dialect_name] = cls
+
     def _init_database(self):
         if not self.create_database_if_not_exists:
             return
@@ -235,19 +255,6 @@ class SQLTableStore(BaseTableStore):
         raise NotImplementedError(
             "create_database_if_not_exists is not implemented for this engine"
         )
-
-    @_init_database.dialect("postgresql")
-    def _init_database_postgresql(self):
-        self._init_database_with_database("postgres", {"isolation_level": "AUTOCOMMIT"})
-
-    @_init_database.dialect("duckdb")
-    def _init_database_duckdb(self):
-        # Duckdb already creates the database file automatically
-        pass
-
-    @_init_database.dialect("mssql")
-    def _init_database_mssql(self):
-        self._init_database_with_database("master", {"isolation_level": "AUTOCOMMIT"})
 
     def _init_database_with_database(
         self, database: str, execution_options: dict = None
@@ -282,37 +289,13 @@ class SQLTableStore(BaseTableStore):
                 conn.exec_driver_sql("SELECT 1")
 
     def _create_engine(self):
-        engine = sa.create_engine(self.engine_url)
-
-        # if engine.dialect.name == "ibm_db_sa":
-        #     engine.dispose()
-        #     # switch to READ STABILITY isolation level to avoid unnecessary deadlock
-        #     # victims in case of background operations when reflecting columns
-        #     engine = sa.create_engine(
-        #         engine_url, execution_options={"isolation_level": "RS"}
-        #     )
-        # sqlalchemy 2 has create_engine().execution_options()
-
-        return engine
+        return sa.create_engine(self.engine_url)
 
     @contextmanager
-    @engine_dispatch
     def engine_connect(self) -> sa.Connection:
-        if self.engine.dialect.name == "ibm_db_sa":
-            conn = self.engine.connect()
-        else:
-            # sqlalchemy 2.0 uses this (except for dialect ibm_db_sa)
-            conn = (
-                self.engine.connect()
-            )  # .execution_options(isolation_level="AUTOCOMMIT")
-        try:
+        with self.engine.connect() as conn:
             yield conn
-        finally:
-            try:
-                # sqlalchemy 2.0 + ibm_db_sa needs this
-                conn.commit()
-            except AttributeError:
-                pass
+            conn.commit()
 
     def get_schema(self, name):
         return Schema(name, self.schema_prefix, self.schema_suffix)
@@ -374,7 +357,6 @@ class SQLTableStore(BaseTableStore):
             for index in table.indexes:
                 self.add_index(table.name, schema, index)
 
-    @engine_dispatch
     def add_primary_key(
         self,
         table_name: str,
@@ -387,7 +369,6 @@ class SQLTableStore(BaseTableStore):
         _ = early_not_null_possible  # only used for some dialects
         self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
 
-    @engine_dispatch
     def add_index(
         self,
         table_name: str,
@@ -396,78 +377,6 @@ class SQLTableStore(BaseTableStore):
         name: str | None = None,
     ):
         self.execute(AddIndex(table_name, schema, index_columns, name))
-
-    @add_primary_key.dialect("mssql")
-    def _add_primary_key_mssql(
-        self,
-        table_name: str,
-        schema: Schema,
-        key_columns: list[str],
-        *,
-        name: str | None = None,
-        early_not_null_possible: bool = False,
-    ):
-        _ = early_not_null_possible  # not needed for this dialect
-        sql_types = self.reflect_sql_types(key_columns, table_name, schema)
-        # impose some varchar(max) limit to allow use in primary key / index
-        # TODO: consider making cap_varchar_max a config option
-        self.execute(
-            ChangeColumnTypes(
-                table_name,
-                schema,
-                key_columns,
-                sql_types,
-                nullable=False,
-                cap_varchar_max=1024,
-            )
-        )
-        self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
-
-    @add_index.dialect("mssql")
-    def _add_index_mssql(
-        self, table_name: str, schema: Schema, index: list[str], name: str | None = None
-    ):
-        sql_types = self.reflect_sql_types(index, table_name, schema)
-        if any(
-            [
-                isinstance(_type, sa.String) and _type.length is None
-                for _type in sql_types
-            ]
-        ):
-            # impose some varchar(max) limit to allow use in primary key / index
-            self.execute(
-                ChangeColumnTypes(
-                    table_name, schema, index, sql_types, cap_varchar_max=1024
-                )
-            )
-        self.execute(AddIndex(table_name, schema, index, name))
-
-    @add_primary_key.dialect("ibm_db_sa")
-    def _add_primary_key_ibm_db_sa(
-        self,
-        table_name: str,
-        schema: Schema,
-        key_columns: list[str],
-        *,
-        name: str | None = None,
-        early_not_null_possible: bool = False,
-    ):
-        if not early_not_null_possible:
-            for retry_iteration in range(4):
-                # retry operation since it might have been terminated as a
-                # deadlock victim
-                try:
-                    self.execute(
-                        ChangeColumnNullable(
-                            table_name, schema, key_columns, nullable=False
-                        )
-                    )
-                    break
-                except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
-                    if retry_iteration == 3:
-                        raise
-                    time.sleep(retry_iteration * retry_iteration * 1.1)
-        self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
 
     def copy_indexes(
         self, src_table: str, src_schema: Schema, dest_table: str, dest_schema: Schema
@@ -517,58 +426,10 @@ class SQLTableStore(BaseTableStore):
     def format_sql_string(query_str: str) -> str:
         return textwrap.dedent(query_str).strip()
 
-    @engine_dispatch
     def execute_raw_sql(self, raw_sql: RawSql):
         """Executed raw SQL statements in the associated transaction stage"""
         for statement in raw_sql.sql.split(";"):
             self.execute(statement)
-
-    @execute_raw_sql.dialect("mssql")
-    def _execute_raw_sql_mssql(self, raw_sql: RawSql):
-        if self.disable_pytsql:
-            self._execute_raw_sql_mssql_fallback(raw_sql)
-        else:
-            self._execute_raw_sql_mssql_pytsql(raw_sql)
-
-    def _execute_raw_sql_mssql_fallback(self, raw_sql: RawSql):
-        """Alternative to using pytsql for splitting SQL statement.
-
-        Known Problems:
-        - DECLARE statements will not be available across GO
-        """
-        last_use_statement = None
-        for statement in re.split(r"\bGO\b", raw_sql.sql, flags=re.IGNORECASE):
-            statement = statement.strip()
-            if statement == "":
-                # allow GO at end of script
-                continue
-
-            if re.match(r"\bUSE\b", statement):
-                last_use_statement = statement
-
-            with self.engine_connect() as conn:
-                if last_use_statement is not None:
-                    self.execute(last_use_statement, conn=conn)
-                self.execute(statement, conn=conn)
-
-    def _execute_raw_sql_mssql_pytsql(self, raw_sql: RawSql):
-        """Use pytsql for executing T-SQL scripts containing many GO statements."""
-        # noinspection PyUnresolvedReferences,PyPackageRequirements
-        import pytsql
-
-        sql_string = raw_sql.sql
-        if self.print_sql:
-            print_query_string = self.format_sql_string(sql_string)
-            max_length = 5000
-            if len(print_query_string) >= max_length:
-                print_query_string = print_query_string[:max_length] + " [...]"
-            self.logger.info("Executing sql", query=print_query_string)
-
-        pytsql.executes(
-            sql_string,
-            self.engine,
-            isolate_top_level_statements=self.pytsql_isolate_top_level_statements,
-        )
 
     def setup(self):
         super().setup()
@@ -616,7 +477,6 @@ class SQLTableStore(BaseTableStore):
             return self._init_stage_read_views(stage)
         raise ValueError(f"Invalid stage commit technique: {stage_commit_technique}")
 
-    @engine_dispatch
     def _init_stage_schema_swap(self, stage: Stage):
         schema = self.get_schema(stage.name)
         transaction_schema = self.get_schema(stage.transaction_name)
@@ -706,26 +566,17 @@ class SQLTableStore(BaseTableStore):
         # statement parts as one transaction. This is solvable via complex code,
         # but we typically don't want to rely on database transactions anyways.
         with self.engine_connect() as conn:
-            # TODO: for mssql try to find schema does not exist and then move
-            #       the forgotten tmp schema there
-            assert not self.avoid_drop_create_schema, (
-                "The option avoid_drop_create_schema is currently not supported in "
-                "combination with dialect mssql"
-            )
+            # TODO: self.avoid_drop_create_schema is currently being ignored...
             self.execute(
                 DropSchema(
                     tmp_schema, if_exists=True, cascade=True, engine=self.engine
                 ),
                 conn=conn,
             )
-            self.logger.info("DROPPED")
-
             self.execute(RenameSchema(schema, tmp_schema, self.engine), conn=conn)
-            self.logger.info("RENAMED")
             self.execute(
                 RenameSchema(transaction_schema, schema, self.engine), conn=conn
             )
-            self.logger.info("RENAMED")
             self.execute(
                 RenameSchema(tmp_schema, transaction_schema, self.engine), conn=conn
             )
@@ -949,7 +800,6 @@ class SQLTableStore(BaseTableStore):
         self.logger.info("RENAME", fr=from_name, to=to_name)
         self.execute(RenameTable(from_name, to_name, schema))
 
-    @engine_dispatch
     def get_view_names(self, schema: str, *, include_everything=False) -> list[str]:
         """
         List all views that are present in a schema.
@@ -966,29 +816,8 @@ class SQLTableStore(BaseTableStore):
             Currently, this only makes a difference for dialect=mssql.
         :return: list of view names [and other objects]
         """
-        _ = include_everything  # not used in this implementation
         inspector = sa.inspect(self.engine)
         return inspector.get_view_names(schema)
-
-    @get_view_names.dialect("mssql")
-    def _get_view_names_mssql(self, schema: str, *, include_everything=False):
-        if not include_everything:
-            return self.get_view_names.original(self, schema)
-        return list(self._get_mssql_sql_modules(schema).keys())
-
-    # noinspection SqlDialectInspection
-    def _get_mssql_sql_modules(self, schema: str):
-        with self.engine_connect() as conn:
-            # include stored procedures in view names because they can also be recreated
-            # based on sys.sql_modules.description
-            sql = (
-                "select obj.name, obj.type from sys.sql_modules as mod "
-                "left join sys.objects as obj on mod.object_id=obj.object_id "
-                "left join sys.schemas as schem on schem.schema_id=obj.schema_id "
-                f"where schem.name='{schema}'"
-            )
-            rows = self.execute(sql, conn=conn).fetchall()
-        return {row[0]: row[1] for row in rows}
 
     def copy_raw_sql_tables_to_transaction(
         self, metadata: RawSqlMetadata, target_stage: Stage
@@ -1034,35 +863,10 @@ class SQLTableStore(BaseTableStore):
         for view_name in views_to_copy:
             self._copy_view_to_transaction(view_name, src_schema, dest_schema)
 
-    @engine_dispatch
     def _copy_view_to_transaction(
         self, view_name: str, src_schema: Schema, dest_schema: Schema
     ):
         raise NotImplementedError("Only implemented for mssql.")
-
-    # noinspection SqlDialectInspection
-    @_copy_view_to_transaction.dialect("mssql")
-    def _copy_view_to_transaction_mssql(
-        self, view_name: str, src_schema: Schema, dest_schema: Schema
-    ):
-        # TODO: Create DDL for all of this
-        #       See implementation of RenameSchema for mssql
-        with self.engine_connect() as conn:
-            definition = conn.exec_driver_sql(
-                "SELECT OBJECT_DEFINITION(OBJECT_ID("
-                f"N'{src_schema.get()}.{view_name}'"
-                "))"
-            ).scalar_one()
-
-            # TODO: Quote properly
-            definition = definition.replace(
-                f"{src_schema.get()}.", f"{dest_schema.get()}."
-            )
-            definition = definition.replace(
-                f"[{src_schema.get()}].", f"{dest_schema.get()}."
-            )
-
-            self.execute(definition, conn=conn)
 
     def delete_table_from_transaction(self, table: Table):
         self.execute(
@@ -1274,25 +1078,8 @@ class SQLTableStore(BaseTableStore):
             task_hash=result.task_hash,
         )
 
-    @engine_dispatch
-    def resolve_aliases(self, table_name, schema):
-        return table_name, schema
-
-    @resolve_aliases.dialect("ibm_db_sa")
-    def resolve_aliases_ibm_db_sa(self, table_name, schema):
-        from pydiverse.pipedag.backend.table.sql.reflection import (
-            PipedagDB2Reflection,
-        )
-
-        return PipedagDB2Reflection.resolve_alias(self.engine, table_name, schema)
-
-    @resolve_aliases.dialect("mssql")
-    def resolve_aliases_mssql(self, table_name, schema):
-        from pydiverse.pipedag.backend.table.sql.reflection import (
-            PipedagMSSqlReflection,
-        )
-
-        return PipedagMSSqlReflection.resolve_alias(self.engine, table_name, schema)
+    def resolve_alias(self, table: str, schema: str) -> tuple[str, str]:
+        return table, schema
 
     def list_tables(self, stage: Stage, *, include_everything=False):
         """
@@ -1347,4 +1134,7 @@ class SQLTableStore(BaseTableStore):
 
 
 # Load SQLTableStore Hooks
-from pydiverse.pipedag.backend.table.sql.hooks import *  # noqa
+import pydiverse.pipedag.backend.table.sql.hooks  # noqa
+
+# Load SQLTableStore dialect specific subclasses
+import pydiverse.pipedag.backend.table.sql.dialects  # noqa

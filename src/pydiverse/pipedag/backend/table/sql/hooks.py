@@ -85,7 +85,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     ) -> sa.sql.selectable.Selectable:
         table_name = table.name
         schema = store.get_schema(stage_name).get()
-        table_name, schema = store.resolve_aliases(table_name, schema)
+        table_name, schema = store.resolve_alias(table_name, schema)
         tbl = None
         for retry_iteration in range(4):
             # retry operation since it might have been terminated as a deadlock victim
@@ -387,7 +387,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         engine = store.engine
         schema = store.get_schema(stage_name).get()
         table_name = table.name
-        table_name, schema = store.resolve_aliases(table_name, schema)
+        table_name, schema = store.resolve_alias(table_name, schema)
 
         sql_table = sa.Table(
             table_name,
@@ -542,7 +542,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
     ) -> polars.dataframe.DataFrame:
         schema = store.get_schema(stage_name).get()
         table_name = table.name
-        table_name, schema = store.resolve_aliases(table_name, schema)
+        table_name, schema = store.resolve_alias(table_name, schema)
         connection_uri = store.engine_url.render_as_string(hide_password=False)
         df = polars.read_database(
             f'SELECT * FROM {schema}."{table_name}"', connection_uri
@@ -764,7 +764,7 @@ class IbisTableHook(TableHook[SQLTableStore]):
         con = cls.get_con(store)
         table_name = table.name
         schema = store.get_schema(stage_name).get()
-        table_name, schema = store.resolve_aliases(table_name, schema)
+        table_name, schema = store.resolve_alias(table_name, schema)
         for retry_iteration in range(4):
             # retry operation since it might have been terminated as a deadlock victim
             try:

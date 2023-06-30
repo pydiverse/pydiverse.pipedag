@@ -15,6 +15,7 @@ __all__ = [
     "CreateSchema",
     "DropSchema",
     "RenameSchema",
+    "DropSchemaContent",
     "CreateTableAsSelect",
     "CreateViewAsSelect",
     "CreateAlias",
