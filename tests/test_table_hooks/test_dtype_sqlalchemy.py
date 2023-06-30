@@ -15,7 +15,8 @@ def test_dtype_from_sqlalchemy():
 
     assert_conversion(sa.Numeric(), DType.FLOAT64)
     assert_conversion(sa.Float(), DType.FLOAT64)
-    assert_conversion(sa.Double(), DType.FLOAT64)
+    assert_conversion(sa.Float(24), DType.FLOAT32)
+    assert_conversion(sa.Float(53), DType.FLOAT64)
 
     assert_conversion(sa.String(), DType.STRING)
     assert_conversion(sa.Boolean(), DType.BOOLEAN)
@@ -39,7 +40,7 @@ def test_dtype_to_sqlalchemy():
     assert_conversion(DType.UINT16, sa.Integer)
     assert_conversion(DType.UINT8, sa.SmallInteger)
 
-    assert_conversion(DType.FLOAT64, sa.Double)
+    assert_conversion(DType.FLOAT64, sa.Float)
     assert_conversion(DType.FLOAT32, sa.Float)
 
     assert_conversion(DType.STRING, sa.String)

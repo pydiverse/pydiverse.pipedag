@@ -58,6 +58,9 @@ class DType(Enum):
         if isinstance(type_, sa.Integer):
             return DType.INT32
         if isinstance(type_, sa.Numeric):
+            precision = type_.precision or 53
+            if precision <= 24:
+                return DType.FLOAT32
             return DType.FLOAT64
         if isinstance(type_, sa.String):
             return DType.STRING
@@ -192,8 +195,8 @@ class DType(Enum):
             DType.UINT16: sa.Integer(),
             DType.UINT32: sa.BigInteger(),
             DType.UINT64: sa.BigInteger(),
-            DType.FLOAT32: sa.Float(),
-            DType.FLOAT64: sa.Double(),
+            DType.FLOAT32: sa.Float(24),
+            DType.FLOAT64: sa.Float(53),
             DType.STRING: sa.String(),
             DType.BOOLEAN: sa.Boolean(),
             DType.DATE: sa.Date(),
