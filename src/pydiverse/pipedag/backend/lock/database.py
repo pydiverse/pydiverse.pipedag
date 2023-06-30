@@ -50,17 +50,23 @@ class DatabaseLockManager(BaseLockManager):
         engine = table_store.get_engine_for_locking()
         instance_id = config_context.instance_id
         lock_schema = table_store.get_lock_schema()
+        create_lock_schema = not table_store.avoid_drop_create_schema
 
-        return cls(engine, instance_id, lock_schema)
+        return cls(engine, instance_id, lock_schema, create_lock_schema)
 
     def __init__(
-        self, engine: sa.Engine, instance_id: str, lock_schema: Schema | None = None
+        self,
+        engine: sa.Engine,
+        instance_id: str,
+        lock_schema: Schema | None = None,
+        create_lock_schema: bool = True,
     ):
         super().__init__()
 
         self.engine = engine
         self.instance_id = instance_id
         self.lock_schema = lock_schema
+        self.create_lock_schema = create_lock_schema
 
         # Stage level locking
         self.connection = None
@@ -82,6 +88,9 @@ class DatabaseLockManager(BaseLockManager):
     @prepare.dialect("ibm_db_sa")
     def __prepare(self):
         # Create the lock schema
+        if not self.create_lock_schema:
+            return
+
         # If two lock managers do this concurrently, this action might fail. Thus,
         # we retry a second time to ensure the schema exists.
         with self.engine.connect() as conn:
