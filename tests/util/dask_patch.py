@@ -1,4 +1,6 @@
 # Patch pytest EncodedFile (from pytest-capture plugin) to be pickleable
+from __future__ import annotations
+
 # https://github.com/mariusvniekerk/pytest-dask/blob/master/pytest_dask/serde_patch.py
 from io import BytesIO
 

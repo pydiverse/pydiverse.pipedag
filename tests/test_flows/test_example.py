@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from example.run_pipeline import main as example_flow_main
 
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pydiverse.pipedag import Flow, Stage
 from tests.util import tasks_library as m
 from tests.util.spy import spy_task

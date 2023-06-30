@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pydiverse.pipedag.backend.table.util.sql_ddl import insert_into_in_query
 
 

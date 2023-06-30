@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from .base import BaseLockManager, LockState
 from .database import DatabaseLockManager
 from .filelock import FileLockManager

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from .base import BaseTableStore
 from .dict import DictTableStore
 from .sql import SQLTableStore
