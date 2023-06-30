@@ -177,8 +177,7 @@ class DatabaseLockManager(BaseLockManager):
             self.connection = self.engine.connect()
 
         name = self.lock_name(lockable)
-        database, _ = self.lock_schema.get().split(".")
-        return MSSqlLock(name, database, self.connection)
+        return MSSqlLock(name, self.connection)
 
     @engine_dispatch
     def get_instance_level_lock(self):
@@ -255,14 +254,12 @@ class MSSqlLock(Lock):
     https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-getapplock-transact-sql?view=sql-server-ver15
     """
 
-    def __init__(self, name: str, database: str, connection: sa.Connection):
+    def __init__(self, name: str, connection: sa.Connection):
         self.name = name
-        self._database = database
         self._connection = connection
         self._locked = False
 
     def acquire(self) -> bool:
-        self._connection.execute(sa.text(f"USE [{self._database}]"))
         result = self._connection.execute(
             sa.text(
                 """
@@ -282,7 +279,6 @@ class MSSqlLock(Lock):
         return result
 
     def release(self) -> bool:
-        self._connection.execute(sa.text(f"USE [{self._database}]"))
         result = self._connection.execute(
             sa.text(
                 """

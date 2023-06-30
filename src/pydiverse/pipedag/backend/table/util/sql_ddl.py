@@ -66,9 +66,10 @@ class DropSchema(DDLElement):
 
 
 class RenameSchema(DDLElement):
-    def __init__(self, from_: Schema, to: Schema):
+    def __init__(self, from_: Schema, to: Schema, engine: sa.Engine):
         self.from_ = from_
         self.to = to
+        self.engine = engine
 
 
 class DropSchemaContent(DDLElement):
@@ -319,41 +320,18 @@ def visit_create_schema(create: CreateSchema, compiler, **kw):
 # noinspection SqlDialectInspection
 @compiles(CreateSchema, "mssql")
 def visit_create_schema_mssql(create: CreateSchema, compiler, **kw):
-    # For SQL Server we support two modes:  using databases as schemas,
-    # or schemas as schemas.
     _ = kw
-    if "." in create.schema.name:
-        raise AttributeError(
-            "We currently do not support dots in schema names "
-            " when working with mssql database"
-        )
-    full_name = create.schema.get()
-    # it was already checked that there is exactly one dot in schema prefix + suffix
-    database_name, schema_name = full_name.split(".")
-    database = compiler.preparer.format_schema(database_name)
-    schema = compiler.preparer.format_schema(schema_name)
-    create_schema = f"CREATE SCHEMA {schema}"
-    create_database = f"CREATE DATABASE {database}"
+    schema = compiler.preparer.format_schema(create.schema.get())
     if create.if_not_exists:
-        create_database = f"""
-            IF NOT EXISTS (
-                SELECT * FROM sys.databases WHERE name = N'{database_name}'
-            )
-            BEGIN {create_database} END"""
-        create_schema = f"""
-            IF NOT EXISTS (
-                SELECT * FROM sys.schema WHERE name = N'{schema_name}'
-            )
-            BEGIN {create_schema} END"""
-
-    if "." in create.schema.prefix:
-        # With prefix like "my_db." we create our stages as schemas
-        # Attention: we have to rely on a preceding USE statement
-        #            for correct prefix database
-        return create_schema
+        unquoted_schema = create.schema.get()
+        return f"""
+        IF NOT EXISTS (
+            SELECT 1 FROM sys.schemas WHERE name = N'{unquoted_schema}'
+        )
+        BEGIN EXEC('CREATE SCHEMA {schema}') END
+        """
     else:
-        # With suffix like ".dbo" we create our stages as databases
-        return create_database
+        return f"CREATE SCHEMA {schema}"
 
 
 @compiles(CreateSchema, "ibm_db_sa")
@@ -388,23 +366,25 @@ def visit_drop_schema(drop: DropSchema, compiler, **kw):
 @compiles(DropSchema, "mssql")
 def visit_drop_schema_mssql(drop: DropSchema, compiler, **kw):
     _ = kw
-    full_name = drop.schema.get()
-    # it was already checked that there is exactly one dot in schema prefix + suffix
-    database_name, schema_name = full_name.split(".")
-    if "." in drop.schema.prefix:
-        # With prefix like "my_db." we create our stages as schemas
-        # Attention: we have to rely on a preceding USE statement
-        #            for correct prefix database
-        text = ["DROP SCHEMA"]
-        name = compiler.preparer.format_schema(schema_name)
-    else:
-        # With suffix like ".dbo" we create our stages as databases
-        text = ["DROP DATABASE"]
-        name = compiler.preparer.format_schema(database_name)
+    schema = compiler.preparer.format_schema(drop.schema.get())
+    statements = []
+
+    if drop.cascade:
+        if drop.engine is None:
+            raise ValueError(
+                "Using DropSchema with cascade=True for mssql requires passing"
+                " the engine kwarg to DropSchema."
+            )
+
+        statements.append(DropSchemaContent(drop.schema, drop.engine))
+
+    text = ["DROP SCHEMA"]
     if drop.if_exists:
         text.append("IF EXISTS")
-    text.append(name)
-    return " ".join(text)
+    text.append(schema)
+    statements.append(" ".join(text))
+
+    return join_ddl_statements(statements, compiler, **kw)
 
 
 @compiles(DropSchema, "ibm_db_sa")
@@ -446,27 +426,79 @@ def visit_rename_schema(rename: RenameSchema, compiler, **kw):
 
 @compiles(RenameSchema, "mssql")
 def visit_rename_schema_mssql(rename: RenameSchema, compiler, **kw):
+    # MSSql doesn't support renaming schemas, but it allows you to move objects from
+    # one schema to another.
+    # https://stackoverflow.com/questions/17571233/how-to-change-schema-of-all-tables-views-and-stored-procedures-in-mssql
+    # https://learn.microsoft.com/en-us/sql/t-sql/statements/alter-schema-transact-sql?view=sql-server-ver16
+    from pydiverse.pipedag.backend.table.util.sql_reflection import (
+        PipedagMSSqlReflection,
+    )
+
     _ = kw
-    if rename.from_.prefix != rename.to.prefix:
-        raise AttributeError(
-            "We currently do not support varying schema prefixes for mssql database"
-        )
-    from_full_name = rename.from_.get()
-    to_full_name = rename.to.get()
-    # it was already checked that there is exactly one dot in schema prefix + suffix
-    from_database_name, from_schema_name = from_full_name.split(".")
-    to_database_name, to_schema_name = to_full_name.split(".")
-    if "." in rename.from_.prefix:
-        # With prefix like "my_db." we create our stages as schemas
-        raise NotImplementedError(
-            "There is not SCHEMA rename expression for mssql. "
-            "Needs to be addressed on higher level!"
-        )
-    else:
-        # With suffix like ".dbo" we create our stages as databases
-        from_name = compiler.preparer.format_schema(from_database_name)
-        to_name = compiler.preparer.format_schema(to_database_name)
-        return f"ALTER DATABASE {from_name} MODIFY NAME = {to_name}"
+    from_ = compiler.preparer.format_schema(rename.from_.get())
+    to = compiler.preparer.format_schema(rename.to.get())
+
+    inspector = sa.inspect(rename.engine)
+
+    # Reflect to get objects which we want to move
+    names_to_move = []
+    names_to_redefine = []
+
+    table_names = inspector.get_table_names(schema=rename.from_.get())
+    view_names = inspector.get_view_names(schema=rename.from_.get())
+    alias_names = PipedagMSSqlReflection.get_alias_names(
+        rename.engine, schema=rename.from_.get()
+    )
+    procedure_names = PipedagMSSqlReflection.get_procedure_names(
+        rename.engine, schema=rename.from_.get()
+    )
+    function_names = PipedagMSSqlReflection.get_function_names(
+        rename.engine, schema=rename.from_.get()
+    )
+
+    names_to_move.extend(table_names)
+    names_to_move.extend(alias_names)
+    names_to_redefine.extend(view_names)
+    names_to_redefine.extend(procedure_names)
+    names_to_redefine.extend(function_names)
+
+    if not (names_to_move or names_to_redefine):
+        return ""
+
+    # Produce statement
+    statements = []
+
+    statements.append(CreateSchema(rename.to, if_not_exists=True))
+    for name in names_to_move:
+        name = compiler.preparer.quote(name)
+        statements.append(f"ALTER SCHEMA {to} TRANSFER {from_}.{name}")
+
+    # Recreate views, procedures and functions
+    # TODO: Create DDL for all of this
+    with rename.engine.connect() as conn:
+
+        def get_definition(name: str) -> str:
+            q = f"SELECT OBJECT_DEFINITION(OBJECT_ID(N'{rename.from_.get()}.{name}'))"
+            return conn.exec_driver_sql(q).scalar_one()
+
+        for name in names_to_redefine:
+            # TODO: Blindly replacing strings in the query is dangerous.
+            #       Instead I would use pyparsing to do this more properly
+            #       -> Don't replace in strings
+            definition = get_definition(name)
+            definition = definition.replace(f"{from_}.", f"{to}.")
+            definition = definition.replace(f"[{from_}].", f"{to}.")
+            statements.append(definition)
+
+    for view in view_names:
+        statements.append(DropView(view, rename.from_))
+    for procedure in procedure_names:
+        statements.append(DropProcedure(procedure, rename.from_))
+    for function in function_names:
+        statements.append(DropFunction(function, rename.from_))
+
+    statements.append(DropSchema(rename.from_))
+    return join_ddl_statements(statements, compiler, **kw)
 
 
 @compiles(DropSchemaContent)
@@ -505,6 +537,14 @@ def visit_drop_schema_content_mssql(drop: DropSchemaContent, compiler, **kw):
         statements.append(DropView(view, schema=schema))
     for alias in PipedagMSSqlReflection.get_alias_names(engine, schema=schema.get()):
         statements.append(DropAlias(alias, schema=drop.schema))
+    for procedure in PipedagMSSqlReflection.get_procedure_names(
+        engine, schema=schema.get()
+    ):
+        statements.append(DropProcedure(procedure, schema=schema))
+    for function in PipedagMSSqlReflection.get_function_names(
+        engine, schema=schema.get()
+    ):
+        statements.append(DropFunction(function, schema=schema))
 
     return join_ddl_statements(statements, compiler, **kw)
 
@@ -583,16 +623,12 @@ def visit_create_table_as_select_postgresql(
 @compiles(CreateTableAsSelect, "mssql")
 def visit_create_table_as_select_mssql(create: CreateTableAsSelect, compiler, **kw):
     name = compiler.preparer.quote(create.name)
-    full_name = create.schema.get()
-    # it was already checked that there is exactly one dot in schema prefix + suffix
-    database_name, schema_name = full_name.split(".")
-    database = compiler.preparer.format_schema(database_name)
-    schema = compiler.preparer.format_schema(schema_name)
+    schema = compiler.preparer.format_schema(create.schema.get())
 
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(create.query, **kw)
 
-    return insert_into_in_query(select, database, schema, name)
+    return insert_into_in_query(select, schema, name)
 
 
 # noinspection SqlDialectInspection
@@ -649,8 +685,10 @@ def visit_create_view_as_select(create: CreateViewAsSelect, compiler, **kw):
     return _visit_create_obj_as_select(create, compiler, "VIEW", kw)
 
 
-def insert_into_in_query(select_sql, database, schema, table):
-    into = f"INTO {database}.{schema}.{table}"
+def insert_into_in_query(select_sql, schema, table):
+    # TODO: use pyparsing to solve this, because the current approach has issues
+    #       with CTE and quotes
+    into = f"INTO {schema}.{table}"
     into_point = None
     # insert INTO before first FROM, WHERE, GROUP BY, WINDOW, HAVING,
     #                          ORDER BY, UNION, EXCEPT, INTERSECT
@@ -684,13 +722,9 @@ def insert_into_in_query(select_sql, database, schema, table):
 
 @compiles(CreateAlias)
 def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
-    query = sa.select("*").select_from(
-        sa.Table(
-            create_alias.from_name,
-            sa.MetaData(),
-            schema=create_alias.from_schema.get(),
-        )
-    )
+    from_name = compiler.preparer.quote(create_alias.from_name)
+    from_schema = compiler.preparer.format_schema(create_alias.from_schema.get())
+    query = sa.select("*").select_from(sa.text(f"{from_schema}.{from_name}"))
     return compiler.process(
         CreateViewAsSelect(create_alias.to_name, create_alias.to_schema, query), **kw
     )
@@ -699,23 +733,15 @@ def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
 @compiles(CreateAlias, "mssql")
 def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
     from_name = compiler.preparer.quote(create_alias.from_name)
-    from_database, from_schema = _get_mssql_database_schema(
-        create_alias.from_schema, compiler
-    )
+    from_schema = compiler.preparer.format_schema(create_alias.from_schema.get())
     to_name = compiler.preparer.quote(create_alias.to_name)
-    to_database, to_schema = _get_mssql_database_schema(
-        create_alias.to_schema, compiler
-    )
+    to_schema = compiler.preparer.format_schema(create_alias.to_schema.get())
 
-    statements = [f"USE {to_database}"]
     text = ["CREATE"]
     if create_alias.or_replace:
         text.append("OR REPLACE")
-    text.append(
-        f"SYNONYM {to_schema}.{to_name} FOR {from_database}.{from_schema}.{from_name}"
-    )
-    statements.append(" ".join(text))
-    return join_ddl_statements(statements, compiler, **kw)
+    text.append(f"SYNONYM {to_schema}.{to_name} FOR {from_schema}.{from_name}")
+    return " ".join(text)
 
 
 @compiles(CreateAlias, "ibm_db_sa")
@@ -724,6 +750,7 @@ def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
     from_schema = compiler.preparer.format_schema(create_alias.from_schema.get())
     to_name = compiler.preparer.quote(create_alias.to_name)
     to_schema = compiler.preparer.format_schema(create_alias.to_schema.get())
+
     text = ["CREATE"]
     if create_alias.or_replace:
         text.append("OR REPLACE")
@@ -749,21 +776,6 @@ def visit_copy_table(copy_table: CopyTable, compiler, **kw):
 
 
 # noinspection SqlDialectInspection
-@compiles(CopyTable, "mssql")
-def visit_copy_table_mssql(copy_table: CopyTable, compiler, **kw):
-    from_name = compiler.preparer.quote(copy_table.from_name)
-    database, schema = _get_mssql_database_schema(copy_table.from_schema, compiler)
-    query = sa.text(f"SELECT * FROM {database}.{schema}.{from_name}")
-    create = CreateTableAsSelect(
-        copy_table.to_name,
-        copy_table.to_schema,
-        query,
-        early_not_null=copy_table.early_not_null,
-    )
-    return compiler.process(create, **kw)
-
-
-# noinspection SqlDialectInspection
 @compiles(RenameTable)
 def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     _ = kw
@@ -777,15 +789,12 @@ def visit_rename_table(rename_table: RenameTable, compiler, **kw):
 @compiles(RenameTable, "mssql")
 def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     _ = kw
-    database, schema = _get_mssql_database_schema(rename_table.schema, compiler)
 
+    schema = compiler.preparer.format_schema(rename_table.schema.get())
     from_table = compiler.preparer.quote(rename_table.from_name)
     to_table = rename_table.to_name  # no quoting is intentional
-    statements = [
-        f"USE [{database}]",
-        f"EXEC sp_rename '{schema}.{from_table}', '{to_table}'",
-    ]
-    return join_ddl_statements(statements, compiler, **kw)
+
+    return f"EXEC sp_rename '{schema}.{from_table}', '{to_table}'"
 
 
 # noinspection SqlDialectInspection
@@ -803,19 +812,9 @@ def visit_drop_table(drop: DropTable, compiler, **kw):
     return _visit_drop_anything(drop, "TABLE", compiler, **kw)
 
 
-@compiles(DropTable, "mssql")
-def visit_drop_table_mssql(drop: DropTable, compiler, **kw):
-    return _visit_drop_anything_mssql(drop, "TABLE", compiler, **kw)
-
-
 @compiles(DropView)
 def visit_drop_view(drop: DropView, compiler, **kw):
     return _visit_drop_anything(drop, "VIEW", compiler, **kw)
-
-
-@compiles(DropView, "mssql")
-def visit_drop_view_mssql(drop: DropView, compiler, **kw):
-    return _visit_drop_anything_mssql(drop, "VIEW", compiler, **kw)
 
 
 @compiles(DropAlias)
@@ -828,7 +827,7 @@ def visit_drop_alias(drop: DropAlias, compiler, **kw):
 @compiles(DropAlias, "mssql")
 def visit_drop_alias_mssql(drop: DropAlias, compiler, **kw):
     # What is called ALIAS for dialect ibm_db_sa is called SYNONYM for mssql
-    return _visit_drop_anything_mssql(drop, "SYNONYM", compiler, **kw)
+    return _visit_drop_anything(drop, "SYNONYM", compiler, **kw)
 
 
 @compiles(DropAlias, "ibm_db_sa")
@@ -841,62 +840,25 @@ def visit_drop_table(drop: DropProcedure, compiler, **kw):
     return _visit_drop_anything(drop, "PROCEDURE", compiler, **kw)
 
 
-@compiles(DropProcedure, "mssql")
-def visit_drop_table_mssql(drop: DropProcedure, compiler, **kw):
-    return _visit_drop_anything_mssql(drop, "PROCEDURE", compiler, **kw)
-
-
 @compiles(DropFunction)
 def visit_drop_table(drop: DropFunction, compiler, **kw):
     return _visit_drop_anything(drop, "FUNCTION", compiler, **kw)
-
-
-@compiles(DropFunction, "mssql")
-def visit_drop_table_mssql(drop: DropProcedure, compiler, **kw):
-    return _visit_drop_anything_mssql(drop, "FUNCTION", compiler, **kw)
 
 
 def _visit_drop_anything(
     drop: DropTable | DropView | DropProcedure | DropFunction | DropAlias,
     _type,
     compiler,
-    dont_quote_table=False,
     **kw,
 ):
     _ = kw
-    if dont_quote_table:
-        table = drop.name
-    else:
-        table = compiler.preparer.quote(drop.name)
+    table = compiler.preparer.quote(drop.name)
     schema = compiler.preparer.format_schema(drop.schema.get())
     text = [f"DROP {_type}"]
     if drop.if_exists:
         text.append("IF EXISTS")
     text.append(f"{schema}.{table}")
     return " ".join(text)
-
-
-def _visit_drop_anything_mssql(
-    drop: DropTable | DropAlias | DropView | DropProcedure | DropFunction,
-    _type,
-    compiler,
-    **kw,
-):
-    _ = kw
-    table = compiler.preparer.quote(drop.name)
-    database, schema = _get_mssql_database_schema(drop.schema, compiler)
-    statements = []
-    text = [f"DROP {_type}"]
-    if drop.if_exists:
-        text.append("IF EXISTS")
-    if isinstance(drop, (DropAlias, DropView, DropProcedure, DropFunction)):
-        # attention: this statement must be prefixed with a 'USE <database>' statement
-        text.append(f"{schema}.{table}")
-        statements.append(f"USE {database}")
-    else:
-        text.append(f"{database}.{schema}.{table}")
-    statements.append(" ".join(text))
-    return join_ddl_statements(statements, compiler, **kw)
 
 
 # noinspection SqlDialectInspection
@@ -936,28 +898,6 @@ def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
 
 
 # noinspection SqlDialectInspection
-@compiles(AddPrimaryKey, "mssql")
-def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
-    _ = kw
-    database, schema = _get_mssql_database_schema(add_primary_key.schema, compiler)
-
-    table = compiler.preparer.quote(add_primary_key.table_name)
-    pk_name = compiler.preparer.quote(
-        add_primary_key.name
-        if add_primary_key.name is not None
-        else "pk_"
-        + "_".join([c.lower() for c in add_primary_key.key])
-        + "_"
-        + add_primary_key.table_name.lower()
-    )
-    cols = ",".join([compiler.preparer.quote(col) for col in add_primary_key.key])
-    return (
-        f"ALTER TABLE {database}.{schema}.{table} ADD CONSTRAINT {pk_name} PRIMARY KEY"
-        f" ({cols})"
-    )
-
-
-# noinspection SqlDialectInspection
 @compiles(AddIndex)
 def visit_add_index(add_index: AddIndex, compiler, **kw):
     _ = kw
@@ -973,25 +913,6 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
     )
     cols = ",".join([compiler.preparer.quote(col) for col in add_index.index])
     return f"CREATE INDEX {index_name} ON {schema}.{table} ({cols})"
-
-
-# noinspection SqlDialectInspection
-@compiles(AddIndex, "mssql")
-def visit_add_index(add_index: AddIndex, compiler, **kw):
-    _ = kw
-    database, schema = _get_mssql_database_schema(add_index.schema, compiler)
-
-    table = compiler.preparer.quote(add_index.table_name)
-    index_name = compiler.preparer.quote(
-        add_index.name
-        if add_index.name is not None
-        else "idx_"
-        + "_".join([c.lower() for c in add_index.index])
-        + "_"
-        + add_index.table_name.lower()
-    )
-    cols = ",".join([compiler.preparer.quote(col) for col in add_index.index])
-    return f"CREATE INDEX {index_name} ON {database}.{schema}.{table} ({cols})"
 
 
 # noinspection SqlDialectInspection
@@ -1047,9 +968,9 @@ def visit_change_column_types_duckdb(change: ChangeColumnTypes, compiler, **kw):
 @compiles(ChangeColumnTypes, "mssql")
 def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     _ = kw
-    database, schema = _get_mssql_database_schema(change.schema, compiler)
 
     table = compiler.preparer.quote(change.table_name)
+    schema = compiler.preparer.format_schema(change.schema.get())
 
     def modify_type(_type):
         if change.cap_varchar_max is not None:
@@ -1062,7 +983,7 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
         return _type
 
     statements = [
-        f"ALTER TABLE {database}.{schema}.{table} ALTER COLUMN"
+        f"ALTER TABLE {schema}.{table} ALTER COLUMN"
         f" {compiler.preparer.quote(col)} "
         f"{compiler.type_compiler.process(modify_type(_type))}"
         f"{'' if nullable is None else ' NULL' if nullable else ' NOT NULL'}"
@@ -1177,12 +1098,3 @@ def split_ddl_statement(statement: str):
         for statement in statement.split(STATEMENT_SEPERATOR)
         if statement.strip() != ""
     ]
-
-
-def _get_mssql_database_schema(schema: Schema, compiler):
-    full_name = schema.get()
-    # it was already checked that there is exactly one dot in schema prefix + suffix
-    database_name, schema_name = full_name.split(".")
-    database = compiler.preparer.format_schema(database_name)
-    schema = compiler.preparer.format_schema(schema_name)
-    return database, schema

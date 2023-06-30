@@ -1,8 +1,4 @@
 -- This is intentionally crazy TSQL code similar to code "found in the wild"
-
-USE master  -- no default schema
-GO
-
 DROP TABLE IF EXISTS {{out_schema}}.table01
 PRINT(CAST(GETDATE() AS VARCHAR) + ': {{out_schema}}.table01 - Create table')
 GO
