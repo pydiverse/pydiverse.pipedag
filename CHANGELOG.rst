@@ -7,6 +7,8 @@ https://semver.org/spec/v2.0.0.html. The most important bits are:
 Changelog
 =========
 
+- added `delete-schemas` command to `pipedag-manage` to help with cleaning up database
+
 0.5.0 (2023-06-28)
 ------------------
 - add support for DuckDB
