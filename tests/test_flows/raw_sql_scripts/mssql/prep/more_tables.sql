@@ -1,8 +1,5 @@
 -- This is intentionally crazy TSQL code similar to code "found in the wild"
 
-USE master
-GO
-
 /*
     SECTION: raw01A
 */

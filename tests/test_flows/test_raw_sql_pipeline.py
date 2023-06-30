@@ -46,10 +46,7 @@ def raw_sql_bind_schema(
     if stage is not None:
         stage_name = stage.transaction_name if transaction else stage.name
         schema = store.get_schema(stage_name).get()
-        database, schema_only = schema.split(".")
         sql = sql.replace("{{%sschema}}" % prefix, schema)
-        sql = sql.replace("{{%sdatabase}}" % prefix, database)
-        sql = sql.replace("{{%sschema_only}}" % prefix, schema_only)
     return sql
 
 

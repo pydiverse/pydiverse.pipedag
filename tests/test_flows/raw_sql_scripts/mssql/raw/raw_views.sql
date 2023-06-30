@@ -1,22 +1,18 @@
 -- This is intentionally crazy TSQL code similar to code "found in the wild"
-
-USE {{out_database}}  -- needed for views
-GO
-
 {{helper_schema}}.CREATEALLDATES '2022-01-01', '2023-01-01'
 SELECT * INTO {{out_schema}}.dummy_dates FROM ##alldates
 GO
-SELECT 1000000 as entity_nr, cast('1000-01-01' as DATE) as start_date, cast('9999-01-01' as DATE) as end_date INTO dbo.schema00_raw01_table
+SELECT 1000000 as entity_nr, cast('1000-01-01' as DATE) as start_date, cast('9999-01-01' as DATE) as end_date INTO {{out_schema}}.schema00_raw01_table
 GO
-SELECT '1' as mod_type, cast('1000-01-01' as DATE) as start_date, cast('9999-01-01' as DATE) as end_date INTO dbo.filter_table
+SELECT '1' as mod_type, cast('1000-01-01' as DATE) as start_date, cast('9999-01-01' as DATE) as end_date INTO {{out_schema}}.filter_table
 GO
 
 /*
     SECTION: SAMPLING
 */
 GO
-DECLARE @START BIGINT = 0 + (SELECT CAST(MIN(entity_nr) AS BIGINT) FROM dbo.schema00_raw01_table);
-DECLARE @END BIGINT = (SELECT CAST(MAX(entity_nr) AS BIGINT) FROM dbo.schema00_raw01_table);
+DECLARE @START BIGINT = 0 + (SELECT CAST(MIN(entity_nr) AS BIGINT) FROM {{out_schema}}.schema00_raw01_table);
+DECLARE @END BIGINT = (SELECT CAST(MAX(entity_nr) AS BIGINT) FROM {{out_schema}}.schema00_raw01_table);
 DECLARE @STEP INT = {{helper_schema}}.get_db_sampling_factor();
 DROP TABLE IF EXISTS {{out_schema}}.sample_entities;
 WITH L0 AS (SELECT c FROM (SELECT 1 UNION ALL SELECT 1) AS D(c)), -- 2^1
@@ -38,14 +34,14 @@ CREATE UNIQUE CLUSTERED INDEX nr_index ON {{out_schema}}.sample_entities (nr) WI
 */
 GO
 PRINT (CAST(GETDATE() AS VARCHAR) + ': {{out_schema}}.raw01')
-DROP VIEW IF EXISTS {{out_schema_only}}.raw01
+DROP VIEW IF EXISTS {{out_schema}}.raw01
 GO
-CREATE VIEW {{out_schema_only}}.raw01
+CREATE VIEW {{out_schema}}.raw01
 AS
 SELECT entity_nr                 entity
      , start_date                     start_date
      , end_date                  end_date
-FROM dbo.schema00_raw01_table WITH (NOLOCK)
+FROM {{out_schema}}.schema00_raw01_table WITH (NOLOCK)
 INNER JOIN sample_entities WITH (NOLOCK)
 ON entity_nr = sample_entities.nr
 
@@ -56,12 +52,12 @@ ON entity_nr = sample_entities.nr
 
 GO
 PRINT(CAST(GETDATE() AS VARCHAR) + ': {{out_schema}}.fm_mod_type')
-DROP VIEW IF EXISTS {{out_schema_only}}.fm_mod_type
+DROP VIEW IF EXISTS {{out_schema}}.fm_mod_type
 GO
-CREATE VIEW {{out_schema_only}}.fm_mod_type
+CREATE VIEW {{out_schema}}.fm_mod_type
 AS
 SELECT mod_type     x_inv_type
      , start_date               start_date
      , end_date              end_date
-FROM dbo.filter_table WITH(NOLOCK)
+FROM {{out_schema}}.filter_table WITH(NOLOCK)
 GO

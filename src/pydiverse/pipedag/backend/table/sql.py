@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import itertools
 import json
 import re
 import textwrap
@@ -547,8 +546,9 @@ class SQLTableStore(BaseTableStore):
     @execute_raw_sql.dialect("mssql")
     def _execute_raw_sql_mssql(self, raw_sql: RawSql):
         if self.disable_pytsql:
-            return self._execute_raw_sql_mssql_fallback(raw_sql)
-        return self._execute_raw_sql_mssql_pytsql(raw_sql)
+            self._execute_raw_sql_mssql_fallback(raw_sql)
+        else:
+            self._execute_raw_sql_mssql_pytsql(raw_sql)
 
     def _execute_raw_sql_mssql_fallback(self, raw_sql: RawSql):
         """Alternative to using pytsql for splitting SQL statement.
@@ -738,13 +738,14 @@ class SQLTableStore(BaseTableStore):
                 ),
                 conn=conn,
             )
-            # TODO: in case "." is in self.schema_prefix, we need to implement
-            #       schema renaming by creating the new schema and moving
-            #       table objects over
+            self.logger.info("DROPPED")
+
             self.execute(RenameSchema(schema, tmp_schema, self.engine), conn=conn)
+            self.logger.info("RENAMED")
             self.execute(
                 RenameSchema(transaction_schema, schema, self.engine), conn=conn
             )
+            self.logger.info("RENAMED")
             self.execute(
                 RenameSchema(tmp_schema, transaction_schema, self.engine), conn=conn
             )
@@ -998,30 +999,13 @@ class SQLTableStore(BaseTableStore):
     # noinspection SqlDialectInspection
     def _get_mssql_sql_modules(self, schema: str):
         with self.engine_connect() as conn:
-            database, schema_only = schema.split(".")
-            self.execute(f"USE {database}", conn=conn)
             # include stored procedures in view names because they can also be recreated
             # based on sys.sql_modules.description
             sql = (
                 "select obj.name, obj.type from sys.sql_modules as mod "
                 "left join sys.objects as obj on mod.object_id=obj.object_id "
                 "left join sys.schemas as schem on schem.schema_id=obj.schema_id "
-                f"where schem.name='{schema_only}'"
-            )
-            rows = self.execute(sql, conn=conn).fetchall()
-        return {row[0]: row[1] for row in rows}
-
-    # noinspection SqlDialectInspection
-    def _get_mssql_sql_synonyms(self, schema: str):
-        with self.engine_connect() as conn:
-            database, schema_only = schema.split(".")
-            self.execute(f"USE {database}", conn=conn)
-            # include stored procedures in view names because they can also be recreated
-            # based on sys.sql_modules.description
-            sql = (
-                "select syn.name, syn.type from sys.synonyms as syn "
-                "left join sys.schemas as schem on schem.schema_id=syn.schema_id "
-                f"where schem.name='{schema_only}'"
+                f"where schem.name='{schema}'"
             )
             rows = self.execute(sql, conn=conn).fetchall()
         return {row[0]: row[1] for row in rows}
@@ -1029,14 +1013,12 @@ class SQLTableStore(BaseTableStore):
     def copy_raw_sql_tables_to_transaction(
         self, metadata: RawSqlMetadata, target_stage: Stage
     ):
-        # TODO: IMPLEMENT
-        raise NotImplementedError
         src_schema = self.get_schema(metadata.stage)
         dest_schema = self.get_schema(target_stage.transaction_name)
 
-        views = set(self.get_view_names(src_schema.get(), include_everything=True))
         new_tables = set(metadata.tables) - set(metadata.prev_tables)
 
+        views = set(self.get_view_names(src_schema.get(), include_everything=True))
         tables_to_copy = new_tables - set(views)
         for table_name in tables_to_copy:
             try:
@@ -1083,39 +1065,23 @@ class SQLTableStore(BaseTableStore):
     def _copy_view_to_transaction_mssql(
         self, view_name: str, src_schema: Schema, dest_schema: Schema
     ):
-        src_database, src_schema_only = src_schema.get().split(".")
-        dest_database, dest_schema_only = dest_schema.get().split(".")
-
+        # TODO: Create DDL for all of this
         with self.engine_connect() as conn:
-            self.execute(f"USE {src_database}", conn=conn)
-            view_sql = self.execute(
-                f"""
-                SELECT definition
-                FROM sys.sql_modules
-                WHERE [object_id] = OBJECT_ID('[{src_schema_only}].[{view_name}]');
-                """,
-                conn=conn,
-            ).first()
+            definition = conn.exec_driver_sql(
+                "SELECT OBJECT_DEFINITION(OBJECT_ID("
+                f"N'{src_schema.get()}.{view_name}'"
+                "))"
+            ).scalar_one()
 
-            if view_sql is None:
-                msg = f"No SQL query associated with view {view_name} found."
-                raise ValueError(msg)
-            view_sql = view_sql[0]
+            # TODO: Quote properly
+            definition = definition.replace(
+                f"{src_schema.get()}.", f"{dest_schema.get()}."
+            )
+            definition = definition.replace(
+                f"[{src_schema.get()}].", f"{dest_schema.get()}."
+            )
 
-            # Update view SQL so that it references the destination schema
-            if src_schema_only != dest_schema_only:
-                names_product = itertools.product(
-                    [src_schema_only, f"[{src_schema_only}]"],
-                    [view_name, f"[{view_name}]"],
-                )
-                for schema, view in names_product:
-                    view_sql.replace(
-                        f"{schema}.{view}",
-                        f"[{dest_schema_only}].[{view_name}]",
-                    )
-
-            self.execute(f"USE {dest_database}", conn=conn)
-            self.execute(view_sql, conn=conn)
+            self.execute(definition, conn=conn)
 
     def delete_table_from_transaction(self, table: Table):
         self.execute(

@@ -100,3 +100,33 @@ class PipedagMSSqlReflection:
             return table, owner
 
         return name, schema
+
+    @staticmethod
+    def get_procedure_names(engine: sa.Engine, schema: str):
+        query = f"""
+        SELECT obj.name
+        FROM sys.objects AS obj
+        LEFT JOIN sys.schemas AS schem
+               ON obj.schema_id = schem.schema_id
+        WHERE schem.name = '{schema}'
+          AND obj.type = 'P'
+        """
+
+        with engine.connect() as conn:
+            result = conn.exec_driver_sql(query).scalars().all()
+        return result
+
+    @staticmethod
+    def get_function_names(engine: sa.Engine, schema: str):
+        query = f"""
+        SELECT obj.name
+        FROM sys.objects AS obj
+        LEFT JOIN sys.schemas AS schem
+               ON obj.schema_id = schem.schema_id
+        WHERE schem.name = '{schema}'
+          AND obj.type = 'FN'
+        """
+
+        with engine.connect() as conn:
+            result = conn.exec_driver_sql(query).scalars().all()
+        return result

@@ -442,14 +442,27 @@ def visit_rename_schema_mssql(rename: RenameSchema, compiler, **kw):
 
     # Reflect to get objects which we want to move
     names_to_move = []
+    names_to_redefine = []
 
-    names_to_move.extend(inspector.get_table_names(schema=rename.from_.get()))
-    names_to_move.extend(inspector.get_view_names(schema=rename.from_.get()))
-    names_to_move.extend(
-        PipedagMSSqlReflection.get_alias_names(rename.engine, schema=rename.from_.get())
+    table_names = inspector.get_table_names(schema=rename.from_.get())
+    view_names = inspector.get_view_names(schema=rename.from_.get())
+    alias_names = PipedagMSSqlReflection.get_alias_names(
+        rename.engine, schema=rename.from_.get()
+    )
+    procedure_names = PipedagMSSqlReflection.get_procedure_names(
+        rename.engine, schema=rename.from_.get()
+    )
+    function_names = PipedagMSSqlReflection.get_function_names(
+        rename.engine, schema=rename.from_.get()
     )
 
-    if len(names_to_move) == 0:
+    names_to_move.extend(table_names)
+    names_to_move.extend(alias_names)
+    names_to_redefine.extend(view_names)
+    names_to_redefine.extend(procedure_names)
+    names_to_redefine.extend(function_names)
+
+    if not (names_to_move or names_to_redefine):
         return ""
 
     # Produce statement
@@ -459,8 +472,32 @@ def visit_rename_schema_mssql(rename: RenameSchema, compiler, **kw):
     for name in names_to_move:
         name = compiler.preparer.quote(name)
         statements.append(f"ALTER SCHEMA {to} TRANSFER {from_}.{name}")
-    statements.append(DropSchema(rename.from_))
 
+    # Recreate views, procedures and functions
+    # TODO: Create DDL for all of this
+    with rename.engine.connect() as conn:
+
+        def get_definition(name: str) -> str:
+            q = f"SELECT OBJECT_DEFINITION(OBJECT_ID(N'{rename.from_.get()}.{name}'))"
+            return conn.exec_driver_sql(q).scalar_one()
+
+        for name in names_to_redefine:
+            # TODO: Blindly replacing strings in the query is dangerous.
+            #       Instead I would use pyparsing to do this more properly
+            #       -> Don't replace in strings
+            definition = get_definition(name)
+            definition = definition.replace(f"{from_}.", f"{to}.")
+            definition = definition.replace(f"[{from_}].", f"{to}.")
+            statements.append(definition)
+
+    for view in view_names:
+        statements.append(DropView(view, rename.from_))
+    for procedure in procedure_names:
+        statements.append(DropProcedure(procedure, rename.from_))
+    for function in function_names:
+        statements.append(DropFunction(function, rename.from_))
+
+    statements.append(DropSchema(rename.from_))
     return join_ddl_statements(statements, compiler, **kw)
 
 
@@ -500,6 +537,14 @@ def visit_drop_schema_content_mssql(drop: DropSchemaContent, compiler, **kw):
         statements.append(DropView(view, schema=schema))
     for alias in PipedagMSSqlReflection.get_alias_names(engine, schema=schema.get()):
         statements.append(DropAlias(alias, schema=drop.schema))
+    for procedure in PipedagMSSqlReflection.get_procedure_names(
+        engine, schema=schema.get()
+    ):
+        statements.append(DropProcedure(procedure, schema=schema))
+    for function in PipedagMSSqlReflection.get_function_names(
+        engine, schema=schema.get()
+    ):
+        statements.append(DropFunction(function, schema=schema))
 
     return join_ddl_statements(statements, compiler, **kw)
 
