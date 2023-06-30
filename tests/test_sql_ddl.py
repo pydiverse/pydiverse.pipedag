@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydiverse.pipedag.backend.table.util.sql_ddl import insert_into_in_query
+from pydiverse.pipedag.backend.table.sql.ddl import insert_into_in_query
 
 
 def test_insert_into():

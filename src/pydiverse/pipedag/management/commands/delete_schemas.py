@@ -5,7 +5,7 @@ import sqlalchemy as sa
 
 from pydiverse.pipedag import PipedagConfig
 from pydiverse.pipedag.backend.table import SQLTableStore
-from pydiverse.pipedag.backend.table.util.sql_ddl import DropSchema, Schema
+from pydiverse.pipedag.backend.table.sql.ddl import DropSchema, Schema
 from pydiverse.pipedag.management.cli import cli
 
 

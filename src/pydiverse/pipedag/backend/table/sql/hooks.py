@@ -13,16 +13,16 @@ from packaging.version import Version
 
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.table.base import TableHook
-from pydiverse.pipedag.backend.table.sql import SQLTableStore
+from pydiverse.pipedag.backend.table.sql.ddl import (
+    ChangeTableLogged,
+    CreateTableAsSelect,
+    Schema,
+)
+from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import (
     DType,
     PandasDTypeBackend,
     classmethod_engine_argument_dispatch,
-)
-from pydiverse.pipedag.backend.table.util.sql_ddl import (
-    ChangeTableLogged,
-    CreateTableAsSelect,
-    Schema,
 )
 from pydiverse.pipedag.materialize import Table
 from pydiverse.pipedag.materialize.core import TaskInfo

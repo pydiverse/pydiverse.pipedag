@@ -10,11 +10,11 @@ import sqlalchemy as sa
 
 from pydiverse.pipedag import ConfigContext, Stage
 from pydiverse.pipedag.backend.lock.base import BaseLockManager, Lockable, LockState
-from pydiverse.pipedag.backend.table.util import engine_dispatch
-from pydiverse.pipedag.backend.table.util.sql_ddl import (
+from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateSchema,
     Schema,
 )
+from pydiverse.pipedag.backend.table.util import engine_dispatch
 from pydiverse.pipedag.errors import LockError
 
 

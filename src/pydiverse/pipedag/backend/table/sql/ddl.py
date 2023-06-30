@@ -430,7 +430,7 @@ def visit_rename_schema_mssql(rename: RenameSchema, compiler, **kw):
     # one schema to another.
     # https://stackoverflow.com/questions/17571233/how-to-change-schema-of-all-tables-views-and-stored-procedures-in-mssql
     # https://learn.microsoft.com/en-us/sql/t-sql/statements/alter-schema-transact-sql?view=sql-server-ver16
-    from pydiverse.pipedag.backend.table.util.sql_reflection import (
+    from pydiverse.pipedag.backend.table.sql.reflection import (
         PipedagMSSqlReflection,
     )
 
@@ -520,7 +520,7 @@ def visit_drop_schema_content(drop: DropSchemaContent, compiler, **kw):
 
 @compiles(DropSchemaContent, "mssql")
 def visit_drop_schema_content_mssql(drop: DropSchemaContent, compiler, **kw):
-    from pydiverse.pipedag.backend.table.util.sql_reflection import (
+    from pydiverse.pipedag.backend.table.sql.reflection import (
         PipedagMSSqlReflection,
     )
 
@@ -551,7 +551,7 @@ def visit_drop_schema_content_mssql(drop: DropSchemaContent, compiler, **kw):
 
 @compiles(DropSchemaContent, "ibm_db_sa")
 def visit_drop_schema_content_ibm_db2(drop: DropSchemaContent, compiler, **kw):
-    from pydiverse.pipedag.backend.table.util.sql_reflection import PipedagDB2Reflection
+    from pydiverse.pipedag.backend.table.sql.reflection import PipedagDB2Reflection
 
     _ = kw
     schema = drop.schema

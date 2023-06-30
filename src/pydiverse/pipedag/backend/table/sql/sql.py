@@ -14,8 +14,7 @@ import sqlalchemy.sql.elements
 
 from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.table.base import BaseTableStore
-from pydiverse.pipedag.backend.table.util import engine_dispatch
-from pydiverse.pipedag.backend.table.util.sql_ddl import (
+from pydiverse.pipedag.backend.table.sql.ddl import (
     AddIndex,
     AddPrimaryKey,
     ChangeColumnNullable,
@@ -33,6 +32,7 @@ from pydiverse.pipedag.backend.table.util.sql_ddl import (
     Schema,
     split_ddl_statement,
 )
+from pydiverse.pipedag.backend.table.util import engine_dispatch
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.context.context import ConfigContext, StageCommitTechnique
 from pydiverse.pipedag.context.run_context import DeferredTableStoreOp
@@ -1280,7 +1280,7 @@ class SQLTableStore(BaseTableStore):
 
     @resolve_aliases.dialect("ibm_db_sa")
     def resolve_aliases_ibm_db_sa(self, table_name, schema):
-        from pydiverse.pipedag.backend.table.util.sql_reflection import (
+        from pydiverse.pipedag.backend.table.sql.reflection import (
             PipedagDB2Reflection,
         )
 
@@ -1288,7 +1288,7 @@ class SQLTableStore(BaseTableStore):
 
     @resolve_aliases.dialect("mssql")
     def resolve_aliases_mssql(self, table_name, schema):
-        from pydiverse.pipedag.backend.table.util.sql_reflection import (
+        from pydiverse.pipedag.backend.table.sql.reflection import (
             PipedagMSSqlReflection,
         )
 
@@ -1347,4 +1347,4 @@ class SQLTableStore(BaseTableStore):
 
 
 # Load SQLTableStore Hooks
-from pydiverse.pipedag.backend.table.sql_hooks import *  # noqa
+from pydiverse.pipedag.backend.table.sql.hooks import *  # noqa
