@@ -137,6 +137,10 @@ class Stage:
         self._ctx.__exit__()
         del self._ctx
 
+        if len(self.tasks) == 0:
+            # Empty stage doesn't need to be committed
+            self.commit_task._skip_commit = True
+
     def all_tasks(self):
         yield from self.tasks
         yield self.commit_task
@@ -168,6 +172,7 @@ class CommitStageTask(Task):
         self.flow = flow
         self.upstream_stages = {stage}
         self.input_tasks = {}
+        self._skip_commit = False
 
         self.logger = self.logger.bind(logger_name="Commit Stage", stage=stage)
 
@@ -175,8 +180,7 @@ class CommitStageTask(Task):
         self._visualize_hidden = True
 
     def fn(self):
-        if len(self.stage.tasks) == 0:
-            # Empty stage doesn't need to be committed
+        if self._skip_commit:
             return
 
         self.logger.info("Committing stage")
