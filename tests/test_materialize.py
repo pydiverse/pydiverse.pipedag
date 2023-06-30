@@ -359,6 +359,14 @@ def test_name_mangling_lazy_table_cache_fn():
         assert result.get(lazy_2, as_type=pd.DataFrame)["x"][0] == 2
 
 
+def test_run_flow_with_empty_stage():
+    with Flow("f") as f:
+        with Stage("stage_0"):
+            pass
+
+    assert f.run().successful
+
+
 @materialize(lazy=True)
 def _lazy_task_1():
     return Table(select_as(1, "x"), name="t1", primary_key="x")

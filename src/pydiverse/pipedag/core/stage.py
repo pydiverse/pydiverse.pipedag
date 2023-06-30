@@ -175,5 +175,9 @@ class CommitStageTask(Task):
         self._visualize_hidden = True
 
     def fn(self):
+        if len(self.stage.tasks) == 0:
+            # Empty stage doesn't need to be committed
+            return
+
         self.logger.info("Committing stage")
         ConfigContext.get().store.commit_stage(self.stage)
