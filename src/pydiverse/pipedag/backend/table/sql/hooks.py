@@ -8,13 +8,11 @@ from typing import Any
 
 import pandas as pd
 import sqlalchemy as sa
-import sqlalchemy.dialects
 from packaging.version import Version
 
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.table.base import TableHook
 from pydiverse.pipedag.backend.table.sql.ddl import (
-    ChangeTableLogged,
     CreateTableAsSelect,
     Schema,
 )
@@ -22,7 +20,6 @@ from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import (
     DType,
     PandasDTypeBackend,
-    classmethod_engine_argument_dispatch,
 )
 from pydiverse.pipedag.materialize import Table
 from pydiverse.pipedag.materialize.core import TaskInfo
@@ -193,19 +190,17 @@ class PandasTableHook(TableHook[SQLTableStore]):
             store=store,
             table=table,
             schema=schema,
-            engine=store.engine,
             dtypes=dtypes,
         )
         store.add_indexes(table, schema)
 
-    @classmethod_engine_argument_dispatch
+    @classmethod
     def _execute_materialize(
         cls,
         df: pd.DataFrame,
         store: SQLTableStore,
         table: Table[pd.DataFrame],
         schema: Schema,
-        engine: sa.Engine,
         dtypes: dict[str, DType],
     ):
         dtypes = {name: dtype.to_sql() for name, dtype in dtypes.items()}
@@ -214,135 +209,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
         df.to_sql(
             table.name,
-            engine,
-            schema=schema.get(),
-            index=False,
-            dtype=dtypes,
-            chunksize=100_000,
-        )
-
-    @_execute_materialize.dialect("postgresql")
-    def _execute_materialize_postgres(
-        cls,
-        df: pd.DataFrame,
-        store: SQLTableStore,
-        table: Table[pd.DataFrame],
-        schema: Schema,
-        engine: sa.Engine,
-        dtypes: dict[str, DType],
-    ):
-        import csv
-        from io import StringIO
-
-        dtypes = {name: dtype.to_sql() for name, dtype in dtypes.items()}
-        if table.type_map:
-            dtypes.update(table.type_map)
-
-        # Create empty table
-        df[:0].to_sql(
-            table.name,
-            engine,
-            schema=schema.get(),
-            index=False,
-            dtype=dtypes,
-        )
-
-        if store.unlogged_tables:
-            with engine.connect() as conn:
-                conn.execute(ChangeTableLogged(table.name, schema, False))
-
-        # COPY data
-        # TODO: For python 3.12, there is csv.QUOTE_STRINGS
-        #       This would make everything a bit safer, because then we could represent
-        #       the string "\\N" (backslash + capital n).
-        s_buf = StringIO()
-        df.to_csv(
-            s_buf,
-            na_rep="\\N",
-            header=False,
-            index=False,
-            quoting=csv.QUOTE_MINIMAL,
-        )
-        s_buf.seek(0)
-
-        dbapi_conn = engine.raw_connection()
-        try:
-            with dbapi_conn.cursor() as cur:
-                sql = (
-                    f"COPY {schema.get()}.{table.name} FROM STDIN"
-                    " WITH (FORMAT CSV, NULL '\\N')"
-                )
-                cur.copy_expert(sql=sql, file=s_buf)
-            dbapi_conn.commit()
-        finally:
-            dbapi_conn.close()
-
-    @_execute_materialize.dialect("mssql")
-    def _execute_materialize_mssql(
-        cls,
-        df: pd.DataFrame,
-        store: SQLTableStore,
-        table: Table[pd.DataFrame],
-        schema: Schema,
-        engine: sa.Engine,
-        dtypes: dict[str, DType],
-    ):
-        dtypes = ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
-            {
-                name: sa.dialects.mssql.DATETIME2()
-                for name, dtype in dtypes.items()
-                if dtype == DType.DATETIME
-            }
-        )
-
-        if table.type_map:
-            dtypes.update(table.type_map)
-
-        df.to_sql(
-            table.name,
-            engine,
-            schema=schema.get(),
-            index=False,
-            dtype=dtypes,
-            chunksize=100_000,
-        )
-
-    @_execute_materialize.dialect("ibm_db_sa")
-    def _execute_materialize_ibm_db_sa(
-        cls,
-        df: pd.DataFrame,
-        store: SQLTableStore,
-        table: Table[pd.DataFrame],
-        schema: Schema,
-        engine: sa.Engine,
-        dtypes: dict[str, DType],
-    ):
-        # Default string target is CLOB which can't be used for indexing.
-        # -> Convert indexed string columns to VARCHAR(256)
-        index_columns = set()
-        if indexes := table.indexes:
-            index_columns |= {col for index in indexes for col in index}
-        if primary_key := table.primary_key:
-            index_columns |= set(primary_key)
-
-        dtypes = ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
-            {
-                name: (
-                    sa.String(length=256)
-                    if name in index_columns
-                    else sa.String(length=32_672)
-                )
-                for name, dtype in dtypes.items()
-                if dtype == DType.STRING
-            }
-        )
-
-        if table.type_map:
-            dtypes.update(table.type_map)
-
-        df.to_sql(
-            table.name,
-            engine,
+            store.engine,
             schema=schema.get(),
             index=False,
             dtype=dtypes,
@@ -373,7 +240,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
         # Retrieve
         query, dtypes = cls._build_retrieve_query(store, table, stage_name, backend)
-        dataframe = cls._execute_query_retrieve(query, dtypes, store.engine, backend)
+        dataframe = cls._execute_query_retrieve(store, query, dtypes, backend)
         return dataframe
 
     @classmethod
@@ -452,19 +319,19 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
         return res_cols, res_dtypes
 
-    @classmethod_engine_argument_dispatch
+    @classmethod
     def _execute_query_retrieve(
         cls,
+        store: SQLTableStore,
         query: Any,
         dtypes: dict[str, DType],
-        engine: sa.Engine,
         backend: PandasDTypeBackend,
     ) -> pd.DataFrame:
         dtypes = {
             name: dtype.to_pandas(backend=backend) for name, dtype in dtypes.items()
         }
 
-        with engine.connect() as conn:
+        with store.engine.connect() as conn:
             if PandasTableHook.pd_version >= Version("2.0"):
                 df = pd.read_sql(query, con=conn, dtype=dtypes)
             else:

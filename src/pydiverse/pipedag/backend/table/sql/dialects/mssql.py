@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import re
 
+import pandas as pd
 import sqlalchemy as sa
+import sqlalchemy.dialects.mssql
 
 from pydiverse.pipedag.backend.table.sql.ddl import (
     AddIndex,
@@ -10,8 +12,11 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     ChangeColumnTypes,
     Schema,
 )
+from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook
 from pydiverse.pipedag.backend.table.sql.reflection import PipedagMSSqlReflection
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
+from pydiverse.pipedag.backend.table.util import DType
+from pydiverse.pipedag.materialize import Table
 from pydiverse.pipedag.materialize.container import RawSql
 
 
@@ -156,3 +161,35 @@ class MSSqlTableStore(SQLTableStore):
 
     def resolve_alias(self, table: str, schema: str):
         return PipedagMSSqlReflection.resolve_alias(self.engine, table, schema)
+
+
+@MSSqlTableStore.register_table(pd)
+class PandasTableHook(PandasTableHook):
+    @classmethod
+    def _execute_materialize(
+        cls,
+        df: pd.DataFrame,
+        store: SQLTableStore,
+        table: Table[pd.DataFrame],
+        schema: Schema,
+        dtypes: dict[str, DType],
+    ):
+        dtypes = ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
+            {
+                name: sa.dialects.mssql.DATETIME2()
+                for name, dtype in dtypes.items()
+                if dtype == DType.DATETIME
+            }
+        )
+
+        if table.type_map:
+            dtypes.update(table.type_map)
+
+        df.to_sql(
+            table.name,
+            store.engine,
+            schema=schema.get(),
+            index=False,
+            dtype=dtypes,
+            chunksize=100_000,
+        )

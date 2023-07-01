@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, ABCMeta, abstractmethod
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Generic
 
 import structlog
@@ -34,17 +35,19 @@ class _TableStoreMeta(ABCMeta):
     def __new__(mcs, name, bases, attrs, **kwargs):
         cls = super().__new__(mcs, name, bases, attrs, **kwargs)
 
-        cls._REGISTERED_TABLES = []
-        cls._M_TABLE_CACHE = {}
-        cls._R_TABLE_CACHE = {}
+        cls._registered_table_hooks = []
+        cls._m_hook_cache = {}
+        cls._r_hook_cache = {}
+        cls._hook_subclass_cache = {}
 
         return cls
 
 
 class TableHookResolver(Disposable, metaclass=_TableStoreMeta):
-    _REGISTERED_TABLES: list[TableHook]
-    _M_TABLE_CACHE: dict[type, TableHook]
-    _R_TABLE_CACHE: dict[type, TableHook]
+    _registered_table_hooks: list[type[TableHook]]
+    _m_hook_cache: dict[type, type[TableHook]]
+    _r_hook_cache: dict[type, type[TableHook]]
+    _hook_subclass_cache: dict[type, type[TableHook]]
 
     @classmethod
     def register_table(cls, *requirements: Any):
@@ -79,49 +82,63 @@ class TableHookResolver(Disposable, metaclass=_TableStoreMeta):
                 )(hook_cls)
 
             # Register the hook
-            cls._REGISTERED_TABLES.append(hook_cls)
-            cls._M_TABLE_CACHE.clear()
-            cls._R_TABLE_CACHE.clear()
+            cls._registered_table_hooks.append(hook_cls)
+            cls._m_hook_cache.clear()
+            cls._r_hook_cache.clear()
+            cls._hook_subclass_cache.clear()
             return hook_cls
 
         return decorator
 
-    def get_m_table_hook(self: Self, type_: type[T]) -> TableHook[Self]:
-        """Get a table hook that can materialize the specified type"""
-        if type_ in self._M_TABLE_CACHE:
-            return self._M_TABLE_CACHE[type_]
-
-        # Walk up the hierarchy of super classes to search for the first class with
-        # a hook that can materialize a table of the specified type.
+    def __registered_tables(self) -> Iterable[type[TableHook]]:
+        # Walk up the hierarchy of super classes and return each registered
+        # table hook in reverse order
         for cls in type(self).__mro__:
-            if hasattr(cls, "_REGISTERED_TABLES"):
-                for hook in cls._REGISTERED_TABLES:
-                    if hook.can_materialize(type_):
-                        self._M_TABLE_CACHE[type_] = hook
-                        return hook
+            if hasattr(cls, "_registered_table_hooks"):
+                yield from cls._registered_table_hooks[::-1]
+
+    def get_m_table_hook(self: Self, type_: type[T]) -> type[TableHook[Self]]:
+        """Get a table hook that can materialize the specified type"""
+        if type_ in self._m_hook_cache:
+            return self._m_hook_cache[type_]
+
+        for hook in self.__registered_tables():
+            if hook.can_materialize(type_):
+                self._m_hook_cache[type_] = hook
+                return hook
 
         raise TypeError(f"Can't materialize Table with underlying type {type_}")
 
-    def get_r_table_hook(self: Self, type_: type[T] | tuple | dict) -> TableHook[Self]:
+    def get_r_table_hook(
+        self: Self, type_: type[T] | tuple | dict
+    ) -> type[TableHook[Self]]:
         """Get a table hook that can retrieve the specified type"""
         if isinstance(type_, tuple):
             type_ = type_[0]
         elif isinstance(type_, dict):
             type_ = type_["type"]
 
-        if type_ in self._R_TABLE_CACHE:
-            return self._R_TABLE_CACHE[type_]
+        if type_ in self._r_hook_cache:
+            return self._r_hook_cache[type_]
 
-        # Walk up the hierarchy of super classes to search for the first class with
-        # a hook that can retrieve a table of the specified type.
-        for cls in type(self).__mro__:
-            if hasattr(cls, "_REGISTERED_TABLES"):
-                for hook in cls._REGISTERED_TABLES:
-                    if hook.can_retrieve(type_):
-                        self._R_TABLE_CACHE[type_] = hook
-                        return hook
+        for hook in self.__registered_tables():
+            if hook.can_retrieve(type_):
+                self._r_hook_cache[type_] = hook
+                return hook
 
         raise TypeError(f"Can't retrieve Table as type {type_}")
+
+    def get_hook_subclass(self, type_: type[TableHook[T]]) -> type[TableHook[T]]:
+        """Finds a table hook that is a subclass of the provided type"""
+        if type_ in self._hook_subclass_cache:
+            return self._hook_subclass_cache[type_]
+
+        for hook in self.__registered_tables():
+            if issubclass(hook, type_):
+                self._hook_subclass_cache[type_] = hook
+                return hook
+
+        return type_
 
     def store_table(
         self,

@@ -289,7 +289,8 @@ class SQLTableStore(BaseTableStore):
                 conn.exec_driver_sql("SELECT 1")
 
     def _create_engine(self):
-        return sa.create_engine(self.engine_url)
+        # future=True enables SQLAlchemy 2.0 behaviour with version 1.4
+        return sa.create_engine(self.engine_url, future=True)
 
     @contextmanager
     def engine_connect(self) -> sa.Connection:
@@ -330,12 +331,7 @@ class SQLTableStore(BaseTableStore):
             query_str = str(
                 query.compile(self.engine, compile_kwargs={"literal_binds": True})
             )
-            try:
-                # sqlalchemy 2.0 + ibm_db_sa needs this
-                conn.commit()
-            except AttributeError:
-                # sqlalchemy 1.x does not have this function and does not need it
-                pass
+
             with conn.begin():
                 for part in split_ddl_statement(query_str):
                     self._execute(part, conn)

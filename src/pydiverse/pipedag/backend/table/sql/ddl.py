@@ -31,6 +31,7 @@ __all__ = [
     "AddIndex",
     "ChangeColumnNullable",
     "ChangeColumnTypes",
+    "ChangeTableLogged",
     "split_ddl_statement",
 ]
 
