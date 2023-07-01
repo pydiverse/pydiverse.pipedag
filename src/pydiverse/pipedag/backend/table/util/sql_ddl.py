@@ -342,7 +342,7 @@ def visit_create_schema_mssql(create: CreateSchema, compiler, **kw):
             BEGIN {create_database} END"""
         create_schema = f"""
             IF NOT EXISTS (
-                SELECT * FROM sys.schema WHERE name = N'{schema_name}'
+                SELECT * FROM sys.schemas WHERE name = N'{schema_name}'
             )
             BEGIN {create_schema} END"""
 

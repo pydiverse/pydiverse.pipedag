@@ -248,7 +248,7 @@ class PolarsParquetTableHook(TableHook[ParquetTableCache]):
         task_info: TaskInfo | None,
     ):
         path = store.base_path / stage_name / f"{table.name}.parquet"
-        table.obj.to_parquet(path)
+        table.obj.write_parquet(path)
 
     @classmethod
     def retrieve(

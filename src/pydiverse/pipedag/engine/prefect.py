@@ -165,14 +165,14 @@ class PrefectTwoEngine(OrchestrationEngine):
         # Compute task_values
         task_values = {}
         successful = result.is_completed()
-        for task, state in result.data.items():
+        for task, state in result.result().items():
             successful &= state.is_completed()
             task_values[task] = state.data
 
         # If the task failed, extract the exception
         exception = None
         if not successful:
-            for state in result.data.values():
+            for state in result.result().values():
                 if state.is_failed() or state.is_crashed():
                     exception = prefect.states.get_state_exception(state)
                     break
