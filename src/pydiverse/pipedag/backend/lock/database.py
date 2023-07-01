@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import threading
 import time
+import warnings
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -14,7 +15,6 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateSchema,
     Schema,
 )
-from pydiverse.pipedag.backend.table.util import engine_dispatch
 from pydiverse.pipedag.errors import LockError
 
 
@@ -29,6 +29,23 @@ class DatabaseLockManager(BaseLockManager):
 
     The database specific lock implementations can be found at the end of the file.
     """
+
+    __registered_dialects: dict[str, type[DatabaseLockManager]] = {}
+    _dialect_name: str
+
+    def __new__(cls, engine: sa.Engine, *args, **kwargs):
+        if cls != DatabaseLockManager:
+            return super().__new__(cls)
+
+        # If calling DatabaseLockManager(engine), then we want to dynamically
+        # instantiate the correct dialect specific subclass based on the engine dialect.
+        dialect = engine.dialect.name
+        dialect_specific_cls = DatabaseLockManager.__registered_dialects.get(
+            dialect, cls
+        )
+        return super(DatabaseLockManager, dialect_specific_cls).__new__(
+            dialect_specific_cls
+        )
 
     @classmethod
     def _init_conf_(cls, config: dict[str, Any]):
@@ -80,13 +97,28 @@ class DatabaseLockManager(BaseLockManager):
         # Prepare database
         self.prepare()
 
-    @engine_dispatch
-    def prepare(self):
-        ...
+    def __init_subclass__(cls, **kwargs):
+        # Whenever a new subclass if DatabaseLockManager is defined, it must contain the
+        # `_dialect_name` attribute. This allows us to dynamically instantiate it
+        # when DatabaseLockManager SQLTableStore(engine, ...) based on the dialect
+        # of the engine (see __new__).
+        dialect_name = getattr(cls, "_dialect_name", None)
+        if dialect_name is None:
+            raise ValueError(
+                "All subclasses of DatabaseLockManager must have a `_dialect_name`"
+                f"attribute. But {cls.__name__}._dialect_name is None."
+            )
 
-    @prepare.dialect("mssql")
-    @prepare.dialect("ibm_db_sa")
-    def __prepare(self):
+        if dialect_name in DatabaseLockManager.__registered_dialects:
+            warnings.warn(
+                f"Already registered a DatabaseLockManager for dialect {dialect_name}"
+            )
+        DatabaseLockManager.__registered_dialects[dialect_name] = cls
+
+    def prepare(self):
+        pass
+
+    def _prepare_create_lock_schema(self):
         # Create the lock schema
         if not self.create_lock_schema:
             return
@@ -112,7 +144,7 @@ class DatabaseLockManager(BaseLockManager):
 
     @property
     def supports_stage_level_locking(self):
-        return self.engine.dialect.name not in ["ibm_db_sa"]
+        raise NotImplementedError
 
     def acquire(self, lockable: Lockable):
         if self.supports_stage_level_locking:
@@ -159,33 +191,11 @@ class DatabaseLockManager(BaseLockManager):
                     self.logger.info("Unlocking at instance level")
                     self.il_lock.release()
 
-    @engine_dispatch
     def get_lock_object(self, lockable: Lockable):
-        raise NotImplementedError(f"Dialect '{self.engine.dialect}' not supported")
+        raise NotImplementedError(f"Dialect '{self.engine.dialect.name}' not supported")
 
-    @get_lock_object.dialect("postgresql")
-    def __get_lock_object(self, lockable: Lockable):
-        if self.connection is None:
-            self.connection = self.engine.connect()
-
-        name = self.lock_name(lockable)
-        return PostgresLock(name, self.connection)
-
-    @get_lock_object.dialect("mssql")
-    def __get_lock_object(self, lockable: Lockable):
-        if self.connection is None:
-            self.connection = self.engine.connect()
-
-        name = self.lock_name(lockable)
-        return MSSqlLock(name, self.connection)
-
-    @engine_dispatch
     def get_instance_level_lock(self):
-        raise NotImplementedError(f"Dialect '{self.engine.dialect}' not supported")
-
-    @get_instance_level_lock.dialect("ibm_db_sa")
-    def __get_instance_level_lock(self):
-        return DB2Lock("instance_lock", self.lock_schema.get(), self.engine)
+        raise NotImplementedError(f"Dialect '{self.engine.dialect.name}' not supported")
 
     def lock_name(self, lock: Lockable):
         if isinstance(lock, Stage):
@@ -248,6 +258,18 @@ class PostgresLock(Lock):
         return self._locked
 
 
+class PostgresLockManager(DatabaseLockManager):
+    _dialect_name = "postgresql"
+    supports_stage_level_locking = True
+
+    def get_lock_object(self, lockable: Lockable):
+        if self.connection is None:
+            self.connection = self.engine.connect()
+
+        name = self.lock_name(lockable)
+        return PostgresLock(name, self.connection)
+
+
 class MSSqlLock(Lock):
     """
     Locking based on application resource locks.
@@ -299,6 +321,18 @@ class MSSqlLock(Lock):
     @property
     def locked(self) -> bool:
         return self._locked
+
+
+class MSSqlLockManager(DatabaseLockManager):
+    _dialect_name = "mssql"
+    supports_stage_level_locking = True
+
+    def get_lock_object(self, lockable: Lockable):
+        if self.connection is None:
+            self.connection = self.engine.connect()
+
+        name = self.lock_name(lockable)
+        return MSSqlLock(name, self.connection)
 
 
 class DB2Lock(Lock):
@@ -356,3 +390,14 @@ class DB2Lock(Lock):
     @property
     def locked(self) -> bool:
         return self._locked
+
+
+class DB2LockManager(DatabaseLockManager):
+    _dialect_name = "ibm_db_sa"
+    supports_stage_level_locking = False
+
+    def prepare(self):
+        self._prepare_create_lock_schema()
+
+    def get_instance_level_lock(self):
+        return DB2Lock("instance_lock", self.lock_schema.get(), self.engine)
