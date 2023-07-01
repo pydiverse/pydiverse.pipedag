@@ -55,14 +55,17 @@ class SQLTableStore(BaseTableStore):
     METADATA_SCHEMA = "pipedag_metadata"
     LOCK_SCHEMA = "pipedag_locks"
 
-    _REGISTERED_DIALECTS = {}
+    __registered_dialects: dict[str, type[SQLTableStore]] = {}
     _dialect_name: str
 
     def __new__(cls, engine_url: str, *args, **kwargs):
-        # Dynamically instantiate the proper subclass based on the dialect found
-        # in the engine url.
-        dialect_name = sa.engine.make_url(engine_url).get_dialect().name
-        dialect_specific_cls = SQLTableStore._REGISTERED_DIALECTS.get(dialect_name, cls)
+        if cls != SQLTableStore:
+            return super().__new__(cls)
+
+        # If calling SQLTableStore(engine_url), then we want to dynamically instantiate
+        # the correct dialect specific subclass based on the dialect found in the url.
+        dialect = sa.engine.make_url(engine_url).get_dialect().name
+        dialect_specific_cls = SQLTableStore.__registered_dialects.get(dialect, cls)
         return super(SQLTableStore, dialect_specific_cls).__new__(dialect_specific_cls)
 
     @classmethod
@@ -127,59 +130,40 @@ class SQLTableStore(BaseTableStore):
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
 
         self.engine_url = sa.engine.make_url(engine_url)
-
         self.engine = self._create_engine()
-        self.engines_other = dict()  # i.e. for IBIS connection
 
         self._init_database()
 
         # Set up metadata tables and schema
-        from sqlalchemy import CLOB, BigInteger, Boolean, Column, DateTime, String
-
-        if self.engine.dialect.name == "ibm_db_sa":
-            clob_type = CLOB  # VARCHAR(MAX) does not exist
-        else:
-            clob_type = String  # VARCHAR(MAX)s
-
-        self.sql_metadata = sa.MetaData()
-
-        # Stage Table is unique for stage
-        # (we currently cannot version changes of this metadata table when using
-        # stage_commit_tequnique=read_views)
+        self.sql_metadata = sa.MetaData(schema=self.metadata_schema.get())
 
         def autoincrement_pk(name: str, seq_name: str):
-            if self.engine.dialect.name == "duckdb":
-                sequence = sqlalchemy.Sequence(
-                    f"{seq_name}_{name}_seq", schema=self.metadata_schema.get()
-                )
-                return Column(
-                    name,
-                    BigInteger,
-                    sequence,
-                    server_default=sequence.next_value(),
-                    primary_key=True,
-                )
-
-            return Column(name, BigInteger, primary_key=True, autoincrement=True)
-
-        self.stage_table = sa.Table(
-            "stages",
-            self.sql_metadata,
-            autoincrement_pk("id", "stages"),
-            Column("stage", String(64)),
-            Column("cur_transaction_name", String(256)),
-            schema=self.metadata_schema.get(),
-        )
+            sequence = sa.Sequence(f"{seq_name}_{name}_seq", metadata=self.sql_metadata)
+            return sa.Column(
+                name,
+                sa.BigInteger(),
+                sequence,
+                server_default=sequence.next_value(),
+                primary_key=True,
+            )
 
         # Store version number for metadata table schema evolution.
         # We disable caching in case of version mismatch.
         self.disable_caching = False
-        self.metadata_version = "0.3.0"  # Increase version if metadata table changes
+        self.metadata_version = "0.3.1"  # Increase version if metadata table changes
         self.version_table = sa.Table(
             "metadata_version",
             self.sql_metadata,
-            Column("version", String(32)),
-            schema=self.metadata_schema.get(),
+            sa.Column("version", sa.String(32)),
+        )
+
+        # Stage Table is unique for stage
+        self.stage_table = sa.Table(
+            "stages",
+            self.sql_metadata,
+            autoincrement_pk("id", "stages"),
+            sa.Column("stage", sa.String(64)),
+            sa.Column("cur_transaction_name", sa.String(256)),
         )
 
         # Task Table is unique for stage * in_transaction_schema
@@ -187,17 +171,16 @@ class SQLTableStore(BaseTableStore):
             "tasks",
             self.sql_metadata,
             autoincrement_pk("id", "tasks"),
-            Column("name", String(128)),
-            Column("stage", String(64)),
-            Column("version", String(64)),
-            Column("timestamp", DateTime),
-            Column("run_id", String(20)),
-            Column("position_hash", String(20)),
-            Column("input_hash", String(20)),
-            Column("cache_fn_hash", String(20)),
-            Column("output_json", clob_type),
-            Column("in_transaction_schema", Boolean),
-            schema=self.metadata_schema.get(),
+            sa.Column("name", sa.String(128)),
+            sa.Column("stage", sa.String(64)),
+            sa.Column("version", sa.String(64)),
+            sa.Column("timestamp", sa.DateTime()),
+            sa.Column("run_id", sa.String(20)),
+            sa.Column("position_hash", sa.String(20)),
+            sa.Column("input_hash", sa.String(20)),
+            sa.Column("cache_fn_hash", sa.String(20)),
+            sa.Column("output_json", sa.Text()),
+            sa.Column("in_transaction_schema", sa.Boolean()),
         )
 
         # Lazy Cache Table is unique for stage * in_transaction_schema
@@ -205,12 +188,11 @@ class SQLTableStore(BaseTableStore):
             "lazy_tables",
             self.sql_metadata,
             autoincrement_pk("id", "lazy_tables"),
-            Column("name", String(128)),
-            Column("stage", String(64)),
-            Column("query_hash", String(20)),
-            Column("task_hash", String(20)),
-            Column("in_transaction_schema", Boolean),
-            schema=self.metadata_schema.get(),
+            sa.Column("name", sa.String(128)),
+            sa.Column("stage", sa.String(64)),
+            sa.Column("query_hash", sa.String(20)),
+            sa.Column("task_hash", sa.String(20)),
+            sa.Column("in_transaction_schema", sa.Boolean()),
         )
 
         # Sql Cache Table is unique for stage * in_transaction_schema
@@ -218,13 +200,12 @@ class SQLTableStore(BaseTableStore):
             "raw_sql_tables",
             self.sql_metadata,
             autoincrement_pk("id", "raw_sql_tables"),
-            Column("prev_tables", String(256)),
-            Column("tables", String(256)),
-            Column("stage", String(64)),
-            Column("query_hash", String(20)),
-            Column("task_hash", String(20)),
-            Column("in_transaction_schema", Boolean),
-            schema=self.metadata_schema.get(),
+            sa.Column("prev_tables", sa.String(1028)),
+            sa.Column("tables", sa.String(1028)),
+            sa.Column("stage", sa.String(64)),
+            sa.Column("query_hash", sa.String(20)),
+            sa.Column("task_hash", sa.String(20)),
+            sa.Column("in_transaction_schema", sa.Boolean()),
         )
 
         self.logger.info(
@@ -235,6 +216,10 @@ class SQLTableStore(BaseTableStore):
         )
 
     def __init_subclass__(cls, **kwargs):
+        # Whenever a new subclass if SQLTableStore is defined, it must contain the
+        # `_dialect_name` attribute. This allows us to dynamically instantiate it
+        # when calling SQLTableStore(engine_url, ...) based on the dialect name found
+        # in the engine url (see __new__).
         dialect_name = getattr(cls, "_dialect_name", None)
         if dialect_name is None:
             raise ValueError(
@@ -242,11 +227,11 @@ class SQLTableStore(BaseTableStore):
                 f" But {cls.__name__}._dialect_name is None."
             )
 
-        if dialect_name in SQLTableStore._REGISTERED_DIALECTS:
+        if dialect_name in SQLTableStore.__registered_dialects:
             warnings.warn(
                 f"Already registered a SQLTableStore for dialect {dialect_name}"
             )
-        SQLTableStore._REGISTERED_DIALECTS[dialect_name] = cls
+        SQLTableStore.__registered_dialects[dialect_name] = cls
 
     def _init_database(self):
         if not self.create_database_if_not_exists:
