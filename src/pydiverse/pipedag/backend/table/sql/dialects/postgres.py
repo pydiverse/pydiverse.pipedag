@@ -4,12 +4,21 @@ import csv
 from io import StringIO
 
 import pandas as pd
+import sqlalchemy as sa
 
-from pydiverse.pipedag.backend.table.sql.ddl import ChangeTableLogged, Schema
-from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook
+from pydiverse.pipedag.backend.table.sql.ddl import (
+    ChangeTableLogged,
+    CreateTableAsSelect,
+    Schema,
+)
+from pydiverse.pipedag.backend.table.sql.hooks import (
+    PandasTableHook,
+    SQLAlchemyTableHook,
+)
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.materialize import Table
+from pydiverse.pipedag.materialize.core import TaskInfo
 
 
 class PostgresTableStore(SQLTableStore):
@@ -35,13 +44,39 @@ class PostgresTableStore(SQLTableStore):
         self._init_database_with_database("postgres", {"isolation_level": "AUTOCOMMIT"})
 
 
+@PostgresTableStore.register_table()
+class SQLAlchemyTableHook(SQLAlchemyTableHook):
+    @classmethod
+    def materialize(
+        cls,
+        store: PostgresTableStore,
+        table: Table[sa.sql.elements.TextClause | sa.Text],
+        stage_name,
+        task_info: TaskInfo | None,
+    ):
+        obj = table.obj
+        if isinstance(table.obj, (sa.Table, sa.sql.selectable.Alias)):
+            obj = sa.select("*").select_from(table.obj)
+
+        schema = store.get_schema(stage_name)
+        store.execute(
+            CreateTableAsSelect(
+                table.name,
+                schema,
+                obj,
+                unlogged=store.unlogged_tables,
+            )
+        )
+        store.add_indexes(table, schema, early_not_null_possible=True)
+
+
 @PostgresTableStore.register_table(pd)
 class PandasTableHook(PandasTableHook):
     @classmethod
     def _execute_materialize(
         cls,
         df: pd.DataFrame,
-        store: SQLTableStore,
+        store: PostgresTableStore,
         table: Table[pd.DataFrame],
         schema: Schema,
         dtypes: dict[str, DType],
@@ -61,7 +96,7 @@ class PandasTableHook(PandasTableHook):
         )
 
         if store.unlogged_tables:
-            with engine.connect() as conn:
+            with engine.begin() as conn:
                 conn.execute(ChangeTableLogged(table.name, schema, False))
 
         # COPY data

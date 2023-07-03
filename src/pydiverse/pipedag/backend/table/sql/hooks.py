@@ -71,7 +71,6 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                 obj,
                 early_not_null=table.primary_key,
                 source_tables=source_tables,
-                unlogged=store.unlogged_tables,
             )
         )
         store.add_indexes(table, schema, early_not_null_possible=True)

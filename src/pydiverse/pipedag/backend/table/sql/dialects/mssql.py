@@ -185,7 +185,7 @@ class PandasTableHook(PandasTableHook):
     def _execute_materialize(
         cls,
         df: pd.DataFrame,
-        store: SQLTableStore,
+        store: MSSqlTableStore,
         table: Table[pd.DataFrame],
         schema: Schema,
         dtypes: dict[str, DType],
