@@ -82,12 +82,9 @@ class SQLTableStore(BaseTableStore):
         schema_prefix: str = "",
         schema_suffix: str = "",
         avoid_drop_create_schema: bool = False,
-        disable_pytsql: bool = False,
-        pytsql_isolate_top_level_statements: bool = True,
         print_materialize: bool = False,
         print_sql: bool = False,
         no_db_locking: bool = True,
-        unlogged_tables: bool = False,
     ):
         """
         Construct table store.
@@ -97,38 +94,29 @@ class SQLTableStore(BaseTableStore):
         :param create_database_if_not_exists:
             whether to create database if it does not exist
         :param schema_prefix:
-            prefix string for schemas (dot is interpreted as database.schema)
+            prefix string for schemas
         :param schema_suffix:
-            suffix string for schemas (dot is interpreted as database.schema)
+            suffix string for schemas
         :param avoid_drop_create_schema
             avoid creating and dropping schemas
-        :param disable_pytsql:
-            whether to disable the use of pytsql (dialect mssql only)
-        :param pytsql_isolate_top_level_statements:
-            forward pytsql executes() parameter
         :param print_materialize:
             whether to print select statements before materialization
         :param print_sql:
             whether to print final SQL statements (except for metadata)
         :param no_db_locking:
             speed up database by telling it we will not rely on it's locking mechanisms
-        :param unlogged_tables:
-            whether to use UNLOGGED tables or not (dialect postgresql only)
         """
         super().__init__()
 
         self.create_database_if_not_exists = create_database_if_not_exists
         self.schema_prefix = schema_prefix
         self.schema_suffix = schema_suffix
-        self.disable_pytsql = disable_pytsql
         self.avoid_drop_create_schema = avoid_drop_create_schema
-        self.pytsql_isolate_top_level_statements = pytsql_isolate_top_level_statements
         self.print_materialize = print_materialize
         self.print_sql = print_sql
         self.no_db_locking = no_db_locking
-        self.unlogged_tables = unlogged_tables
-        self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
 
+        self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
         self.engine_url = sa.engine.make_url(engine_url)
         self.engine = self._create_engine()
 

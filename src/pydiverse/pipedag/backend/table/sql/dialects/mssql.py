@@ -23,6 +23,22 @@ from pydiverse.pipedag.materialize.container import RawSql
 class MSSqlTableStore(SQLTableStore):
     _dialect_name = "mssql"
 
+    def __init__(
+        self,
+        *args,
+        disable_pytsql: bool = False,
+        pytsql_isolate_top_level_statements: bool = True,
+        **kwargs,
+    ):
+        """
+        :param disable_pytsql: whether to disable the use of pytsql
+        :param pytsql_isolate_top_level_statements: forward pytsql executes() parameter
+        """
+        self.disable_pytsql = disable_pytsql
+        self.pytsql_isolate_top_level_statements = pytsql_isolate_top_level_statements
+
+        super().__init__(*args, **kwargs)
+
     def _init_database(self):
         self._init_database_with_database("master", {"isolation_level": "AUTOCOMMIT"})
 

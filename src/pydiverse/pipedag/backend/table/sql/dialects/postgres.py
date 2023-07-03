@@ -15,6 +15,22 @@ from pydiverse.pipedag.materialize import Table
 class PostgresTableStore(SQLTableStore):
     _dialect_name = "postgresql"
 
+    def __init__(
+        self,
+        *args,
+        unlogged_tables: bool = False,
+        **kwargs,
+    ):
+        """
+        :param unlogged_tables: whether to use UNLOGGED tables or not.
+            This reduces safety in case of a crash or unclean shutdown, but can
+            significantly increase write performance.
+            https://www.postgresql.org/docs/9.5/sql-createtable.html#SQL-CREATETABLE-UNLOGGED
+        """
+        self.unlogged_tables = unlogged_tables
+
+        super().__init__(*args, **kwargs)
+
     def _init_database(self):
         self._init_database_with_database("postgres", {"isolation_level": "AUTOCOMMIT"})
 
