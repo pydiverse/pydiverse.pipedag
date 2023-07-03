@@ -174,6 +174,9 @@ class PipedagConfig:
             fail_fast=config["fail_fast"],
             network_interface=config["network_interface"],
             attrs=Box(config["attrs"], frozen_box=True),
+            table_hook_args=Box(
+                config["table_store"].get("hook_args", {}), frozen_box=True
+            ),
         )
 
         if "PYDIVERSE_PIPEDAG_PYTEST" not in os.environ:

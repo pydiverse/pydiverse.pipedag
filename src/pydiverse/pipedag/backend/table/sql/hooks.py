@@ -10,6 +10,7 @@ import pandas as pd
 import sqlalchemy as sa
 from packaging.version import Version
 
+from pydiverse.pipedag import ConfigContext
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.table.base import TableHook
 from pydiverse.pipedag.backend.table.sql.ddl import (
@@ -126,6 +127,16 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
 @SQLTableStore.register_table(pd)
 class PandasTableHook(TableHook[SQLTableStore]):
+    """
+    Allows overriding the default dtype backend to use by setting the `dtype_backend`
+    argument in the `hook_args` section of the table store config:
+    ::
+
+        hook_args:
+          pandas:
+            dtype_backend: "arrow" | "numpy"
+    """
+
     pd_version = Version(pd.__version__)
 
     @classmethod
@@ -227,6 +238,10 @@ class PandasTableHook(TableHook[SQLTableStore]):
             backend_str = "arrow"
         else:
             backend_str = "numpy"
+
+        if hook_args := ConfigContext.get().table_hook_args.get("pandas", None):
+            if dtype_backend := hook_args.get("dtype_backend", None):
+                backend_str = dtype_backend
 
         if isinstance(as_type, tuple):
             backend_str = as_type[1]

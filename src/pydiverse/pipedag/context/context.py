@@ -128,7 +128,9 @@ class ConfigContext(BaseAttrsContext):
     network_interface: str
     attrs: Box
 
-    # other configuration options
+    table_hook_args: Box
+
+    # run specific options
     ignore_fresh_input: bool = False
 
     # INTERNAL FLAGS - ONLY FOR PIPEDAG USE
@@ -152,6 +154,7 @@ class ConfigContext(BaseAttrsContext):
         try:
             table_store_config = self._config_dict["table_store"]
             table_store = load_object(table_store_config)
+
             if "local_table_cache" in table_store_config:
                 local_cache_config = table_store_config["local_table_cache"]
                 local_table_cache = LocalTableCache(

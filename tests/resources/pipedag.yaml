@@ -43,6 +43,9 @@ instances:
         print_materialize: true
         # print final sql statements
         print_sql: true
+      hook_args:
+        pandas:
+          dtype_backend: "arrow"
 
     blob_store:
       class: "pydiverse.pipedag.backend.blob.FileBlobStore"
