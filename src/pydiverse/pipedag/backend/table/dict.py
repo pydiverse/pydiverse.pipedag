@@ -163,7 +163,7 @@ class PandasTableHook(TableHook[DictTableStore]):
         store.store[stage_name][table.name] = table.obj
 
     @classmethod
-    def retrieve(cls, store, table, stage_name, as_type):
+    def retrieve(cls, store, table, stage_name, as_type, namer):
         return store.store[stage_name][table.name].copy()
 
     @classmethod
@@ -208,10 +208,10 @@ class PydiverseTransformTableHook(TableHook[DictTableStore]):
         return PandasTableHook.materialize(store, table, stage_name, task_info)
 
     @classmethod
-    def retrieve(cls, store, table, stage_name, as_type):
+    def retrieve(cls, store, table, stage_name, as_type, namer):
         from pydiverse.transform.eager import PandasTableImpl
 
-        df = PandasTableHook.retrieve(store, table, stage_name, pd.DataFrame)
+        df = PandasTableHook.retrieve(store, table, stage_name, pd.DataFrame, namer)
         return pdt.Table(PandasTableImpl(table.name, df))
 
     @classmethod

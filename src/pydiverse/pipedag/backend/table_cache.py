@@ -15,6 +15,7 @@ from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.table.base import TableHook, TableHookResolver
 from pydiverse.pipedag.context import ConfigContext
 from pydiverse.pipedag.util import normalize_name
+from pydiverse.pipedag.util.naming import NameDisambiguator
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.materialize.core import MaterializingTask, TaskInfo
@@ -64,11 +65,15 @@ class LocalTableCache:
                     type=type(table.obj),
                 )
 
-    def retrieve_table_obj(self, table: Table, as_type: type[T]) -> T:
+    def retrieve_table_obj(
+        self, table: Table, as_type: type[T], namer: NameDisambiguator | None = None
+    ) -> T:
         assert (
             self.obj is not None
         ), "this method should only be called if has_cache_table returns True"
-        return self.obj.retrieve_table_obj(table, as_type, use_transaction_name=False)
+        return self.obj.retrieve_table_obj(
+            table, as_type, namer, use_transaction_name=False
+        )
 
     def has_cache_table(self, table: Table, astype: type[T]):
         """Checks if the cache has a table for the given table.cache_key"""
@@ -201,6 +206,7 @@ class PandasParquetTableHook(TableHook[ParquetTableCache]):
         table: Table,
         stage_name: str,
         as_type: type[pd.DataFrame],
+        namer: NameDisambiguator | None = None,
     ) -> pd.DataFrame:
         path = store.base_path / stage_name / f"{table.name}.parquet"
         return pd.read_parquet(path)
@@ -251,6 +257,7 @@ class PolarsParquetTableHook(TableHook[ParquetTableCache]):
         table: Table,
         stage_name: str,
         as_type: type[polars.dataframe.DataFrame],
+        namer: NameDisambiguator | None = None,
     ) -> polars.dataframe.DataFrame:
         path = store.base_path / stage_name / f"{table.name}.parquet"
         return polars.read_parquet(path)
@@ -299,8 +306,9 @@ class TidyPolarsParquetTableHook(TableHook[ParquetTableCache]):
         table: Table,
         stage_name: str,
         as_type: type[tidypolars.Tibble],
+        namer: NameDisambiguator | None = None,
     ) -> tidypolars.Tibble:
-        df = PolarsParquetTableHook.retrieve(store, table, stage_name, as_type)
+        df = PolarsParquetTableHook.retrieve(store, table, stage_name, as_type, namer)
         return tidypolars.from_polars(df)
 
     @classmethod
@@ -353,11 +361,14 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
         table: Table,
         stage_name: str,
         as_type: type[T],
+        namer: NameDisambiguator | None = None,
     ) -> T:
         from pydiverse.transform.eager import PandasTableImpl
 
         if issubclass(as_type, PandasTableImpl):
-            df = PandasParquetTableHook.retrieve(store, table, stage_name, pd.DataFrame)
+            df = PandasParquetTableHook.retrieve(
+                store, table, stage_name, pd.DataFrame, namer
+            )
             return pdt.Table(PandasTableImpl(table.name, df))
         raise NotImplementedError
 

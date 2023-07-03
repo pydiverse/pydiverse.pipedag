@@ -27,12 +27,12 @@ def lazy_task_2(input1: sa.Table, input2: sa.Table):
 
 @materialize(lazy=True, input_type=sa.Table)
 def lazy_task_3(input1: sa.Table):
-    return sa.text(f"SELECT * FROM {input1.schema}.{input1.name}")
+    return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.name}")
 
 
 @materialize(lazy=True, input_type=sa.Table)
 def lazy_task_4(input1: sa.Table):
-    return sa.text(f"SELECT * FROM {input1.schema}.{input1.name}")
+    return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.name}")
 
 
 @materialize(nout=2, version="1.0.0")

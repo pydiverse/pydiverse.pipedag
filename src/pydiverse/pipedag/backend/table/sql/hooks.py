@@ -24,6 +24,7 @@ from pydiverse.pipedag.backend.table.util import (
 )
 from pydiverse.pipedag.materialize import Table
 from pydiverse.pipedag.materialize.core import TaskInfo
+from pydiverse.pipedag.util.naming import NameDisambiguator
 
 # region SQLALCHEMY
 
@@ -38,7 +39,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        return type_ == sa.Table or type_ == sa.Alias
+        return type_ == sa.Table
 
     @classmethod
     def materialize(
@@ -77,29 +78,29 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def retrieve(
-        cls, store, table, stage_name, as_type: type[sa.Table]
+        cls, store, table, stage_name, as_type: type[sa.Table], namer=None
     ) -> sa.sql.selectable.Selectable:
         table_name = table.name
         schema = store.get_schema(stage_name).get()
         table_name, schema = store.resolve_alias(table_name, schema)
         tbl = None
-
         for retry_iteration in range(4):
             # retry operation since it might have been terminated as a deadlock victim
             try:
+                alias_name = (
+                    namer.get_name(table_name) if namer is not None else table_name
+                )
                 tbl = sa.Table(
                     table_name,
                     sa.MetaData(),
                     schema=schema,
                     autoload_with=store.engine,
-                )
+                ).alias(alias_name)
+                break
             except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
                 if retry_iteration == 3:
                     raise
                 time.sleep(retry_iteration * retry_iteration * 1.2)
-
-        if as_type == sa.Alias:
-            return tbl.alias()
         return tbl
 
     @classmethod
@@ -232,6 +233,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         table: Table,
         stage_name: str,
         as_type: type[pd.DataFrame] | tuple | dict,
+        namer: NameDisambiguator | None = None,
     ) -> pd.DataFrame:
         # Config
         if PandasTableHook.pd_version >= Version("2.0"):
@@ -417,6 +419,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         table: Table,
         stage_name: str,
         as_type: type[polars.dataframe.DataFrame],
+        namer: NameDisambiguator | None = None,
     ) -> polars.dataframe.DataFrame:
         schema = store.get_schema(stage_name).get()
         table_name = table.name
@@ -470,8 +473,9 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         table: Table,
         stage_name: str,
         as_type: type[tidypolars.Tibble],
+        namer: NameDisambiguator | None = None,
     ) -> tidypolars.Tibble:
-        df = PolarsTableHook.retrieve(store, table, stage_name, as_type)
+        df = PolarsTableHook.retrieve(store, table, stage_name, as_type, namer)
         return tidypolars.from_polars(df)
 
     @classmethod
@@ -531,15 +535,18 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         table: Table,
         stage_name: str,
         as_type: type[T],
+        namer: NameDisambiguator | None = None,
     ) -> T:
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
 
         if issubclass(as_type, PandasTableImpl):
-            df = PandasTableHook.retrieve(store, table, stage_name, pd.DataFrame)
+            df = PandasTableHook.retrieve(store, table, stage_name, pd.DataFrame, namer)
             return pdt.Table(PandasTableImpl(table.name, df))
         if issubclass(as_type, SQLTableImpl):
-            sa_tbl = SQLAlchemyTableHook.retrieve(store, table, stage_name, sa.Table)
+            sa_tbl = SQLAlchemyTableHook.retrieve(
+                store, table, stage_name, sa.Table, namer
+            )
             return pdt.Table(SQLTableImpl(store.engine, sa_tbl))
         raise NotImplementedError
 
@@ -614,6 +621,7 @@ class IbisTableHook(TableHook[SQLTableStore]):
         table: Table,
         stage_name: str,
         as_type: type[ibis.expr.types.Table],
+        namer: NameDisambiguator | None = None,
     ) -> ibis.expr.types.Table:
         conn = cls.conn(store)
         table_name = table.name
