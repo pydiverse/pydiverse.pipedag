@@ -12,7 +12,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     ChangeColumnTypes,
     Schema,
 )
-from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook
+from pydiverse.pipedag.backend.table.sql.hooks import IbisTableHook, PandasTableHook
 from pydiverse.pipedag.backend.table.sql.reflection import PipedagMSSqlReflection
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import DType
@@ -208,4 +208,24 @@ class PandasTableHook(PandasTableHook):
             index=False,
             dtype=dtypes,
             chunksize=100_000,
+        )
+
+
+try:
+    import ibis
+except ImportError:
+    ibis = None
+
+
+@MSSqlTableStore.register_table(ibis)
+class IbisTableHook(IbisTableHook):
+    @classmethod
+    def _conn(cls, store: MSSqlTableStore):
+        url = store.engine_url
+        return ibis.mssql.connect(
+            host=url.host,
+            user=url.username,
+            password=url.password,
+            port=url.port,
+            database=url.database,
         )

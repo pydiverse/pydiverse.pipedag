@@ -120,6 +120,9 @@ class SQLTableStore(BaseTableStore):
         self.engine_url = sa.engine.make_url(engine_url)
         self.engine = self._create_engine()
 
+        # Dict where hooks are allowed to store values that should get cached
+        self.hook_cache = {}
+
         self._init_database()
 
         # Set up metadata tables and schema
@@ -436,6 +439,7 @@ class SQLTableStore(BaseTableStore):
 
     def dispose(self):
         self.engine.dispose()
+        self.hook_cache = None
         super().dispose()
 
     def init_stage(self, stage: Stage):

@@ -558,36 +558,17 @@ except ImportError as e:
 
 @SQLTableStore.register_table(ibis)
 class IbisTableHook(TableHook[SQLTableStore]):
-    @staticmethod
-    def get_con(store):
-        # TODO: move this function to a better ibis specific place
-        con = store.engines_other.get("ibis")
-        if con is None:
-            url = store.engine_url
-            dialect = store.engine.dialect.name
-            if dialect == "postgresql":
-                con = ibis.postgres.connect(
-                    host=url.host,
-                    user=url.username,
-                    password=url.password,
-                    port=url.port,
-                    database=url.database,
-                )
-            elif dialect == "mssql":
-                con = ibis.mssql.connect(
-                    host=url.host,
-                    user=url.username,
-                    password=url.password,
-                    port=url.port,
-                    database=url.database,
-                )
-            else:
-                raise RuntimeError(
-                    f"initializing ibis for {dialect} is not supported, yet "
-                    "-- supported: postgresql, mssql"
-                )
-            store.engines_other["ibis"] = con
-        return con
+    @classmethod
+    def conn(cls, store: SQLTableStore):
+        if conn := store.hook_cache.get((cls, "conn")):
+            return conn
+        conn = cls._conn(store)
+        store.hook_cache[(cls, "conn")] = conn
+        return conn
+
+    @classmethod
+    def _conn(cls, store: SQLTableStore):
+        return ibis.connect(store.engine_url.render_as_string(hide_password=False))
 
     @classmethod
     def can_materialize(cls, type_) -> bool:
@@ -619,14 +600,14 @@ class IbisTableHook(TableHook[SQLTableStore]):
         stage_name: str,
         as_type: type[ibis.expr.types.Table],
     ) -> ibis.expr.types.Table:
-        con = cls.get_con(store)
+        conn = cls.conn(store)
         table_name = table.name
         schema = store.get_schema(stage_name).get()
         table_name, schema = store.resolve_alias(table_name, schema)
         for retry_iteration in range(4):
             # retry operation since it might have been terminated as a deadlock victim
             try:
-                tbl = con.table(
+                tbl = conn.table(
                     table_name,
                     schema=schema,
                 )
@@ -648,7 +629,7 @@ class IbisTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def lazy_query_str(cls, store, obj: ibis.expr.types.Table) -> str:
-        return str(ibis.to_sql(obj, cls.get_con(store).name))
+        return str(ibis.to_sql(obj, cls.conn(store).name))
 
 
 # endregion
