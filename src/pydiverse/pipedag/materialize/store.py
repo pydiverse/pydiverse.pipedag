@@ -15,7 +15,6 @@ from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import MaterializingTask, TaskInfo
 from pydiverse.pipedag.materialize.metadata import TaskMetadata
 from pydiverse.pipedag.util import Disposable, deep_map
-from pydiverse.pipedag.util.naming import NameDisambiguator
 
 
 class PipeDAGStore(Disposable):
@@ -108,7 +107,6 @@ class PipeDAGStore(Disposable):
         item: Table | Blob | Any,
         as_type: type[T],
         ctx: RunContext | None = None,
-        namer: NameDisambiguator | None = None,
     ):
         if ctx is None:
             ctx = RunContext.get()
@@ -116,11 +114,9 @@ class PipeDAGStore(Disposable):
         if isinstance(item, Table):
             ctx.validate_stage_lock(item.stage)
             if self.local_table_cache.has_cache_table(item, as_type):
-                return self.local_table_cache.retrieve_table_obj(item, as_type, namer)
+                return self.local_table_cache.retrieve_table_obj(item, as_type)
             else:
-                obj = self.table_store.retrieve_table_obj(
-                    item, as_type=as_type, namer=namer
-                )
+                obj = self.table_store.retrieve_table_obj(item, as_type=as_type)
                 table = item.copy_without_obj()
                 table.obj = obj
                 self.local_table_cache.store_table(
@@ -150,16 +146,12 @@ class PipeDAGStore(Disposable):
         """
 
         ctx = RunContext.get()
-
         input_tables = []
-        namer = NameDisambiguator(prefix="t")
 
         def dematerialize_mapper(x):
             if isinstance(x, Table):
                 input_tables.append(x)
-            return self.dematerialize_item(
-                x, as_type=task.input_type, ctx=ctx, namer=namer
-            )
+            return self.dematerialize_item(x, as_type=task.input_type, ctx=ctx)
 
         d_args = deep_map(args, dematerialize_mapper)
         d_kwargs = deep_map(kwargs, dematerialize_mapper)
