@@ -11,6 +11,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     AddPrimaryKey,
     ChangeColumnTypes,
     Schema,
+    _mssql_update_definition,
 )
 from pydiverse.pipedag.backend.table.sql.hooks import IbisTableHook, PandasTableHook
 from pydiverse.pipedag.backend.table.sql.reflection import PipedagMSSqlReflection
@@ -156,23 +157,13 @@ class MSSqlTableStore(SQLTableStore):
     def _copy_view_to_transaction(
         self, view_name: str, src_schema: Schema, dest_schema: Schema
     ):
-        # TODO: Create DDL for all of this
-        #       See implementation of RenameSchema for mssql
         with self.engine_connect() as conn:
-            definition = conn.exec_driver_sql(
-                "SELECT OBJECT_DEFINITION(OBJECT_ID("
-                f"N'{src_schema.get()}.{view_name}'"
-                "))"
-            ).scalar_one()
-
-            # TODO: Quote properly
-            definition = definition.replace(
-                f"{src_schema.get()}.", f"{dest_schema.get()}."
+            definition = _mssql_update_definition(
+                conn,
+                view_name,
+                src_schema,
+                dest_schema,
             )
-            definition = definition.replace(
-                f"[{src_schema.get()}].", f"{dest_schema.get()}."
-            )
-
             self.execute(definition, conn=conn)
 
     def resolve_alias(self, table: str, schema: str):

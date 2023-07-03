@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import re
 
+import pyparsing as pp
 import sqlalchemy as sa
 from attr import frozen
 from sqlalchemy.ext.compiler import compiles
@@ -475,21 +476,11 @@ def visit_rename_schema_mssql(rename: RenameSchema, compiler, **kw):
         name = compiler.preparer.quote(name)
         statements.append(f"ALTER SCHEMA {to} TRANSFER {from_}.{name}")
 
-    # Recreate views, procedures and functions
-    # TODO: Create DDL for all of this
+    # Recreate views, procedures and functions, but replace all references to the
+    # old schema name with the new schema name
     with rename.engine.connect() as conn:
-
-        def get_definition(name: str) -> str:
-            q = f"SELECT OBJECT_DEFINITION(OBJECT_ID(N'{rename.from_.get()}.{name}'))"
-            return conn.exec_driver_sql(q).scalar_one()
-
         for name in names_to_redefine:
-            # TODO: Blindly replacing strings in the query is dangerous.
-            #       Instead I would use pyparsing to do this more properly
-            #       -> Don't replace in strings
-            definition = get_definition(name)
-            definition = definition.replace(f"{from_}.", f"{to}.")
-            definition = definition.replace(f"[{from_}].", f"{to}.")
+            definition = _mssql_update_definition(conn, name, rename.from_, rename.to)
             statements.append(definition)
 
     for view in view_names:
@@ -688,8 +679,6 @@ def visit_create_view_as_select(create: CreateViewAsSelect, compiler, **kw):
 
 
 def insert_into_in_query(select_sql, schema, table):
-    # TODO: use pyparsing to solve this, because the current approach has issues
-    #       with CTE and quotes
     into = f"INTO {schema}.{table}"
     into_point = None
     # insert INTO before first FROM, WHERE, GROUP BY, WINDOW, HAVING,
@@ -1076,6 +1065,48 @@ def _get_nullable_change_statements(change, compiler):
     ]
     statements.append(f"call sysproc.admin_cmd('REORG TABLE {schema}.{table}')")
     return statements
+
+
+def _mssql_update_definition(
+    conn: sa.Connection,
+    name: str,
+    old_schema: Schema,
+    new_schema: Schema,
+) -> str:
+    """
+    Loads the definition of object `name` in `old_schema`, and replaces all references
+    to `old_schema` inside the definition with `new_schema`.
+
+    :return: updated definition referencing `new_schema` instead of `old_schema`.
+    """
+
+    # Get definition from database (using unquoted name)
+    query = f"SELECT OBJECT_DEFINITION(OBJECT_ID(N'{old_schema.get()}.{name}'))"
+    definition = conn.exec_driver_sql(query).scalar_one()
+
+    # Replace unquoted names with quoted ones
+    identifier_preparer = conn.dialect.identifier_preparer
+    old_schema = identifier_preparer.format_schema(old_schema.get())
+    new_schema = identifier_preparer.format_schema(new_schema.get())
+
+    # Replace schema in definition with new destination schema
+    string_literal = pp.QuotedString(quote_char="'", esc_quote="''")
+    quoted_identifier = pp.QuotedString(
+        quote_char="[", esc_quote="]]", end_quote_char="]"
+    )
+
+    schema_expr = pp.CaselessKeyword(old_schema).ignore(string_literal)
+    if old_schema.startswith("["):
+        schema_expr = schema_expr.ignore(quoted_identifier)
+    else:
+        schema_expr = schema_expr.ignore(quoted_identifier) | (
+            pp.Literal("[") + schema_expr + pp.Literal("]")
+        )
+
+    schema_expr = schema_expr.set_parse_action(pp.replace_with(new_schema))
+    expr = schema_expr + pp.FollowedBy(".")
+
+    return expr.transform_string(definition)
 
 
 STATEMENT_SEPERATOR = "; -- PYDIVERSE-PIPEDAG-SPLIT\n"
