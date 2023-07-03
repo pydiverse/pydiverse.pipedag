@@ -128,20 +128,10 @@ class SQLTableStore(BaseTableStore):
         # Set up metadata tables and schema
         self.sql_metadata = sa.MetaData(schema=self.metadata_schema.get())
 
-        def autoincrement_pk(name: str, seq_name: str):
-            sequence = sa.Sequence(f"{seq_name}_{name}_seq", metadata=self.sql_metadata)
-            return sa.Column(
-                name,
-                sa.BigInteger(),
-                sequence,
-                server_default=sequence.next_value(),
-                primary_key=True,
-            )
-
         # Store version number for metadata table schema evolution.
         # We disable caching in case of version mismatch.
         self.disable_caching = False
-        self.metadata_version = "0.3.1"  # Increase version if metadata table changes
+        self.metadata_version = "0.3.0"  # Increase version if metadata table changes
         self.version_table = sa.Table(
             "metadata_version",
             self.sql_metadata,
@@ -152,7 +142,7 @@ class SQLTableStore(BaseTableStore):
         self.stage_table = sa.Table(
             "stages",
             self.sql_metadata,
-            autoincrement_pk("id", "stages"),
+            self._metadata_pk("id", "stages"),
             sa.Column("stage", sa.String(64)),
             sa.Column("cur_transaction_name", sa.String(256)),
         )
@@ -161,7 +151,7 @@ class SQLTableStore(BaseTableStore):
         self.tasks_table = sa.Table(
             "tasks",
             self.sql_metadata,
-            autoincrement_pk("id", "tasks"),
+            self._metadata_pk("id", "tasks"),
             sa.Column("name", sa.String(128)),
             sa.Column("stage", sa.String(64)),
             sa.Column("version", sa.String(64)),
@@ -178,7 +168,7 @@ class SQLTableStore(BaseTableStore):
         self.lazy_cache_table = sa.Table(
             "lazy_tables",
             self.sql_metadata,
-            autoincrement_pk("id", "lazy_tables"),
+            self._metadata_pk("id", "lazy_tables"),
             sa.Column("name", sa.String(128)),
             sa.Column("stage", sa.String(64)),
             sa.Column("query_hash", sa.String(20)),
@@ -190,7 +180,7 @@ class SQLTableStore(BaseTableStore):
         self.raw_sql_cache_table = sa.Table(
             "raw_sql_tables",
             self.sql_metadata,
-            autoincrement_pk("id", "raw_sql_tables"),
+            self._metadata_pk("id", "raw_sql_tables"),
             sa.Column("prev_tables", sa.String(1028)),
             sa.Column("tables", sa.String(1028)),
             sa.Column("stage", sa.String(64)),
@@ -223,6 +213,9 @@ class SQLTableStore(BaseTableStore):
                 f"Already registered a SQLTableStore for dialect {dialect_name}"
             )
         SQLTableStore.__registered_dialects[dialect_name] = cls
+
+    def _metadata_pk(self, name: str, table_name: str):
+        return sa.Column(name, sa.BigInteger(), primary_key=True)
 
     def _init_database(self):
         if not self.create_database_if_not_exists:
