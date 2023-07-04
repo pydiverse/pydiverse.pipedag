@@ -354,7 +354,14 @@ class BaseTableStore(TableHookResolver):
             prev_objects = self.get_objects_in_stage(raw_sql.stage)
             self.execute_raw_sql(raw_sql)
             post_objects = self.get_objects_in_stage(raw_sql.stage)
-            table_cache_info.store_raw_sql_metadata(self, prev_objects, post_objects)
+
+            # Object names must be sorted to ensure that we can identify the task
+            # again in the future even if the objects get returned in a different order.
+            prev_objects = sorted(prev_objects)
+
+            prev_objects_set = set(prev_objects)
+            new_objects = [o for o in post_objects if o in prev_objects_set]
+            table_cache_info.store_raw_sql_metadata(self, prev_objects, new_objects)
 
         # At this point we MUST also update the cache info, so that any downstream
         # tasks get invalidated if the sql query string changed.

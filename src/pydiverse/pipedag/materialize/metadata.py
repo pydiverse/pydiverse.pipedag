@@ -56,7 +56,7 @@ class RawSqlMetadata:
     The `query_hash` is a hash of the raw sql string.
     The `task_hash` is the combined hash of the task that produced statement.
 
-    The `tables` and `stage` values are used to retrieve the appropriate
+    The `prev_objects` and `stage` values are used to retrieve the appropriate
     tables from the cache.
 
     Attention: `task_hash` is sometimes taken from cache and thus is not guaranteed
@@ -64,8 +64,8 @@ class RawSqlMetadata:
     Instead, it refers to the task that originally produced this object.
     """
 
-    prev_tables: list[str]
-    tables: list[str]
+    prev_objects: list[str]
+    new_objects: list[str]
     stage: str
     query_hash: str
     task_hash: str

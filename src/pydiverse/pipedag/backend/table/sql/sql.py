@@ -131,7 +131,7 @@ class SQLTableStore(BaseTableStore):
         # Store version number for metadata table schema evolution.
         # We disable caching in case of version mismatch.
         self.disable_caching = False
-        self.metadata_version = "0.3.0"  # Increase version if metadata table changes
+        self.metadata_version = "0.3.1"  # Increase version if metadata table changes
         self.version_table = sa.Table(
             "metadata_version",
             self.sql_metadata,
@@ -178,11 +178,11 @@ class SQLTableStore(BaseTableStore):
 
         # Sql Cache Table is unique for stage * in_transaction_schema
         self.raw_sql_cache_table = sa.Table(
-            "raw_sql_tables",
+            "raw_sql",
             self.sql_metadata,
-            self._metadata_pk("id", "raw_sql_tables"),
-            sa.Column("prev_tables", sa.String(1028)),
-            sa.Column("tables", sa.String(1028)),
+            self._metadata_pk("id", "raw_sql"),
+            sa.Column("prev_objects", sa.Text()),
+            sa.Column("new_objects", sa.Text()),
             sa.Column("stage", sa.String(64)),
             sa.Column("query_hash", sa.String(20)),
             sa.Column("task_hash", sa.String(20)),
@@ -774,7 +774,7 @@ class SQLTableStore(BaseTableStore):
         dest_schema = self.get_schema(target_stage.transaction_name)
 
         # New tables (AND other objects)
-        new_objects = set(metadata.tables) - set(metadata.prev_tables)
+        new_objects = set(metadata.new_objects) - set(metadata.prev_objects)
         tables_in_schema = set(inspector.get_table_names(src_schema.get()))
         objects_in_schema = self._get_all_objects_in_schema(src_schema)
 
@@ -1015,8 +1015,8 @@ class SQLTableStore(BaseTableStore):
             with self.engine_connect() as conn:
                 conn.execute(
                     self.raw_sql_cache_table.insert().values(
-                        prev_tables=json.dumps(metadata.prev_tables),
-                        tables=json.dumps(metadata.tables),
+                        prev_objects=json.dumps(metadata.prev_objects),
+                        new_objects=json.dumps(metadata.new_objects),
                         stage=metadata.stage,
                         query_hash=metadata.query_hash,
                         task_hash=metadata.task_hash,
@@ -1058,8 +1058,8 @@ class SQLTableStore(BaseTableStore):
             raise CacheError("No result found for raw sql cache key")
 
         return RawSqlMetadata(
-            prev_tables=json.loads(result.prev_tables),
-            tables=json.loads(result.tables),
+            prev_objects=json.loads(result.prev_objects),
+            new_objects=json.loads(result.new_objects),
             stage=result.stage,
             query_hash=result.query_hash,
             task_hash=result.task_hash,
