@@ -7,7 +7,16 @@ https://semver.org/spec/v2.0.0.html. The most important bits are:
 Changelog
 =========
 
-- added `delete-schemas` command to `pipedag-manage` to help with cleaning up database
+0.6.0 (YYYY-MM-DD)
+------------------
+- Added `delete-schemas` command to `pipedag-manage` to help with cleaning up database
+- Remove all support for mssql database swapping. Instead we now properly support schema swapping.
+- Fix UNLOGGED tables not working with Postgres.
+- Added `hook_args` section to `table_store` part of config file to support passing config arguments to table hooks.
+- Added `dtype_backend` hook argument for `PandasTableHook` to overriding the default pandas dtype backend to use.
+- Update raw sql metadata table (`SQLTableStore`).
+- Remove `engine_dispatch` and replace with SQLTableStore subclasses.
+
 
 0.5.0 (2023-06-28)
 ------------------

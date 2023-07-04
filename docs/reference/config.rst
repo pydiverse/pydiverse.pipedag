@@ -200,7 +200,7 @@ We do not support all techniques for all sqlalchemy dialects:
         - mssql
         - yes
         - yes
-        - we use schema='database.schema' for sqlalchemy and ignore create_database_if_not_exists
+        -
     *
         - ibm_db_sa
         - no
@@ -289,12 +289,6 @@ The `class` attribute is used to define which class to use as the table store.
 Attributes of the `args` subsection are backend specific and get passed to the respective classes
 (detail: see `__init__` or `_init_conf_` methods).
 
-Fields `schema_prefix` and `schema_suffix` are optional. They are particularly useful for use with SQL Server database.
-SQL Server can query multiple databases within one query. So the database becomes effectively a part of the schema
-(also in the view of sqlalchemy). If `schema_prefix` includes a dot (i.e. ``"flow_db."``), we always prefix a
-specific database as part of the schema. If `schema_suffix` includes a dot, we use databases instead of schemas.
-``schema_suffix=".dbo"`` is the most common usecase for this. Never put a dot in both `schema_prefix` and `schema_suffix`.
-
 .. code-block:: yaml
 
     table_store:
@@ -302,8 +296,6 @@ specific database as part of the schema. If `schema_suffix` includes a dot, we u
         args:
             url: "postgresql://{username}:{password}@127.0.0.1/{instance_id}"
             url_attrs_file: "~/.pipedag/{name}_{instance_id}.yaml"
-            # schema_prefix: "myflow_"
-            # schema_suffix: "_flow01"
 
 
 table_store_connection
@@ -323,6 +315,32 @@ This is an attribute within `table_store`_ section which allows referencing a bl
     table_store:
         table_store_connection: postgres
         class: "pydiverse.pipedag.backend.table.SQLTableStore"
+
+
+hook_args
+^^^^^^^^^
+
+This section inside the `table_store`_ section allows passing custom config attributes to the different table hooks
+that materialize and retrieve tables.
+
+
+pandas
+""""""
+
+For pandas, we support the following hook arguments:
+
+* ``dtype_backend`` - The default `dtype backend <https://pandas.pydata.org/docs/reference/arrays.html>`_ to use.
+
+  * ``"numpy"`` - Use pandas' nullable extension dtypes for numpy.
+  * ``"arrow"`` - Use pyarrow backed dataframes.
+
+.. code-block:: yaml
+
+    table_store:
+        hook_args:
+            pandas:
+                dtype_backend: "numpy"
+
 
 
 class: pydiverse.pipedag.backend.table.SQLTableStore
@@ -372,25 +390,19 @@ The filename may also reference environment variables:
 
 Environment variables may include non-environment variable placeholders.
 
-schema_prefix
-"""""""""""""
+schema_prefix / schema_suffix
+"""""""""""""""""""""""""""""
 
-When accessing tables via a database connection, sqlalchemy offers a `schema=` attribute. This schema is assembled
-as `schema_prefix`_ + `stage.name` + `schema_suffix`_. For `dialect=mssql`, sqlalchemy best supports the use of
-databases as schemas. In this case one of `schema_prefix`_ or `schema_suffix`_ must include a dot, so that the
-resulting schema name looks like `schema="database_<stage_schema>.dbo"`:
+Allows specifying a prefix / suffix that will be put in front / behind the name of all schemas produced by pipedag.
+This schema is assembled as `schema_prefix`_ + `stage.name` + `schema_suffix`_.
 
 Attention: `PipedagConfig.get(per_user=true)` modifies `instance_id`_ before it is used here.
 
 .. code-block:: yaml
 
         schema_prefix: "{instance_id}_"
-        schema_suffix: ".dbo"
+        schema_suffix: "_xyz"
 
-schema_suffix
-"""""""""""""
-
-See `schema_prefix`_.
 
 create_database_if_not_exists
 """""""""""""""""""""""""""""
@@ -399,11 +411,6 @@ default: false
 
 The sqlalchmey engine `url`_ may include a database name which might not exist of first run of a pipedag instance.
 This parameter can be used to tell pipedag to create the database before it will try opening a database connection.
-
-The parameter is ineffective for the following sqlalchemy dialects:
-
-- mssql: we use `database.schema` in schema swapping, so databases are automatically created when setting up a stage
-- ibm_db2: so far, we only use `instance_id`_ as schema prefix and don't (need to) know how to create a new database
 
 avoid_drop_create_schema
 """"""""""""""""""""""""
