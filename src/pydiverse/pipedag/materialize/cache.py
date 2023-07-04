@@ -77,10 +77,11 @@ class TableCacheInfo:
     def is_cache_valid(self):
         return self._is_cache_valid
 
+    # TODO: Rename parameters
     def store_raw_sql_metadata(self, store: BaseTableStore, prev_tables, post_tables):
         # Store metadata
         # Attention: Raw SQL statements may only be executed sequentially within
-        #            stage for store.list_tables to work
+        #            stage for store.get_objects_in_stage to work
         store.store_raw_sql_metadata(
             RawSqlMetadata(
                 prev_tables=prev_tables,

@@ -766,73 +766,94 @@ class SQLTableStore(BaseTableStore):
         self.logger.info("RENAME", fr=from_name, to=to_name)
         self.execute(RenameTable(from_name, to_name, schema))
 
-    def get_view_names(self, schema: str, *, include_everything=False) -> list[str]:
-        """
-        List all views that are present in a schema.
-
-        It may also include other database objects like stored procedures, functions,
-        etc. which makes the name `get_view_names` too specific. But sqlalchemy
-        only allows reading views for all dialects thus the storyline of dialect
-        agnostic callers is much nicer to read. In the end we might need everything
-        to recover the full cache output which was produced by a RawSQL statement
-        (we want to be compatible with legacy sql code as a starting point).
-        :param schema: the schema
-        :param include_everything: If True, we might include stored procedures,
-            functions and other database objects that have a schema associated name.
-            Currently, this only makes a difference for dialect=mssql.
-        :return: list of view names [and other objects]
-        """
-        inspector = sa.inspect(self.engine)
-        return inspector.get_view_names(schema)
-
     def copy_raw_sql_tables_to_transaction(
         self, metadata: RawSqlMetadata, target_stage: Stage
     ):
+        inspector = sa.inspect(self.engine)
         src_schema = self.get_schema(metadata.stage)
         dest_schema = self.get_schema(target_stage.transaction_name)
 
-        new_tables = set(metadata.tables) - set(metadata.prev_tables)
+        # New tables (AND other objects)
+        new_objects = set(metadata.tables) - set(metadata.prev_tables)
+        tables_in_schema = set(inspector.get_table_names(src_schema.get()))
+        objects_in_schema = self._get_all_objects_in_schema(src_schema)
 
-        views = set(self.get_view_names(src_schema.get(), include_everything=True))
-        tables_to_copy = new_tables - set(views)
-        for table_name in tables_to_copy:
-            try:
-                # TODO: implement deferred execution in RunContextServer so
-                # no data is copied if a stage is 100% cache valid
-                self.execute(
-                    CopyTable(
-                        table_name,
+        tables_to_copy = new_objects & tables_in_schema
+        objects_to_copy = {
+            k: v
+            for k, v in objects_in_schema.items()
+            if k in new_objects and k not in tables_to_copy
+        }
+
+        try:
+            with self.engine_connect() as conn:
+                for name in tables_to_copy:
+                    self.execute(
+                        CopyTable(
+                            name,
+                            src_schema,
+                            name,
+                            dest_schema,
+                        ),
+                        conn=conn,
+                    )
+                    self.copy_indexes(
+                        name,
                         src_schema,
-                        table_name,
+                        name,
                         dest_schema,
                     )
-                )
-                self.copy_indexes(
-                    table_name,
-                    src_schema,
-                    table_name,
-                    dest_schema,
-                )
-            except Exception as _e:
-                msg = (
-                    f"Failed to copy raw sql generated table {table_name} (schema:"
-                    f" '{src_schema}') to transaction."
-                )
-                self.logger.exception(
-                    msg
-                    + " This error is treated as cache-lookup-failure and thus we can"
-                    " continue."
-                )
-                raise CacheError(msg) from _e
 
-        views_to_copy = new_tables & set(views)
-        for view_name in views_to_copy:
-            self._copy_view_to_transaction(view_name, src_schema, dest_schema)
+                for name, obj_metadata in objects_to_copy.items():
+                    self._copy_object_to_transaction(
+                        name, obj_metadata, src_schema, dest_schema, conn
+                    )
 
-    def _copy_view_to_transaction(
-        self, view_name: str, src_schema: Schema, dest_schema: Schema
+        except Exception as _e:
+            msg = (
+                f"Failed to copy raw sql generated object {name} (schema:"
+                f" '{src_schema}') to transaction."
+            )
+            self.logger.exception(
+                msg + " This error is treated as cache-lookup-failure."
+            )
+            raise CacheError(msg) from _e
+
+    def _get_all_objects_in_schema(self, schema: Schema) -> dict[str, Any]:
+        """List all objects that are present in a schema.
+
+        This may include things like views, stored procedures, functions, etc.
+
+        :param schema: the schema
+        :return: a dictionary where the keys are the names of the objects, and the
+            values are any other (dialect specific) information that might be useful.
+        """
+
+        # Because SQLAlchemy only provides limited capabilities to inspect objects
+        # inside a schema, we limit ourselves to tables and views.
+        inspector = sa.inspect(self.engine)
+        tables = inspector.get_table_names(schema.get())
+        views = inspector.get_view_names(schema.get())
+        return {name: None for name in tables + views}
+
+    def _copy_object_to_transaction(
+        self,
+        name: str,
+        metadata: Any,
+        src_schema: Schema,
+        dest_schema: Schema,
+        conn: sa.Connection,
     ):
-        raise NotImplementedError("Only implemented for mssql.")
+        """Copy a generic object from one schema to another.
+
+        :param name: name of the object to be copied
+        :param metadata:
+            additional information as returned by `get_all_objects_in_schema`
+        :param src_schema: the schema in which the object is
+        :param dest_schema: the schema into which the object should be copied
+        """
+        dialect = self.engine.dialect.name
+        raise NotImplementedError(f"Not implemented for dialect '{dialect}'.")
 
     def delete_table_from_transaction(self, table: Table):
         self.execute(
@@ -1047,29 +1068,9 @@ class SQLTableStore(BaseTableStore):
     def resolve_alias(self, table: str, schema: str) -> tuple[str, str]:
         return table, schema
 
-    def list_tables(self, stage: Stage, *, include_everything=False):
-        """
-        List all tables that were generated in a stage.
-
-        It may also include other objects database objects like views, stored
-        procedures, functions, etc. which makes the name `list_tables` too specific.
-        But the predominant idea is that tasks produce tables in stages and thus the
-        storyline of callers is much nicer to read. In the end we might need everything
-        to recover the full cache output which was produced by a RawSQL statement
-        (we want to be compatible with legacy sql code as a starting point).
-
-        :param stage: the stage
-        :param include_everything: If True, we might include stored procedures,
-            functions and other database objects that have a schema associated name.
-        :return: list of tables [and other objects]
-        """
-        inspector = sa.inspect(self.engine)
-        schema = self.get_schema(stage.transaction_name).get()
-
-        table_names = inspector.get_table_names(schema)
-        view_names = self.get_view_names(schema, include_everything=include_everything)
-
-        return table_names + view_names
+    def get_objects_in_stage(self, stage: Stage):
+        schema = self.get_schema(stage.transaction_name)
+        return list(self._get_all_objects_in_schema(schema).keys())
 
     def get_stage_hash(self, stage: Stage) -> str:
         """Compute hash that represents entire stage's output metadata."""

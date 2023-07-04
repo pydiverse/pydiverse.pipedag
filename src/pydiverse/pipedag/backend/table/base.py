@@ -350,10 +350,11 @@ class BaseTableStore(TableHookResolver):
         if not table_cache_info.is_cache_valid():
             TaskContext.get().is_cache_valid = False
             RunContext.get().set_stage_has_changed(task.stage)
-            prev_tables = self.list_tables(raw_sql.stage, include_everything=True)
+
+            prev_objects = self.get_objects_in_stage(raw_sql.stage)
             self.execute_raw_sql(raw_sql)
-            post_tables = self.list_tables(raw_sql.stage, include_everything=True)
-            table_cache_info.store_raw_sql_metadata(self, prev_tables, post_tables)
+            post_objects = self.get_objects_in_stage(raw_sql.stage)
+            table_cache_info.store_raw_sql_metadata(self, prev_objects, post_objects)
 
         # At this point we MUST also update the cache info, so that any downstream
         # tasks get invalidated if the sql query string changed.
@@ -493,21 +494,17 @@ class BaseTableStore(TableHookResolver):
     # Utility
 
     @abstractmethod
-    def list_tables(self, stage: Stage, *, include_everything=False) -> list[str]:
+    def get_objects_in_stage(self, stage: Stage) -> list[str]:
         """
-        List all tables that were generated in a stage.
+        List all objects that are in the current stage.
 
-        It may also include other objects database objects like views, stored
-        procedures, functions, etc. which makes the name `list_tables` too specific.
-        But the predominant idea is that tasks produce tables in stages and thus the
-        storyline of callers is much nicer to read. In the end we might need everything
-        to recover the full cache output which was produced by a RawSQL statement
-        (we want to be compatible with legacy sql code as a starting point).
+        This may include tables but also other database objects like views, stored
+        procedures, functions etc. This function is used to calculate a diff on the
+        table store to determine which objects were produced (or could have been used
+        to produce those objects) when executing RawSQL.
 
         :param stage: the stage
-        :param include_everything: If True, we might include stored procedures,
-            functions and other database objects that have a schema associated name.
-        :return: list of tables [and other objects]
+        :return: list of object names in the stage at the current point in time.
         """
 
 

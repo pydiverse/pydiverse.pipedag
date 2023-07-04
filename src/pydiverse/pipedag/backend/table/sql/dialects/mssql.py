@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 import pandas as pd
 import sqlalchemy as sa
@@ -10,6 +11,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     AddIndex,
     AddPrimaryKey,
     ChangeColumnTypes,
+    CreateAlias,
     Schema,
     _mssql_update_definition,
 )
@@ -136,35 +138,48 @@ class MSSqlTableStore(SQLTableStore):
             isolate_top_level_statements=self.pytsql_isolate_top_level_statements,
         )
 
-    def get_view_names(self, schema: str, *, include_everything=False):
-        if not include_everything:
-            return super().get_view_names(schema, include_everything=include_everything)
-        return list(self.__get_sql_modules(schema).keys())
-
-    def __get_sql_modules(self, schema: str):
+    def _get_all_objects_in_schema(self, schema: Schema) -> dict[str, Any]:
         with self.engine_connect() as conn:
-            # include stored procedures in view names because they can also be recreated
-            # based on sys.sql_modules.description
-            sql = (
-                "select obj.name, obj.type from sys.sql_modules as mod "
-                "left join sys.objects as obj on mod.object_id=obj.object_id "
-                "left join sys.schemas as schem on schem.schema_id=obj.schema_id "
-                f"where schem.name='{schema}'"
-            )
-            rows = self.execute(sql, conn=conn).fetchall()
-        return {row[0]: row[1] for row in rows}
+            # tables (U), views (V), synonyms (SN), procedures (P) and functions (FN)
+            query = """
+                SELECT obj.name, obj.type
+                FROM sys.objects AS obj
+                LEFT JOIN sys.schemas AS schem ON schem.schema_id = obj.schema_id
+                WHERE obj.type IN ('U', 'V', 'SN', 'P', 'FN')
+                  AND schem.name = :schema
+                  AND obj.is_ms_shipped = 0
+            """
+            result = conn.execute(sa.text(query), {"schema": schema.get()}).all()
+        return {name: type_.strip() for name, type_ in result}
 
-    def _copy_view_to_transaction(
-        self, view_name: str, src_schema: Schema, dest_schema: Schema
+    def _copy_object_to_transaction(
+        self,
+        name: str,
+        metadata: Any,
+        src_schema: Schema,
+        dest_schema: Schema,
+        conn: sa.Connection,
     ):
-        with self.engine_connect() as conn:
-            definition = _mssql_update_definition(
-                conn,
-                view_name,
-                src_schema,
-                dest_schema,
+        type_: str = metadata
+
+        if type_ == "SN":
+            alias_name, alias_schema = self.resolve_alias(name, src_schema.get())
+            self.execute(
+                CreateAlias(
+                    alias_name,
+                    Schema(alias_schema, "", ""),
+                    name,
+                    dest_schema,
+                )
             )
-            self.execute(definition, conn=conn)
+            return
+
+        # For views, procedures and functions we need to inspect the definition
+        # of the object and replace all references to the src schema with
+        # references to the dest schema.
+        assert type_ in ("V", "P", "FN")
+        definition = _mssql_update_definition(conn, name, src_schema, dest_schema)
+        self.execute(definition, conn=conn)
 
     def resolve_alias(self, table: str, schema: str):
         return PipedagMSSqlReflection.resolve_alias(self.engine, table, schema)

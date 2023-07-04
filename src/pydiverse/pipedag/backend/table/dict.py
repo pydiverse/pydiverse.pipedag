@@ -120,23 +120,8 @@ class DictTableStore(BaseTableStore):
         except (TypeError, KeyError):
             raise CacheError("Couldn't find metadata for lazy table") from None
 
-    def list_tables(self, stage, *, include_everything=False):
-        """
-        List all tables that were generated in a stage.
-
-        It may also include other objects database objects like views, stored
-        procedures, functions, etc. which makes the name `list_tables` too specific.
-        But the predominant idea is that tasks produce tables in stages and thus the
-        storyline of callers is much nicer to read. In the end we might need everything
-        to recover the full cache output which was produced by a RawSQL statement
-        (we want to be compatible with legacy sql code as a starting point).
-
-        :param stage: the stage
-        :param include_everything: If True, we might include stored procedures,
-            functions and other database objects that have a schema associated name.
-        :return: list of tables [and other objects]
-        """
-        return self.store[stage.transaction_name].keys()
+    def get_objects_in_stage(self, stage):
+        return list(self.store[stage.transaction_name].keys())
 
 
 @DictTableStore.register_table(pd)
