@@ -10,7 +10,9 @@ class Disposable:
             obj_type = object.__getattribute__(self, "__class__")
             raise DisposedError(f"Object of type {obj_type} has already been disposed.")
         except AttributeError:
-            return object.__getattribute__(self, name)
+            pass
+
+        return object.__getattribute__(self, name)
 
     def __setattr__(self, key, value):
         try:
@@ -18,7 +20,9 @@ class Disposable:
             obj_type = object.__getattribute__(self, "__class__")
             raise DisposedError(f"Object of type {obj_type} has already been disposed.")
         except AttributeError:
-            return object.__setattr__(self, key, value)
+            pass
+
+        return object.__setattr__(self, key, value)
 
     def dispose(self):
         object.__setattr__(self, "_Disposable__disposed", True)
