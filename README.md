@@ -44,23 +44,32 @@ git clone https://github.com/pydiverse/pydiverse.pipedag.git
 cd pydiverse.pipedag
 
 # Create the environment, activate it and install the pre-commit hooks
-poetry install --all-extras
+poetry install
 poetry shell
 pre-commit install
 ```
 
 ## Testing
 
-After installation, you should be able to run:
+To facilitate easy testing, we provide a Docker Compose file to start all required servers.
+Just run `docker compose up` in the root directory of the project to start everything, and then run `pytest` in a new
+tab.
+
+Now, you should be able to run:
 
 ```bash
-poetry run pytest --workers 4
+poetry run pytest
 ```
 
-To be able to run all tests (for different databases or table types), you have to install the test dependency group:
+You can inspect the contents of the PipeDAG Postgres database at
+`postgresql://sa:Pydiverse23@127.0.0.1:6543/pipedag_default`.
+To reset the state of the docker containers you can run `docker compose down`.
+This might be necessary if the database cache gets corrupted during development.
+
+To run tests in parallel:
 
 ```bash
-poetry install --with=tests
+poetry run pytest --workers auto
 ```
 
 ## Pre-commit install with conda and python 3.9
@@ -75,18 +84,19 @@ conda activate python39
 pre-commit install
 ```
 
-## Testing
+## Testing more database targets
 
-To facilitate easy testing, we provide a Docker Compose file to start all required servers.
-Just run `docker compose up` in the root directory of the project to start everything, and then run `pytest` in a new
-tab.
+To be able to run all tests (for different databases or table types), you have to install the test dependency group:
 
-You can inspect the contents of the PipeDAG Postgres database at
-`postgresql://sa:Pydiverse23@127.0.0.1:6543/pipedag_default`.
-To reset the state of the docker containers you can run `docker compose down`.
-This might be necessary if the database cache gets corrupted during development.
+```bash
+poetry install --with=tests
+```
 
-To run tests in parallel, pass the `--workers auto` flag to pytest.
+Afterwards, you can run:
+
+```bash
+poetry run pytest --mssql
+```
 
 ## Testing db2 functionality
 
@@ -99,7 +109,11 @@ docker run -h db2server --name db2server --restart=always --detach --privileged=
 
 Then check `docker logs db2server | grep -i completed` until you see `(*) Setup has completed.`.
 
-Afterwards you can run `pytest --ibm_db2`.
+Afterwards, you can run:
+
+```bash
+poetry run pytest --ibm_db2
+```
 
 ## Example
 
