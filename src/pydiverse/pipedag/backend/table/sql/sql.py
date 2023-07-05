@@ -289,10 +289,7 @@ class SQLTableStore(BaseTableStore):
     def execute(self, query, *, conn: sa.engine.Connection = None):
         if conn is None:
             with self.engine_connect() as conn:
-                if isinstance(query, str):
-                    return self.execute(sa.text(query), conn=conn)
-                else:
-                    return self.execute(query, conn=conn)
+                return self.execute(query, conn=conn)
 
         if isinstance(query, sa.schema.DDLElement):
             # Some custom DDL statements contain multiple statements.
