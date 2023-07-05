@@ -7,10 +7,11 @@ from threading import Lock
 from typing import TYPE_CHECKING, ClassVar
 
 import structlog
-from attrs import define, evolve, frozen
+from attrs import define, evolve, field, frozen
 from box import Box
 
 from pydiverse.pipedag.util.import_ import import_object, load_object
+from pydiverse.pipedag.util.naming import NameDisambiguator
 
 if TYPE_CHECKING:
     from pydiverse.pipedag._typing import T
@@ -86,6 +87,7 @@ class TaskContext(BaseContext):
 
     task: Task
     is_cache_valid: bool | None = None
+    name_disambiguator: NameDisambiguator = field(factory=NameDisambiguator)
 
     _context_var = ContextVar("task_context")
 

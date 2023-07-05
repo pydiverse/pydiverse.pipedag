@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import itertools
+
 
 def normalize_name(name: str) -> str:
     """Normalizes an identifier
@@ -28,22 +30,19 @@ def safe_name(name: str) -> str:
 
 
 class NameDisambiguator:
-    """State object for creating non-colliding names."""
+    """State object for creating non-colliding names
 
-    def __init__(self, prefix):
-        self.prefix = prefix
-        self.names = set()
-        self.cnt = 1
+    This object is used inside `TableHook.retrieve` to prevent SQLAlchemy issues...
+    """
 
-    def get_name(self, name_wish: str | None):
-        if name_wish is not None and name_wish not in self.names:
-            self.names.add(name_wish)
-            return name_wish
-        else:
-            for _ in range(100):
-                name = f"{self.prefix}{self.cnt}"
-                if name not in self.names:
-                    self.names.add(name)
-                    return name
-                self.cnt += 1
-            raise RuntimeError(f"Failed to find unique name: wish={name_wish}")
+    def __init__(self):
+        self.used_names = set()
+        self.counter = itertools.count()
+
+    def get_name(self, name: str | None) -> str:
+        new_name = name
+        while new_name in self.used_names:
+            new_name = f"alias_{next(self.counter)}"
+
+        self.used_names.add(new_name)
+        return new_name

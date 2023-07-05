@@ -23,9 +23,9 @@ from pydiverse.pipedag.backend.table.util import (
     DType,
     PandasDTypeBackend,
 )
+from pydiverse.pipedag.context import TaskContext
 from pydiverse.pipedag.materialize import Table
 from pydiverse.pipedag.materialize.core import TaskInfo
-from pydiverse.pipedag.util.naming import NameDisambiguator
 
 # region SQLALCHEMY
 
@@ -79,30 +79,25 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def retrieve(
-        cls, store, table, stage_name, as_type: type[sa.Table], namer=None
+        cls, store, table, stage_name, as_type: type[sa.Table]
     ) -> sa.sql.selectable.Selectable:
-        table_name = table.name
         schema = store.get_schema(stage_name).get()
-        table_name, schema = store.resolve_alias(table_name, schema)
-        tbl = None
+        table_name, schema = store.resolve_alias(table.name, schema)
+        alias_name = TaskContext.get().name_disambiguator.get_name(table_name)
+
         for retry_iteration in range(4):
             # retry operation since it might have been terminated as a deadlock victim
             try:
-                alias_name = (
-                    namer.get_name(table_name) if namer is not None else table_name
-                )
-                tbl = sa.Table(
+                return sa.Table(
                     table_name,
                     sa.MetaData(),
                     schema=schema,
                     autoload_with=store.engine,
                 ).alias(alias_name)
-                break
             except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
                 if retry_iteration == 3:
                     raise
                 time.sleep(retry_iteration * retry_iteration * 1.2)
-        return tbl
 
     @classmethod
     def lazy_query_str(cls, store, obj) -> str:
@@ -234,7 +229,6 @@ class PandasTableHook(TableHook[SQLTableStore]):
         table: Table,
         stage_name: str,
         as_type: type[pd.DataFrame] | tuple | dict,
-        namer: NameDisambiguator | None = None,
     ) -> pd.DataFrame:
         # Config
         if PandasTableHook.pd_version >= Version("2.0"):
@@ -268,8 +262,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
     ) -> tuple[Any, dict[str, DType]]:
         engine = store.engine
         schema = store.get_schema(stage_name).get()
-        table_name = table.name
-        table_name, schema = store.resolve_alias(table_name, schema)
+        table_name, schema = store.resolve_alias(table.name, schema)
 
         sql_table = sa.Table(
             table_name,
@@ -421,11 +414,9 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         table: Table,
         stage_name: str,
         as_type: type[polars.dataframe.DataFrame],
-        namer: NameDisambiguator | None = None,
     ) -> polars.dataframe.DataFrame:
         schema = store.get_schema(stage_name).get()
-        table_name = table.name
-        table_name, schema = store.resolve_alias(table_name, schema)
+        table_name, schema = store.resolve_alias(table.name, schema)
         connection_uri = store.engine_url.render_as_string(hide_password=False)
         df = polars.read_database(
             f'SELECT * FROM {schema}."{table_name}"', connection_uri
@@ -477,10 +468,9 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         table: Table,
         stage_name: str,
         as_type: type[tidypolars.Tibble],
-        namer: NameDisambiguator | None = None,
     ) -> tidypolars.Tibble:
         hook = store.get_hook_subclass(PolarsTableHook)
-        df = hook.retrieve(store, table, stage_name, as_type, namer)
+        df = hook.retrieve(store, table, stage_name, as_type)
         return tidypolars.from_polars(df)
 
     @classmethod
@@ -542,18 +532,17 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         table: Table,
         stage_name: str,
         as_type: type[T],
-        namer: NameDisambiguator | None = None,
     ) -> T:
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
 
         if issubclass(as_type, PandasTableImpl):
             hook = store.get_hook_subclass(PandasTableHook)
-            df = hook.retrieve(store, table, stage_name, pd.DataFrame, namer)
+            df = hook.retrieve(store, table, stage_name, pd.DataFrame)
             return pdt.Table(PandasTableImpl(table.name, df))
         if issubclass(as_type, SQLTableImpl):
             hook = store.get_hook_subclass(SQLAlchemyTableHook)
-            sa_tbl = hook.retrieve(store, table, stage_name, sa.Table, namer)
+            sa_tbl = hook.retrieve(store, table, stage_name, sa.Table)
             return pdt.Table(SQLTableImpl(store.engine, sa_tbl))
         raise NotImplementedError
 
@@ -629,12 +618,10 @@ class IbisTableHook(TableHook[SQLTableStore]):
         table: Table,
         stage_name: str,
         as_type: type[ibis.api.Table],
-        namer: NameDisambiguator | None = None,
     ) -> ibis.api.Table:
         conn = cls.conn(store)
-        table_name = table.name
         schema = store.get_schema(stage_name).get()
-        table_name, schema = store.resolve_alias(table_name, schema)
+        table_name, schema = store.resolve_alias(table.name, schema)
         for retry_iteration in range(4):
             # retry operation since it might have been terminated as a deadlock victim
             try:
