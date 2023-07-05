@@ -405,7 +405,8 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         dtypes = dict(zip(df.columns, map(DType.from_polars, df.dtypes)))
 
         pd_df = df.to_pandas(use_pyarrow_extension_array=True, zero_copy_only=True)
-        return PandasTableHook.materialize_(
+        hook = store.get_hook_subclass(PandasTableHook)
+        return hook.materialize_(
             df=pd_df,
             dtypes=dtypes,
             store=store,
@@ -465,7 +466,9 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         t = table.obj
         table = table.copy_without_obj()
         table.obj = t.to_polars()
-        PolarsTableHook.materialize(store, table, stage_name, task_info)
+
+        hook = store.get_hook_subclass(PolarsTableHook)
+        return hook.materialize(store, table, stage_name, task_info)
 
     @classmethod
     def retrieve(
@@ -476,7 +479,8 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         as_type: type[tidypolars.Tibble],
         namer: NameDisambiguator | None = None,
     ) -> tidypolars.Tibble:
-        df = PolarsTableHook.retrieve(store, table, stage_name, as_type, namer)
+        hook = store.get_hook_subclass(PolarsTableHook)
+        df = hook.retrieve(store, table, stage_name, as_type, namer)
         return tidypolars.from_polars(df)
 
     @classmethod
@@ -523,10 +527,12 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         table = table.copy_without_obj()
         if isinstance(t._impl, PandasTableImpl):
             table.obj = t >> collect()
-            return PandasTableHook.materialize(store, table, stage_name, task_info)
+            hook = store.get_hook_subclass(PandasTableHook)
+            return hook.materialize(store, table, stage_name, task_info)
         if isinstance(t._impl, SQLTableImpl):
             table.obj = t._impl.build_select()
-            return SQLAlchemyTableHook.materialize(store, table, stage_name, task_info)
+            hook = store.get_hook_subclass(SQLAlchemyTableHook)
+            return hook.materialize(store, table, stage_name, task_info)
         raise NotImplementedError
 
     @classmethod
@@ -542,12 +548,12 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         from pydiverse.transform.lazy import SQLTableImpl
 
         if issubclass(as_type, PandasTableImpl):
-            df = PandasTableHook.retrieve(store, table, stage_name, pd.DataFrame, namer)
+            hook = store.get_hook_subclass(PandasTableHook)
+            df = hook.retrieve(store, table, stage_name, pd.DataFrame, namer)
             return pdt.Table(PandasTableImpl(table.name, df))
         if issubclass(as_type, SQLTableImpl):
-            sa_tbl = SQLAlchemyTableHook.retrieve(
-                store, table, stage_name, sa.Table, namer
-            )
+            hook = store.get_hook_subclass(SQLAlchemyTableHook)
+            sa_tbl = hook.retrieve(store, table, stage_name, sa.Table, namer)
             return pdt.Table(SQLTableImpl(store.engine, sa_tbl))
         raise NotImplementedError
 
@@ -612,7 +618,9 @@ class IbisTableHook(TableHook[SQLTableStore]):
         t = table.obj
         table = table.copy_without_obj()
         table.obj = sa.text(cls.lazy_query_str(store, t))
-        return SQLAlchemyTableHook.materialize(store, table, stage_name, task_info)
+
+        sa_hook = store.get_hook_subclass(SQLAlchemyTableHook)
+        return sa_hook.materialize(store, table, stage_name, task_info)
 
     @classmethod
     def retrieve(
