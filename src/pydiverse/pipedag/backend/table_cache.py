@@ -14,7 +14,7 @@ from pydiverse.pipedag import Table
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.table.base import TableHook, TableHookResolver
 from pydiverse.pipedag.context import ConfigContext
-from pydiverse.pipedag.util import normalize_name
+from pydiverse.pipedag.util import Disposable, normalize_name
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.materialize.core import MaterializingTask, TaskInfo
@@ -92,7 +92,7 @@ class LocalTableCache:
             self.obj.dispose()
 
 
-class BaseTableCache(TableHookResolver, ABC):
+class BaseTableCache(TableHookResolver, Disposable, ABC):
     """Local Table cache base class
 
     A local table cache stores tables after retrieval from / before

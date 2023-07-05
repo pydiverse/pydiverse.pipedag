@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from abc import ABC, ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Generic
 
@@ -24,29 +24,11 @@ if TYPE_CHECKING:
     from pydiverse.pipedag.materialize.core import MaterializingTask, TaskInfo
 
 
-class _TableStoreMeta(ABCMeta):
-    """TableStore Metaclass
-
-    Add the `_REGISTERED_TABLES`, `_M_TABLE_CACHE` and `_R_TABLE_CACHE`
-    attributes to all table stores.
-    """
-
-    def __new__(mcs, name, bases, attrs, **kwargs):
-        cls = super().__new__(mcs, name, bases, attrs, **kwargs)
-
-        cls._registered_table_hooks = []
-        cls._m_hook_cache = {}
-        cls._r_hook_cache = {}
-        cls._hook_subclass_cache = {}
-
-        return cls
-
-
-class TableHookResolver(Disposable, metaclass=_TableStoreMeta):
-    _registered_table_hooks: list[type[TableHook]]
-    _m_hook_cache: dict[type, type[TableHook]]
-    _r_hook_cache: dict[type, type[TableHook]]
-    _hook_subclass_cache: dict[type, type[TableHook]]
+class TableHookResolver:
+    _registered_table_hooks: list[type[TableHook]] = []
+    _m_hook_cache: dict[type, type[TableHook]] = {}
+    _r_hook_cache: dict[type, type[TableHook]] = {}
+    _hook_subclass_cache: dict[type, type[TableHook]] = {}
 
     @classmethod
     def register_table(cls, *requirements: Any):
@@ -73,6 +55,15 @@ class TableHookResolver(Disposable, metaclass=_TableStoreMeta):
             the decorated class.
         """
 
+        # `cls` is very likely a subclass of TableHookResolver
+        # -> Add the hook related attributes to subclass to allow registering
+        #    new hooks without interfering with the superclass.
+        if "_registered_table_hooks" not in cls.__dict__:
+            cls._registered_table_hooks = []
+            cls._m_hook_cache = {}
+            cls._r_hook_cache = {}
+            cls._hook_subclass_cache = {}
+
         def decorator(hook_cls):
             if not all(requirements):
                 return requires(
@@ -93,8 +84,8 @@ class TableHookResolver(Disposable, metaclass=_TableStoreMeta):
         # Walk up the hierarchy of super classes and return each registered
         # table hook in reverse order
         for cls in type(self).__mro__:
-            if hasattr(cls, "_registered_table_hooks"):
-                yield from cls._registered_table_hooks[::-1]
+            if "_registered_table_hooks" in cls.__dict__:
+                yield from cls._registered_table_hooks[::-1]  # noqa
 
     def get_m_table_hook(self: Self, type_: type[T]) -> type[TableHook[Self]]:
         """Get a table hook that can materialize the specified type"""
