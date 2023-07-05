@@ -43,7 +43,7 @@ setup_logging(log_level=log_level)
 # Pytest Configuration
 
 
-@pytest.fixture(autouse=True, scope="session")
+@pytest.fixture(autouse=True, scope="function")
 def structlog_test_info(request):
     """Add testcase information to structlog context"""
     if not os.environ.get("DEBUG", ""):
