@@ -13,61 +13,13 @@ on:
       - '**'
 
 env:
-  DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
+  DEBUG: 1
 
 jobs:
-  lint:
-    name: "Linting - pre-commit hooks - Python 3.9"
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout branch
-        uses: actions/checkout@v3
 
-      - name: Install Python 3.9
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.9
 
-      - name: Linting - Run pre-commit checks
-        uses: pre-commit/action@v3.0.0
-
-  smoke_test:
-    name: 'Smoke Test - Python 3.11 - postgres'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Environment
-        uses: ./.github/actions/setup
-        with:
-          python-version: 3.11
-
-      - name: Start Docker Compose
-        uses: isbang/compose-action@v1.4.1
-        with:
-          compose-file: ./docker-compose.yaml
-          services: |
-            postgres
-            zoo
-
-      - name: Wait for Docker Servers
-        timeout-minutes: 1
-        shell: bash
-        run: |
-          until bash ./.github/workflows/resources/docker_compose_ready.sh; do
-            sleep 2
-          done
-
-      - name: Run Tests
-        uses: ./.github/actions/test
-        with:
-          arguments: --workers 4
-
-  db2_test:
-    name: "DB2 Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
-    needs: [smoke_test]
+  db2_test_4:
+    name: "DB2 Tests (4) - ${{ matrix.os }} / ${{ matrix.python-version }}"
     runs-on: ${{ matrix.os }}-latest
     timeout-minutes: 30
     strategy:
@@ -119,17 +71,28 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/test
         with:
-          arguments: --workers 4 --ibm_db2 --pdtransform
+          arguments: --ibm_db2 -m ibm_db2
 
-  full_test:
-    name: "Full Tests no-DB2 - ${{ matrix.os }} / ${{ matrix.python-version }}"
-    needs: [smoke_test]
+  db2_test_5:
+    name: "DB2 Tests (5) - ${{ matrix.os }} / ${{ matrix.python-version }}"
     runs-on: ${{ matrix.os }}-latest
     timeout-minutes: 30
     strategy:
       matrix:
         os: [Ubuntu]
-        python-version: ['3.9', '3.10', '3.11']
+        python-version: ['3.11']
+    services:
+      ibm_db2:
+        image: ibmcom/db2:11.5.5.1
+        env:
+          LICENSE: accept
+          DB2INSTANCE: db2inst1
+          DB2INST1_PASSWORD: password
+          DBNAME: testdb
+          UPDATEAVAIL: "NO"
+        options: --privileged
+        ports:
+          - 50000:50000
     steps:
       - uses: actions/checkout@v3
 
@@ -138,9 +101,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           poetry-flags: --all-extras --with=tests
-
-      - name: Install Microsoft ODBC
-        run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
 
       - name: Start Docker Compose
         uses: isbang/compose-action@v1.4.1
@@ -155,8 +115,71 @@ jobs:
             sleep 2
           done
 
+      - name: Wait for DB/2
+        timeout-minutes: 2
+        run: |
+          until docker logs "${{ job.services.ibm_db2.id }}" 2>&1 | grep -q "Setup has completed"; do 
+            sleep 10
+            echo Waiting
+          done
+
       - name: Run Tests
         uses: ./.github/actions/test
         with:
-          # --polars currently fails with sqlalchemy 2.0 (connectorx)
-          arguments: --workers 4 --mssql --pdtransform --ibis --dask
+          arguments: --ibm_db2 -m ibm_db2
+
+  db2_test_6:
+    name: "DB2 Tests (6) - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    runs-on: ${{ matrix.os }}-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        os: [Ubuntu]
+        python-version: ['3.11']
+    services:
+      ibm_db2:
+        image: ibmcom/db2:11.5.5.1
+        env:
+          LICENSE: accept
+          DB2INSTANCE: db2inst1
+          DB2INST1_PASSWORD: password
+          DBNAME: testdb
+          UPDATEAVAIL: "NO"
+        options: --privileged
+        ports:
+          - 50000:50000
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+        with:
+          python-version: ${{ matrix.python-version }}
+          poetry-flags: --all-extras --with=tests
+
+      - name: Start Docker Compose
+        uses: isbang/compose-action@v1.4.1
+        with:
+          compose-file: ./docker-compose.yaml
+
+      - name: Wait for Docker Servers
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          until bash ./.github/workflows/resources/docker_compose_ready.sh; do
+            sleep 2
+          done
+
+      - name: Wait for DB/2
+        timeout-minutes: 2
+        run: |
+          until docker logs "${{ job.services.ibm_db2.id }}" 2>&1 | grep -q "Setup has completed"; do 
+            sleep 10
+            echo Waiting
+          done
+
+      - name: Run Tests
+        uses: ./.github/actions/test
+        with:
+          arguments: --ibm_db2 -m ibm_db2
+
