@@ -982,17 +982,6 @@ docs = ["Sphinx", "docutils (<0.18)"]
 test = ["objgraph", "psutil"]
 
 [[package]]
-name = "ibis"
-version = "3.2.0"
-description = "A template engine for people who enjoy the simpler things in life."
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "ibis-3.2.0-py3-none-any.whl", hash = "sha256:2726d42176c52b4f6084db6460176ec88eaf50a52c4dcabf7a01bcbf444f595a"},
-    {file = "ibis-3.2.0.tar.gz", hash = "sha256:79a5c3bfd22fde90c36b1b953ce4b5b5a7a8f86cdebf33807891eb925d643ed6"},
-]
-
-[[package]]
 name = "ibis-framework"
 version = "5.1.0"
 description = "Productivity-centric Python Big Data Framework"
@@ -1152,23 +1141,6 @@ files = [
     {file = "iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374"},
     {file = "iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3"},
 ]
-
-[[package]]
-name = "isort"
-version = "5.12.0"
-description = "A Python utility / library to sort Python imports."
-optional = false
-python-versions = ">=3.8.0"
-files = [
-    {file = "isort-5.12.0-py3-none-any.whl", hash = "sha256:f84c2818376e66cf843d497486ea8fed8700b340f308f076c6fb1229dff318b6"},
-    {file = "isort-5.12.0.tar.gz", hash = "sha256:8bef7dde241278824a6d83f44a544709b065191b95b6e50894bdc722fcba0504"},
-]
-
-[package.extras]
-colors = ["colorama (>=0.4.3)"]
-pipfile-deprecated-finder = ["pip-shims (>=0.5.2)", "pipreqs", "requirementslib"]
-plugins = ["setuptools"]
-requirements-deprecated-finder = ["pip-api", "pipreqs"]
 
 [[package]]
 name = "jinja2"
@@ -3403,4 +3375,4 @@ zookeeper = ["kazoo"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "807b9e35d3bda97d2079ba465da7359356ee883aa7f6f449726409b18d0071eb"
+content-hash = "e6f34492c469baa4f3cdfebf2661161a7aa26922e7f34642038d4e4bfb43a6de"

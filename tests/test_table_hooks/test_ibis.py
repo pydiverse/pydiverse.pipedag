@@ -19,7 +19,7 @@ except ImportError:
 
 
 def test_table_store():
-    IbisTable = ibis.expr.types.Table
+    IbisTable = ibis.api.Table
 
     @materialize()
     def in_table():
