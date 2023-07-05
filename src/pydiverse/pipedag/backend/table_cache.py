@@ -333,15 +333,14 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        from pydiverse.transform.eager import PandasTableImpl
-
-        return issubclass(type_, PandasTableImpl)
+        return issubclass(type_, pdt.Table)
 
     @classmethod
     def materialize(
         cls, store, table: Table[pdt.Table], stage_name, task_info: TaskInfo | None
     ):
         from pydiverse.transform.eager import PandasTableImpl
+        from pydiverse.transform.lazy import SQLTableImpl
 
         t = table.obj
         table = table.copy_without_obj()
@@ -349,9 +348,11 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
             from pydiverse.transform.core.verbs import collect
 
             table.obj = t >> collect()
-            return PandasParquetTableHook.materialize(
-                store, table, stage_name, task_info
-            )
+            PandasParquetTableHook.materialize(store, table, stage_name, task_info)
+            return None
+        elif isinstance(t._impl, SQLTableImpl):
+            # table cache is only meant for dataframe tasks
+            return None
         raise NotImplementedError
 
     @classmethod
