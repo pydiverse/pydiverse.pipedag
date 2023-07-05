@@ -219,12 +219,15 @@ class RunContextServer(IPCServer):
         )
 
     def enter_commit_stage(self, stage_id: int):
+        self._await_deferred_ts_ops(stage_id)
         if self.has_stage_changed(stage_id):
             self._trigger_deferred_ts_ops(
                 stage_id, DeferredTableStoreOp.Condition.ON_STAGE_COMMIT
             )
         else:
-            self.abort_stage(stage_id)
+            self._trigger_deferred_ts_ops(
+                stage_id, DeferredTableStoreOp.Condition.ON_STAGE_ABORT
+            )
         self._await_deferred_ts_ops(stage_id)
 
         return self._enter_stage_state_transition(
@@ -373,14 +376,6 @@ class RunContextServer(IPCServer):
         futures = self.deferred_ts_ops_futures[stage_id]
         for future in futures:
             future.result()
-
-    @synchronized("deferred_ops_lock")
-    def abort_stage(self, stage_id: int):
-        self._await_deferred_ts_ops(stage_id)
-        self._trigger_deferred_ts_ops(
-            stage_id, DeferredTableStoreOp.Condition.ON_STAGE_ABORT
-        )
-        self._await_deferred_ts_ops(stage_id)
 
     # TASK
 
