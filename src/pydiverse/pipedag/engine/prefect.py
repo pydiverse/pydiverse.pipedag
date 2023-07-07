@@ -112,7 +112,7 @@ class PrefectOneEngine(OrchestrationEngine):
 @requires(prefect, ImportError("Module 'prefect' not installed"))
 @requires(
     prefect_version in SpecifierSet("~=2.0"),
-    ImportWarning(f"Requires prefect version 1.x (found {prefect_version})"),
+    ImportWarning(f"Requires prefect version 2.x (found {prefect_version})"),
 )
 class PrefectTwoEngine(OrchestrationEngine):
     """Flow execution engine using prefect version 2.x"""
