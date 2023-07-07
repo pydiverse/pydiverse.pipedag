@@ -15,3 +15,7 @@ __all__ = [
     "Table",
     "materialize",
 ]
+
+import importlib.metadata
+
+__version__ = importlib.metadata.version("pydiverse.pipedag")
