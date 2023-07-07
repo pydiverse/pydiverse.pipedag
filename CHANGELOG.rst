@@ -8,7 +8,7 @@
 Changelog
 =========
 
-0.6.0 (YYYY-MM-DD)
+0.6.0 (2023-07-07)
 ------------------
 - Added ``delete-schemas`` command to ``pipedag-manage`` to help with cleaning up database
 - Remove all support for mssql database swapping. Instead we now properly support schema swapping.
@@ -18,6 +18,7 @@ Changelog
 - Update raw sql metadata table (``SQLTableStore``).
 - Remove ``engine_dispatch`` and replace with SQLTableStore subclasses.
 - Moved local table cache from ``pydiverse.pipedag.backend.table_cache`` to ``pydiverse.pipedag.backend.table.cache`` namespace.
+- Changed order in which flow / instance config gets resolved.
 
 
 0.5.0 (2023-06-28)
