@@ -65,13 +65,6 @@ _technical_setups:
       # class: "pydiverse.pipedag.engine.PrefectEngine"
 
 _instances: &instances
-  __any__:
-    <<: *technical_setup_default
-    # The following Attributes are handed over to the flow implementation (pipedag does not care)
-    attrs:
-      # by default we load source data and not a sampled version of a loaded database
-      copy_filtered_input: false
-
   full:
     # Full dataset is using default database connection and schemas
     instance_id: pipedag_full
@@ -123,6 +116,11 @@ _instances: &instances
 flows:
   __any__:
     instances: *instances
+    <<: *technical_setup_default
+    attrs:
+      # by default we load source data and not a sampled version of a loaded database
+      copy_filtered_input: false
+
   test_instance_selection:
     instances:
       full:
