@@ -32,11 +32,12 @@ class PipeDAGStore(Disposable):
         self,
         table: backend.table.BaseTableStore,
         blob: backend.blob.BaseBlobStore,
-        local_table_cache: backend.table_cache.LocalTableCache,
+        local_table_cache: backend.table.cache.BaseTableCache | None,
     ):
         self.table_store = table
         self.blob_store = blob
         self.local_table_cache = local_table_cache
+        self.table_store.local_table_cache = local_table_cache
 
         self.logger = structlog.get_logger()
 
@@ -53,7 +54,7 @@ class PipeDAGStore(Disposable):
         """
         self.table_store.dispose()
         self.blob_store.dispose()
-        if self.local_table_cache is not None:
+        if self.local_table_cache:
             self.local_table_cache.dispose()
         super().dispose()
 
@@ -74,6 +75,8 @@ class PipeDAGStore(Disposable):
         RunContext.get().validate_stage_lock(stage)
         self.table_store.init_stage(stage)
         self.blob_store.init_stage(stage)
+        if self.local_table_cache:
+            self.local_table_cache.init_stage(stage)
 
         # Once stage reference counter hits 0 (this means all tasks that
         # have any task contained in the stage as an upstream dependency),
@@ -113,16 +116,8 @@ class PipeDAGStore(Disposable):
 
         if isinstance(item, Table):
             ctx.validate_stage_lock(item.stage)
-            if self.local_table_cache.has_cache_table(item, as_type):
-                return self.local_table_cache.retrieve_table_obj(item, as_type)
-            else:
-                obj = self.table_store.retrieve_table_obj(item, as_type=as_type)
-                table = item.copy_without_obj()
-                table.obj = obj
-                self.local_table_cache.store_table(
-                    table, task=None, task_info=None, is_input=True
-                )
-                return obj
+            obj = self.table_store.retrieve_table_obj(item, as_type=as_type)
+            return obj
         elif isinstance(item, Blob):
             ctx.validate_stage_lock(item.stage)
             return self.blob_store.retrieve_blob(item)
@@ -277,9 +272,6 @@ class PipeDAGStore(Disposable):
             if task.lazy:
                 self.table_store.store_table_lazy(table, task, task_info)
             else:
-                self.local_table_cache.store_table(
-                    table, task, task_info, is_input=False
-                )
                 self.table_store.store_table(table, task, task_info)
 
         # Materialize

@@ -470,7 +470,7 @@ Example:
             store_input: true
             store_output: true
             use_stored_input_as_cache: true
-            class: "pydiverse.pipedag.backend.table_cache.ParquetTableCache"
+            class: "pydiverse.pipedag.backend.table.cache.ParquetTableCache"
             args:
                 base_path: "/tmp/pipedag/table_cache"
 
@@ -499,8 +499,8 @@ If true, input dataframes are read from cache instead of table store if cache is
 combined with `store_input: false`.
 
 
-class: pydiverse.pipedag.backend.table_cache.ParquetTableCache
-"""""""""""""""""""""""""""""""""""""""""""""""""""""""
+class: pydiverse.pipedag.backend.table.cache.ParquetTableCache
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 This class stores locally cached dataframes in parquet files.
 

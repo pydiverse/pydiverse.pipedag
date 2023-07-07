@@ -1,21 +1,23 @@
-.. Versioning follows semantic versioning, see also
-https://semver.org/spec/v2.0.0.html. The most important bits are:
-* Update the major if you break the public API and major > 0
-* Update the minor if you add new functionality
-* Update the patch if you fixed a bug
+..
+    Versioning follows semantic versioning, see also
+    https://semver.org/spec/v2.0.0.html. The most important bits are:
+    * Update the major if you break the public API and major > 0
+    * Update the minor if you add new functionality
+    * Update the patch if you fixed a bug
 
 Changelog
 =========
 
 0.6.0 (YYYY-MM-DD)
 ------------------
-- Added `delete-schemas` command to `pipedag-manage` to help with cleaning up database
+- Added ``delete-schemas`` command to ``pipedag-manage`` to help with cleaning up database
 - Remove all support for mssql database swapping. Instead we now properly support schema swapping.
 - Fix UNLOGGED tables not working with Postgres.
-- Added `hook_args` section to `table_store` part of config file to support passing config arguments to table hooks.
-- Added `dtype_backend` hook argument for `PandasTableHook` to overriding the default pandas dtype backend to use.
-- Update raw sql metadata table (`SQLTableStore`).
-- Remove `engine_dispatch` and replace with SQLTableStore subclasses.
+- Added ``hook_args`` section to ``table_store`` part of config file to support passing config arguments to table hooks.
+- Added ``dtype_backend`` hook argument for ``PandasTableHook`` to overriding the default pandas dtype backend to use.
+- Update raw sql metadata table (``SQLTableStore``).
+- Remove ``engine_dispatch`` and replace with SQLTableStore subclasses.
+- Moved local table cache from ``pydiverse.pipedag.backend.table_cache`` to ``pydiverse.pipedag.backend.table.cache`` namespace.
 
 
 0.5.0 (2023-06-28)
@@ -24,11 +26,11 @@ Changelog
 - add support for pyarrow backed pandas dataframes
 - support execution of subflow
 - store final state of task in flow result object
-- tasks now have a `position_hash` associated with them to identify them purely based on their position (e.g. stage, name and input wiring) inside a flow.
-- breaking change to metadata: added position_hash to `tasks` metadata table and change type of hash columns from String(32) to String(20).
-- `Flow`, `Subflow`, and `Result` objects now provide additional options for visualizing them
-- added `unlogged_tables` flag to SQLTableStore for creating UNLOGGED tables with Postgres.
-- created `pipedag-manage` command line utility with `clear-metadata` command to help with migrating between different pipedag metadata versions.
+- tasks now have a ``position_hash`` associated with them to identify them purely based on their position (e.g. stage, name and input wiring) inside a flow.
+- breaking change to metadata: added position_hash to ``tasks`` metadata table and change type of hash columns from String(32) to String(20).
+- ``Flow``, ``Subflow``, and ``Result`` objects now provide additional options for visualizing them
+- added ``unlogged_tables`` flag to SQLTableStore for creating UNLOGGED tables with Postgres.
+- created ``pipedag-manage`` command line utility with ``clear-metadata`` command to help with migrating between different pipedag metadata versions.
 
 0.4.1 (2023-06-17)
 ------------------
@@ -44,7 +46,7 @@ Changelog
 
 0.3.0 (2023-05-25)
 ------------------
-- breaking change to pipedag.yaml: introduced `args` subsections for arguments
+- breaking change to pipedag.yaml: introduced ``args`` subsections for arguments
   that are passed to backend classes
 - fix ibm_db_sa bug when copying dataframes from cache: uppercase table names by default
 - nicer readable SQL queries: use automatic aliases for inputs of SQLAlchemy tasks
@@ -101,6 +103,7 @@ Changelog
 0.1.0 (2022-09-01)
 ------------------
 Initial release.
+
 - @materialize annotations
 - flow definition with nestable stages
 - zookeeper synchronization

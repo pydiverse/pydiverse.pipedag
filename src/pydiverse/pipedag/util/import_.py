@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 import importlib
+from collections.abc import Collection
 from typing import Any
 
 
@@ -67,7 +68,7 @@ def import_object(import_path: str):
     return obj
 
 
-def load_object(config_dict: dict):
+def load_object(config_dict: dict, move_keys_into_args: Collection[str] | None = None):
     """Instantiates an instance of an object given
 
     The import path (module.Class) should be specified as the "class" value
@@ -76,13 +77,17 @@ def load_object(config_dict: dict):
     If the class defines a `_init_conf_` function, it gets called using the
     config values, otherwise they just get passed to the class initializer.
 
-    >>> # module.Class(argument="value")
-    >>> load_object({
-    >>>     "class": "module.Class",
-    >>>     "args": {
-    >>>         "argument": "value",
-    >>>     },
-    >>> })
+    Additionally, any values of `config_dict` whose associated keys are in
+    `move_keys_into_args`, get also passed as an argument to the initializer.
+    ::
+
+        # module.Class(argument="value")
+        load_object({
+            "class": "module.Class",
+            "args": {
+                "argument": "value",
+            },
+        })
     """
 
     if "class" not in config_dict:
@@ -99,6 +104,10 @@ def load_object(config_dict: dict):
             f"Invalid type for args section: {type(args)}\n"
             f"config section: {config_dict}"
         )
+
+    if move_keys_into_args:
+        args = args | {k: v for k, v in config_dict.items() if k in move_keys_into_args}
+
     try:
         init_conf = cls._init_conf_
         return init_conf(args)

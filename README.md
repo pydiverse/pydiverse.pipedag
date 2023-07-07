@@ -230,7 +230,7 @@ instances:
         store_input: true
         store_output: true
         use_stored_input_as_cache: true
-        class: "pydiverse.pipedag.backend.table_cache.ParquetTableCache"
+        class: "pydiverse.pipedag.backend.table.cache.ParquetTableCache"
         args:
           base_path: "/tmp/pipedag/table_cache"
 

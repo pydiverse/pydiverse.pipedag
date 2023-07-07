@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Generic
 import structlog
 from typing_extensions import Self
 
-from pydiverse.pipedag._typing import StoreT, T
+from pydiverse.pipedag._typing import T, TableHookResolverT
 from pydiverse.pipedag.context import RunContext, TaskContext
 from pydiverse.pipedag.materialize.cache import CacheManager
 from pydiverse.pipedag.materialize.container import RawSql, Table
@@ -21,6 +21,7 @@ from pydiverse.pipedag.util.hashing import stable_hash
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Stage
+    from pydiverse.pipedag.backend.table.cache.base import BaseTableCache
     from pydiverse.pipedag.materialize.core import MaterializingTask, TaskInfo
 
 
@@ -135,7 +136,6 @@ class TableHookResolver:
         table: Table,
         task: MaterializingTask | None,
         task_info: TaskInfo | None,
-        use_transaction_name=True,
     ):
         """Stores a table in the associated transaction stage
 
@@ -155,16 +155,12 @@ class TableHookResolver:
 
         # Materialize
         hook = self.get_m_table_hook(type(table.obj))
-        stage_name = (
-            table.stage.transaction_name if use_transaction_name else table.stage.name
-        )
-        hook.materialize(self, table, stage_name, task_info)
+        hook.materialize(self, table, table.stage.transaction_name, task_info)
 
     def retrieve_table_obj(
         self,
         table: Table,
         as_type: type[T],
-        use_transaction_name=True,
     ) -> T:
         """Loads a table from the store
 
@@ -184,12 +180,8 @@ class TableHookResolver:
             )
 
         hook = self.get_r_table_hook(as_type)
-        stage_name = (
-            table.stage.current_name if use_transaction_name else table.stage.name
-        )
-
         try:
-            return hook.retrieve(self, table, stage_name, as_type)
+            return hook.retrieve(self, table, table.stage.current_name, as_type)
         except Exception as e:
             raise RuntimeError(f"Failed to retrieve table '{table}'") from e
 
@@ -223,6 +215,7 @@ class BaseTableStore(TableHookResolver, Disposable):
 
     def __init__(self):
         self.logger = structlog.get_logger(logger_name=type(self).__name__)
+        self.local_table_cache: BaseTableCache | None = None
 
     def setup(self):
         """Setup function
@@ -259,6 +252,16 @@ class BaseTableStore(TableHookResolver, Disposable):
         """
 
     # Materialize
+
+    def store_table(
+        self,
+        table: Table,
+        task: MaterializingTask | None,
+        task_info: TaskInfo | None,
+    ):
+        super().store_table(table, task, task_info)
+        if self.local_table_cache:
+            self.local_table_cache.store_table(table, task, task_info)
 
     def execute_raw_sql(self, raw_sql: RawSql):
         """Executed raw SQL statements in the associated transaction stage
@@ -401,6 +404,25 @@ class BaseTableStore(TableHookResolver, Disposable):
         If the table doesn't exist in the transaction stage, fail silently.
         """
 
+    def retrieve_table_obj(
+        self,
+        table: Table,
+        as_type: type[T],
+    ) -> T:
+        if self.local_table_cache:
+            obj = self.local_table_cache.retrieve_table_obj(table, as_type)
+            if obj is not None:
+                return obj
+
+        obj = super().retrieve_table_obj(table, as_type)
+
+        if self.local_table_cache:
+            t = table.copy_without_obj()
+            t.obj = obj
+            self.local_table_cache.store_input(t, task=None, task_info=None)
+
+        return obj
+
     # Metadata
 
     @abstractmethod
@@ -504,7 +526,7 @@ class BaseTableStore(TableHookResolver, Disposable):
         """
 
 
-class TableHook(Generic[StoreT], ABC):
+class TableHook(Generic[TableHookResolverT], ABC):
     """Base class to define how to handle a specific table
 
     For more information, take a look at the `BaseTableStore.register_table`
@@ -535,7 +557,7 @@ class TableHook(Generic[StoreT], ABC):
     @abstractmethod
     def materialize(
         cls,
-        store: StoreT,
+        store: TableHookResolverT,
         table: Table,
         stage_name: str,
         task_info: TaskInfo,
@@ -553,7 +575,7 @@ class TableHook(Generic[StoreT], ABC):
     @abstractmethod
     def retrieve(
         cls,
-        store: StoreT,
+        store: TableHookResolverT,
         table: Table,
         stage_name: str,
         as_type: type[T] | tuple | dict[str, Any],
@@ -582,7 +604,7 @@ class TableHook(Generic[StoreT], ABC):
         return Table(obj)
 
     @classmethod
-    def lazy_query_str(cls, store: StoreT, obj) -> str:
+    def lazy_query_str(cls, store: TableHookResolverT, obj) -> str:
         """String that represents the associated object
 
         Can either be a literal query string (e.g. SQL query), or a string that

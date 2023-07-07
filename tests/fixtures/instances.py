@@ -16,6 +16,7 @@ __all__ = [
 
 # Pytest markers associated with specific instance name
 INSTANCE_MARKS = {
+    # Database Instances
     "postgres": pytest.mark.postgres,
     "postgres_unlogged": pytest.mark.postgres,
     "mssql": pytest.mark.mssql,
@@ -23,6 +24,11 @@ INSTANCE_MARKS = {
     "ibm_db2": pytest.mark.ibm_db2,
     "ibm_db2_avoid_schema": pytest.mark.ibm_db2,
     "duckdb": pytest.mark.duckdb,
+    # Local Table Cache Instances
+    "local_table_cache": pytest.mark.postgres,
+    "local_table_cache_inout": pytest.mark.postgres,
+    "local_table_store": pytest.mark.postgres,
+    # Orchestration Instances
     "dask_engine": [pytest.mark.dask, pytest.mark.postgres],
 }
 
@@ -43,6 +49,7 @@ ALL_INSTANCES = (
     "ibm_db2",
     "ibm_db2_avoid_schema",
     "duckdb",
+    "local_table_cache",
 )
 
 

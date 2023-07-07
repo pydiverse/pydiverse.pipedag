@@ -21,7 +21,7 @@ table_store_connections:
 
   duckdb:
     args:
-      url: "duckdb:///{$TMPDIR}{instance_id}.duckdb"
+      url: "duckdb:////tmp/pipedag/{instance_id}/db.duckdb"
 
 instances:
   __any__:
@@ -71,6 +71,11 @@ instances:
       args:
         unlogged_tables: false
 
+      local_table_cache:
+        class: "pydiverse.pipedag.backend.table.cache.ParquetTableCache"
+        args:
+          base_path: "/tmp/pipedag/table_cache"
+
   postgres_unlogged:
     instance_id: pd_postgres_unlogged
     table_store:
@@ -119,7 +124,7 @@ instances:
     instance_id: local_table_cache
     table_store:
       local_table_cache:
-        class: "pydiverse.pipedag.backend.table_cache.ParquetTableCache"
+        class: "pydiverse.pipedag.backend.table.cache.ParquetTableCache"
         args:
           base_path: "/tmp/pipedag/table_cache"
 
@@ -130,7 +135,7 @@ instances:
         store_input: true
         store_output: true
         use_stored_input_as_cache: true
-        class: "pydiverse.pipedag.backend.table_cache.ParquetTableCache"
+        class: "pydiverse.pipedag.backend.table.cache.ParquetTableCache"
         args:
           base_path: "/tmp/pipedag/table_cache"
 
@@ -141,7 +146,7 @@ instances:
         store_input: true
         store_output: true
         use_stored_input_as_cache: false
-        class: "pydiverse.pipedag.backend.table_cache.ParquetTableCache"
+        class: "pydiverse.pipedag.backend.table.cache.ParquetTableCache"
         args:
           base_path: "/tmp/pipedag/table_cache"
 

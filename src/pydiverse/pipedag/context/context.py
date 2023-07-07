@@ -149,43 +149,12 @@ class ConfigContext(BaseAttrsContext):
 
     @cached_property
     def store(self):
-        from pydiverse.pipedag.backend.table_cache import LocalTableCache
         from pydiverse.pipedag.materialize.store import PipeDAGStore
 
         # Load objects referenced in config
         try:
             table_store_config = self._config_dict["table_store"]
             table_store = load_object(table_store_config)
-
-            if "local_table_cache" in table_store_config:
-                local_cache_config = table_store_config["local_table_cache"]
-                local_table_cache = LocalTableCache(
-                    load_object(local_cache_config),
-                    local_cache_config.get("store_input", True),
-                    local_cache_config.get("store_output", False),
-                    local_cache_config.get("use_stored_input_as_cache", True),
-                )
-                unknown_attributes = set(local_cache_config.keys()) - {
-                    "class",
-                    "args",
-                    "store_input",
-                    "store_output",
-                    "use_stored_input_as_cache",
-                }
-                if len(unknown_attributes) > 0:
-                    raise AttributeError(
-                        (
-                            "Unknown attributes in local_table_cache config:"
-                            f" {unknown_attributes}"
-                        ),
-                    )
-            else:
-                local_table_cache = LocalTableCache(
-                    None,
-                    store_input=False,
-                    store_output=False,
-                    use_stored_input_as_cache=False,
-                )
         except Exception as e:
             raise RuntimeError("Failed loading table_store") from e
 
@@ -193,6 +162,21 @@ class ConfigContext(BaseAttrsContext):
             blob_store = load_object(self._config_dict["blob_store"])
         except Exception as e:
             raise RuntimeError("Failed loading blob_store") from e
+
+        try:
+            local_table_cache = None
+            local_table_cache_config = table_store_config.get("local_table_cache", None)
+            if local_table_cache_config is not None:
+                local_table_cache = load_object(
+                    local_table_cache_config,
+                    move_keys_into_args=(
+                        "store_input",
+                        "store_output",
+                        "use_stored_input_as_cache",
+                    ),
+                )
+        except Exception as e:
+            raise RuntimeError("Failed loading local_table_cache") from e
 
         return PipeDAGStore(
             table=table_store,
@@ -202,7 +186,16 @@ class ConfigContext(BaseAttrsContext):
 
     def evolve(self, **changes) -> ConfigContext:
         """Create a new instance with the changes applied; Wrapper for attrs.evolve"""
-        return evolve(self, **changes)
+        evolved = evolve(self, **changes)
+
+        # Transfer cached properties
+        cached_properties = ["auto_table", "auto_blob", "store"]
+        for name in cached_properties:
+            if name in self.__dict__:
+                evolved.__dict__[name] = self.__dict__[name]
+                evolved.__dict__[f"__{name}_inherited"] = True
+
+        return evolved
 
     def create_lock_manager(self) -> BaseLockManager:
         return load_object(self._config_dict["lock_manager"])
@@ -214,8 +207,9 @@ class ConfigContext(BaseAttrsContext):
         # If the store has been initialized (and thus cached in the __dict__),
         # dispose of it, and remove it from the cache.
         if store := self.__dict__.get("store", None):
-            store.dispose()
-            self.__dict__.pop("store")
+            if not self.__dict__.get("__store_inherited", False):
+                store.dispose()
+                self.__dict__.pop("store")
 
     def __getstate__(self):
         state = super().__getstate__()
