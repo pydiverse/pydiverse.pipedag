@@ -218,21 +218,21 @@ class PipeDAGStore(Disposable):
                     # task cache_key is output cache_key for eager tables
                     x.cache_key = task_info.task_cache_info.get_task_cache_key()
 
-                if isinstance(x, (Table, Blob)):
-                    x.stage = stage
-                    # Update name:
-                    # - If no name has been provided, generate on automatically
-                    # - If the provided name ends with %%, perform name mangling
-                    object_number = next(auto_suffix_counter)
-                    auto_suffix = (
-                        f"{task_info.task_cache_info.get_task_cache_key()}"
-                        f"_{object_number:04d}"
-                    )
+                x.stage = stage
 
-                    if x.name is None:
-                        x.name = task.name + "_" + auto_suffix
-                    elif x.name.endswith("%%"):
-                        x.name = x.name[:-2] + auto_suffix
+                # Update name:
+                # - If no name has been provided, generate on automatically
+                # - If the provided name ends with %%, perform name mangling
+                object_number = next(auto_suffix_counter)
+                auto_suffix = (
+                    f"{task_info.task_cache_info.get_task_cache_key()}"
+                    f"_{object_number:04d}"
+                )
+
+                if x.name is None:
+                    x.name = task.name + "_" + auto_suffix
+                elif x.name.endswith("%%"):
+                    x.name = x.name[:-2] + auto_suffix
 
                 ctx.validate_stage_lock(stage)
                 if isinstance(x, Table):

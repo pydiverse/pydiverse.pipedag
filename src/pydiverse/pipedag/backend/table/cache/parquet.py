@@ -17,6 +17,18 @@ from pydiverse.pipedag.util import normalize_name
 
 
 class ParquetTableCache(BaseTableCache):
+    """
+    Local Table Cache that stores tables in `Parquet`_ files.
+
+    :param base_path:
+        A path to a folder where the Parquet files should get stored.
+        To differentiate between different instances, the ``instance_id`` will
+        automatically be appended to the provided path.
+
+    .. _parquet:
+        https://parquet.apache.org
+    """
+
     @classmethod
     def _init_conf_(cls, config: dict[str, Any]):
         instance_id = normalize_name(ConfigContext.get().instance_id)

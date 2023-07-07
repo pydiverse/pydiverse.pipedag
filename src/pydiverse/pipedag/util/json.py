@@ -105,24 +105,20 @@ def json_object_hook(d: dict):
     if type_ == Type.TABLE:
         tbl = Table(
             name=d["name"],
-            stage=stages[d["stage"]],
             primary_key=d["primary_key"],
             indexes=d["indexes"],
         )
+        tbl.stage = stages[d["stage"]]
         tbl.cache_key = d["cache_key"]
         return tbl
     if type_ == Type.RAW_SQL:
-        raw_sql = RawSql(
-            name=d["name"],
-            stage=stages[d["stage"]],
-        )
+        raw_sql = RawSql(name=d["name"])
+        raw_sql.stage = stages[d["stage"]]
         raw_sql.cache_key = d["cache_key"]
         return raw_sql
     if type_ == Type.BLOB:
-        blob = Blob(
-            name=d["name"],
-            stage=stages[d["stage"]],
-        )
+        blob = Blob(name=d["name"])
+        blob.stage = stages[d["stage"]]
         blob.cache_key = d["cache_key"]
         return blob
     if type_ == Type.STAGE:

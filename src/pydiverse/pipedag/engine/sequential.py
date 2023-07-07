@@ -11,11 +11,7 @@ if TYPE_CHECKING:
 
 
 class SequentialEngine(OrchestrationEngine):
-    """Execute flow sequentially
-
-    This engine executes all tasks in a flow sequentially in the order
-    that they were defined in.
-    """
+    """Most basic orchestration engine that just executes all tasks sequentially."""
 
     def run(self, flow: Subflow, **run_kwargs):
         run_context = RunContext.get()

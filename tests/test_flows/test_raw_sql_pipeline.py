@@ -33,7 +33,7 @@ def tsql(
     sql = raw_sql_bind_schema(sql, "out_", out_stage, transaction=True)
     sql = raw_sql_bind_schema(sql, "in_", in_sql)
     sql = raw_sql_bind_schema(sql, "helper_", helper_sql)
-    return RawSql(sql, Path(script_path).name, out_stage)
+    return RawSql(sql, Path(script_path).name)
 
 
 def raw_sql_bind_schema(

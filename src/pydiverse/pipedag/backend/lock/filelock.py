@@ -24,9 +24,19 @@ class FileLockManager(BaseLockManager):
     For details on how exactly the file locking is implemented, check out the
     `filelock documentation`_.
 
-    .. _`filelock documentation`:
-        https://py-filelock.readthedocs.io/en/latest/index.html
+    :param base_path:
+        A path to a folder where the lock files should get stored.
+        To differentiate between different instances, the ``instance_id`` will
+        automatically be appended to the provided path.
+
+    .. _filelock documentation: https://py-filelock.readthedocs.io/en/latest/index.html
     """
+
+    @classmethod
+    def _init_conf_(cls, config: dict[str, Any]):
+        instance_id = normalize_name(ConfigContext.get().instance_id)
+        base_path = Path(config["base_path"]) / instance_id
+        return cls(base_path)
 
     def __init__(self, base_path: str | Path):
         super().__init__()
@@ -34,12 +44,6 @@ class FileLockManager(BaseLockManager):
         self.locks: dict[Lockable, fl.BaseFileLock] = {}
 
         os.makedirs(self.base_path, exist_ok=True)
-
-    @classmethod
-    def _init_conf_(cls, config: dict[str, Any]):
-        instance_id = normalize_name(ConfigContext.get().instance_id)
-        base_path = Path(config["base_path"]) / instance_id
-        return cls(base_path)
 
     @property
     def supports_stage_level_locking(self):

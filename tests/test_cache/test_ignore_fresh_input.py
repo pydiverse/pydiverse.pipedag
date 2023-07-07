@@ -272,9 +272,7 @@ def test_raw_sql(mocker):
             f"""
             CREATE TABLE {stage.transaction_name}.raw_table AS
             SELECT {raw_value} as x
-            """,
-            "raw_table",
-            stage,
+            """
         )
 
     @materialize(version="1.0")

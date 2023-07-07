@@ -4,14 +4,13 @@ from pydiverse.pipedag.backend.lock.base import BaseLockManager, Lockable, LockS
 
 
 class NoLockManager(BaseLockManager):
-    """Non locking lock manager (oxymoron)
-
+    """
     This lock manager doesn't do any locking and only serves as a placeholder
     for an actual lock manager for testing something locally.
 
-    .. WARNING::
-        DON'T USE THIS IN A PRODUCTION ENVIRONMENT. A LOCK MANAGER IS
-        ESSENTIAL TO PREVENT DATA CORRUPTION.
+    .. Warning::
+        This lock manager is not intended for use in a production environment.
+        Using a lock manager is essential for preventing data corruption.
     """
 
     @property

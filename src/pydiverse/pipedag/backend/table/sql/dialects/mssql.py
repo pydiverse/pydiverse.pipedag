@@ -24,6 +24,38 @@ from pydiverse.pipedag.materialize.container import RawSql
 
 
 class MSSqlTableStore(SQLTableStore):
+    """
+    SQLTableStore that supports `Microsoft SQL Server`_.
+
+    In addition to the arguments of
+    :py:class:`SQLTableStore <pydiverse.pipedag.backend.table.SQLTableStore>`,
+    it also takes the following arguments:
+
+    :param disable_pytsql:
+        For mssql, a package called `pytsql <https://pypi.org/project/pytsql/>`_ is
+        used for executing RawSql scripts. It has the advantage that it allows for
+        some kind of SQL based print statements. However, it may fail for some
+        statements. For those cases, you can set ``disable_pytsql: true`` to use another
+        logic for splitting up Raw SQL scripts and handing that over to sqlalchemy.
+        This is actually quite a complex process for mssql.
+        Sorry for any inconveniences. We will try to make it work for most tsql code
+        that should be integrated in pipedag pipelines. However, the ultimate goal
+        is to split up monolithic blocks of dynamic sql statements into defined
+        transformations with dynamic aspects written in python.
+
+    :param pytsql_isolate_top_level_statements:
+        This parameter is handed over to `pytsql.executes`_ and causes the script to
+        be split in top level statements that are sent to sqlalchemy separately.
+        The tricky part here is that some magic is done to make DECLARE statements
+        reach across, but it is not guaranteed to be identical to scripts executed
+        by a SQL UI.
+
+    .. _Microsoft SQL Server:
+        https://www.microsoft.com/en/sql-server/
+    .. _pytsql.executes:
+        https://pytsql.readthedocs.io/en/latest/api/pytsql.html#pytsql.executes
+    """
+
     _dialect_name = "mssql"
 
     def __init__(
@@ -33,10 +65,6 @@ class MSSqlTableStore(SQLTableStore):
         pytsql_isolate_top_level_statements: bool = True,
         **kwargs,
     ):
-        """
-        :param disable_pytsql: whether to disable the use of pytsql
-        :param pytsql_isolate_top_level_statements: forward pytsql executes() parameter
-        """
         self.disable_pytsql = disable_pytsql
         self.pytsql_isolate_top_level_statements = pytsql_isolate_top_level_statements
 

@@ -50,6 +50,51 @@ class SQLTableStore(BaseTableStore):
     Creates a schema for each stage and a temporary schema for each
     transaction. If all tasks inside a stage succeed, swaps the schemas by
     renaming them.
+
+    The correct dialect specific subclass of ``SQLTableStore`` gets initialized when
+    based on the dialect found in the provided engine url during initialization.
+
+    :param url:
+        The `SQLAlchemy engine url <https://docs.sqlalchemy.org/en/20/core/engines.html#database-urls>`_
+        use to connect to the database.
+
+        This URL may contain placeholders like ``{name}`` or ``{instance_id}``
+        (additional ones can be defined in the ``url_attrs_file`) or
+        environment variables like ``{$USER}`` which get substituted with their
+        respective values.
+
+    :param url_attrs_file:
+        Filename of a yaml file which is read shortly before rendering the final
+        engine URL and which is used to replace custom placeholders in ``url``.
+
+        Just like ``url``, this value may also contain placeholders and environment
+        variables which get substituted.
+
+    :param create_database_if_not_exists:
+        If the engine url references a database name that doesn't yet exists,
+        then setting this value to ``True`` tells pipedag to create the database
+        before trying to open a connection to it.
+
+    :param schema_prefix:
+        A prefix that gets placed in front of all schema names created by pipedag.
+
+    :param schema_suffix:
+        A suffix that gets placed behind of all schema names created by pipedag.
+
+    :param avoid_drop_create_schema:
+        If ``True``, no ``CREATE SCHEMA`` or ``DROP SCHEMA`` statements get issued.
+        This is mostly relevant for databases that support automatic schema
+        creation like IBM DB2.
+
+    :param print_materialize:
+        If ``True``, all tables that get materialized get logged.
+
+    :param print_sql:
+        If ``True``, all executed SQL statements get logged.
+
+    :param no_db_locking:
+        Speed up database by telling it we will not rely on it's locking mechanisms.
+        Currently not implemented.
     """
 
     METADATA_SCHEMA = "pipedag_metadata"
@@ -86,26 +131,6 @@ class SQLTableStore(BaseTableStore):
         print_sql: bool = False,
         no_db_locking: bool = True,
     ):
-        """
-        Construct table store.
-
-        :param engine_url:
-            URL for SQLAlchemy engine
-        :param create_database_if_not_exists:
-            whether to create database if it does not exist
-        :param schema_prefix:
-            prefix string for schemas
-        :param schema_suffix:
-            suffix string for schemas
-        :param avoid_drop_create_schema
-            avoid creating and dropping schemas
-        :param print_materialize:
-            whether to print select statements before materialization
-        :param print_sql:
-            whether to print final SQL statements (except for metadata)
-        :param no_db_locking:
-            speed up database by telling it we will not rely on it's locking mechanisms
-        """
         super().__init__()
 
         self.create_database_if_not_exists = create_database_if_not_exists

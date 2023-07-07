@@ -9,9 +9,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import DropSchema, Schema
 from pydiverse.pipedag.management.cli import cli
 
 
-@cli.command(
-    help="deletes all schemas associated with an instance",
-)
+@cli.command()
 @click.option(
     "--config",
     "config_path",
@@ -47,6 +45,12 @@ def delete_schemas(
     per_user: bool,
     yes: bool,
 ):
+    """
+    Delete all schemas associated with an instance.
+
+    Only works with SQLTableStore.
+    """
+
     if config_path:
         pipedag_config = PipedagConfig(path=config_path)
     else:

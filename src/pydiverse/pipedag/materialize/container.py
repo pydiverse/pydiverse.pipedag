@@ -11,33 +11,49 @@ if TYPE_CHECKING:
 
 
 class Table(Generic[T]):
-    """Table container
+    """Container for storing Tables.
 
     Used to wrap table objects that get returned from materializing
-    tasks.
+    tasks. Tables get stored using the table store.
+
+    .. code-block:: python
+       :caption: Example: How to return a table from a task.
+
+        @materialize()
+        def task():
+            df = pd.DataFrame({"x": [0, 1, 2, 3]}
+            return Table(df, "name")
 
     :param obj: The table object to wrap
     :param name: Optional name. If no name is provided, an automatically
         generated name will be used. To prevent name collisions, you can
-        add '%%' at the end of the name to enable automatic name mangling.
+        append ``"%%"`` at the end of the name to enable automatic name mangling.
     :param primary_key: Optional name of the primary key that should be
-        used when materializing this table
+        used when materializing this table. Only supported by some table stores.
+    :param indexes: Optional list of indexes to create. Each provided index should be
+        a list of column names. Only supported by some table stores.
+    :param type_map: Optional map of column names to types. Depending on the table
+        store this will allow you to control the datatype as which the specified
+        columns get materialized.
+
+    .. seealso:: You can specify which types of objects should automatically get
+        converted to tables using the :ref:`auto_table` config option.
     """
 
     def __init__(
         self,
         obj: T | None = None,
         name: str | None = None,
-        stage: Stage | None = None,
+        *,
         primary_key: str | list[str] | None = None,
         indexes: list[list[str]] | None = None,
         type_map: dict[str, Any] | None = None,
     ):
         self._name = None
+        self.stage: Stage | None = None
 
         self.obj = obj
         self.name = name
-        self.stage = stage
         self.primary_key = primary_key
         self.indexes = indexes
         self.type_map = type_map
@@ -91,27 +107,37 @@ class Table(Generic[T]):
 
 
 class RawSql:
-    """Container for raw sql strings
+    """Container for raw sql strings.
 
-    This allows wrapping legacy sql code with pipedag before it is converted
-    to proper tasks that allow tracing tables.
+    This allows returning sql query strings that then get executed in the
+    table store. This is only intended to help with transitioning legacy sql
+    pipelines to pipedag, and should be replaced with pipedag managed tables as
+    soon as possible.
 
-    :param sql: The table object to wrap
-    :param cache_key: Internal cache_key used when retreiving an object
-        from the database cache.
+    .. attention::
+        When using RawSql, make sure that you only write tables to the stage that
+        the corresponding task is running in. Otherwise, schema swapping won't work.
+        To do this, pass the current stage as an argument to your task and then
+        access the current stage name using :py:class:`Stage.current_name`.
+
+    :param sql: The sql query string to execute. Depending on the database dialect,
+        the query will be split into multiple subqueries that then get
+        executed sequentially.
+    :param name: Optional name. If no name is provided, an automatically
+        generated name will be used. To prevent name collisions, you can
+        append ``"%%"`` at the end of the name to enable automatic name mangling.
     """
 
     def __init__(
         self,
         sql: str | None = None,
         name: str | None = None,
-        stage: Stage | None = None,
     ):
         self._name = None
+        self.stage: Stage | None = None
 
         self.sql = sql
         self.name = name
-        self.stage = stage
 
         # cache_key will be overridden shortly before handing over to downstream tasks
         # that use it to compute their input_hash for cache_invalidation due to input
@@ -129,35 +155,43 @@ class RawSql:
     @name.setter
     def name(self, value):
         if value is not None and not isinstance(value, str):
-            raise TypeError(f"Table name must be of instance 'str' not {type(value)}.")
+            raise TypeError(f"RawSql name must be of instance 'str' not {type(value)}.")
         self._name = normalize_name(value)
 
 
 class Blob(Generic[T]):
-    """Blob (binary large object) container
+    """Blob (binary large object) container.
 
-    Used to wrap arbitrary python objects that get returned from materializing
-    tasks.
+    Used to wrap arbitrary Python objects that get returned from materializing
+    tasks. Blobs get stored in the blob store.
+
+    .. code-block:: python
+       :caption: Example: How to return a blob from a task.
+
+        @materialize()
+        def task():
+            obj = SomePicklableClass()
+            return Blob(obj, "name")
 
     :param obj: The object to wrap
     :param name: Optional name. If no name is provided, an automatically
         generated name will be used. To prevent name collisions, you can
-        add '%%' at the end of the name to enable automatic name mangling.
-    :param cache_key: Internal cache_key used when retreiving an object
-        from the database cache.
+        append ``"%%"`` at the end of the name to enable automatic name mangling.
+
+    .. seealso:: You can specify which types of objects should automatically get
+        converted to blobs using the :ref:`auto_blob` config option.
     """
 
     def __init__(
         self,
         obj: T | None = None,
         name: str | None = None,
-        stage: Stage | None = None,
     ):
         self._name = None
+        self.stage: Stage | None = None
 
         self.obj = obj
         self.name = name
-        self.stage = stage
 
         # cache_key will be overridden shortly before handing over to downstream tasks
         # that use it to compute their input_hash for cache_invalidation due to input

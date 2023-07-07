@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class Stage:
-    """The Stage class is used to group a collection of related tasks
+    """A stage represents a collection of related tasks.
 
     The main purpose of a Stage is to allow for a transactionality mechanism.
     Only if all tasks inside a stage finish successfully does the stage
@@ -23,35 +23,18 @@ class Stage:
     All task that get defined inside the stage's context will automatically
     get added to the stage.
 
-    An example of how to use a Stage:
-    ::
-
-        @materialize()
-        def my_materializing_task():
-            return Table(...)
-
-        with Flow("my_flow") as flow:
-            with Stage("stage_1") as stage_1:
-                task_1 = my_materializing_task()
-                task_2 = another_materializing_task(task_1)
-
-            with Stage("stage_2") as stage_2:
-                task_3 = yet_another_task(task_3)
-                ...
-
-        flow.run()
-
-    To ensure that all tasks get executed in the correct order, each
-    MaterializingTask must be an upstream dependency of its stage's
-    CommitStageTask (this is done by calling the `add_task` method) and
-    for each of its upstream dependencies, the associated StageCommitTask
-    must be added as an upstream dependency.
-    This ensures that the stage commit only happens after all tasks have
-    finished writing to the transaction stage, and a task never gets executed
-    before any of its upstream stage dependencies have been committed.
-
     :param name: The name of the stage. Two stages with the same name may
         not be used inside the same flow.
+
+    ..
+        To ensure that all tasks get executed in the correct order, each
+        MaterializingTask must be an upstream dependency of its stage's
+        CommitStageTask (this is done by calling the `add_task` method) and
+        for each of its upstream dependencies, the associated StageCommitTask
+        must be added as an upstream dependency.
+        This ensures that the stage commit only happens after all tasks have
+        finished writing to the transaction stage, and a task never gets executed
+        before any of its upstream stage dependencies have been committed.
     """
 
     def __init__(self, name: str):
@@ -69,10 +52,12 @@ class Stage:
 
     @property
     def name(self) -> str:
+        """The name of the stage."""
         return self._name
 
     @property
     def transaction_name(self) -> str:
+        """The name temporary transaction stage."""
         return self._transaction_name
 
     def set_transaction_name(self, new_transaction_name):
@@ -82,10 +67,10 @@ class Stage:
 
     @property
     def current_name(self) -> str:
-        """The name of the stage where the data currently lives
+        """The name of the stage where the data currently lives.
 
         Before a task has been committed this is the transaction name,
-        after the commit it is the base name.
+        after the commit it is the normal name.
         """
 
         if self.did_commit:

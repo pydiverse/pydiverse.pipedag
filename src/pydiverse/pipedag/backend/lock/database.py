@@ -27,7 +27,11 @@ class DatabaseLockManager(BaseLockManager):
     the instance level (where the entire instance including all stages get locked and
     unlocked together).
 
-    The database specific lock implementations can be found at the end of the file.
+    This lock manager uses the same database as the ``SQLTableStore``.
+    No other configuration in the ``args`` section of the config file is required.
+
+    We currently support the following databases:
+    PostgreSQL, Microsoft SQL Server, IBM DB2.
     """
 
     __registered_dialects: dict[str, type[DatabaseLockManager]] = {}

@@ -19,6 +19,14 @@ from pydiverse.pipedag.materialize import Table
 
 
 class IBMDB2TableStore(SQLTableStore):
+    """
+    SQLTableStore that supports `IBM Db2 <https://www.ibm.com/products/db2>`_.
+    Requires `ibm-db-sa <https://pypi.org/project/ibm-db-sa/>`_ to be installed.
+
+    Takes the same arguments as
+    :py:class:`SQLTableStore <pydiverse.pipedag.backend.table.SQLTableStore>`
+    """
+
     _dialect_name = "ibm_db_sa"
 
     def add_primary_key(

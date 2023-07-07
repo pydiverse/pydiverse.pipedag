@@ -30,6 +30,25 @@ class cached_class_property:
 
 
 class PipedagConfig:
+    """
+    This class represents a :doc:`pipedag config file </reference/config>`.
+
+    :param path: Path to the config file to load.
+
+    Attributes
+    ----------
+    default : PipedagConfig
+        The default config file.
+
+        If the environment variable :envvar:`PIPEDAG_CONFIG` is set, then this file
+        will be used as the config file. Otherwise, pipedag searches for a file called
+        ``pipedag.yaml`` or ``pipedag.yml`` in:
+
+        * The current working directory
+        * Any parent directories of the working directory
+        * The user folder
+    """
+
     default: PipedagConfig
 
     def __init__(self, path: str):
@@ -89,6 +108,21 @@ class PipedagConfig:
         flow: str | None = None,
         per_user: bool = False,
     ) -> ConfigContext:
+        """
+        Constructs a :py:class:`ConfigContext`.
+        For more details how the specific ConfigContext instance is constructed,
+        check out the :ref:`specifying instances and flows
+        <reference/config:Specifying instances and flows>` section.
+
+        :param instance: Name of the instance.
+            If no value is provided the ``__any__`` instance gets used.
+        :param flow: Name of the flow.
+            If no value is provided the ``__any__`` flow gets used.
+        :param per_user:
+            Whether to customize the instance id for each user according to
+            :ref:`per_user_template`.
+        """
+
         # TODO: Check that this function only gets called in the main interpreter.
         #       Otherwise certain environment variables might get expanded incorrectly.
         from pydiverse.pipedag.context import ConfigContext
@@ -266,7 +300,7 @@ class PipedagConfig:
             "name": self.name,
         }
 
-        for key, val in variables.items():
+        for key, val in list(variables.items()):
             if val is None:
                 variables.pop(key)
 
@@ -327,7 +361,7 @@ def find_config(
 
     file_names = [name + extension for extension in extensions]
     for path, file_name in itertools.product(search_paths, file_names):
-        config_path = (path / file_name).resolve()
+        config_path: Path = (path / file_name).resolve()
         if config_path.is_file():
             return str(config_path)
 

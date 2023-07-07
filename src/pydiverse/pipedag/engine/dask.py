@@ -23,7 +23,18 @@ except ImportError as e:
 
 @requires(dask, ImportError("DaskEngine requires 'dask' to be installed."))
 class DaskEngine(OrchestrationEngine):
-    """Execute flow in parallel on a single machine using dask"""
+    """
+    Execute a flow in parallel on a single machine using `dask <https://dask.org>`_.
+
+    :param dask_compute_kwargs:
+        Keyword arguments that get passed to |dask.compute|_.
+        The main kwarg you might be interested in is ``num_workers``,
+        which allows you to specify how many worker processes dask should spawn.
+        By default, it spawns one worker per CPU core.
+
+    .. |dask.compute| replace:: ``dask.compute``
+    .. _dask.compute: https://docs.dask.org/en/stable/api.html#dask.compute
+    """
 
     def __init__(self, **dask_compute_kwargs):
         self.dask_compute_kwargs = dict(

@@ -46,13 +46,17 @@ class BaseContext:
                     raise RuntimeError
                 self._context_var.reset(self._token)
                 object.__setattr__(self, "_token", None)
-                self.close()
+                self._close()
 
-    def close(self):
+    def _close(self):
         """Function that gets called at __exit__"""
 
     @classmethod
     def get(cls: type[T]) -> T:
+        """Returns the current, innermost context instance.
+
+        :raises LookupError: If no such context has been entered yet.
+        """
         return cls._context_var.get()
 
     def __getstate__(self):
@@ -99,19 +103,41 @@ class StageCommitTechnique(Enum):
 
 @frozen(slots=False)
 class ConfigContext(BaseAttrsContext):
-    """
-    Configuration context for running a particular pipedag instance.
+    """Configuration context for running a particular pipedag instance.
 
-    For the most part it holds serializable attributes. But it also offers access
-    to blob_store and table_store as well as lock manager and orchestration engine.
-    Lock manager and orchestration engine are managed full cycle by exactly one
-    caller (ServerRunContext / Flow.run()). So this class just offers a way to create
-    a disposable object. Blob_store and table_store on the other hand might be
-    accessed by multi-threaded / multi-processed / multi-node way of orchestrating
-    functions in the pipedag. Since they don't keep real state, they can be
-    thrown away while pickling and will be reloaded on first access of the
-    @cached_property store. Calling ConfigContext.dispose() will close all
-    connections and render this object unusable afterwards.
+    To create a `ConfigContext` instance use :py:meth:`PipedagConfig.get`.
+
+    ..
+        For the most part, the Config context holds serializable config attributes.
+        But it also offers access to the table and blob store, as well as the lock
+        manager and orchestration engine.
+
+        Because we can't pickle those classes (and pipedag supports flow execution
+        across multiple processes / nodes), the lock manager and orchestration engine
+        only get created once per flow execution and then get managed by a central
+        process (in the case of the lock manager this is the RunContextServer).
+
+        The table and blob store on the other hand need to be accessed by many task
+        across multiple threads / processes / nodes. Because they don't contain
+        any state (all state gets stored in the RunContextServer), they get
+        thrown away during pickling and then get recreated on the first access.
+
+    Attributes
+    ----------
+    pipedag_name :
+        :ref:`Name <config-name>` of the config file.
+    flow_name :
+        Name of the flow used for instantiating this config.
+    instance_name :
+        Name of the instance used for instantiating this config.
+    instance_id :
+        The :ref:`instance_id`.
+    attrs :
+        Values from the :ref:`config-attrs` config section, stored in a |Box|_ object.
+        Useful for passing any custom, use case specific config options to your flow.
+
+        .. |Box| replace:: ``Box``
+        .. _Box: https://github.com/cdgriffith/Box/wiki
     """
 
     _config_dict: dict
@@ -185,7 +211,16 @@ class ConfigContext(BaseAttrsContext):
         )
 
     def evolve(self, **changes) -> ConfigContext:
-        """Create a new instance with the changes applied; Wrapper for attrs.evolve"""
+        """Create a new config context instance with the changes applied.
+
+        Because ConfigContext is immutable, this is the only valid way to derive a
+        new instance with some values mutated.
+
+        Wrapper around |attrs.evolve()|_.
+
+        .. |attrs.evolve()| replace:: ``attrs.evolve()``
+        .. _attrs.evolve(): https://www.attrs.org/en/stable/api.html#attrs.evolve
+        """
         evolved = evolve(self, **changes)
 
         # Transfer cached properties
@@ -203,7 +238,7 @@ class ConfigContext(BaseAttrsContext):
     def create_orchestration_engine(self) -> OrchestrationEngine:
         return load_object(self._config_dict["orchestration"])
 
-    def close(self):
+    def _close(self):
         # If the store has been initialized (and thus cached in the __dict__),
         # dispose of it, and remove it from the cache.
         if store := self.__dict__.get("store", None):
@@ -225,7 +260,25 @@ class ConfigContext(BaseAttrsContext):
 
 class StageLockContext(BaseContext):
     """
-    Context manager used to keep stages locked until after flow.run() has been called
+    Context manager used to keep stages locked until after :py:meth:`Flow.run()`.
+
+    By default, pipedag releases stage locks as soon as it is done processing a stage.
+    This means that by the time the flow has finished running, another flow
+    run might already have overwritten any data in those stages.
+    Consequently, calling :py:meth:`Result.get()` might not return the values
+    produced by the current run, but instead those from the other (newer) run.
+
+    To prevent this, you can wrap the calls to :py:meth:`Flow.run()` and
+    :py:meth:`Result.get()` in a `StageLockContext`. This keeps all stages modified
+    by the flow to remain locked until the end of `StageLockContext`.
+
+    Example
+    -------
+    ::
+
+        with StageLockContext():
+            result = flow.run()
+            df = result.get(task_x)
     """
 
     lock_state_handlers: [StageLockStateHandler]
@@ -237,7 +290,7 @@ class StageLockContext(BaseContext):
         self.logger.info("Open stage lock context")
         self.lock_state_handlers = []
 
-    def close(self):
+    def _close(self):
         self.logger.info("Close stage lock context")
         for lock_state_handler in self.lock_state_handlers:
             lock_state_handler.dispose()

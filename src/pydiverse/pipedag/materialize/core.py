@@ -29,6 +29,127 @@ def materialize(
     lazy: bool = False,
     nout: int = 1,
 ) -> CallableT | MaterializingTask:
+    """Decorator to create a task whose outputs get materialized.
+
+    This decorator takes a class and turns it into a :py:class:`MaterializingTask`.
+    This means, that this function can only be used as part of a flow.
+    Any outputs it produces get written to their appropriate storage backends
+    (either the table or blob store). Additionally, any :py:class:`Table`
+    or :py:class:`Blob` objects this task receives as an input get replaced
+    with the appropriate object retrieved from the storage backend.
+    In other words: All outputs from a materializing task get written to the store,
+    and all inputs get retrieved from the store.
+
+    Because of how caching is implemented, task inputs and outputs must all
+    be "materializable". This means that they can only contain objects of
+    the following types:
+    ``dict``, ``list``, ``tuple``,
+    ``int``, ``float``, ``str``, ``bool``, ``None``,
+    ``datetime.date``, ``datetime.datetime``, ``pathlib.Path``,
+    :py:class:`Table`, :py:class:`RawSql`, :py:class:`Blob`, or :py:class:`Stage`.
+
+    :param fn:
+        The function that gets executed by this task.
+    :param name:
+        The name of this task.
+        If no `name` is provided, the name of `fn` is used instead.
+    :param input_type:
+        The data type as which to retrieve table objects from the store.
+        All tables passed to this task get loaded from the table store and converted
+        to this type.
+    :param version:
+        The version of this task.
+        Unless the task is lazy, you always need to manually change this
+        version number when you change the implementation to ensure that the
+        task gets executed and the cache flushed.
+
+        If the `version` is ``None`` and the task isn't lazy, then the task always
+        gets executed, and all downstream tasks get invalidated.
+    :param cache:
+        An explicit cache function used to determine cache validity of the task inputs.
+
+        This function gets called every time before the task gets executed.
+        It gets called with the same arguments as the task.
+
+        An explicit function for validating cache validity. If the output
+        of this function changes while the source parameters are the same (e.g.
+        the source is a filepath and `cache` loads data from this file), then the
+        cache will be deemed invalid and is not used.
+    :param lazy:
+        Whether this task is lazy or not.
+
+        Unlike a normal task, lazy tasks always get executed. However, if a lazy
+        task produces a lazy table (e.g. a SQL query), the table store checks if
+        the same query has been executed before. If this is the case, then the
+        query doesn't get executed, and instead, the table gets copied from the cache.
+
+        This behaviour is very useful, because you don't need to manually bump
+        the `version` of a lazy task. This only works because for lazy tables
+        generating the query is very cheap compared to executing it.
+    :param nout:
+        The number of objects returned by the task.
+        If set, this allows unpacking and iterating over the results from the task.
+
+    Example
+    -------
+
+    ::
+
+        @materialize(version="1.0", input_type=pd.DataFrame)
+        def task(df: pd.DataFrame) -> pd.DataFrame:
+            df = ...  # Do something with the dataframe
+            return Table(df)
+
+        @materialize(lazy=True, input_type=sa.Table)
+        def lazy_task(tbl: sa.Table) -> sa.Table:
+            query = sa.select(tbl).where(...)
+            return Table(query)
+
+    You can use the `cache` argument to specify an explicit cache function.
+    In this example we define a task that reads a dataframe from a csv file.
+    Without specifying a cache function, this task would only get rerun when the
+    `path` argument changes. Instead, we define a function that calculates a
+    hash based on the contents of the csv file, and pass it to the `cache` argument
+    of ``@materialize``. This means that the task now gets invalidated and rerun if
+    either the `path` argument changes or if the content of the file pointed
+    to by `path` changes::
+
+        import hashlib
+
+        def file_digest(path):
+            with open(path, "rb") as f:
+                return hashlib.file_digest(f, "sha256").hexdigest()
+
+        @materialize(version="1.0", cache=file_digest)
+        def task(path):
+            df = pd.read_scv(path)
+            return Table(df)
+
+    Setting nout allows you to use unpacking assignment with the task result::
+
+        @materialize(version="1.0", nout=2)
+        def task():
+            return 1, 2
+
+        # Later, while defining a flow, you can use unpacking assignment
+        # because you specified that the task returns 2 objects (nout=2).
+        one, two = task()
+
+    If a task returns a dictionary or a list, you can use square brackets to
+    explicitly wire individual values / elements to task inputs::
+
+        @materialize(version="1.0")
+        def task():
+            return {
+                "x": [0, 1],
+                "y": [2, 3],
+            }
+
+        # Later, while defining a flow
+        # This would result in another_task being called with ([0, 1], 3).
+        task_out = task()
+        another_task(task_out["x"], task_out["y"][1])
+    """
     if fn is None:
         return partial(
             materialize,
@@ -52,47 +173,9 @@ def materialize(
 
 
 class MaterializingTask(Task):
-    """Task whose outputs get materialized
+    """Subclass of `Task` that materializes all outputs.
 
-    All the values a materializing task returns get written to the appropriate
-    storage backend. Additionally, all `Table` and `Blob` objects in the
-    input will be replaced with their appropriate objects (loaded from the
-    storage backend). This means that tables and blobs never move from one
-    task to another directly, but go through the storage layer instead.
-
-    Because of how caching is implemented, task inputs and outputs must all
-    be 'materializable'. This means that they can only contain objects of
-    the following types:
-    `dict`, `list`, `tuple`,
-    `int`, `float`, `str`, `bool`, `None`,
-    and PipeDAG's `Table` and `Blob` type.
-
-    Automatically adds itself to the active stage.
-    All materializing tasks MUST be defined inside a stage.
-
-    :param fn: The run method of this task
-    :key name: The name of this task
-    :key input_type: The data type to convert table objects to when passed
-        to this task.
-    :key version: The version of this task. Unless this task is lazy, you
-        always have to bump / change the version number to ensure that
-        the new implementation gets used. Else a cached result might be used
-        instead. version=None and lazy=False means the task is never cached
-        but outputs are still materialized.
-        In addition, see also option ignore_task_version in pipedag config
-        documentation.
-    :key cache: An explicit function for validating cache validity. If the output
-        of this function changes while the source parameters are the same (e.g.
-        the source is a filepath and `cache` loads data from this file), then the
-        cache will be deemed invalid and is not used.
-    :key lazy: Boolean indicating if this task should be lazy. A lazy task is
-        a task that always gets executed, and if it produces a lazy table
-        (e.g. a SQL query), the backend can compare the generated output
-        to see it the same query has been executed before (and only execute
-        it if not). This is an alternative to manually setting the version
-        number.
-    :key kwargs: Any other keyword arguments will directly get passed to the
-        prefect Task initializer.
+    See :py:func:`materialize` for documentation.
     """
 
     def __init__(
@@ -155,13 +238,6 @@ class MaterializingTask(Task):
             inputs[in_id] = cached_output
 
         return super().run(inputs, **kwargs)
-
-
-@dataclass
-class TaskInfo:
-    task_cache_info: TaskCacheInfo
-    input_tables: list[Table]
-    open_stages: set[Stage]
 
 
 class MaterializationWrapper:
@@ -264,3 +340,10 @@ class MaterializationWrapper:
             self.value = result
 
             return result
+
+
+@dataclass
+class TaskInfo:
+    task_cache_info: TaskCacheInfo
+    input_tables: list[Table]
+    open_stages: set[Stage]

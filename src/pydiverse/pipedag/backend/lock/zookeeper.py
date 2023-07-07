@@ -23,11 +23,26 @@ class ZooKeeperLockManager(BaseLockManager):
     """Apache ZooKeeper based lock manager
 
     Uses Apache ZooKeeper to establish `fully distributed locks that are
-    globally synchronous` [1]_. The advantage of this approach is that we
-    it is highly reliable and that in case our flow crashes, the acquired
-    locks automatically get released (the locks are ephemeral).
+    globally synchronous`_. The advantage of this approach is that we it is highly
+    reliable and that in case our flow crashes, the acquired locks automatically
+    get released (the locks are ephemeral).
 
-    .. [1] https://zookeeper.apache.org/doc/r3.1.2/recipes.html#sc_recipes_Locks
+    Config File
+    -----------
+
+    All arguments in the ``args`` section get passed as-is to the initializer
+    of |KazooClient|_. Some useful arguments include:
+
+    :param hosts:
+        Comma separated list of hosts to connect.
+
+
+    .. _fully distributed locks that are globally synchronous:
+        https://zookeeper.apache.org/doc/r3.1.2/recipes.html#sc_recipes_Locks
+
+    .. |KazooClient| replace:: ``KazooClient``
+    .. _KazooClient:
+        https://kazoo.readthedocs.io/en/latest/api/client.html#kazoo.client.KazooClient
     """
 
     @classmethod

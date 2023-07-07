@@ -22,6 +22,23 @@ from pydiverse.pipedag.materialize.core import TaskInfo
 
 
 class PostgresTableStore(SQLTableStore):
+    """
+    SQLTableStore that supports `PostgreSQL <https://postgresql.org>`_.
+
+    In addition to the arguments of
+    :py:class:`SQLTableStore <pydiverse.pipedag.backend.table.SQLTableStore>`,
+    it also takes the following arguments:
+
+    :param unlogged_tables:
+        Whether to use `unlogged`_ tables or not.
+        This reduces safety in case of a crash or unclean shutdown, but can
+        significantly increase write performance.
+
+    .. _unlogged:
+        https://www.postgresql.org/docs/9.5/sql-createtable.html
+        #SQL-CREATETABLE-UNLOGGED
+    """
+
     _dialect_name = "postgresql"
 
     def __init__(
@@ -30,12 +47,6 @@ class PostgresTableStore(SQLTableStore):
         unlogged_tables: bool = False,
         **kwargs,
     ):
-        """
-        :param unlogged_tables: whether to use UNLOGGED tables or not.
-            This reduces safety in case of a crash or unclean shutdown, but can
-            significantly increase write performance.
-            https://www.postgresql.org/docs/9.5/sql-createtable.html#SQL-CREATETABLE-UNLOGGED
-        """
         self.unlogged_tables = unlogged_tables
 
         super().__init__(*args, **kwargs)

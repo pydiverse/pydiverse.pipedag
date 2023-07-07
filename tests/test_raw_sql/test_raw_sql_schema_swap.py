@@ -25,7 +25,7 @@ def sql_script(
     sql = Path(script_path).read_text()
     sql = raw_sql_bind_schema(sql, "out_", stage, transaction=True)
     sql = raw_sql_bind_schema(sql, "in_", input_stage)
-    return RawSql(sql, Path(script_path).name, stage)
+    return RawSql(sql)
 
 
 def raw_sql_bind_schema(

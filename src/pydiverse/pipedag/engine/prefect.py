@@ -32,7 +32,16 @@ except ImportError as e:
     ImportWarning(f"Requires prefect version 1.x (found {prefect_version})"),
 )
 class PrefectOneEngine(OrchestrationEngine):
-    """Flow execution engine using prefect version 1.x"""
+    """
+    Hands over execution of a flow to `Prefect 1 <https://docs-v1.prefect.io>`_.
+
+    :param flow_kwargs:
+        Optional dictionary of keyword arguments that get passed to the
+        initializer of |prefect1.Flow|_.
+
+    .. |prefect1.Flow| replace:: ``prefect.Flow``
+    .. _prefect1.Flow: https://docs-v1.prefect.io/api/latest/core/flow.html
+    """
 
     def __init__(self, flow_kwargs: dict[str, Any] = None):
         self.flow_kwargs = flow_kwargs or {}
@@ -115,7 +124,17 @@ class PrefectOneEngine(OrchestrationEngine):
     ImportWarning(f"Requires prefect version 2.x (found {prefect_version})"),
 )
 class PrefectTwoEngine(OrchestrationEngine):
-    """Flow execution engine using prefect version 2.x"""
+    """
+    Hands over execution of a flow to `Prefect 2 <https://docs.prefect.io>`_.
+
+    :param flow_kwargs:
+        Optional dictionary of keyword arguments that get passed to the
+        initializer of |@prefect2.flow|_ deecorator.
+
+    .. |@prefect2.flow| replace:: ``@prefect.flow``
+    .. _@prefect2.flow:
+            https://docs.prefect.io/latest/api-ref/prefect/flows/#prefect.flows.flow
+    """
 
     def __init__(self, flow_kwargs: dict[str, Any] = None):
         self.flow_kwargs = flow_kwargs or {}

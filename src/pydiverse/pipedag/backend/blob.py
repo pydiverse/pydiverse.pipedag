@@ -26,11 +26,11 @@ class BaseBlobStore(Disposable, ABC):
 
     A blob (binary large object) store is responsible for storing arbitrary
     python objects. This can, for example, be done by serializing them using
-    the python `pickle` module.
+    the python ``pickle`` module.
 
-    A store must use a blob's name (`blob.name`) and stage (`blob.stage`)
+    A store must use a blob's name (``Blob.name``) and stage (``Blob.stage``)
     as the primary keys for storing and retrieving blobs. This means that
-    two different `Blob` objects can be used to store and retrieve the same
+    two different ``Blob`` objects can be used to store and retrieve the same
     data as long as they have the same name and stage.
     """
 
@@ -78,11 +78,11 @@ class BaseBlobStore(Disposable, ABC):
 class FileBlobStore(BaseBlobStore):
     """File based blob store
 
-    The FileBlobStore stores blobs in a folder structure on a file system.
+    The ``FileBlobStore`` stores blobs in a folder structure on a file system.
     In the base directory there will be two folders for every stage, one
     for the base and one for the transaction stage. Inside those folders the
     blobs will be stored as pickled files:
-    `base_path/instance_id/STAGE_NAME/BLOB_NAME.pkl`.
+    ``base_path/instance_id/STAGE_NAME/BLOB_NAME.pkl``.
 
     To commit a stage, the only thing that has to be done is to rename
     the appropriate folders.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 import importlib
+import os
 from collections.abc import Collection
 from typing import Any
 
@@ -23,7 +24,14 @@ def requires(requirements: Any | list, exception: BaseException | type[BaseExcep
 
         # Modify class to raise exception
         class RaiserMeta(type):
-            def __getattr__(self, x):
+            def __getattribute__(self, x):
+                # While building the documentation, we set the SPHINX_BUILD env
+                # variable. This allows us to properly generate the documentation
+                # without raising exceptions.
+                if os.environ.get("SPHINX_BUILD"):
+                    return getattr(cls, x)
+                if x in ["__class__", "__doc__", "__name__", "__qualname__"]:
+                    return getattr(cls, x)
                 raise exception
 
         def raiser(*args, **kwargs):

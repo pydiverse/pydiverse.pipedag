@@ -25,6 +25,35 @@ if TYPE_CHECKING:
 
 
 class Flow:
+    """
+    A flow represents a collection of dependent Tasks.
+
+    A flow is defined by using it as a context manager.
+    Any stages and tasks defined inside the flow context will automatically get added
+    to the flow with the correct dependency wiring.
+
+    :param name: The name of the flow.
+
+    Examples
+    --------
+    ::
+
+        @materialize
+        def my_materializing_task():
+            return Table(...)
+
+        with Flow("my_flow") as flow:
+            with Stage("stage_1") as stage_1:
+                task_1 = my_materializing_task()
+                task_2 = another_materializing_task(task_1)
+
+            with Stage("stage_2") as stage_2:
+                task_3 = yet_another_task(task_3)
+                ...
+
+        result = flow.run()
+    """
+
     def __init__(
         self,
         name: str = "default",
@@ -88,15 +117,46 @@ class Flow:
         self.graph.add_edge(from_, to)
 
     def visualize(self, result: Result | None = None):
+        """Visualizes the flow as a graph.
+
+        If you are running in a jupyter notebook, the graph will get displayed inline.
+        Otherwise, it will get rendered to a pdf that then gets opened in your browser.
+
+        Requires `Graphviz <https://graphviz.org>`_ to be installed on your computer.
+
+        :param result: An optional :py:class:`Result` instance.
+            If provided, the visualization will contain additional information such
+            as which tasks ran successfully, or failed.
+        """
         dot = self.visualize_pydot(result)
         _display_pydot(dot)
         return dot
 
     def visualize_url(self, result: Result | None = None) -> str:
+        """Visualizes the flow as a graph and returns a URL to view the visualization.
+
+        If you don't have Graphviz installed on your computer (and thus aren't able to
+        use the :py:meth:`~.visualize()` method) then this is the easiest way to
+        visualize the flow.
+        For this we use a free service called `Kroki <https://kroki.io>`_.
+
+        :param result: An optional :py:class:`Result` instance.
+            If provided, the visualization will contain additional information such
+            as which tasks ran successfully, or failed.
+        :return:
+            A URL that, when opened, displays the graph.
+        """
         dot = self.visualize_pydot(result)
         return _pydot_url(dot)
 
     def visualize_pydot(self, result: Result | None = None) -> pydot.Dot:
+        """Visualizes the flow as a graph and return a ``pydot.Dot`` graph.
+
+        :param result: An optional :py:class:`Result` instance.
+            If provided, the visualization will contain additional information such
+            as which tasks ran successfully, or failed.
+        :return: A ``pydot.Dot`` graph.
+        """
         task_style = _generate_task_style(self.tasks, result)
         dot = _build_pydot(
             stages=list(self.stages.values()),
@@ -192,29 +252,61 @@ class Flow:
         ignore_fresh_input: bool = False,
         **kwargs,
     ) -> Result:
-        """Execute a flow
-
-        You can provide an engine to execute the flow with using the `engine`
-        keyword. If no engine is provided, the engine specified in the config
-        file is used.
+        """Execute the flow.
+        This will execute the flow and all tasks within using the orchestration engine.
 
         :param components: An optional selection of tasks or stages that should
-            get executed. If no value is provided, all tasks and stages get executed.
+            get executed. If no values are provided, all tasks and stages get executed.
+
             If you specify a subset of tasks, those tasks get executed even when
             they are cache valid, and they don't get committed.
+
             If you specify a subset of stages, all tasks and substages of those stages
             get executed and committed.
-        :param config: A configuration context with information about
-            the pipe-DAG instance.
-        :param orchestration_engine: The orchestration engine to use.
-        :param fail_fast: True means that errors should be raised as exceptions
-            out of this function.
-        :param ignore_fresh_input: whether cache functions should be disabled that
-            check for fresh input into pipe-DAG
-        :param kwargs: Other keyword arguments. They get passed on directly to the
-            orchestration engine's `.run` method and thus are engine dependant.
+        :param config:
+            A :py:class:`ConfigContext` to use as the configuration for executing
+            this flow. If no config is provided, then pipedag uses the
+            current innermost open ConfigContext, or if no such config exists,
+            it gets the default config from :py:attr:`PipedagConfig.default`.
+        :param orchestration_engine:
+            The orchestration engine to use. If no engine is provided, the
+            orchestration engine from the config gets used.
+        :param fail_fast:
+            Whether exceptions should get raised or swallowed.
+            If set to True, exceptions that occur get immediately raised and the
+            flow gets aborted.
+        :param ignore_fresh_input:
+            When set to True, the task's cache function gets ignored when determining
+            the cache validity of a task.
+        :param kwargs:
+            Other keyword arguments that get passed on directly to the
+            ``run()` method of the orchestration engine. Consequently, these
+            keyword arguments are engine dependant.
         :return:
-            Result object that gives information whether run was successful
+            A :py:class:`Result` object for the current flow run.
+
+        Examples
+        --------
+        .. code-block:: python
+
+            with Flow() as flow:
+                with Stage("stage_1") as stage_1:
+                    task_1 = ...
+                    task_2 = ...
+
+                with Stage("stage_2") as stage_2:
+                    task_3 = ...
+                    task_4 = ...
+
+            # Execute the entire flow
+            flow.run()
+
+            # Execute (and commit) only stage 1
+            flow.run(stage_1)
+
+            # Execute (but DON'T commit) only task 1 and task 4
+            flow.run(task_1, task_4)
+
         """
 
         subflow = self.get_subflow(*components)
@@ -224,7 +316,7 @@ class Flow:
             try:
                 config = ConfigContext.get()
             except LookupError:
-                config = PipedagConfig.default.get()
+                config = PipedagConfig.default.get(flow=self.name)
 
         # Evolve config using the arguments passed to flow.run
         config = config.evolve(

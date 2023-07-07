@@ -7,6 +7,13 @@ from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 
 
 class DuckDBTableStore(SQLTableStore):
+    """
+    SQLTableStore that supports `DuckDB <https://duckdb.org>`_.
+
+    Takes the same arguments as
+    :py:class:`SQLTableStore <pydiverse.pipedag.backend.table.SQLTableStore>`
+    """
+
     _dialect_name = "duckdb"
 
     def _metadata_pk(self, name: str, table_name: str):

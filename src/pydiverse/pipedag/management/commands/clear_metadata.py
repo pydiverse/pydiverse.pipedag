@@ -8,9 +8,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import DropSchema
 from pydiverse.pipedag.management.cli import cli
 
 
-@cli.command(
-    help="delete all metadata",
-)
+@cli.command()
 @click.option(
     "--config",
     "config_path",
@@ -46,6 +44,8 @@ def clear_metadata(
     flow: str | None,
     per_user: bool,
 ):
+    """Clears all pipedag metadata."""
+
     if config_path:
         pipedag_config = PipedagConfig(path=config_path)
     else:

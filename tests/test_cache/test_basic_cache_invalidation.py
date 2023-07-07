@@ -322,7 +322,7 @@ def test_change_raw_sql(mocker):
     @materialize(lazy=True, nout=2, version="1.0")
     def raw_task(stage):
         raw_sql = compile_sql(select_as(query_value, "x"))
-        return 0, RawSql(raw_sql, "raw_task", stage)
+        return 0, RawSql(raw_sql, "raw_task")
 
     @materialize(version="1.0")
     def raw_child(raw):
