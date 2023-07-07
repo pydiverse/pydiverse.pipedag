@@ -203,11 +203,10 @@ class PipedagConfig:
         search_paths = [
             ("instances", "__any__"),
             ("instances", instance),
-            ("flows", "__any__", "instances", "__any__"),
+            ("flows", "__any__"),
             ("flows", "__any__", "instances", instance),
-            ("flows", flow, "instances", "__any__"),
-            ("flows", flow, "instances", instance),
             ("flows", flow),
+            ("flows", flow, "instances", instance),
         ]
 
         search_paths = [path for path in search_paths if None not in path]
