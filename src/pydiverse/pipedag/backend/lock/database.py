@@ -273,6 +273,11 @@ class PostgresLockManager(DatabaseLockManager):
         name = self.lock_name(lockable)
         return PostgresLock(name, self.connection)
 
+    def dispose(self):
+        self.release_all()
+        self.connection.close()
+        super().dispose()
+
 
 class MSSqlLock(Lock):
     """
