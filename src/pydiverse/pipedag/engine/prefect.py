@@ -139,7 +139,7 @@ class PrefectTwoEngine(OrchestrationEngine):
     def __init__(self, flow_kwargs: dict[str, Any] = None):
         self.flow_kwargs = flow_kwargs or {}
 
-    def construct_prefect_flow(self, f: Subflow):
+    def construct_prefect_flow(self, f: Subflow) -> prefect.Flow:
         from pydiverse.pipedag.materialize.core import MaterializingTask
 
         run_context = RunContext.get()
@@ -184,14 +184,17 @@ class PrefectTwoEngine(OrchestrationEngine):
         # Compute task_values
         task_values = {}
         successful = result.is_completed()
-        for task, state in result.data.items():
-            successful &= state.is_completed()
-            task_values[task] = state.data
+
+        for task, state in result.result().items():
+            if state.is_completed():
+                task_values[task] = state.result()
+            else:
+                successful = False
 
         # If the task failed, extract the exception
         exception = None
         if not successful:
-            for state in result.data.values():
+            for state in result.result().values():
                 if state.is_failed() or state.is_crashed():
                     exception = prefect.states.get_state_exception(state)
                     break
@@ -200,7 +203,7 @@ class PrefectTwoEngine(OrchestrationEngine):
             subflow=flow,
             underlying=result,
             successful=successful,
-            task_values=result,
+            task_values=task_values,
             exception=exception,
         )
 

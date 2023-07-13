@@ -4,7 +4,11 @@ import pandas as pd
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
-from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.fixtures.instances import (
+    DATABASE_INSTANCES,
+    ORCHESTRATION_INSTANCES,
+    with_instances,
+)
 
 
 @materialize(nout=2, version="1.1")
@@ -50,7 +54,7 @@ def get_flow():
     return flow
 
 
-@with_instances(DATABASE_INSTANCES, "dask_engine")
+@with_instances(DATABASE_INSTANCES, ORCHESTRATION_INSTANCES)
 def test_simple_flow():
     flow = get_flow()
     result = flow.run()

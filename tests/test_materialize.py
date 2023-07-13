@@ -10,11 +10,15 @@ from pydiverse.pipedag.context import RunContext, StageLockContext
 from pydiverse.pipedag.core.config import PipedagConfig
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import ALL_INSTANCES, with_instances
+from tests.fixtures.instances import (
+    ALL_INSTANCES,
+    ORCHESTRATION_INSTANCES,
+    with_instances,
+)
 from tests.util import select_as
 from tests.util import tasks_library as m
 
-pytestmark = [with_instances(ALL_INSTANCES, "dask_engine")]
+pytestmark = [with_instances(ALL_INSTANCES, ORCHESTRATION_INSTANCES)]
 
 
 def test_materialize_literals():

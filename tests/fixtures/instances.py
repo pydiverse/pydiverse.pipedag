@@ -8,6 +8,7 @@ from pydiverse.pipedag import PipedagConfig
 
 __all__ = [
     "DATABASE_INSTANCES",
+    "ORCHESTRATION_INSTANCES",
     "ALL_INSTANCES",
     "with_instances",
     "skip_instances",
@@ -30,6 +31,7 @@ INSTANCE_MARKS = {
     "local_table_store": pytest.mark.postgres,
     # Orchestration Instances
     "dask_engine": [pytest.mark.dask, pytest.mark.postgres],
+    "prefect_engine": [pytest.mark.prefect, pytest.mark.postgres],
 }
 
 # Collection of instances that represent different database technologies
@@ -38,6 +40,11 @@ DATABASE_INSTANCES = (
     "mssql",
     "ibm_db2",
     "duckdb",
+)
+
+ORCHESTRATION_INSTANCES = (
+    "dask_engine",
+    "prefect_engine",
 )
 
 # Extended collection of instances

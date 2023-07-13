@@ -42,12 +42,14 @@ pyparsing = ">=3.0"
 filelock = { version = ">=3.7.1", optional = true }
 kazoo = { version = ">=2.8.0", optional = true }
 dask = { version = ">=2022.1.0", optional = true }
+prefect = { version = ">=2.6", optional = true }
 
 
 [tool.poetry.extras]
 filelock = ["filelock"]
 zookeeper = ["kazoo"]
 dask = ["dask"]
+prefect = ["prefect"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=7.2.0"
@@ -78,8 +80,6 @@ connectorx = [
     { version = ">=0.3.1", python = "<3.11" },
     { version = "0.3.2a5", python = "==3.11" }  # Latest full release is broken - unpin when 0.3.2 released
 ]
-# Engines
-prefect = "^1.3"
 # MSSQL
 pyodbc = ">=4.0.35"
 pytsql = ">=1.1.4"

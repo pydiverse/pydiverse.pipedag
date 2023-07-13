@@ -77,7 +77,7 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/test
         with:
-          arguments: --workers 4 --polars --ibis --pdtransform --dask
+          arguments: --workers 4 --polars --ibis --pdtransform
 
   duckdb_test:
     name: "DuckDB Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
@@ -178,3 +178,30 @@ jobs:
         uses: ./.github/actions/test
         with:
           arguments: --workers 4 --mssql -m mssql --polars --ibis --pdtransform
+
+  orchestration_tests:
+    name: "Orchestration Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    needs: [ smoke_test ]
+    runs-on: ${{ matrix.os }}-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        os: [ Ubuntu ]
+        python-version: [ '3.11' ]
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+        with:
+          python-version: ${{ matrix.python-version }}
+          poetry-flags: --all-extras --with=tests
+          docker-services: |
+            postgres
+            zoo
+
+      - name: Run Tests
+        uses: ./.github/actions/test
+        with:
+          arguments: --workers 4 --dask --prefect -m "dask or prefect"
+

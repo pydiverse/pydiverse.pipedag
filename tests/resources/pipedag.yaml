@@ -159,3 +159,8 @@ instances:
       class: "pydiverse.pipedag.engine.DaskEngine"
       args:
         num_workers: 8
+
+  prefect_engine:
+    instance_id: prefect_engine
+    orchestration:
+      class: "pydiverse.pipedag.engine.PrefectEngine"
