@@ -35,7 +35,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @classmethod
     def can_materialize(cls, type_) -> bool:
         return issubclass(
-            type_, (sa.sql.elements.TextClause, sa.sql.selectable.Selectable)
+            type_, (sa.sql.expression.TextClause, sa.sql.expression.Selectable)
         )
 
     @classmethod
@@ -46,12 +46,12 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     def materialize(
         cls,
         store,
-        table: Table[sa.sql.elements.TextClause | sa.Text],
+        table: Table[sa.sql.expression.TextClause | sa.Text],
         stage_name,
         task_info: TaskInfo | None,
     ):
         obj = table.obj
-        if isinstance(table.obj, (sa.Table, sa.sql.selectable.Alias)):
+        if isinstance(table.obj, (sa.Table, sa.sql.expression.Alias)):
             obj = sa.select("*").select_from(table.obj)
 
         source_tables = [
@@ -80,7 +80,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @classmethod
     def retrieve(
         cls, store, table, stage_name, as_type: type[sa.Table]
-    ) -> sa.sql.selectable.Selectable:
+    ) -> sa.sql.expression.Selectable:
         schema = store.get_schema(stage_name).get()
         table_name, schema = store.resolve_alias(table.name, schema)
         alias_name = TaskContext.get().name_disambiguator.get_name(table_name)
@@ -101,7 +101,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def lazy_query_str(cls, store, obj) -> str:
-        if isinstance(obj, sa.sql.selectable.FromClause):
+        if isinstance(obj, sa.sql.expression.FromClause):
             query = sa.select("*").select_from(obj)
         else:
             query = obj

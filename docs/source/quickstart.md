@@ -79,7 +79,7 @@ instances:
     instance_id: quickstart
     auto_table: 
       - pandas.DataFrame
-      - sqlalchemy.sql.selectable.Selectable 
+      - sqlalchemy.sql.expression.Selectable 
     
     table_store:
       class: "pydiverse.pipedag.backend.table.SQLTableStore"

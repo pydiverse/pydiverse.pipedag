@@ -30,7 +30,7 @@ instances:
     network_interface: "127.0.0.1"
     # classes to be materialized to table store even without pipedag Table wrapper (we have loose coupling between
     # pipedag and pydiverse.transform, so consider adding 'pydiverse.transform.Table' in your config)
-    auto_table: ["pandas.DataFrame", "sqlalchemy.sql.elements.TextClause", "sqlalchemy.sql.selectable.Selectable"]
+    auto_table: ["pandas.DataFrame", "sqlalchemy.sql.expression.TextClause", "sqlalchemy.sql.expression.Selectable"]
     # abort as fast a possible on task failure and print most readable stack trace
     fail_fast: true
 

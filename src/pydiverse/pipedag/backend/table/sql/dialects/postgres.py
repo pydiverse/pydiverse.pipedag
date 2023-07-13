@@ -61,12 +61,12 @@ class SQLAlchemyTableHook(SQLAlchemyTableHook):
     def materialize(
         cls,
         store: PostgresTableStore,
-        table: Table[sa.sql.elements.TextClause | sa.Text],
+        table: Table[sa.sql.expression.TextClause | sa.Text],
         stage_name,
         task_info: TaskInfo | None,
     ):
         obj = table.obj
-        if isinstance(table.obj, (sa.Table, sa.sql.selectable.Alias)):
+        if isinstance(table.obj, (sa.Table, sa.sql.expression.Alias)):
             obj = sa.select("*").select_from(table.obj)
 
         schema = store.get_schema(stage_name)

@@ -67,8 +67,8 @@ instances:
     instance_id: pipedag_default
     auto_table: 
       - pandas.DataFrame
-      - sqlalchemy.sql.elements.TextClause
-      - sqlalchemy.sql.selectable.Selectable 
+      - sqlalchemy.sql.expression.TextClause
+      - sqlalchemy.sql.expression.Selectable 
     
     table_store:
       class: "pydiverse.pipedag.backend.table.SQLTableStore"
@@ -224,8 +224,8 @@ auto_table
   auto_table: 
     - pandas.DataFrame
     - pydiverse.transform.Table
-    - sqlalchemy.sql.elements.TextClause
-    - sqlalchemy.sql.selectable.Selectable
+    - sqlalchemy.sql.expression.TextClause
+    - sqlalchemy.sql.expression.Selectable
   ```
 
 (auto_blob)=
