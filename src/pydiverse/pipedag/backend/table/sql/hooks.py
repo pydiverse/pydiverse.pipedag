@@ -418,9 +418,12 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         schema = store.get_schema(stage_name).get()
         table_name, schema = store.resolve_alias(table.name, schema)
         connection_uri = store.engine_url.render_as_string(hide_password=False)
-        df = polars.read_database(
-            f'SELECT * FROM {schema}."{table_name}"', connection_uri
-        )
+
+        preparer = store.engine.dialect.identifier_preparer
+        q_table = preparer.quote(table_name)
+        q_schema = preparer.format_schema(schema)
+
+        df = polars.read_database(f"SELECT * FROM {q_schema}.{q_table}", connection_uri)
         return df
 
     @classmethod
