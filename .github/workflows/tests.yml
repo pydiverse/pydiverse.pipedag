@@ -15,11 +15,12 @@ on:
 env:
   DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
 
+
 jobs:
   lint:
     name: "Linting - pre-commit hooks - Python 3.9"
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - name: Checkout branch
         uses: actions/checkout@v3
@@ -43,33 +44,71 @@ jobs:
         uses: ./.github/actions/setup
         with:
           python-version: 3.11
-
-      - name: Start Docker Compose
-        uses: isbang/compose-action@v1.4.1
-        with:
-          compose-file: ./docker-compose.yaml
-          services: |
+          docker-services: |
             postgres
             zoo
-
-      - name: Wait for Docker Servers
-        timeout-minutes: 1
-        shell: bash
-        run: |
-          until bash ./.github/workflows/resources/docker_compose_ready.sh; do
-            sleep 2
-          done
 
       - name: Run Tests
         uses: ./.github/actions/test
         with:
           arguments: --workers 4
 
+  postgres_test:
+    name: "Postgres Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    needs: [smoke_test]
+    runs-on: ${{ matrix.os }}-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        os: [Ubuntu]
+        python-version: ['3.9', '3.10', '3.11']
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+        with:
+          python-version: ${{ matrix.python-version }}
+          poetry-flags: --all-extras --with=tests
+          docker-services: |
+            postgres
+            zoo
+
+      - name: Run Tests
+        uses: ./.github/actions/test
+        with:
+          arguments: --workers 4 --polars --ibis --pdtransform --dask
+
+  duckdb_test:
+    name: "DuckDB Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    needs: [smoke_test]
+    runs-on: ${{ matrix.os }}-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        os: [Ubuntu]
+        python-version: ['3.9', '3.11']
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+        with:
+          python-version: ${{ matrix.python-version }}
+          poetry-flags: --all-extras --with=tests
+          docker-services: |
+            zoo
+
+      - name: Run Tests
+        uses: ./.github/actions/test
+        with:
+          arguments: --workers 4 --duckdb -m duckdb --polars --ibis --pdtransform
+
   db2_test:
     name: "DB2 Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
     needs: [smoke_test]
     runs-on: ${{ matrix.os }}-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     strategy:
       matrix:
         os: [Ubuntu]
@@ -94,42 +133,30 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           poetry-flags: --all-extras --with=tests
-
-      - name: Start Docker Compose
-        uses: isbang/compose-action@v1.4.1
-        with:
-          compose-file: ./docker-compose.yaml
-
-      - name: Wait for Docker Servers
-        timeout-minutes: 1
-        shell: bash
-        run: |
-          until bash ./.github/workflows/resources/docker_compose_ready.sh; do
-            sleep 2
-          done
+          docker-services: |
+            zoo
 
       - name: Wait for DB/2
         timeout-minutes: 2
         run: |
           until docker logs "${{ job.services.ibm_db2.id }}" 2>&1 | grep -q "Setup has completed"; do 
-            sleep 10
-            echo Waiting
+            sleep 1
           done
 
       - name: Run Tests
         uses: ./.github/actions/test
         with:
-          arguments: --workers 4 --ibm_db2 --pdtransform
+          arguments: --workers 4 --ibm_db2 -m ibm_db2 --polars --pdtransform
 
-  full_test:
-    name: "Full Tests no-DB2 - ${{ matrix.os }} / ${{ matrix.python-version }}"
+  mssql_test:
+    name: "MSSql Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
     needs: [smoke_test]
     runs-on: ${{ matrix.os }}-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     strategy:
       matrix:
         os: [Ubuntu]
-        python-version: ['3.9', '3.10', '3.11']
+        python-version: ['3.9', '3.11']
     steps:
       - uses: actions/checkout@v3
 
@@ -138,25 +165,39 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           poetry-flags: --all-extras --with=tests
+          docker-services: |
+            mssql
+            zoo
 
       - name: Install Microsoft ODBC
         run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
 
-      - name: Start Docker Compose
-        uses: isbang/compose-action@v1.4.1
-        with:
-          compose-file: ./docker-compose.yaml
-
-      - name: Wait for Docker Servers
-        timeout-minutes: 1
-        shell: bash
-        run: |
-          until bash ./.github/workflows/resources/docker_compose_ready.sh; do
-            sleep 2
-          done
-
       - name: Run Tests
         uses: ./.github/actions/test
         with:
-          # --polars currently fails with sqlalchemy 2.0 (connectorx)
-          arguments: --workers 4 --mssql --pdtransform --ibis --dask
+          arguments: --workers 4 --mssql -m mssql --polars --ibis --pdtransform
+
+  tox_test:
+    name: "Tox - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    needs: [ smoke_test ]
+    runs-on: ${{ matrix.os }}-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        os: [ Ubuntu ]
+        python-version: ['3.11']
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+        with:
+          python-version: ${{ matrix.python-version }}
+          docker-services: |
+            postgres
+            zoo
+
+      - name: Run Tests
+        shell: bash
+        run: |
+          poetry run -- tox -- --workers 4

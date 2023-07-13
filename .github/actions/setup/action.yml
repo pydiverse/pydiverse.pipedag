@@ -7,6 +7,12 @@ inputs:
     description: 'Poetry flags'
     required: false
     default: ''
+  docker-compose-file:
+    required: false
+    default: './docker-compose.yaml'
+  docker-services:
+    required: false
+
 runs:
   using: composite
   steps:
@@ -27,3 +33,15 @@ runs:
       shell: bash
       run: poetry install -vv ${{ inputs.poetry-flags }} --no-interaction
 
+    - name: Start Docker Compose
+      uses: isbang/compose-action@v1.4.1
+      with:
+        compose-file: ${{ inputs.docker-compose-file }}
+        services: ${{ inputs.docker-services }}
+
+    - name: Wait for Docker Servers
+      shell: bash
+      run: |
+        until bash ./.github/actions/setup/docker_compose_ready.sh; do
+          sleep 1
+        done

@@ -53,6 +53,7 @@ dask = ["dask"]
 pytest = ">=7.2.0"
 pytest-mock = ">=3.10.0"
 pytest-timeout = ">=2.1.0"
+tox = "^4.6.4"
 
 black = { version = "23.3.0", extras = ["d"] }
 ruff = "^0.0.270"
