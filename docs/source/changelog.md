@@ -4,6 +4,7 @@
 - Create initial documentation for pipedag.
 - Remove stage argument from [](#RawSql) initializer.
 - Add [](#RawSql) to public API.
+- Fix [](#PrefectTwoEngine) failing on retrieval of results.
 
 ## 0.6.0 (2023-07-07)
 - Added [`delete-schemas`](#reference/cli:delete-schemas) command to `pipedag-manage` to help with cleaning up database
