@@ -7,7 +7,7 @@ table_store_connections:
 
   mssql:
     args:
-      url: "mssql+pyodbc://sa:PydiQyant27@127.0.0.1:1433/{instance_id}?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
+      url: "mssql+pyodbc://sa:PydiQuant27@127.0.0.1:1433/{instance_id}?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
       create_database_if_not_exists: true
 
   ibm_db2:
