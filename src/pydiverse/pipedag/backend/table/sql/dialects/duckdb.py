@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import sqlalchemy as sa
 
 from pydiverse.pipedag.backend.table.sql.hooks import IbisTableHook
@@ -27,8 +29,17 @@ class DuckDBTableStore(SQLTableStore):
         )
 
     def _init_database(self):
+        if not self.create_database_if_not_exists:
+            return
+
         # Duckdb already creates the database file automatically
-        pass
+        # However, the parent directory doesn't get created automatically
+        database = self.engine_url.database
+        if database == ":memory:":
+            return
+
+        database_path = Path(database)
+        database_path.parent.mkdir(parents=True, exist_ok=True)
 
 
 try:

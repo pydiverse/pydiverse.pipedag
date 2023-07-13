@@ -22,6 +22,7 @@ table_store_connections:
   duckdb:
     args:
       url: "duckdb:////tmp/pipedag/{instance_id}/db.duckdb"
+      create_database_if_not_exists: true
 
 instances:
   __any__:
