@@ -54,8 +54,51 @@ class SQLTableStore(BaseTableStore):
     The correct dialect specific subclass of ``SQLTableStore`` gets initialized when
     based on the dialect found in the provided engine url during initialization.
 
+    .. rubric:: Supported Tables
+
+    The `SQLTableStore` can materialize (that is, store task output)
+    and dematerialize (that is, retrieve task input) the following Table types:
+
+    .. list-table::
+       :widths: 30, 30, 30
+       :header-rows: 1
+       :stub-columns: 1
+
+       * - Framework
+         - Materialization
+         - Dematerialization
+
+       * - SQLAlchemy
+         - | :py:class:`sa.sql.expression.Selectable
+                        <sqlalchemy.sql.expression.Selectable>`
+           | :py:class:`sa.sql.expression.TextClause
+                        <sqlalchemy.sql.expression.TextClause>`
+         - :py:class:`sa.Table <sqlalchemy.schema.Table>`
+
+       * - Pandas
+         - :py:class:`pd.DataFrame <pandas.DataFrame>`
+         - :py:class:`pd.DataFrame <pandas.DataFrame>`
+
+       * - Polars
+         - :external+pl:doc:`pl.DataFrame <reference/dataframe/index>`
+         - :external+pl:doc:`pl.DataFrame <reference/dataframe/index>`
+
+       * - tidypolars
+         - :py:class:`tp.Tibble <tidypolars.tibble.Tibble>`
+         - :py:class:`tp.Tibble <tidypolars.tibble.Tibble>`
+
+       * - Ibis
+         - :py:class:`ibis.api.Table <ibis.expr.types.relations.Table>`
+         - :py:class:`ibis.api.Table <ibis.expr.types.relations.Table>`
+
+       * - pydiverse.transform
+         - ``pdt.Table``
+         - | ``pdt.eager.PandasTableImpl``
+           | ``pdt.lazy.SQLTableImpl``
+
+
     :param url:
-        The `SQLAlchemy engine url <https://docs.sqlalchemy.org/en/20/core/engines.html#database-urls>`_
+        The :external+sa:ref:`SQLAlchemy engine url <database_urls>`
         use to connect to the database.
 
         This URL may contain placeholders like ``{name}`` or ``{instance_id}``

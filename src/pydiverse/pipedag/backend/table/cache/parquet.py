@@ -20,6 +20,11 @@ class ParquetTableCache(BaseTableCache):
     """
     Local Table Cache that stores tables in `Parquet`_ files.
 
+    .. rubric:: Supported Tables
+
+    The `ParquetTableCache` supports Pandas, Polars and pydiverse.transform.
+
+
     :param base_path:
         A path to a folder where the Parquet files should get stored.
         To differentiate between different instances, the ``instance_id`` will

@@ -29,20 +29,14 @@ class ZooKeeperLockManager(BaseLockManager):
 
     Config File
     -----------
-
     All arguments in the ``args`` section get passed as-is to the initializer
-    of |KazooClient|_. Some useful arguments include:
+    of :py:class:`kazoo.client.KazooClient`. Some useful arguments include:
 
     :param hosts:
         Comma separated list of hosts to connect.
 
-
     .. _fully distributed locks that are globally synchronous:
         https://zookeeper.apache.org/doc/r3.1.2/recipes.html#sc_recipes_Locks
-
-    .. |KazooClient| replace:: ``KazooClient``
-    .. _KazooClient:
-        https://kazoo.readthedocs.io/en/latest/api/client.html#kazoo.client.KazooClient
     """
 
     @classmethod

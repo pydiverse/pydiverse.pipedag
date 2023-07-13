@@ -308,7 +308,7 @@ table_store_connection
   ```
 
 class
-: The [fully qualified name](https://docs.python.org/3/glossary.html#term-qualified-name) of the class to be used as the table store.
+: The [fully qualified name](<inv:python#qualified name>) of the class to be used as the table store.
   
   Available classes:
   - [](#pydiverse.pipedag.backend.table.SQLTableStore)
@@ -343,7 +343,7 @@ The section (labeled `local_table_cache`) inside the [`table_store`](#section-ta
 Such a local table cache may help speed up local development significantly as tables don't need to be retrieved from the (potentially slower) table store.
 
 class
-: The [fully qualified name](https://docs.python.org/3/glossary.html#term-qualified-name) of the class to be used as the local table cache.
+: The [fully qualified name](<inv:python#qualified name>) of the class to be used as the local table cache.
 
   Available classes:
   - [](#pydiverse.pipedag.backend.table.cache.ParquetTableCache)
@@ -382,7 +382,7 @@ blob_store_connection
   For more detail, refer to the documentation of [`table_store_connection`](#table_store_connection).
 
 class
-: The [fully qualified name](https://docs.python.org/3/glossary.html#term-qualified-name) of the class to be used as the blob store.
+: The [fully qualified name](<inv:python#qualified name>) of the class to be used as the blob store.
   
   Available classes:
   - [](#pydiverse.pipedag.backend.blob.FileBlobStore)
@@ -398,7 +398,7 @@ args
 This section (labeled `lock_manager`) specifies the lock manager to use.
 
 class
-: The [fully qualified name](https://docs.python.org/3/glossary.html#term-qualified-name) of the class to be used as the lock manager.
+: The [fully qualified name](<inv:python#qualified name>) of the class to be used as the lock manager.
 
   Available classes:
   - [](#pydiverse.pipedag.backend.lock.DatabaseLockManager)
@@ -420,7 +420,7 @@ This section (labeled `orchestration`) specifies which orchestration engine shou
 It is structured very similarly to `table_store` and provides the following options:
 
 class
-: The [fully qualified name](https://docs.python.org/3/glossary.html#term-qualified-name) of the class to be used as the orchestration engine.
+: The [fully qualified name](<inv:python#qualified name>) of the class to be used as the orchestration engine.
 
   Available classes:
   - [](#pydiverse.pipedag.engine.SequentialEngine)

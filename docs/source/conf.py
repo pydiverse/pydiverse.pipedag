@@ -35,6 +35,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.autosectionlabel",
+    "sphinx.ext.intersphinx",
     # "sphinx.ext.viewcode",
     "sphinx.ext.napoleon",
     "sphinx_click",
@@ -48,6 +49,17 @@ myst_enable_extensions = [
 ]
 
 autosectionlabel_prefix_document = True
+
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
+    "sa": ("https://docs.sqlalchemy.org/en/stable", None),
+    "pd": ("https://pandas.pydata.org/pandas-docs/stable", None),
+    "pl": ("https://pola-rs.github.io/polars/py-polars/html", None),
+    "tp": ("https://tidypolars.readthedocs.io/en/stable", None),
+    "ibis": ("https://ibis-project.org/", None),
+    "kazoo": ("https://kazoo.readthedocs.io/en/latest", None),
+    "dask": ("https://docs.dask.org/en/stable", None),
+}
 
 napoleon_custom_sections = [
     "Config File",
