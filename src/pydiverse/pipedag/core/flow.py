@@ -280,7 +280,7 @@ class Flow:
             the cache validity of a task.
         :param kwargs:
             Other keyword arguments that get passed on directly to the
-            ``run()` method of the orchestration engine. Consequently, these
+            ``run()`` method of the orchestration engine. Consequently, these
             keyword arguments are engine dependant.
         :return:
             A :py:class:`Result` object for the current flow run.
