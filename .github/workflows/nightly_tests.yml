@@ -1,0 +1,39 @@
+name: Nightly Tests
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - id: nightly-check
+        name: Check for changes since last nightly
+        uses: lukecarr/nightly-check@v0.1.0
+
+  tox_test:
+    name: "Tox - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    runs-on: ${{ matrix.os }}-latest
+    needs: check
+    if: ${{ needs.check.outputs.changes == 'false' }}
+    timeout-minutes: 90
+    strategy:
+      matrix:
+        os: [ Ubuntu ]
+        python-version: [ '3.11' ]
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+        with:
+          python-version: ${{ matrix.python-version }}
+          docker-services: |
+            postgres
+            zoo
+
+      - name: Run Tests
+        shell: bash
+        run: |
+          poetry run -- tox -- --workers 4 -s
