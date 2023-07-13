@@ -1,32 +1,20 @@
-name: pipedag_tests
-table_store_connections:
-  postgres:
-    args:
-      # Postgres: this can be used after running `docker-compose up`
-      url: "postgresql://{$POSTGRES_USERNAME}:{$POSTGRES_PASSWORD}@127.0.0.1:6543/{instance_id}"
-
 instances:
   __any__:
-    # listen-interface for pipedag context server which synchronizes some task state during DAG execution
     network_interface: "127.0.0.1"
-    # classes to be materialized to table store even without pipedag Table wrapper (we have loose coupling between
-    # pipedag and pydiverse.transform, so consider adding 'pydiverse.transform.Table' in your config)
-    auto_table: ["pandas.DataFrame", "sqlalchemy.sql.expression.TextClause", "sqlalchemy.sql.expression.Selectable"]
-    fail_fast: true
+    auto_table:
+      - "pandas.DataFrame"
+      - "sqlalchemy.sql.expression.TextClause"
+      - "sqlalchemy.sql.expression.Selectable"
 
+    fail_fast: true
     instance_id: pipedag_default
     table_store:
       class: "pydiverse.pipedag.backend.table.SQLTableStore"
-
-      # Postgres: this can be used after running `docker-compose up`
-      table_store_connection: postgres
       args:
+        url: "postgresql://sa:Pydiverse23@127.0.0.1:6543/{instance_id}"
         create_database_if_not_exists: True
 
-        # print select statements before being encapsualted in materialize expressions and tables before writing to
-        # database
         print_materialize: true
-        # print final sql statements
         print_sql: true
 
       local_table_cache:
@@ -43,9 +31,7 @@ instances:
         base_path: "/tmp/pipedag/blobs"
 
     lock_manager:
-      class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
-      args:
-        hosts: "localhost:2181"
+      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
 
     orchestration:
       class: "pydiverse.pipedag.engine.SequentialEngine"

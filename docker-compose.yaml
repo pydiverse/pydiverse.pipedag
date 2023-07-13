@@ -5,21 +5,19 @@ services:
     environment:
       POSTGRES_USER: sa
       POSTGRES_PASSWORD: Pydiverse23
-      POSTGRES_PORT: 6543
     ports:
-      # keep port 5432 free since prefect 1 UI also spins up a postgres database on this port
-      - 6543:5432
+      - "6543:5432"
   mssql:
     image: mcr.microsoft.com/azure-sql-edge
     environment:
       ACCEPT_EULA: Y
       SA_PASSWORD: PydiQuant27
     ports:
-      - 1433:1433
+      - "1433:1433"
   zoo:
     image: zookeeper
     environment:
       ZOO_4LW_COMMANDS_WHITELIST: ruok
       ZOO_MAX_CLIENT_CNXNS: 100
     ports:
-      - 2181:2181
+      - "2181:2181"

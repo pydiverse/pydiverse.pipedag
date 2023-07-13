@@ -110,35 +110,23 @@ if __name__ == "__main__":
 Create a file called `pipedag.yaml` in the same directory:
 
 ```yaml
-name: pipedag_tests
-table_store_connections:
-  postgres:
-    args:
-      # Postgres: this can be used after running `docker-compose up`  
-      url: "postgresql://{$POSTGRES_USERNAME}:{$POSTGRES_PASSWORD}@127.0.0.1:6543/{instance_id}"
-
 instances:
   __any__:
-    # listen-interface for pipedag context server which synchronizes some task state during DAG execution
     network_interface: "127.0.0.1"
-    # classes to be materialized to table store even without pipedag Table wrapper (we have loose coupling between
-    # pipedag and pydiverse.transform, so consider adding 'pydiverse.transform.Table' in your config)
-    auto_table: ["pandas.DataFrame", "sqlalchemy.sql.expression.TextClause", "sqlalchemy.sql.expression.Selectable"]
-    fail_fast: true
+    auto_table:
+      - "pandas.DataFrame"
+      - "sqlalchemy.sql.expression.TextClause"
+      - "sqlalchemy.sql.expression.Selectable"
 
+    fail_fast: true
     instance_id: pipedag_default
     table_store:
       class: "pydiverse.pipedag.backend.table.SQLTableStore"
-
-      # Postgres: this can be used after running `docker-compose up`
-      table_store_connection: postgres
       args:
+        url: "postgresql://sa:Pydiverse23@127.0.0.1:6543/{instance_id}"
         create_database_if_not_exists: True
-        
-        # print select statements before being encapsualted in materialize expressions and tables before writing to
-        # database
+
         print_materialize: true
-        # print final sql statements
         print_sql: true
 
       local_table_cache:
@@ -155,16 +143,13 @@ instances:
         base_path: "/tmp/pipedag/blobs"
 
     lock_manager:
-      class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
-      args:
-        hosts: "localhost:2181"
+      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
 
     orchestration:
       class: "pydiverse.pipedag.engine.SequentialEngine"
 ```
 
-If you don't have a postgres, Microsoft SQL Server, or IBM DB2 database at hand, you can
-start a postgres database with the following `docker-compose.yaml` file:
+If you don't have a postgres database at hand, you can start a postgres database, with the following `docker-compose.yaml` file:
 
 ```yaml
 version: "3.9"
@@ -174,16 +159,8 @@ services:
     environment:
       POSTGRES_USER: sa
       POSTGRES_PASSWORD: Pydiverse23
-      POSTGRES_PORT: 6543
     ports:
-      - 6543:5432
-  zoo:
-    image: zookeeper
-    environment:
-      ZOO_4LW_COMMANDS_WHITELIST: ruok
-      ZOO_MAX_CLIENT_CNXNS: 100
-    ports:
-      - 2181:2181
+      - "6543:5432"
 ```
 
 Run `docker-compose up` in the directory of your `docker-compose.yaml` and then execute
@@ -191,9 +168,7 @@ the flow script as follows with a shell like `bash` and a python environment tha
 includes `pydiverse-pipedag`, `pandas`, and `sqlalchemy`:
 
 ```bash
-export POSTGRES_USERNAME=sa
-export POSTGRES_PASSWORD=Pydiverse23
-python run_pipeline.py
+poetry run python run_pipeline.py
 ```
 
 Finally, you may connect to your localhost postgres database `pipedag_default` and

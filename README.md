@@ -195,35 +195,23 @@ if __name__ == "__main__":
 You also need a file called `pipedag.yaml` in the same directory (see `example/pipedag.yaml`):
 
 ```yaml
-name: pipedag_tests
-table_store_connections:
-  postgres:
-    args:
-      # Postgres: this can be used after running `docker-compose up`  
-      url: "postgresql://{$POSTGRES_USERNAME}:{$POSTGRES_PASSWORD}@127.0.0.1:6543/{instance_id}"
-
 instances:
   __any__:
-    # listen-interface for pipedag context server which synchronizes some task state during DAG execution
     network_interface: "127.0.0.1"
-    # classes to be materialized to table store even without pipedag Table wrapper (we have loose coupling between
-    # pipedag and pydiverse.transform, so consider adding 'pydiverse.transform.Table' in your config)
-    auto_table: ["pandas.DataFrame", "sqlalchemy.sql.expression.TextClause", "sqlalchemy.sql.expression.Selectable"]
-    fail_fast: true
+    auto_table:
+      - "pandas.DataFrame"
+      - "sqlalchemy.sql.expression.TextClause"
+      - "sqlalchemy.sql.expression.Selectable"
 
+    fail_fast: true
     instance_id: pipedag_default
     table_store:
       class: "pydiverse.pipedag.backend.table.SQLTableStore"
-
-      # Postgres: this can be used after running `docker-compose up`
-      table_store_connection: postgres
       args:
+        url: "postgresql://sa:Pydiverse23@127.0.0.1:6543/{instance_id}"
         create_database_if_not_exists: True
-        
-        # print select statements before being encapsualted in materialize expressions and tables before writing to
-        # database
+
         print_materialize: true
-        # print final sql statements
         print_sql: true
 
       local_table_cache:
@@ -240,15 +228,13 @@ instances:
         base_path: "/tmp/pipedag/blobs"
 
     lock_manager:
-      class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
-      args:
-        hosts: "localhost:2181"
+      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
 
     orchestration:
       class: "pydiverse.pipedag.engine.SequentialEngine"
 ```
 
-If you don't have a postgres, Microsoft SQL Server, or IBM DB2 database at hand, you can start a postgres database, you can use a file like `example/docker-compose.yaml`:
+If you don't have a postgres database at hand, you can start a postgres database, you can use a file like `example/docker-compose.yaml`:
 
 ```yaml
 version: "3.9"
@@ -258,16 +244,8 @@ services:
     environment:
       POSTGRES_USER: sa
       POSTGRES_PASSWORD: Pydiverse23
-      POSTGRES_PORT: 6543
     ports:
-      - 6543:5432
-  zoo:
-    image: zookeeper
-    environment:
-      ZOO_4LW_COMMANDS_WHITELIST: ruok
-      ZOO_MAX_CLIENT_CNXNS: 60
-    ports:
-      - 2181:2181
+      - "6543:5432"
 ```
 
 You can run the example with `bash` as follows:
@@ -281,8 +259,6 @@ and in another terminal
 
 ```bash
 cd example
-export POSTGRES_USERNAME=sa
-export POSTGRES_PASSWORD=Pydiverse23
 poetry run python run_pipeline.py
 ```
 

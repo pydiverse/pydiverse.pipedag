@@ -5,13 +5,5 @@ services:
     environment:
       POSTGRES_USER: sa
       POSTGRES_PASSWORD: Pydiverse23
-      POSTGRES_PORT: 6543
     ports:
-      - 6543:5432
-  zoo:
-    image: zookeeper
-    environment:
-      ZOO_4LW_COMMANDS_WHITELIST: ruok
-      ZOO_MAX_CLIENT_CNXNS: 100
-    ports:
-      - 2181:2181
+      - "6543:5432"
