@@ -2,12 +2,13 @@ API
 ===
 
 .. automodule:: pydiverse.pipedag
-    :exclude-members: Flow, Stage
+    :exclude-members: Flow, Stage, materialize
 
     .. autoclass:: Flow
         :special-members: __getitem__
     .. autoclass:: Stage
         :special-members: __getitem__
+    .. autodecorator:: materialize
 
 Backend Classes
 ===============

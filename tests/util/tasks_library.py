@@ -27,7 +27,7 @@ def noop_lazy(x):
     return x
 
 
-@materialize(nout=2, version="1.0")
+@materialize(nout=2, version="1.0", input_type=pd.DataFrame)
 def create_tuple(x, y):
     return x, y
 

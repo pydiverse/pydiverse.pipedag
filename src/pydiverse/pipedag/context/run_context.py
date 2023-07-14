@@ -14,10 +14,12 @@ from enum import Enum
 from threading import Lock, RLock
 from typing import TYPE_CHECKING, Any
 
+import attrs
 import msgpack
 import structlog
 
 from pydiverse.pipedag.context.context import (
+    BaseAttrsContext,
     BaseContext,
     ConfigContext,
     StageLockContext,
@@ -29,7 +31,7 @@ from pydiverse.pipedag.util.ipc import IPCServer
 if TYPE_CHECKING:
     from pydiverse.pipedag._typing import T
     from pydiverse.pipedag.backend import BaseLockManager, LockState
-    from pydiverse.pipedag.core import Stage, Subflow, Task
+    from pydiverse.pipedag.core import Flow, Stage, Subflow, Task
     from pydiverse.pipedag.materialize import Blob, Table
 
 
@@ -636,7 +638,8 @@ class RunContext(BaseContext):
         )
 
 
-class DematerializeRunContext(BaseContext):
+@attrs.frozen
+class DematerializeRunContext(BaseAttrsContext):
     """Dummy RunContext that returns `COMMITTED` as the stage state for all stages
 
     To dematerialize an object we must know it the associates state has been
@@ -647,6 +650,8 @@ class DematerializeRunContext(BaseContext):
     """
 
     _context_var = RunContext._context_var
+
+    flow: Flow
 
     def get_stage_state(self, stage: Stage) -> StageState:
         return StageState.COMMITTED

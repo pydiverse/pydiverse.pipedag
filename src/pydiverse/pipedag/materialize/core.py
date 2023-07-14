@@ -8,8 +8,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from pydiverse.pipedag._typing import CallableT
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
-from pydiverse.pipedag.core.task import Task
-from pydiverse.pipedag.errors import CacheError
+from pydiverse.pipedag.core.task import Task, TaskGetItem
 from pydiverse.pipedag.materialize.cache import CacheManager, TaskCacheInfo
 from pydiverse.pipedag.materialize.container import Blob, Table
 from pydiverse.pipedag.util import deep_map
@@ -200,6 +199,9 @@ class MaterializingTask(Task):
         self.cache = cache
         self.lazy = lazy
 
+    def __getitem__(self, item):
+        return MaterializingTaskGetItem(self, self, item)
+
     def run(self, inputs: dict[int, Any], **kwargs):
         # When running only a subset of an entire flow, not all inputs
         # get calculated during flow execution. As a consequence, we must load
@@ -209,35 +211,45 @@ class MaterializingTask(Task):
             if in_id in inputs:
                 continue
 
-            # This returns all metadata objects with the same name, stage, AND position
-            # hash as `in_task`. We utilize the position hash to identify a specific
-            # task instance, if the same task appears multiple times in a stage.
             store = ConfigContext.get().store
-            metadata = store.table_store.retrieve_all_task_metadata(in_task)
+            cached_output, metadata = store.retrieve_most_recent_task_output_from_cache(
+                in_task
+            )
 
-            if not metadata:
-                raise CacheError(
-                    f"Couldn't find cached output for task {in_task}"
-                    " with matching position hash."
-                )
-
-            output_json = {m.output_json for m in metadata}
-            if len(output_json) > 1:
-                raise RuntimeError(
-                    f"Found multiple matching cached versions of task '{in_task.name}'"
-                    f" in stage '{in_task.stage}' with different outputs."
-                    f" Couldn't determine which one to use for loading"
-                    f" inputs for task {self}."
-                )
-
-            # Choose newest entry
-            metadata = sorted(metadata, key=lambda m: m.timestamp)[-1]
-            cached_output = store.json_decode(metadata.output_json)
-
-            # Load inputs from database
             inputs[in_id] = cached_output
 
         return super().run(inputs, **kwargs)
+
+    def get_output_from_store(self, as_type: type = None) -> Any:
+        """Retrieves the output of the task from the cache.
+
+        No guarantees are made regarding whether the returned values are still
+        up-to-date and cache valid.
+
+        :param as_type: The type as which tables produced by this task should
+            be dematerialized. If no type is specified, the input type of
+            the task is used.
+        :return: The output of the task.
+        :raise CacheError: if no outputs for this task could be found in the store.
+        """
+        return _get_output_from_store(self, as_type)
+
+
+class MaterializingTaskGetItem(TaskGetItem):
+    def get_output_from_store(self, as_type: type = None) -> Any:
+        """Retrieves the correct part of the output of the task from the cache.
+
+        No guarantees are made regarding whether the returned values are still
+        up-to-date and cache valid.
+
+        :param as_type: The type as which tables produced by this task should
+            be dematerialized. If no type is specified, the input type of
+            the task is used.
+        :return: The output of the task.
+        :raise CacheError: if no outputs for this task could be found in the store.
+        """
+
+        return _get_output_from_store(self, as_type)
 
 
 class MaterializationWrapper:
@@ -340,6 +352,21 @@ class MaterializationWrapper:
             self.value = result
 
             return result
+
+
+def _get_output_from_store(
+    task: MaterializingTask | MaterializingTaskGetItem, as_type: type
+) -> Any:
+    """Helper to retrieve task output from store"""
+    from pydiverse.pipedag.context.run_context import DematerializeRunContext
+    from pydiverse.pipedag.materialize.store import dematerialize_output_from_store
+
+    root_task = task if isinstance(task, Task) else task.task
+
+    store = ConfigContext.get().store
+    with DematerializeRunContext(root_task.flow):
+        cached_output, _ = store.retrieve_most_recent_task_output_from_cache(root_task)
+        return dematerialize_output_from_store(store, task, cached_output, as_type)
 
 
 @dataclass

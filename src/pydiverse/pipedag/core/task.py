@@ -78,7 +78,7 @@ class Task:
             yield TaskGetItem(self, self, i)
 
     def __call__(self_, *args, **kwargs):
-        """Do the wiring"""
+        # Do the wiring
         try:
             ctx = DAGContext.get()
         except LookupError:
@@ -218,7 +218,7 @@ class TaskGetItem:
         )
 
     def __getitem__(self, item):
-        return TaskGetItem(self.task, self, item)
+        return type(self)(self.task, self, item)
 
     def resolve_value(self, task_value: Any):
         parent_value = self.parent.resolve_value(task_value)

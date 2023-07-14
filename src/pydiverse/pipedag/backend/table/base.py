@@ -40,8 +40,8 @@ class TableHookResolver:
         pydiverse transform table, ...). To add table type specific logic to
         a table store so called TableHooks are used.
 
-        This decorator is used to register such a hook:
-        ::
+        This decorator is used to register such a hook::
+
             try:
                 from library import x
             except ImportError as e:

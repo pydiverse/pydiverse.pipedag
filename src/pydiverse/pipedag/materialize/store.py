@@ -7,10 +7,11 @@ import structlog
 
 from pydiverse.pipedag import Blob, Stage, Table, backend
 from pydiverse.pipedag._typing import Materializable, T
-from pydiverse.pipedag.context import ConfigContext, RunContext
+from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.core.config import PipedagConfig
-from pydiverse.pipedag.errors import DuplicateNameError, StageError
+from pydiverse.pipedag.core.task import Task, TaskGetItem
+from pydiverse.pipedag.errors import CacheError, DuplicateNameError, StageError
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import MaterializingTask, TaskInfo
 from pydiverse.pipedag.materialize.metadata import TaskMetadata
@@ -439,6 +440,38 @@ class PipeDAGStore(Disposable):
             lambda: self.table_store.store_task_metadata(original_metadata, task.stage),
         )
 
+    def retrieve_most_recent_task_output_from_cache(
+        self, task: MaterializingTask
+    ) -> (Materializable, TaskMetadata):
+        """
+        Retrieves the cached output from the most recent execution of a task.
+
+        This retrieval is done based on the name, stage and position hash
+        of the task.
+
+        :param task: The materializing task for which to retrieve
+            the cached output.
+        :return: The output from the task as well as the corresponding metadata.
+        :raises CacheError: if no matching task exists in the cache
+        """
+
+        # This returns all metadata objects with the same name, stage, AND position
+        # hash as `task`. We utilize the position hash to identify a specific
+        # task instance, if the same task appears multiple times in a stage.
+        metadata = self.table_store.retrieve_all_task_metadata(task)
+
+        if not metadata:
+            raise CacheError(
+                f"Couldn't find cached output for task '{task}'"
+                " with matching position hash."
+            )
+
+        # Choose newest entry
+        newest_metadata = sorted(metadata, key=lambda m: m.timestamp)[-1]
+        cached_output = self.json_decode(newest_metadata.output_json)
+
+        return cached_output, newest_metadata
+
     # ### Utils ### #
 
     def json_encode(self, value: Materializable) -> str:
@@ -459,3 +492,36 @@ class PipeDAGStore(Disposable):
         `Blob` objects.
         """
         return self.json_decoder.decode(value)
+
+
+def dematerialize_output_from_store(
+    store: PipeDAGStore,
+    task: Task | TaskGetItem,
+    task_output: Materializable,
+    as_type: type | None,
+) -> Any:
+    """
+    Dematerializes a task's output from the store
+
+    Must be called inside a ConfigContext and RunContext. Instead
+    of a RunContext, a DematerializeRunContext can also be used.
+    """
+    if isinstance(task, Task):
+        root_task = task
+    else:
+        root_task = task.task
+
+    if as_type is None:
+        assert isinstance(root_task, MaterializingTask)
+        as_type = root_task.input_type
+
+    run_context = RunContext.get()
+    task_output = task.resolve_value(task_output)
+
+    with TaskContext(task):
+        return deep_map(
+            task_output,
+            lambda item: store.dematerialize_item(
+                item, as_type=as_type, ctx=run_context
+            ),
+        )

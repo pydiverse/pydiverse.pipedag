@@ -9,8 +9,6 @@ from pydiverse.pipedag.context import ConfigContext, StageLockContext
 from pydiverse.pipedag.context.run_context import DematerializeRunContext, RunContext
 from pydiverse.pipedag.core.task import Task, TaskGetItem
 from pydiverse.pipedag.errors import LockError
-from pydiverse.pipedag.materialize.core import MaterializingTask
-from pydiverse.pipedag.util import deep_map
 
 if TYPE_CHECKING:
     import pydot
@@ -82,26 +80,19 @@ class Result:
         If :ref:`strict_result_get_locking` is set to True, this call, as well as
         as :py:meth:`Flow.run()` must be wrapped inside a :py:class:`StageLockContext`.
 
-        :param task: The task for which you want to retrieve the outputs.
+        :param task: The task for which you want to retrieve the output.
         :param as_type: The type as which tables produced by this task should
             be dematerialized. If no type is specified, the input type of
             the task is used.
         :return: The results of the task.
         """
+        from pydiverse.pipedag.materialize.store import dematerialize_output_from_store
+
         if not self.successful:
             logger = structlog.get_logger(logger_name=type(self).__name__)
             logger.warning(
                 "Attention: getting tables from unsuccessful run is unreliable!"
             )
-
-        if isinstance(task, Task):
-            root_task = task
-        else:
-            root_task = task.task
-
-        if as_type is None:
-            assert isinstance(root_task, MaterializingTask)
-            as_type = root_task.input_type
 
         if self.config_context.strict_result_get_locking:
             try:
@@ -113,17 +104,14 @@ class Result:
                     " debugging"
                 ) from None
 
-        # TODO: Check that the results loaded from the database correspond
-        #       to the run_id of this result object.
-        with self.config_context as config_ctx, DematerializeRunContext() as run_ctx:
+        if isinstance(task, Task):
+            task_output = self.task_values[task]
+        else:
+            task_output = self.task_values[task.task]
 
-            def dematerialize_mapper(item):
-                return config_ctx.store.dematerialize_item(
-                    item, as_type=as_type, ctx=run_ctx
-                )
-
-            task_value = self.task_values[root_task]
-            return deep_map(task.resolve_value(task_value), dematerialize_mapper)
+        with self.config_context, DematerializeRunContext(self.flow):
+            store = self.config_context.store
+            return dematerialize_output_from_store(store, task, task_output, as_type)
 
     def visualize(self):
         """

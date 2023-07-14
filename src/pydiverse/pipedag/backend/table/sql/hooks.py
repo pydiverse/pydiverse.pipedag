@@ -126,8 +126,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 class PandasTableHook(TableHook[SQLTableStore]):
     """
     Allows overriding the default dtype backend to use by setting the `dtype_backend`
-    argument in the `hook_args` section of the table store config:
-    ::
+    argument in the `hook_args` section of the table store config::
 
         hook_args:
           pandas:
