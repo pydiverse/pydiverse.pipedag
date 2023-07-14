@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
@@ -292,6 +293,58 @@ class Flow:
             raise result.exception or Exception("Flow run failed")
 
         return result
+
+    def get_stage(self, name: str) -> Stage:
+        """Retrieves a stage by name.
+
+        :param name: The name of the stage.
+        :return: The stage.
+        :raises LookupError: if no stage with the specified name exists.
+        """
+
+        if stage := self.stages.get(name):
+            return stage
+        raise LookupError(f"Couldn't find a stage with name '{name}' in flow.")
+
+    def get_task_from_string(self, path: str) -> Task:
+        """Retrieves a specific task given a path-like string.
+
+        This method is useful if the flow gets defined inside a function,
+        and you want to access a specific task at a later stage outside of
+        that function, without having to return a reference to it.
+
+        Alternatively you can also use :py:meth:`Flow.get_stage` in combination
+        with :py:meth:`Stage.get_task` to achieve the same result.
+
+        :param path: The path of the task.
+            It consists of the stage name, followed by a slash ("/"), followed by
+            the task name. If the same task appears multiple times within a stage,
+            then you must provide the index of the task in square brackets after
+            the task name.
+
+            Examples for valid paths:
+            ``"stage/task"``,
+            ``"stage/task[0]"``,
+            ``"stage/task[3]"``.
+
+        :return: The task.
+        :raises ValueError: If the path is malformed.
+        :raises LookupError: If either the stage or task couldn't be found.
+        """
+
+        if path.count("/") == 1:
+            stage_name, task_name = path.split("/")
+        else:
+            raise ValueError("Task path may only contain one slash '{stage}/{task}'")
+
+        if match := re.search(r"\[\d+]$", task_name):
+            task_index = int(match.group()[1:-1])
+            task_name = task_name[: match.start()]
+        else:
+            task_index = None
+
+        stage = self.get_stage(stage_name)
+        return stage.get_task(task_name, task_index)
 
     # Visualization
     def visualize(self, result: Result | None = None):

@@ -87,6 +87,13 @@ class Stage:
     def __repr__(self):
         return f"<Stage: {self.name}>"
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state.pop("tasks", None)
+        state.pop("commit_task", None)
+        state.pop("logger", None)
+        return state
+
     def __enter__(self):
         if self._did_enter:
             raise StageError(
@@ -138,12 +145,41 @@ class Stage:
             outer = outer.outer_stage
         return False
 
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state.pop("tasks", None)
-        state.pop("commit_task", None)
-        state.pop("logger", None)
-        return state
+    def get_task(self, name: str, index: int | None = None):
+        """Retrieves a task inside the stage by name.
+
+        :param name: The name of the task to retrieve.
+        :param index: If multiple task instances with the same name appear inside
+            the stage, you can request a specific one by passing an index.
+        :return: The task.
+        :raises LookupError: If no task with the name can be found.
+        :raises IndexError: If the index is out of bounds.
+        :raises ValueError: If multiple matching tasks have been found, but no index
+            has been provided.
+        """
+        tasks = [task for task in self.tasks if task.name == name]
+        if not tasks:
+            raise LookupError(
+                f"Couldn't find a task with name '{name}' in stage '{self.name}'."
+            )
+
+        if index is None:
+            if len(tasks) == 1:
+                return tasks[0]
+
+            raise ValueError(
+                f"Found more than one task with name '{name}' in stage. "
+                "Specify which task you want by passing in an index."
+            )
+
+        if index < len(tasks):
+            return tasks[index]
+
+        raise IndexError(
+            f"Found only {len(tasks)} instances of task '{name}' in stage, "
+            f"but you requested the tasks with index {index}, "
+            "which is out of bounds."
+        )
 
 
 class CommitStageTask(Task):

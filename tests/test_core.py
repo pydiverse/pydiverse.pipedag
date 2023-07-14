@@ -441,6 +441,94 @@ class TestPositionHash:
         assert inputs[1][1].position_hash != inputs[0][1].position_hash
 
 
+class TestFlow:
+    def test_get_stage(self):
+        with Flow() as f:
+            with Stage("s0") as s0:
+                ...
+
+            with Stage("s1") as s1:
+                ...
+
+        assert f.get_stage("s0") == s0
+        assert f.get_stage("s1") == s1
+
+        with pytest.raises(LookupError):
+            f.get_stage("s2")
+
+    def test_get_task_from_string(self):
+        with Flow() as f:
+            with Stage("s0"):
+                t00_0 = t("00")(0)
+                t00_1 = t("00")(1)
+
+            with Stage("s1"):
+                t10 = t("10")(t00_0)
+                t11 = t("11")(t00_1)
+
+                t00_s1 = t("00")(0)
+
+        assert f.get_task_from_string("s0/task-00[0]") == t00_0
+        assert f.get_task_from_string("s0/task-00[1]") == t00_1
+
+        assert f.get_task_from_string("s1/task-10") == t10
+        assert f.get_task_from_string("s1/task-10[0]") == t10
+        assert f.get_task_from_string("s1/task-11") == t11
+        assert f.get_task_from_string("s1/task-11[0]") == t11
+
+        assert f.get_task_from_string("s1/task-00") == t00_s1
+
+        with pytest.raises(ValueError):
+            # Missing Task
+            f.get_task_from_string("s0")
+        with pytest.raises(ValueError):
+            # Missing task index
+            f.get_task_from_string("s0/task-00")
+
+        with pytest.raises(LookupError):
+            # No such task
+            f.get_task_from_string("s0/foo-bar")
+        with pytest.raises(LookupError):
+            # Out of bounds
+            f.get_task_from_string("s0/task-00[2]")
+        with pytest.raises(IndexError):
+            # Out of bounds
+            f.get_task_from_string("s1/task-11[1]")
+
+
+class TestStage:
+    def test_get_task(self):
+        with Flow():
+            with Stage("s0") as s0:
+                t00_0 = t("00")(0)
+                t00_1 = t("00")(1)
+
+            with Stage("s1") as s1:
+                t10 = t("10")(t00_0)
+                t11 = t("11")(t00_1)
+                t00_s1 = t("00")(0)
+
+        assert s0.get_task(t00_0.name, 0) == t00_0
+        assert s0.get_task(t00_1.name, 1) == t00_1
+
+        assert s1.get_task(t10.name) == t10
+        assert s1.get_task(t10.name, 0) == t10
+        assert s1.get_task(t11.name) == t11
+        assert s1.get_task(t11.name, 0) == t11
+        assert s1.get_task(t00_s1.name) == t00_s1
+        assert s1.get_task(t00_s1.name, 0) == t00_s1
+
+        with pytest.raises(LookupError):
+            # Task doesn't exist
+            s0.get_task("foo")
+        with pytest.raises(ValueError):
+            # Missing index
+            s0.get_task(t00_0.name)
+        with pytest.raises(IndexError):
+            # Out of bounds
+            s0.get_task(t00_0.name, 2)
+
+
 def test_task_nout():
     with Flow("flow"):
         with Stage("stage"):
