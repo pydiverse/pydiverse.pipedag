@@ -48,6 +48,12 @@ myst_enable_extensions = [
     "attrs_inline",
 ]
 
+autodoc_default_options = {
+    "members": None,
+    "inherited-members": None,
+    "member-order": "bysource",
+}
+
 autosectionlabel_prefix_document = True
 
 intersphinx_mapping = {

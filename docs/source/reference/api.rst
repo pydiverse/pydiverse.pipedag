@@ -2,9 +2,12 @@ API
 ===
 
 .. automodule:: pydiverse.pipedag
-    :members:
-    :inherited-members:
-    :member-order: bysource
+    :exclude-members: Flow, Stage
+
+    .. autoclass:: Flow
+        :special-members: __getitem__
+    .. autoclass:: Stage
+        :special-members: __getitem__
 
 Backend Classes
 ===============

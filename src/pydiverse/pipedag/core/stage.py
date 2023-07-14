@@ -133,33 +133,35 @@ class Stage:
             # Empty stage doesn't need to be committed
             self.commit_task._skip_commit = True
 
-    def all_tasks(self):
-        yield from self.tasks
-        yield self.commit_task
-
-    def is_inner(self, other: Stage):
-        outer = self.outer_stage
-        while outer is not None:
-            if outer == other:
-                return True
-            outer = outer.outer_stage
-        return False
-
-    def get_task(self, name: str, index: int | None = None):
+    def __getitem__(self, item: str | tuple[str, int]) -> Task:
         """Retrieves a task inside the stage by name.
 
-        :param name: The name of the task to retrieve.
-        :param index: If multiple task instances with the same name appear inside
-            the stage, you can request a specific one by passing an index.
-        :return: The task.
-        :raises LookupError: If no task with the name can be found.
+        You can either subscribe a Stage using just a string (``stage["name"]``) or
+        using a tuple containing a string and an integer (``stage["name", 3]``).
+
+        The string is always interpreted as the name of the task to retrieve. If
+        you also pass in an integer, it is interpreted as the `index` of the task.
+        This means, that if the stage contains multiple tasks with the same name,
+        then you can retrieve a specific instance of that task based on the order
+        in which they were defined.
+
+        :raises KeyError: If no task with the name can be found.
         :raises IndexError: If the index is out of bounds.
         :raises ValueError: If multiple matching tasks have been found, but no index
             has been provided.
         """
+
+        if isinstance(item, str):
+            name = item
+            index = None
+        elif isinstance(item, tuple):
+            name, index = item
+        else:
+            raise TypeError
+
         tasks = [task for task in self.tasks if task.name == name]
         if not tasks:
-            raise LookupError(
+            raise KeyError(
                 f"Couldn't find a task with name '{name}' in stage '{self.name}'."
             )
 
@@ -180,6 +182,28 @@ class Stage:
             f"but you requested the tasks with index {index}, "
             "which is out of bounds."
         )
+
+    def all_tasks(self):
+        yield from self.tasks
+        yield self.commit_task
+
+    def is_inner(self, other: Stage):
+        outer = self.outer_stage
+        while outer is not None:
+            if outer == other:
+                return True
+            outer = outer.outer_stage
+        return False
+
+    def get_task(self, name: str, index: int | None = None) -> Task:
+        """Retrieves a task inside the stage by name.
+        Alias for :py:meth:`Stage.__getitem__`.
+
+        :param name: The name of the task to retrieve.
+        :param index: If multiple task instances with the same name appear inside
+            the stage, you can request a specific one by passing an index.
+        """
+        return self[name, index]
 
 
 class CommitStageTask(Task):
