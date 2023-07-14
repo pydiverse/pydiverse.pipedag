@@ -116,57 +116,6 @@ class Flow:
 
         self.graph.add_edge(from_, to)
 
-    def visualize(self, result: Result | None = None):
-        """Visualizes the flow as a graph.
-
-        If you are running in a jupyter notebook, the graph will get displayed inline.
-        Otherwise, it will get rendered to a pdf that then gets opened in your browser.
-
-        Requires `Graphviz <https://graphviz.org>`_ to be installed on your computer.
-
-        :param result: An optional :py:class:`Result` instance.
-            If provided, the visualization will contain additional information such
-            as which tasks ran successfully, or failed.
-        """
-        dot = self.visualize_pydot(result)
-        _display_pydot(dot)
-        return dot
-
-    def visualize_url(self, result: Result | None = None) -> str:
-        """Visualizes the flow as a graph and returns a URL to view the visualization.
-
-        If you don't have Graphviz installed on your computer (and thus aren't able to
-        use the :py:meth:`~.visualize()` method) then this is the easiest way to
-        visualize the flow.
-        For this we use a free service called `Kroki <https://kroki.io>`_.
-
-        :param result: An optional :py:class:`Result` instance.
-            If provided, the visualization will contain additional information such
-            as which tasks ran successfully, or failed.
-        :return:
-            A URL that, when opened, displays the graph.
-        """
-        dot = self.visualize_pydot(result)
-        return _pydot_url(dot)
-
-    def visualize_pydot(self, result: Result | None = None) -> pydot.Dot:
-        """Visualizes the flow as a graph and return a ``pydot.Dot`` graph.
-
-        :param result: An optional :py:class:`Result` instance.
-            If provided, the visualization will contain additional information such
-            as which tasks ran successfully, or failed.
-        :return: A ``pydot.Dot`` graph.
-        """
-        task_style = _generate_task_style(self.tasks, result)
-        dot = _build_pydot(
-            stages=list(self.stages.values()),
-            tasks=self.tasks,
-            graph=self.graph,
-            task_style=task_style,
-        )
-
-        return dot
-
     def build_graph(self) -> nx.DiGraph:
         if not nx.is_directed_acyclic_graph(self.graph):
             raise FlowError("Graph is not a DAG")
@@ -343,6 +292,58 @@ class Flow:
             raise result.exception or Exception("Flow run failed")
 
         return result
+
+    # Visualization
+    def visualize(self, result: Result | None = None):
+        """Visualizes the flow as a graph.
+
+        If you are running in a jupyter notebook, the graph will get displayed inline.
+        Otherwise, it will get rendered to a pdf that then gets opened in your browser.
+
+        Requires `Graphviz <https://graphviz.org>`_ to be installed on your computer.
+
+        :param result: An optional :py:class:`Result` instance.
+            If provided, the visualization will contain additional information such
+            as which tasks ran successfully, or failed.
+        """
+        dot = self.visualize_pydot(result)
+        _display_pydot(dot)
+        return dot
+
+    def visualize_url(self, result: Result | None = None) -> str:
+        """Visualizes the flow as a graph and returns a URL to view the visualization.
+
+        If you don't have Graphviz installed on your computer (and thus aren't able to
+        use the :py:meth:`~.visualize()` method) then this is the easiest way to
+        visualize the flow.
+        For this we use a free service called `Kroki <https://kroki.io>`_.
+
+        :param result: An optional :py:class:`Result` instance.
+            If provided, the visualization will contain additional information such
+            as which tasks ran successfully, or failed.
+        :return:
+            A URL that, when opened, displays the graph.
+        """
+        dot = self.visualize_pydot(result)
+        return _pydot_url(dot)
+
+    def visualize_pydot(self, result: Result | None = None) -> pydot.Dot:
+        """Visualizes the flow as a graph and return a ``pydot.Dot`` graph.
+
+        :param result: An optional :py:class:`Result` instance.
+            If provided, the visualization will contain additional information such
+            as which tasks ran successfully, or failed.
+        :return: A ``pydot.Dot`` graph.
+        """
+        task_style = _generate_task_style(self.tasks, result)
+        dot = _build_pydot(
+            stages=list(self.stages.values()),
+            tasks=self.tasks,
+            graph=self.graph,
+            task_style=task_style,
+        )
+
+        return dot
 
 
 class Subflow:
