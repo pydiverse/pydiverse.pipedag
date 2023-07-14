@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "pydiverse-pipedag"
 version = "0.6.0"
-description = "A pipeline orchestration library executing tasks within one python session. It takes care of SQL table (de)materialization, caching and cache invalidation. Blob storage is supported as well for example for storing model files."
+description = "Pydiverse pipedag is a data pipeline orchestration library maximizing agility and iteration speed."
 authors = [
   "QuantCo, Inc.",
   "Nicolas Camenisch <garnele007@gmail.com>",
