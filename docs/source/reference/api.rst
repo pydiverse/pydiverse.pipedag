@@ -2,11 +2,17 @@ API
 ===
 
 .. automodule:: pydiverse.pipedag
+    :members:
+    :inherited-members:
     :exclude-members: Flow, Stage, materialize
 
     .. autoclass:: Flow
+        :members:
+        :inherited-members:
         :special-members: __getitem__
     .. autoclass:: Stage
+        :members:
+        :inherited-members:
         :special-members: __getitem__
     .. autodecorator:: materialize
 

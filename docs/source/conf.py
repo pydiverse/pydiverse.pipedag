@@ -49,8 +49,6 @@ myst_enable_extensions = [
 ]
 
 autodoc_default_options = {
-    "members": None,
-    "inherited-members": None,
     "member-order": "bysource",
 }
 
