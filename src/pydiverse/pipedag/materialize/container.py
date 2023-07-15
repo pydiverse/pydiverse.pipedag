@@ -79,7 +79,8 @@ class Table(Generic[T]):
         self.cache_key = None
 
     def __repr__(self):
-        return f"<Table '{self.name}' ({self.stage.name})>"
+        stage_name = self.stage.name if self.stage else None
+        return f"<Table '{self.name}' ({stage_name})>"
 
     @property
     def name(self):
@@ -144,9 +145,10 @@ class RawSql:
         # change
         self.cache_key = None
 
-    def __str__(self):
+    def __repr__(self):
+        stage_name = self.stage.name if self.stage else None
         sql_short = self.sql.strip()[0:40].replace("\n", "").strip()
-        return f"<Raw SQL '{self.name}' ({self.stage}) - {sql_short}>"
+        return f"<Raw SQL '{self.name}' ({stage_name}) - {sql_short}>"
 
     @property
     def name(self):
@@ -199,7 +201,8 @@ class Blob(Generic[T]):
         self.cache_key = None
 
     def __repr__(self):
-        return f"<Blob '{self.name}' ({self.stage.name})>"
+        stage_name = self.stage.name if self.stage else None
+        return f"<Blob '{self.name}' ({stage_name})>"
 
     @property
     def name(self):
