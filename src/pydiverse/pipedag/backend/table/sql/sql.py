@@ -102,7 +102,7 @@ class SQLTableStore(BaseTableStore):
         use to connect to the database.
 
         This URL may contain placeholders like ``{name}`` or ``{instance_id}``
-        (additional ones can be defined in the ``url_attrs_file`) or
+        (additional ones can be defined in the ``url_attrs_file``) or
         environment variables like ``{$USER}`` which get substituted with their
         respective values.
 
