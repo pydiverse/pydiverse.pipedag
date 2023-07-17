@@ -25,14 +25,13 @@ def test_table_store():
 
         # Manually materialize the table
         query = sql_table_expr({"col": [0, 1, 2, 3]})
-        with table_store.engine.begin() as conn:
-            conn.execute(
-                CreateTableAsSelect(
-                    "table_reference",
-                    schema,
-                    query,
-                )
+        table_store.execute(
+            CreateTableAsSelect(
+                "table_reference",
+                schema,
+                query,
             )
+        )
 
         # Return a table reference
         return Table(TableReference(), "table_reference")
