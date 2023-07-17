@@ -96,6 +96,10 @@ class SQLTableStore(BaseTableStore):
          - | ``pdt.eager.PandasTableImpl``
            | ``pdt.lazy.SQLTableImpl``
 
+       * - pydiverse.pipedag
+         - | :py:class:`~.TableReference`
+         -
+
 
     :param url:
         The :external+sa:ref:`SQLAlchemy engine url <database_urls>`
@@ -1163,6 +1167,54 @@ class SQLTableStore(BaseTableStore):
 
     def get_lock_schema(self) -> Schema:
         return self.get_schema(self.LOCK_SCHEMA)
+
+
+class TableReference:
+    """Reference to a user-created table.
+
+    By returning a `TableReference` wrapped in a :py:class:`~.Table` from a task,
+    you can tell pipedag that you yourself created a new table inside
+    the correct schema of the table store.
+    This may be useful if you need to perform a complex load operation to create
+    a table (e.g. load a table from an Oracle database into Postgres
+    using `oracle_fdw`).
+
+    Only supported by :py:class:`~.SQLTableStore`.
+
+    Warning
+    -------
+    Using table references is not recommended unless you know what you are doing.
+    It may lead unexpected behaviour.
+    It also requires accessing non-public parts of the pipedag API which can
+    change without notice.
+
+    Example
+    -------
+    Making sure that the table is created in the correct schema is not trivial,
+    because the schema names usually are different from the stage names.
+    To get the correct schema name, you must use undocumented and non-public
+    parts of the pipedag API. To help you get started, we'll provide you with
+    this example, however, be warned that this might break without notice::
+
+        @materialize(version="1.0")
+        def task():
+            from pydiverse.pipedag.context import ConfigContext, TaskContext
+
+            table_store = ConfigContext.get().store.table_store
+            task = TaskContext.get().task
+
+            # Name of the schema in which you must create the table
+            schema_name = table_store.get_schema(task.stage.transaction_name).get()
+
+            # Use the table store's engine to create a table in the correct schema
+            with table_store.engine.begin() as conn:
+                conn.execute(...)
+
+            # Return a reference to the newly created table
+            return Table(TableReference(), "name_of_table")
+    """
+
+    pass
 
 
 # Load SQLTableStore Hooks

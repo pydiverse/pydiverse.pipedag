@@ -18,7 +18,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateTableAsSelect,
     Schema,
 )
-from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
+from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore, TableReference
 from pydiverse.pipedag.backend.table.util import (
     DType,
     PandasDTypeBackend,
@@ -115,6 +115,46 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
             r'(__tmp|__even|__odd)(?=[ \t\n.;"]|$)', "", query_str.lower()
         )
         return query_str
+
+
+@SQLTableStore.register_table()
+class TableReferenceHook(TableHook[SQLTableStore]):
+    @classmethod
+    def can_materialize(cls, type_) -> bool:
+        return issubclass(type_, TableReference)
+
+    @classmethod
+    def can_retrieve(cls, type_) -> bool:
+        return False
+
+    @classmethod
+    def materialize(
+        cls,
+        store: SQLTableStore,
+        table: Table,
+        stage_name,
+        task_info: TaskInfo | None,
+    ):
+        # For a table reference, we don't need to materialize anything.
+        # This is any table referenced by a table reference should already exist
+        # in the schema.
+        # Instead, we check that the table actually exists.
+        schema = store.get_schema(stage_name).get()
+
+        inspector = sa.inspect(store.engine)
+        has_table = inspector.has_table(table.name, schema)
+
+        if not has_table:
+            raise ValueError(
+                f"Not table with name '{table.name}' found in schema '{schema}' "
+                "(reference by TableReference)."
+            )
+
+        return
+
+    @classmethod
+    def retrieve(cls, *args, **kwargs):
+        raise RuntimeError("This should never get called.")
 
 
 # endregion

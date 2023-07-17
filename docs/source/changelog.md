@@ -7,6 +7,7 @@
 - Fix [](#PrefectTwoEngine) failing on retrieval of results.
 - Added [](#Flow.get_stage()), and [](#Stage.get_task()) methods.
 - Added [](#MaterializingTask.get_output_from_store()) method to allow retrieval of task output without running the Flow.
+- Created [](#TableReference) to simplify complex table loading operations.
 
 ## 0.6.0 (2023-07-07)
 - Added [`delete-schemas`](#reference/cli:delete-schemas) command to `pipedag-manage` to help with cleaning up database

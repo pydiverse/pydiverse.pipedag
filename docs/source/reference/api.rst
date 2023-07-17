@@ -60,3 +60,8 @@ Orchestration Engine
 
 .. autoclass:: pydiverse.pipedag.engine.PrefectOneEngine
 .. autoclass:: pydiverse.pipedag.engine.PrefectTwoEngine
+
+Special Table Types
+-------------------
+
+.. autoclass:: pydiverse.pipedag.backend.table.sql.TableReference
