@@ -3,20 +3,29 @@ name: Nightly Tests
 on:
   schedule:
     - cron: "0 2 * * *"
+  workflow_dispatch:
 
 jobs:
   check:
     runs-on: ubuntu-latest
+    name: Check latest commit
+    outputs:
+      should-run: ${{ steps.should-run.outputs.should-run }}
     steps:
-      - id: nightly-check
-        name: Check for changes since last nightly
-        uses: lukecarr/nightly-check@v0.1.0
+      - uses: actions/checkout@v3
+
+      - name: "check if latest commit is within 24 hrs"
+        id: should-run
+        continue-on-error: true
+        if: ${{ github.event_name == 'schedule' }}
+        shell: bash
+        run: "test -z $(git rev-list --after=\"24 hours\" ${{ github.sha }}) && echo \"::set-output name=should-run::false\""
 
   tox_test:
     name: "Tox - ${{ matrix.os }} / ${{ matrix.python-version }}"
     runs-on: ${{ matrix.os }}-latest
     needs: check
-    if: ${{ needs.check.outputs.changes == 'false' }}
+    if: ${{ needs.check.outputs.should-run != 'false' }}
     timeout-minutes: 90
     strategy:
       matrix:
