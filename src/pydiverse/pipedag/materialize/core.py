@@ -172,9 +172,16 @@ def materialize(
 
 
 class MaterializingTask(Task):
-    """Subclass of `Task` that materializes all outputs.
+    """A pipedag task that materializes all its outputs.
 
-    See :py:func:`materialize` for documentation.
+    Instances of this class get initialized using the :py:func:`~.materialize`
+    decorator. From a user perspective, the existence of this class should be
+    considered to be an implementation detail. However, instances of
+    `MaterializingTask` (that is, functions decorated with ``@materialize``)
+    provide the following methods:
+
+    ..
+        See :py:func:`materialize` for documentation.
     """
 
     def __init__(
@@ -199,7 +206,7 @@ class MaterializingTask(Task):
         self.cache = cache
         self.lazy = lazy
 
-    def __getitem__(self, item):
+    def __getitem__(self, item) -> MaterializingTaskGetItem:
         return MaterializingTaskGetItem(self, self, item)
 
     def run(self, inputs: dict[int, Any], **kwargs):
@@ -225,6 +232,21 @@ class MaterializingTask(Task):
 
         No guarantees are made regarding whether the returned values are still
         up-to-date and cache valid.
+
+        Example
+        -------
+
+        ::
+
+            # Define some flow
+            with Flow() as f:
+                with Stage("stage_1"):
+                    x = some_task()
+                    ...
+
+            # Get output BEFORE calling flow.run()
+            df_x = x.get_output_from_store(as_type=pd.DataFrame)
+
 
         :param as_type: The type as which tables produced by this task should
             be dematerialized. If no type is specified, the input type of

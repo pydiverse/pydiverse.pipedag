@@ -1,5 +1,9 @@
+***
 API
-===
+***
+
+Public
+======
 
 .. automodule:: pydiverse.pipedag
     :members:
@@ -15,6 +19,12 @@ API
         :inherited-members:
         :special-members: __getitem__
     .. autodecorator:: materialize
+
+Related Classes
+===============
+
+.. autoclass:: pydiverse.pipedag.materialize.core.MaterializingTask
+    :members: get_output_from_store
 
 Backend Classes
 ===============
