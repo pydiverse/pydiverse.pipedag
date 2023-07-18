@@ -23,8 +23,13 @@ Public
 Related Classes
 ===============
 
-.. autoclass:: pydiverse.pipedag.materialize.core.MaterializingTask
+.. autoclass:: pydiverse.pipedag.materialize.core.UnboundMaterializingTask(__overload__)
+.. autoclass:: pydiverse.pipedag.materialize.core.MaterializingTask(__overload__)
     :members: get_output_from_store
+    :special-members: __getitem__
+.. autoclass:: pydiverse.pipedag.materialize.core.MaterializingTaskGetItem(__overload__)
+    :members: get_output_from_store
+    :special-members: __getitem__
 
 Backend Classes
 ===============

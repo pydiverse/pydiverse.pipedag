@@ -102,6 +102,9 @@ html_theme_options = {
 # Fix signature
 # Use __init__ instead of __new__
 def _correct_signatures(app, what, name, obj, options, signature, return_annotation):
+    if "__overload__" in str(signature):
+        return str(signature).replace("__overload__", ""), return_annotation
+
     if what == "class":
         if obj.__init__ != object.__init__:
             signature = sphinx.util.inspect.signature(obj.__init__)

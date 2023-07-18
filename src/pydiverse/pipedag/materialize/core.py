@@ -19,11 +19,6 @@ if TYPE_CHECKING:
 
 
 @overload
-def materialize(fn: CallableT, /) -> CallableT | UnboundMaterializingTask:
-    ...
-
-
-@overload
 def materialize(
     *,
     name: str = None,
@@ -33,6 +28,11 @@ def materialize(
     lazy: bool = False,
     nout: int = 1,
 ) -> Callable[[CallableT], CallableT | UnboundMaterializingTask]:
+    ...
+
+
+@overload
+def materialize(fn: CallableT, /) -> CallableT | UnboundMaterializingTask:
     ...
 
 
@@ -190,6 +190,28 @@ def materialize(
 
 
 class UnboundMaterializingTask(UnboundTask):
+    """A materializing task without any bound arguments.
+
+    Instances of this class get initialized using the
+    :py:func:`@materialize <pydiverse.pipedag.materialize>` decorator.
+    By calling this object, a :py:class:`~.MaterializingTask` gets created
+    that binds the provided arguments to the task.
+
+    >>> @materialize
+    ... def some_task(arg):
+    ...     ...
+    ...
+    >>> type(some_task)
+    <class 'pydiverse.pipedag.materialize.core.UnboundMaterializingTask'>
+
+    >>> with Flow() as f:
+    ...     with Stage("stage"):
+    ...         x = some_task(...)
+    ...
+    >>> type(x)
+    <class 'pydiverse.pipedag.materialize.core.MaterializingTask'>
+    """
+
     def __init__(
         self,
         fn: Callable,
@@ -219,16 +241,16 @@ class UnboundMaterializingTask(UnboundTask):
 
 
 class MaterializingTask(Task):
-    """A pipedag task that materializes all its outputs.
+    """
+    A pipedag task that materializes all its outputs.
 
-    Instances of this class get initialized using the :py:func:`~.materialize`
-    decorator. From a user perspective, the existence of this class should be
-    considered to be an implementation detail. However, instances of
-    `MaterializingTask` (that is, functions decorated with ``@materialize``)
-    provide the following methods:
+    Instances of this class get initialized by calling a
+    :py:class:`~.UnboundMaterializingTask`.
 
-    ..
-        See :py:func:`materialize` for documentation.
+    As a user, you will encounter `MaterializingTask` objects, together with
+    :py:class:`~.MaterializingTaskGetItem` objects, mostly during flow declaration,
+    because they are used to bind the output (or parts of the output) from one
+    task, to the input of another task.
     """
 
     def __init__(
@@ -246,6 +268,35 @@ class MaterializingTask(Task):
         self.lazy = unbound_task.lazy
 
     def __getitem__(self, item) -> MaterializingTaskGetItem:
+        """Construct a :py:class:`~.MaterializingTaskGetItem`.
+
+        If the corresponding task returns an object that supports
+        :external+python:py:meth:`__getitem__ <object.__getitem__>`,
+        then this allows you to forward only parts of the task's output to
+        the next task.
+
+        Example
+        -------
+        ::
+
+            @materialize
+            def dict_task():
+                return {"x": 1, "y": 2}
+
+            @materialize
+            def assert_equal(actual, expected):
+                assert actual == expected
+
+            with Flow():
+                with Stage("stage"):
+                    d = dict_task()
+
+                    # Only pass parts of the dictionary returned by dict_task
+                    # to the assert_equal tasks.
+                    assert_equal(d["x"], 1)
+                    assert_equal(d["y"], 2)
+
+        """
         return MaterializingTaskGetItem(self, self, item)
 
     def run(self, inputs: dict[int, Any], **kwargs):
@@ -272,6 +323,12 @@ class MaterializingTask(Task):
         No guarantees are made regarding whether the returned values are still
         up-to-date and cache valid.
 
+        :param as_type: The type as which tables produced by this task should
+            be dematerialized. If no type is specified, the input type of
+            the task is used.
+        :return: The output of the task.
+        :raise CacheError: if no outputs for this task could be found in the store.
+
         Example
         -------
 
@@ -286,30 +343,37 @@ class MaterializingTask(Task):
             # Get output BEFORE calling flow.run()
             df_x = x.get_output_from_store(as_type=pd.DataFrame)
 
-
-        :param as_type: The type as which tables produced by this task should
-            be dematerialized. If no type is specified, the input type of
-            the task is used.
-        :return: The output of the task.
-        :raise CacheError: if no outputs for this task could be found in the store.
         """
         return _get_output_from_store(self, as_type)
 
 
 class MaterializingTaskGetItem(TaskGetItem):
-    def get_output_from_store(self, as_type: type = None) -> Any:
-        """Retrieves the correct part of the output of the task from the cache.
+    """Object that represents a subset of a :py:class:`~.MaterializingTask` output.
 
-        No guarantees are made regarding whether the returned values are still
-        up-to-date and cache valid.
+    Instances of this class get initialized by calling
+    :py:class:`MaterializingTask.__getitem__`.
+    """
 
-        :param as_type: The type as which tables produced by this task should
-            be dematerialized. If no type is specified, the input type of
-            the task is used.
-        :return: The output of the task.
-        :raise CacheError: if no outputs for this task could be found in the store.
+    def __init__(
+        self,
+        task: MaterializingTask,
+        parent: MaterializingTask | MaterializingTaskGetItem,
+        item: Any,
+    ):
+        super().__init__(task, parent, item)
+
+    def __getitem__(self, item) -> MaterializingTaskGetItem:
         """
+        Same as :py:meth:`MaterializingTask.__getitem__`,
+        except that it allows you to further refine the selection.
+        """
+        return super().__getitem__(item)
 
+    def get_output_from_store(self, as_type: type = None) -> Any:
+        """
+        Same as :py:meth:`MaterializingTask.get_output_from_store()`,
+        except that it only loads the required subset of the output.
+        """
         return _get_output_from_store(self, as_type)
 
 
