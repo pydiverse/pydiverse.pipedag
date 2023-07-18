@@ -4,16 +4,16 @@ import networkx as nx
 import pytest
 
 from pydiverse.pipedag import Flow, Stage
-from pydiverse.pipedag.core import Task
+from pydiverse.pipedag.core import UnboundTask
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError, StageError
 
 
 def t(name: str, **kwargs):
-    return Task((lambda *a: a), name=f"task-{name}", **kwargs)
+    return UnboundTask((lambda *a: a), name=f"task-{name}", **kwargs)
 
 
 def t_kw(name: str, **kwargs):
-    return Task((lambda **kw: kw), name=f"task-kw-{name}", **kwargs)
+    return UnboundTask((lambda **kw: kw), name=f"task-kw-{name}", **kwargs)
 
 
 def validate_dependencies(flow: Flow):
@@ -493,15 +493,15 @@ class TestStage:
 def test_task_nout():
     with Flow("flow"):
         with Stage("stage"):
-            _ = t("task")
-            _ = t("task", nout=1)
+            _ = t("task")()
+            _ = t("task", nout=1)()
 
-            _, _ = t("task", nout=2)
-            _, _, _ = t("task", nout=3)
-            _, _, *_ = t("task", nout=10)
+            _, _ = t("task", nout=2)()
+            _, _, _ = t("task", nout=3)()
+            _, _, *_ = t("task", nout=10)()
 
             with pytest.raises(ValueError):
-                _, _ = t("task")
+                _, _ = t("task")()
 
             with pytest.raises(ValueError):
                 t("task", nout=0)

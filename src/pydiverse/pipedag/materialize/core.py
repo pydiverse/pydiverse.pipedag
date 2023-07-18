@@ -4,18 +4,36 @@ import functools
 import inspect
 from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, overload
 
 from pydiverse.pipedag._typing import CallableT
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
-from pydiverse.pipedag.core.task import Task, TaskGetItem
+from pydiverse.pipedag.core.task import Task, TaskGetItem, UnboundTask
 from pydiverse.pipedag.materialize.cache import CacheManager, TaskCacheInfo
 from pydiverse.pipedag.materialize.container import Blob, Table
 from pydiverse.pipedag.util import deep_map
 from pydiverse.pipedag.util.hashing import stable_hash
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag import Stage
+    from pydiverse.pipedag import Flow, Stage
+
+
+@overload
+def materialize(fn: CallableT, /) -> CallableT | UnboundMaterializingTask:
+    ...
+
+
+@overload
+def materialize(
+    *,
+    name: str = None,
+    input_type: type | tuple | dict[str, Any] = None,
+    version: str = None,
+    cache: Callable = None,
+    lazy: bool = False,
+    nout: int = 1,
+) -> Callable[[CallableT], CallableT | UnboundMaterializingTask]:
+    ...
 
 
 def materialize(
@@ -27,7 +45,7 @@ def materialize(
     cache: Callable = None,
     lazy: bool = False,
     nout: int = 1,
-) -> CallableT | MaterializingTask:
+):
     """Decorator to create a task whose outputs get materialized.
 
     This decorator takes a class and turns it into a :py:class:`MaterializingTask`.
@@ -160,7 +178,7 @@ def materialize(
             nout=nout,
         )
 
-    return MaterializingTask(
+    return UnboundMaterializingTask(
         fn,
         name=name,
         input_type=input_type,
@@ -171,19 +189,7 @@ def materialize(
     )
 
 
-class MaterializingTask(Task):
-    """A pipedag task that materializes all its outputs.
-
-    Instances of this class get initialized using the :py:func:`~.materialize`
-    decorator. From a user perspective, the existence of this class should be
-    considered to be an implementation detail. However, instances of
-    `MaterializingTask` (that is, functions decorated with ``@materialize``)
-    provide the following methods:
-
-    ..
-        See :py:func:`materialize` for documentation.
-    """
-
+class UnboundMaterializingTask(UnboundTask):
     def __init__(
         self,
         fn: Callable,
@@ -201,10 +207,43 @@ class MaterializingTask(Task):
             nout=nout,
         )
 
+        self._bound_task_type = MaterializingTask
+
         self.input_type = input_type
         self.version = version
         self.cache = cache
         self.lazy = lazy
+
+    def __call__(self, *args, **kwargs) -> MaterializingTask:
+        return super().__call__(*args, **kwargs)  # type: ignore
+
+
+class MaterializingTask(Task):
+    """A pipedag task that materializes all its outputs.
+
+    Instances of this class get initialized using the :py:func:`~.materialize`
+    decorator. From a user perspective, the existence of this class should be
+    considered to be an implementation detail. However, instances of
+    `MaterializingTask` (that is, functions decorated with ``@materialize``)
+    provide the following methods:
+
+    ..
+        See :py:func:`materialize` for documentation.
+    """
+
+    def __init__(
+        self,
+        unbound_task: UnboundMaterializingTask,
+        bound_args: inspect.BoundArguments,
+        flow: Flow,
+        stage: Stage,
+    ):
+        super().__init__(unbound_task, bound_args, flow, stage)
+
+        self.input_type = unbound_task.input_type
+        self.version = unbound_task.version
+        self.cache = unbound_task.cache
+        self.lazy = unbound_task.lazy
 
     def __getitem__(self, item) -> MaterializingTaskGetItem:
         return MaterializingTaskGetItem(self, self, item)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from typing import TYPE_CHECKING
 
 import structlog
@@ -125,13 +126,8 @@ class Stage:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.commit_task = CommitStageTask(self, self._ctx.flow)
-        self._ctx.flow.add_task(self.commit_task)
         self._ctx.__exit__()
         del self._ctx
-
-        if len(self.tasks) == 0:
-            # Empty stage doesn't need to be committed
-            self.commit_task._skip_commit = True
 
     def __getitem__(self, item: str | tuple[str, int]) -> Task:
         """Retrieves a task inside the stage by name.
@@ -208,20 +204,23 @@ class Stage:
 
 class CommitStageTask(Task):
     def __init__(self, stage: Stage, flow: Flow):
-        super().__init__(
-            fn=self.fn,
-            name=f"Commit '{stage.name}'",
-        )
+        # Because the CommitStageTask doesn't get added to the stage.tasks list,
+        # we can't call the super initializer.
+        self.name = f"Commit '{stage.name}'"
+        self.nout = None
 
-        self.stage = stage
+        self.logger = structlog.get_logger(logger_name="Commit Stage", stage=stage)
+
+        self._bound_args = inspect.signature(self.fn).bind()
         self.flow = flow
-        self.upstream_stages = {stage}
+        self.stage = stage
+
+        self.flow.add_task(self)
+
         self.input_tasks = {}
-        self._skip_commit = False
+        self.upstream_stages = [stage]
 
-        self.logger = self.logger.bind(logger_name="Commit Stage", stage=stage)
-
-        self._bound_args = self._signature.bind()
+        self._skip_commit = len(stage.tasks) == 0
         self._visualize_hidden = True
 
     def fn(self):

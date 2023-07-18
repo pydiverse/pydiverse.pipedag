@@ -4,7 +4,7 @@ from .config import PipedagConfig
 from .flow import Flow, Subflow
 from .result import Result
 from .stage import Stage
-from .task import Task
+from .task import Task, UnboundTask
 
 __all__ = [
     "Flow",
@@ -12,5 +12,6 @@ __all__ = [
     "PipedagConfig",
     "Result",
     "Stage",
+    "UnboundTask",
     "Task",
 ]

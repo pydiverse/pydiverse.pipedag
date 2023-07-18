@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import copy
 import inspect
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Callable
 
 import structlog
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from pydiverse.pipedag.core import Flow, Stage
 
 
-class Task:
+class UnboundTask:
     """Main building block of flows
 
     Tasks are just fancy functions that can be used inside a flow. As a user
@@ -49,36 +49,14 @@ class Task:
         self.name = name
         self.nout = nout
 
-        self.id: int = None  # type: ignore
-        self.flow: Flow = None  # type: ignore
-        self.stage: Stage = None  # type: ignore
-        self.upstream_stages: list[Stage] = None  # type: ignore
-        self.input_tasks: dict[int, Task] = None  # type: ignore
-
+        self._bound_task_type = Task
         self._signature = inspect.signature(fn)
-        self._bound_args: inspect.BoundArguments = None  # type: ignore
-        self.position_hash: str = None  # type: ignore
-
-        self.logger = structlog.get_logger(logger_name=f"Task '{self.name}'", task=self)
-        self._visualize_hidden = False
 
     def __repr__(self):
-        return f"<Task '{self.name}' {hex(id(self))} (id: {self.id})>"
+        return f"<UnboundTask 'name' {hex(id(self))}>"
 
-    def __hash__(self):
-        return id(self)
-
-    def __getitem__(self, item):
-        return TaskGetItem(self, self, item)
-
-    def __iter__(self):
-        if self.nout is None:
-            raise ValueError("Can't iterate over task without specifying `nout`.")
-        for i in range(self.nout):
-            yield TaskGetItem(self, self, i)
-
-    def __call__(self_, *args, **kwargs):
-        # Do the wiring
+    def __call__(self, *args, **kwargs) -> Task:
+        """Constructs a `Task` with bound inputs"""
         try:
             ctx = DAGContext.get()
         except LookupError:
@@ -87,41 +65,78 @@ class Task:
         if ctx.stage is None:
             raise StageError("Can't call pipedag task outside of a stage.")
 
-        new = copy.copy(self_)
-        new.flow = ctx.flow
-        new.stage = ctx.stage
-        new.logger = new.logger.bind(logger_name=f"Task '{new.name}'", task=new)
+        # Construct Task
+        bound_args = self._signature.bind(*args, **kwargs)
+        return self._bound_task_type(self, bound_args, ctx.flow, ctx.stage)
 
-        new._bound_args = new._signature.bind(*args, **kwargs)
-        new.position_hash = new.__compute_position_hash()
 
-        new.flow.add_task(new)
-        new.stage.tasks.append(new)
+class Task:
+    def __init__(
+        self,
+        unbound_task: UnboundTask,
+        bound_args: inspect.BoundArguments,
+        flow: Flow,
+        stage: Stage,
+    ):
+        self.fn = unbound_task.fn
+        self.name = unbound_task.name
+        self.nout = unbound_task.nout
+
+        self.logger = structlog.get_logger(logger_name=f"Task '{self.name}'", task=self)
+
+        self._bound_args = bound_args
+        self.flow = flow
+        self.stage = stage
+        self.position_hash = self.__compute_position_hash()
+
+        # The ID gets set by calling flow.add_task
+        self.id: int = None  # type: ignore
+
+        # Do the wiring
+        self.flow.add_task(self)
+        self.stage.tasks.append(self)
 
         # Compute input tasks
-        new.input_tasks = {}
+        self.input_tasks: dict[int, Task] = {}
 
         def visitor(x):
             if isinstance(x, Task):
-                new.input_tasks[x.id] = x
+                self.input_tasks[x.id] = x
             elif isinstance(x, TaskGetItem):
-                new.input_tasks[x.task.id] = x.task
+                self.input_tasks[x.task.id] = x.task
             return x
 
-        deep_map(new._bound_args.args, visitor)
-        deep_map(new._bound_args.kwargs, visitor)
+        deep_map(bound_args.args, visitor)
+        deep_map(bound_args.kwargs, visitor)
 
         # Add upstream edges
-        new.upstream_stages = []
+        self.upstream_stages: list[Stage] = []
+
         upstream_stages_set = set()
-        for input_task in new.input_tasks.values():
-            new.flow.add_edge(input_task, new)
+        for input_task in self.input_tasks.values():
+            self.flow.add_edge(input_task, self)
 
             if input_task.stage not in upstream_stages_set:
                 upstream_stages_set.add(input_task.stage)
-                new.upstream_stages.append(input_task.stage)
+                self.upstream_stages.append(input_task.stage)
 
-        return new
+        # Private flags
+        self._visualize_hidden = False
+
+    def __repr__(self):
+        return f"<Task '{self.name}' {hex(id(self))} (id: {self.id})>"
+
+    def __hash__(self):
+        return id(self)
+
+    def __getitem__(self, item) -> TaskGetItem:
+        return TaskGetItem(self, self, item)
+
+    def __iter__(self) -> Iterable[TaskGetItem]:
+        if self.nout is None:
+            raise ValueError("Can't iterate over task without specifying `nout`.")
+        for i in range(self.nout):
+            yield TaskGetItem(self, self, i)
 
     def run(
         self,
