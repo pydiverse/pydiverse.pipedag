@@ -3624,6 +3624,24 @@ docutils = "*"
 sphinx = ">=2.0"
 
 [[package]]
+name = "sphinx-copybutton"
+version = "0.5.2"
+description = "Add a copy button to each of your code cells."
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "sphinx-copybutton-0.5.2.tar.gz", hash = "sha256:4cf17c82fb9646d1bc9ca92ac280813a3b605d8c421225fd9913154103ee1fbd"},
+    {file = "sphinx_copybutton-0.5.2-py3-none-any.whl", hash = "sha256:fb543fd386d917746c9a2c50360c7905b605726b9355cd26e9974857afeae06e"},
+]
+
+[package.dependencies]
+sphinx = ">=1.8"
+
+[package.extras]
+code-style = ["pre-commit (==2.12.1)"]
+rtd = ["ipython", "myst-nb", "sphinx", "sphinx-book-theme", "sphinx-examples"]
+
+[[package]]
 name = "sphinxcontrib-apidoc"
 version = "0.3.0"
 description = "A Sphinx extension for running 'sphinx-apidoc' on each build"
@@ -4422,4 +4440,4 @@ zookeeper = ["kazoo"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "c9766b9d0dbe4f9d24c1c5713637da505b0da414a19ecd7ad65c8db3b19e9179"
+content-hash = "9c7d224b35f0658e9ed8df47f47db76d1c20bbb2afefad88269ae6fc031faa80"

@@ -36,7 +36,7 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.autosectionlabel",
     "sphinx.ext.intersphinx",
-    # "sphinx.ext.viewcode",
+    "sphinx_copybutton",
     "sphinx.ext.napoleon",
     "sphinx_click",
 ]
