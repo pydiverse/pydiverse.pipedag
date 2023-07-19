@@ -1167,9 +1167,9 @@ class SQLTableStore(BaseTableStore):
                 sa.select(self.tasks_table.c.output_json)
                 .where(self.tasks_table.c.stage == stage.name)
                 .where(self.tasks_table.c.in_transaction_schema.in_([False]))
-                .order_by(self.tasks_table.c.output_json)
-            ).all()
-            result = [row[0] for row in result]
+            ).scalars()
+
+        result = sorted(result)
         return stable_hash(*result)
 
     # DatabaseLockManager
