@@ -275,7 +275,7 @@ def test_raw_sql(mocker):
             """
         )
 
-    @materialize(version="1.0")
+    @materialize(version="1.0", input_type=sa.Table)
     def child_task(x):
         return Table(sa.text(f"SELECT * FROM {x.stage.transaction_name}.raw_table"))
 

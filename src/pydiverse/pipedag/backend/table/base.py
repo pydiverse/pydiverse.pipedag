@@ -365,6 +365,10 @@ class BaseTableStore(TableHookResolver, Disposable):
             task_info.task_cache_info.get_task_cache_key(), query_hash
         )
 
+        # Store new_objects as part of raw_sql.
+        all_table_names = set(self.get_table_objects_in_stage(raw_sql.stage))
+        raw_sql.table_names = [o for o in new_objects if o in all_table_names]
+
     @abstractmethod
     def copy_table_to_transaction(self, table: Table):
         """Copy a table from the base stage to the transaction stage
@@ -527,6 +531,16 @@ class BaseTableStore(TableHookResolver, Disposable):
 
         :param stage: the stage
         :return: list of object names in the stage at the current point in time.
+        """
+
+    @abstractmethod
+    def get_table_objects_in_stage(self, stage: Stage) -> list[str]:
+        """
+        List all table-like objects that are in the current stage.
+
+        :param stage: the stage
+        :return: list of table-like object names in the stage at
+            the current point in time.
         """
 
 

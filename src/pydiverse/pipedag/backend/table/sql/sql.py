@@ -463,6 +463,10 @@ class SQLTableStore(BaseTableStore):
     def execute_raw_sql(self, raw_sql: RawSql):
         """Executed raw SQL statements in the associated transaction stage"""
         for statement in raw_sql.sql.split(";"):
+            if not statement.strip():
+                # Skip empty queries
+                continue
+
             self.execute(statement)
 
     def setup(self):
@@ -1140,6 +1144,14 @@ class SQLTableStore(BaseTableStore):
     def get_objects_in_stage(self, stage: Stage):
         schema = self.get_schema(stage.transaction_name)
         return list(self._get_all_objects_in_schema(schema).keys())
+
+    def get_table_objects_in_stage(self, stage: Stage):
+        schema = self.get_schema(stage.current_name).get()
+        inspector = sa.inspect(self.engine)
+
+        tables = inspector.get_table_names(schema)
+        views = inspector.get_view_names(schema)
+        return [*tables, *views]
 
     def get_stage_hash(self, stage: Stage) -> str:
         """Compute hash that represents entire stage's output metadata."""

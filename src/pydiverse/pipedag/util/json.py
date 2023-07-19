@@ -55,6 +55,7 @@ def json_default(o):
             "stage": o.stage.name,
             "name": o.name,
             "cache_key": o.cache_key,
+            "table_names": o.table_names,
         }
     if isinstance(o, Blob):
         return {
@@ -115,6 +116,7 @@ def json_object_hook(d: dict):
         raw_sql = RawSql(name=d["name"])
         raw_sql.stage = stages[d["stage"]]
         raw_sql.cache_key = d["cache_key"]
+        raw_sql.table_names = d["table_names"]
         return raw_sql
     if type_ == Type.BLOB:
         blob = Blob(name=d["name"])

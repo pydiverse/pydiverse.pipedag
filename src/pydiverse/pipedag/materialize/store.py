@@ -108,7 +108,7 @@ class PipeDAGStore(Disposable):
 
     def dematerialize_item(
         self,
-        item: Table | Blob | Any,
+        item: Table | RawSql | Blob | Any,
         as_type: type[T],
         ctx: RunContext | None = None,
     ):
@@ -119,6 +119,18 @@ class PipeDAGStore(Disposable):
             ctx.validate_stage_lock(item.stage)
             obj = self.table_store.retrieve_table_obj(item, as_type=as_type)
             return obj
+        elif isinstance(item, RawSql):
+            ctx.validate_stage_lock(item.stage)
+
+            loaded_tables = {}
+            for table_name in item:
+                table = item[table_name]
+                obj = self.table_store.retrieve_table_obj(table, as_type=as_type)
+                loaded_tables[table_name] = obj
+
+            new_raw_sql = item.copy_without_obj()
+            new_raw_sql.loaded_tables = loaded_tables
+            return new_raw_sql
         elif isinstance(item, Blob):
             ctx.validate_stage_lock(item.stage)
             return self.blob_store.retrieve_blob(item)

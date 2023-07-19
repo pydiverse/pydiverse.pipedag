@@ -10,7 +10,7 @@ from pydiverse.pipedag._typing import CallableT
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.core.task import Task, TaskGetItem, UnboundTask
 from pydiverse.pipedag.materialize.cache import CacheManager, TaskCacheInfo
-from pydiverse.pipedag.materialize.container import Blob, Table
+from pydiverse.pipedag.materialize.container import Blob, RawSql, Table
 from pydiverse.pipedag.util import deep_map
 from pydiverse.pipedag.util.hashing import stable_hash
 
@@ -470,6 +470,8 @@ class MaterializationWrapper:
             def obj_del_mutator(x):
                 if isinstance(x, (Table, Blob)):
                     x.obj = None
+                if isinstance(x, RawSql):
+                    x.loaded_tables = None
                 return x
 
             result = deep_map(result, obj_del_mutator)

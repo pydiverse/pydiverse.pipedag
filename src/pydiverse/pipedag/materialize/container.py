@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Generic
 
 from pydiverse.pipedag._typing import T
@@ -127,6 +128,46 @@ class RawSql:
     :param name: Optional name. If no name is provided, an automatically
         generated name will be used. To prevent name collisions, you can
         append ``"%%"`` at the end of the name to enable automatic name mangling.
+
+    Example
+    -------
+    When you want to use tables produced by a RawSql task in a downstream task,
+    you can either use square brackets during flow definition to pass
+    a specific table to a child task, or you can pass the entire RawSql object
+    as an input, in which case all tables get loaded and the child task can
+    access them using square brackets (or any of the dict-like methods
+    defined by RawSql).
+
+    .. code-block::
+        :emphasize-lines: 23-24, 26-27
+
+        @materialize(lazy=True)
+        def raw_sql_task(stage):
+            schema = stage.current_name
+            return RawSql(f\"\"\"
+                CREATE TABLE {schema}.tbl_1 AS SELECT 1 as x;
+                CREATE TABEL {schema}.tbl_2 AS SELECT 2 as x;
+            \"\"\")
+
+        @materialize(input_type=sa.Table)
+        def foo(tbl_1, tbl_2):
+            ...
+
+        @materialize(input_type=sa.Table)
+        def bar(raw_sql):
+            tbl_1 = raw_sql["tbl_1"]
+            tbl_2 = raw_sql["tbl_2"]
+            ...
+
+        with Flow() as f:
+            with Stage("stage") as s:
+                out = raw_sql_task(s)
+
+                # Manually pass specific tables into the task
+                foo(out["tbl_1"], out["tbl_2"])
+
+                # Or pass the entire RawSql object into the task
+                bar(out)
     """
 
     def __init__(
@@ -145,9 +186,16 @@ class RawSql:
         # change
         self.cache_key = None
 
+        # If a task receives a RawSQL object as input, it loads all tables
+        # produced by it and makes them available through a dict like interface.
+        self.table_names: list[str] = None  # type: ignore
+        self.loaded_tables: dict[str, Any] = None  # type: ignore
+
     def __repr__(self):
         stage_name = self.stage.name if self.stage else None
-        sql_short = self.sql.strip()[0:40].replace("\n", "").strip()
+        sql_short = None
+        if self.sql:
+            sql_short = self.sql.strip()[0:40].replace("\n", "").strip()
         return f"<Raw SQL '{self.name}' ({stage_name}) - {sql_short}>"
 
     @property
@@ -159,6 +207,60 @@ class RawSql:
         if value is not None and not isinstance(value, str):
             raise TypeError(f"RawSql name must be of instance 'str' not {type(value)}.")
         self._name = normalize_name(value)
+
+    # Dict-like interface
+
+    def __iter__(self) -> Iterable[str]:
+        """Yields all names of tables produced by this RawSql object."""
+        yield from self.table_names
+
+    def __contains__(self, table_name: str) -> bool:
+        """Check if this RawSql object produced a table with name `table_name`."""
+        return table_name in self.table_names
+
+    def __getitem__(self, table_name: str):
+        """Gets the table produced by this RawSql object with name `table_name`."""
+        if table_name not in self.table_names:
+            raise KeyError(f"No table with name '{table_name}' found in RawSql.")
+
+        # Did load tables -> __getitem__ should return Table.obj
+        if self.loaded_tables is not None:
+            return self.loaded_tables[table_name]
+
+        # Otherwise, while preparing the task inputs inside
+        # (`TaskGetItem.resolve_value`) we need to return objects of type `Table`.
+        table = Table(None, table_name)
+        table.stage = self.stage
+        table.cache_key = self.cache_key
+        return table
+
+    def items(self) -> Iterable[tuple[str, Any]]:
+        """Returns pairs of ``(table_name, table)``."""
+        for table_name in self.table_names:
+            yield table_name, self[table_name]
+
+    def get(self, table_name: str, default=None):
+        """
+        Returns the table with name `table_name`, or if no such table exists,
+        the `default` value.
+        """
+        if table_name in self:
+            return table_name
+        return default
+
+    def copy_without_obj(self) -> RawSql:
+        obj = self.loaded_tables
+        self.loaded_tables = None
+        self_copy = copy.deepcopy(self)
+        self.loaded_tables = obj
+        return self_copy
+
+    def __getstate__(self):
+        # The `loaded_tables` field can't necessarily be pickled. That's why we
+        # remove it from the state before pickling.
+        state = self.__dict__.copy()
+        state["loaded_tables"] = None
+        return state
 
 
 class Blob(Generic[T]):

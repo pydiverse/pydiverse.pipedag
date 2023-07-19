@@ -5,20 +5,35 @@ API
 Public
 ======
 
-.. automodule:: pydiverse.pipedag
+.. py:module:: pydiverse.pipedag
+
+.. autoclass:: Flow
     :members:
     :inherited-members:
-    :exclude-members: Flow, Stage, materialize
+    :special-members: __getitem__
+.. autoclass:: Stage
+    :members:
+    :inherited-members:
+    :special-members: __getitem__
 
-    .. autoclass:: Flow
-        :members:
-        :inherited-members:
-        :special-members: __getitem__
-    .. autoclass:: Stage
-        :members:
-        :inherited-members:
-        :special-members: __getitem__
-    .. autodecorator:: materialize
+.. autodecorator:: materialize
+
+.. autoclass:: Table
+.. autoclass:: RawSql
+    :members:
+    :special-members: __iter__, __getitem__, __contains__
+.. autoclass:: Blob
+
+.. autoclass:: Result
+    :members:
+
+.. autoclass:: PipedagConfig
+    :inherited-members:
+.. autoclass:: ConfigContext
+    :inherited-members:
+.. autoclass:: StageLockContext
+    :inherited-members:
+
 
 Related Classes
 ===============

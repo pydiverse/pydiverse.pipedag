@@ -123,6 +123,9 @@ class DictTableStore(BaseTableStore):
     def get_objects_in_stage(self, stage):
         return list(self.store[stage.transaction_name].keys())
 
+    def get_table_objects_in_stage(self, stage: Stage) -> list[str]:
+        return list(self.store[stage.transaction_name].keys())
+
 
 @DictTableStore.register_table(pd)
 class PandasTableHook(TableHook[DictTableStore]):
