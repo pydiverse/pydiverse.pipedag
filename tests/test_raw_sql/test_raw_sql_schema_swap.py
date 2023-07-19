@@ -5,7 +5,7 @@ from pathlib import Path
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, materialize
-from pydiverse.pipedag.context import ConfigContext, TaskContext
+from pydiverse.pipedag.context import ConfigContext, FinalTaskState, TaskContext
 from pydiverse.pipedag.materialize.container import RawSql
 from tests.fixtures.instances import with_instances
 
@@ -51,9 +51,16 @@ def test_raw_sql_schema_swap():
 
     with Flow() as f:
         with Stage("raw_0") as raw_0:
-            sql_script("create_objects.sql", dir_)
+            sql_1 = sql_script("create_objects.sql", dir_)
         with Stage("raw_1"):
-            sql_script("check_objects.sql", dir_, input_stage=raw_0)
+            sql_2 = sql_script(
+                "check_objects.sql", dir_, input_stage=raw_0, depend=[sql_1]
+            )
 
     f.run()
-    f.run()
+
+    # Check that running the flow again results in the cache being used
+    for _ in range(2):
+        result = f.run()
+        assert result.task_states[sql_1] == FinalTaskState.CACHE_VALID
+        assert result.task_states[sql_2] == FinalTaskState.CACHE_VALID

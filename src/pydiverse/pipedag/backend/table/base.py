@@ -336,7 +336,7 @@ class BaseTableStore(TableHookResolver, Disposable):
 
         query_hash = stable_hash("RAW-SQL", query_str)
 
-        table_cache_info = CacheManager.raw_sql_cache_lookup(
+        table_cache_info, raw_sql_metadata = CacheManager.raw_sql_cache_lookup(
             self, task_info.task_cache_info, raw_sql, query_hash
         )
         if not table_cache_info.is_cache_valid():
@@ -352,8 +352,12 @@ class BaseTableStore(TableHookResolver, Disposable):
             prev_objects = sorted(prev_objects)
 
             prev_objects_set = set(prev_objects)
-            new_objects = [o for o in post_objects if o in prev_objects_set]
-            table_cache_info.store_raw_sql_metadata(self, prev_objects, new_objects)
+            new_objects = [o for o in post_objects if o not in prev_objects_set]
+        else:
+            prev_objects = raw_sql_metadata.prev_objects
+            new_objects = raw_sql_metadata.new_objects
+
+        table_cache_info.store_raw_sql_metadata(self, prev_objects, new_objects)
 
         # At this point we MUST also update the cache info, so that any downstream
         # tasks get invalidated if the sql query string changed.

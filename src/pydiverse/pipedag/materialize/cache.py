@@ -194,7 +194,7 @@ class CacheManager:
         task_cache_info: TaskCacheInfo,
         raw_sql: RawSql,
         query_hash: str,
-    ):
+    ) -> tuple[TableCacheInfo, RawSqlMetadata | None]:
         task_hash = task_cache_info.get_task_cache_key()
         # Store tables
         try:
@@ -210,8 +210,12 @@ class CacheManager:
             # Either not found in cache, or copying failed
             # -> Store using default method
             store.logger.warning("Cache miss for raw-SQL", cause=str(e))
+            metadata = None
             is_cache_valid = False
-        return TableCacheInfo(raw_sql.stage, task_hash, query_hash, is_cache_valid)
+        return (
+            TableCacheInfo(raw_sql.stage, task_hash, query_hash, is_cache_valid),
+            metadata,
+        )
 
     @staticmethod
     def task_cache_key(task: MaterializingTask, input_hash: str, cache_fn_hash: str):
