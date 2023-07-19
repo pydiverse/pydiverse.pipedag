@@ -367,7 +367,7 @@ class BaseTableStore(TableHookResolver, Disposable):
 
         # Store new_objects as part of raw_sql.
         all_table_names = set(self.get_table_objects_in_stage(raw_sql.stage))
-        raw_sql.table_names = [o for o in new_objects if o in all_table_names]
+        raw_sql.table_names = sorted(o for o in new_objects if o in all_table_names)
 
     @abstractmethod
     def copy_table_to_transaction(self, table: Table):
