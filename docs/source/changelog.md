@@ -2,6 +2,7 @@
 
 ## Latest
 - Switch back to using numpy nullable dtypes for Pandas as default.
+- Fix private method `SQLTableStore.get_stage_hash`.
 
 ## 0.6.1 (2023-07-19)
 - Create initial documentation for pipedag.

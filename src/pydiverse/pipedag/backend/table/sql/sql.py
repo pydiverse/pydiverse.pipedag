@@ -1168,8 +1168,8 @@ class SQLTableStore(BaseTableStore):
                 .where(self.tasks_table.c.stage == stage.name)
                 .where(self.tasks_table.c.in_transaction_schema.in_([False]))
             ).scalars()
+            result = sorted(result)
 
-        result = sorted(result)
         return stable_hash(*result)
 
     # DatabaseLockManager
