@@ -1,5 +1,8 @@
 # Changelog
 
+## Latest
+- Switch back to using numpy nullable dtypes for Pandas as default.
+
 ## 0.6.1 (2023-07-19)
 - Create initial documentation for pipedag.
 - Remove stage argument from [](#RawSql) initializer.

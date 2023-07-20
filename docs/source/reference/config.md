@@ -324,8 +324,6 @@ hook_args
   pandas
   : dtype_backend
     : The default [dtype backend](https://pandas.pydata.org/docs/reference/arrays.html) to use.
-      By default, pandas > 2.0 uses pyarrow backed dataframes. 
-      This can be overwritten with this option.
     
     : Supported values:
       - `numpy`: Use pandas' nullable extension dtypes for numpy.

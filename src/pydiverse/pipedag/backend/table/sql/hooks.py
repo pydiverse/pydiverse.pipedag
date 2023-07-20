@@ -271,7 +271,9 @@ class PandasTableHook(TableHook[SQLTableStore]):
     ) -> pd.DataFrame:
         # Config
         if PandasTableHook.pd_version >= Version("2.0"):
-            backend_str = "arrow"
+            # Once arrow is mature enough, we might want to switch to
+            # arrow backed dataframes by default
+            backend_str = "numpy"
         else:
             backend_str = "numpy"
 

@@ -118,7 +118,7 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         # Determine dtype backend for pandas >= 2.0
         # [this is similar to the PandasTableHook found in SQLTableStore]
 
-        backend_str = "arrow"
+        backend_str = "numpy"
         if hook_args := ConfigContext.get().table_hook_args.get("pandas", None):
             if dtype_backend := hook_args.get("dtype_backend", None):
                 backend_str = dtype_backend
