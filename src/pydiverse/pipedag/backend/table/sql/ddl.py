@@ -236,7 +236,14 @@ class AddPrimaryKey(DDLElement):
         self.table_name = table_name
         self.schema = schema
         self.key = key_columns
-        self.name = name
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        if self._name:
+            return self._name
+        columns = "_".join(c.lower() for c in self.key)
+        return f"pk_{self.table_name.lower()}_" + columns
 
 
 class AddIndex(DDLElement):
@@ -250,7 +257,14 @@ class AddIndex(DDLElement):
         self.table_name = table_name
         self.schema = schema
         self.index = index_columns
-        self.name = name
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        if self._name:
+            return self._name
+        columns = "_".join(c.lower() for c in self.index)
+        return f"idx_{self.table_name.lower()}_" + columns
 
 
 class ChangeColumnTypes(DDLElement):
@@ -320,7 +334,6 @@ def visit_create_schema(create: CreateSchema, compiler, **kw):
     return " ".join(text)
 
 
-# noinspection SqlDialectInspection
 @compiles(CreateSchema, "mssql")
 def visit_create_schema_mssql(create: CreateSchema, compiler, **kw):
     _ = kw
@@ -624,7 +637,6 @@ def visit_create_table_as_select_mssql(create: CreateTableAsSelect, compiler, **
     return insert_into_in_query(select, schema, name)
 
 
-# noinspection SqlDialectInspection
 @compiles(CreateTableAsSelect, "ibm_db_sa")
 def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler, **kw):
     prepare_statement = _visit_create_obj_as_select(
@@ -766,7 +778,6 @@ def visit_copy_table(copy_table: CopyTable, compiler, **kw):
     return compiler.process(create, **kw)
 
 
-# noinspection SqlDialectInspection
 @compiles(RenameTable)
 def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     _ = kw
@@ -776,7 +787,6 @@ def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     return f"ALTER TABLE {schema}.{from_table} RENAME TO {to_table}"
 
 
-# noinspection SqlDialectInspection
 @compiles(RenameTable, "mssql")
 def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     _ = kw
@@ -788,7 +798,6 @@ def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     return f"EXEC sp_rename '{schema}.{from_table}', '{to_table}'"
 
 
-# noinspection SqlDialectInspection
 @compiles(RenameTable, "ibm_db_sa")
 def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     _ = kw
@@ -852,61 +861,46 @@ def _visit_drop_anything(
     return " ".join(text)
 
 
-# noinspection SqlDialectInspection
 @compiles(AddPrimaryKey)
 def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
     _ = kw
     table = compiler.preparer.quote(add_primary_key.table_name)
     schema = compiler.preparer.format_schema(add_primary_key.schema.get())
-    pk_name = compiler.preparer.quote(
-        add_primary_key.name
-        if add_primary_key.name is not None
-        else "pk_"
-        + "_".join([c.lower() for c in add_primary_key.key])
-        + "_"
-        + add_primary_key.table_name.lower()
-    )
+    pk_name = compiler.preparer.quote(add_primary_key.name)
     cols = ",".join([compiler.preparer.quote(col) for col in add_primary_key.key])
     return f"ALTER TABLE {schema}.{table} ADD CONSTRAINT {pk_name} PRIMARY KEY ({cols})"
 
 
-# noinspection SqlDialectInspection
 @compiles(AddPrimaryKey, "duckdb")
 def visit_add_primary_key(add_primary_key: AddPrimaryKey, compiler, **kw):
     _ = kw
     table = compiler.preparer.quote(add_primary_key.table_name)
     schema = compiler.preparer.format_schema(add_primary_key.schema.get())
-    pk_name = compiler.preparer.quote(
-        add_primary_key.name
-        if add_primary_key.name is not None
-        else "pk_"
-        + "_".join([c.lower() for c in add_primary_key.key])
-        + "_"
-        + add_primary_key.table_name.lower()
-    )
+    pk_name = compiler.preparer.quote(add_primary_key.name)
     cols = ",".join([compiler.preparer.quote(col) for col in add_primary_key.key])
     return f"CREATE UNIQUE INDEX {pk_name} ON {schema}.{table} ({cols})"
 
 
-# noinspection SqlDialectInspection
 @compiles(AddIndex)
 def visit_add_index(add_index: AddIndex, compiler, **kw):
     _ = kw
     table = compiler.preparer.quote(add_index.table_name)
     schema = compiler.preparer.format_schema(add_index.schema.get())
-    index_name = compiler.preparer.quote(
-        add_index.name
-        if add_index.name is not None
-        else "idx_"
-        + "_".join([c.lower() for c in add_index.index])
-        + "_"
-        + add_index.table_name.lower()
-    )
+    index_name = compiler.preparer.quote(add_index.name)
     cols = ",".join([compiler.preparer.quote(col) for col in add_index.index])
     return f"CREATE INDEX {index_name} ON {schema}.{table} ({cols})"
 
 
-# noinspection SqlDialectInspection
+@compiles(AddIndex, "ibm_db_sa")
+def visit_add_index(add_index: AddIndex, compiler, **kw):
+    _ = kw
+    table = compiler.preparer.quote(add_index.table_name)
+    schema = compiler.preparer.format_schema(add_index.schema.get())
+    index_name = compiler.preparer.quote(add_index.name)
+    cols = ",".join([compiler.preparer.quote(col) for col in add_index.index])
+    return f"CREATE INDEX {schema}.{index_name} ON {schema}.{table} ({cols})"
+
+
 @compiles(ChangeColumnTypes)
 def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     _ = kw
@@ -931,7 +925,6 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     return f"ALTER TABLE {schema}.{table} {alter_columns}"
 
 
-# noinspection SqlDialectInspection
 @compiles(ChangeColumnTypes, "duckdb")
 def visit_change_column_types_duckdb(change: ChangeColumnTypes, compiler, **kw):
     table = compiler.preparer.quote(change.table_name)
@@ -955,7 +948,6 @@ def visit_change_column_types_duckdb(change: ChangeColumnTypes, compiler, **kw):
     return join_ddl_statements(statements, compiler, **kw)
 
 
-# noinspection SqlDialectInspection
 @compiles(ChangeColumnTypes, "mssql")
 def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     _ = kw
@@ -985,7 +977,6 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     return join_ddl_statements(statements, compiler, **kw)
 
 
-# noinspection SqlDialectInspection
 @compiles(ChangeColumnTypes, "ibm_db_sa")
 def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     _ = kw
@@ -1020,7 +1011,6 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     return join_ddl_statements(statements, compiler, **kw)
 
 
-# noinspection SqlDialectInspection
 @compiles(ChangeColumnNullable)
 def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
     _ = kw
@@ -1037,7 +1027,6 @@ def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
     return f"ALTER TABLE {schema}.{table} {alter_columns}"
 
 
-# noinspection SqlDialectInspection
 @compiles(ChangeColumnNullable, "ibm_db_sa")
 def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
     _ = kw
