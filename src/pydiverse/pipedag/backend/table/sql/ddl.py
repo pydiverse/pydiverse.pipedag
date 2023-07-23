@@ -243,7 +243,7 @@ class AddPrimaryKey(DDLElement):
         if self._name:
             return self._name
         columns = "_".join(c.lower() for c in self.key)
-        return f"pk_{self.table_name.lower()}_" + columns
+        return "pk_" + columns + "_" + self.table_name.lower()
 
 
 class AddIndex(DDLElement):
@@ -264,7 +264,7 @@ class AddIndex(DDLElement):
         if self._name:
             return self._name
         columns = "_".join(c.lower() for c in self.index)
-        return f"idx_{self.table_name.lower()}_" + columns
+        return "idx_" + columns + "_" + self.table_name.lower()
 
 
 class ChangeColumnTypes(DDLElement):
