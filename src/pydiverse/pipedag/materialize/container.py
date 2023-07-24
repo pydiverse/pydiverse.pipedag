@@ -26,9 +26,10 @@ class Table(Generic[T]):
             return Table(df, "name")
 
     :param obj: The table object to wrap
-    :param name: Optional name. If no name is provided, an automatically
-        generated name will be used. To prevent name collisions, you can
-        append ``"%%"`` at the end of the name to enable automatic name mangling.
+    :param name: Optional, case-insensitive name. If no name is provided,
+        an automatically generated name will be used. To prevent name collisions,
+        you can append ``"%%"`` at the end of the name to enable automatic
+        name mangling.
     :param primary_key: Optional name of the primary key that should be
         used when materializing this table. Only supported by some table stores.
     :param indexes: Optional list of indexes to create. Each provided index should be
@@ -125,9 +126,10 @@ class RawSql:
     :param sql: The sql query string to execute. Depending on the database dialect,
         the query will be split into multiple subqueries that then get
         executed sequentially.
-    :param name: Optional name. If no name is provided, an automatically
-        generated name will be used. To prevent name collisions, you can
-        append ``"%%"`` at the end of the name to enable automatic name mangling.
+    :param name: Optional, case-insensitive name. If no name is provided,
+        an automatically generated name will be used. To prevent name collisions,
+        you can append ``"%%"`` at the end of the name to enable automatic
+        name mangling.
 
     Example
     -------
@@ -278,9 +280,10 @@ class Blob(Generic[T]):
             return Blob(obj, "name")
 
     :param obj: The object to wrap
-    :param name: Optional name. If no name is provided, an automatically
-        generated name will be used. To prevent name collisions, you can
-        append ``"%%"`` at the end of the name to enable automatic name mangling.
+    :param name: Optional, case-insensitive name. If no name is provided,
+        an automatically generated name will be used. To prevent name collisions,
+        you can append ``"%%"`` at the end of the name to enable automatic
+        name mangling.
 
     .. seealso:: You can specify which types of objects should automatically get
         converted to blobs using the :ref:`auto_blob` config option.
