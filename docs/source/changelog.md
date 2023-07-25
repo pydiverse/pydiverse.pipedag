@@ -1,6 +1,6 @@
 # Changelog
 
-## Latest
+## 0.6.3 (2023-07-25)
 - Fix crash during config initialization when using [](#DatabaseLockManager) together with `PostgreSQL`.
 
 ## 0.6.2 (2023-07-23)
