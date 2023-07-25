@@ -1,5 +1,8 @@
 # Changelog
 
+## Latest
+- Fix crash during config initialization when using [](#DatabaseLockManager) together with `PostgreSQL`.
+
 ## 0.6.2 (2023-07-23)
 - Switch back to using numpy nullable dtypes for Pandas as default.
 - Ensure that indices get created in same schema as corresponding table (IBM Db2).

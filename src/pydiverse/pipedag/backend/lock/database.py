@@ -275,7 +275,8 @@ class PostgresLockManager(DatabaseLockManager):
 
     def dispose(self):
         self.release_all()
-        self.connection.close()
+        if self.connection is not None:
+            self.connection.close()
         super().dispose()
 
 
