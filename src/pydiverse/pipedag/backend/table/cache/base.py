@@ -7,6 +7,7 @@ import structlog
 from pydiverse.pipedag import Stage
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.table.base import TableHookResolver
+from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.materialize.container import Table
 from pydiverse.pipedag.materialize.core import MaterializingTask, TaskInfo
 from pydiverse.pipedag.util import Disposable
@@ -58,12 +59,21 @@ class BaseTableCache(ABC, TableHookResolver, Disposable):
         table: Table,
         task: MaterializingTask | None,
         task_info: TaskInfo | None,
-    ):
+    ) -> bool:
+        """
+        :return: bool flag indicating if storing was successful
+        """
         try:
             hook = self.get_m_table_hook(type(table.obj))
-            hook.materialize(self, table, table.stage.transaction_name, task_info)
         except TypeError:
-            return None
+            return False
+
+        if not RunContext.get().should_store_table_in_cache(table):
+            # Prevent multiple tasks writing at the same time
+            return False
+
+        hook.materialize(self, table, table.stage.transaction_name, task_info)
+        return True
 
     def retrieve_table_obj(self, table: Table, as_type: type[T]) -> T:
         if not self.should_use_stored_input_as_cache:

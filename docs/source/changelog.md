@@ -1,5 +1,8 @@
 # Changelog
 
+## Latest
+- Fix race condition leading to `JSONDecodeError` in [](#ParquetTableCache) when setting `store_input: true` together with the `DaskEngine`.
+
 ## 0.6.3 (2023-07-25)
 - Fix crash during config initialization when using [](#DatabaseLockManager) together with `PostgreSQL`.
 

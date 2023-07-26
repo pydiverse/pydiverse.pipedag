@@ -56,7 +56,8 @@ class ParquetTableCache(BaseTableCache):
         shutil.rmtree(self.get_stage_path(stage))
 
     def _store_table(self, table: Table, task: MaterializingTask, task_info: TaskInfo):
-        super()._store_table(table, task, task_info)
+        if not super()._store_table(table, task, task_info):
+            return
 
         metadata = {
             "cache_key": table.cache_key,
@@ -69,8 +70,11 @@ class ParquetTableCache(BaseTableCache):
         if not metadata_path.exists():
             return False
 
-        metadata = json.loads(metadata_path.read_text())
-        return metadata["cache_key"] == table.cache_key
+        try:
+            metadata = json.loads(metadata_path.read_text())
+            return metadata["cache_key"] == table.cache_key
+        except (OSError, json.decoder.JSONDecodeError):
+            return False
 
     def get_stage_path(self, stage: Stage):
         return self.base_path / stage.name

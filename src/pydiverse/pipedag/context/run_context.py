@@ -96,6 +96,8 @@ class RunContextServer(IPCServer):
         self.table_names = [set() for _ in range(num_stages)]
         self.blob_names = [set() for _ in range(num_stages)]
 
+        self.tables_in_local_table_cache = [set() for _ in range(num_stages)]
+
         self.task_memo: defaultdict[Any, Any] = defaultdict(lambda: MemoState.NONE)
 
         # DEFERRED TABLE STORE OPERATIONS
@@ -110,6 +112,7 @@ class RunContextServer(IPCServer):
         self.names_lock = Lock()
         self.task_memo_lock = Lock()
         self.deferred_ops_lock = RLock()
+        self.local_table_cache_lock = Lock()
 
         # LOCKING
         self.lock_manager = config_ctx.create_lock_manager()
@@ -500,6 +503,20 @@ class RunContextServer(IPCServer):
         for blob in blobs:
             self.blob_names[stage_id].remove(blob)
 
+    # LOCAL TABLE CACHE
+
+    @synchronized("local_table_cache_lock")
+    def should_store_table_in_cache(self, stage_id: int, table_name: str) -> bool:
+        if table_name in self.tables_in_local_table_cache[stage_id]:
+            # Some other task already stored / is attempting to store this table
+            # In case we are running tasks in parallel and `store_input` is set
+            # to true, it can happen that multiple tasks are reading and writing
+            # the same table at the same time, which may lead to incorrect behaviour.
+            return False
+
+        self.tables_in_local_table_cache[stage_id].add(table_name)
+        return True
+
 
 def _call_with_args(fn, args, kwargs):
     fn(*args, **kwargs)
@@ -637,6 +654,11 @@ class RunContext(BaseContext):
             [b.name for b in blobs],
         )
 
+    # LOCAL TABLE CACHE
+
+    def should_store_table_in_cache(self, table: Table):
+        return self._request("should_store_table_in_cache", table.stage.id, table.name)
+
 
 @attrs.frozen
 class DematerializeRunContext(BaseAttrsContext):
@@ -658,6 +680,9 @@ class DematerializeRunContext(BaseAttrsContext):
 
     def validate_stage_lock(self, stage: Stage):
         pass
+
+    def should_store_table_in_cache(self, table: Table):
+        return False
 
 
 # Stage Locking
