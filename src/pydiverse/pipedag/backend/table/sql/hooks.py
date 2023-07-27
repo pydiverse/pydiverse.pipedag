@@ -59,7 +59,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                 name=tbl.name,
                 schema=store.get_schema(tbl.stage.current_name).get(),
             )
-            for tbl in task_info.input_tables
+            for tbl in TaskContext.get().input_tables
         ]
         schema = store.get_schema(stage_name)
         store.execute(

@@ -141,7 +141,7 @@ class PipeDAGStore(Disposable):
         task: MaterializingTask,
         args: tuple[Materializable],
         kwargs: dict[str, Materializable],
-    ) -> tuple[tuple, dict, list[Table]]:
+    ) -> tuple[tuple, dict]:
         """Loads the inputs for a task from the storage backends
 
         Traverses the function arguments and replaces all `Table` and
@@ -155,17 +155,13 @@ class PipeDAGStore(Disposable):
 
         ctx = RunContext.get()
 
-        input_tables = []
-
         def dematerialize_mapper(x):
-            if isinstance(x, Table):
-                input_tables.append(x)
             return self.dematerialize_item(x, as_type=task.input_type, ctx=ctx)
 
         d_args = deep_map(args, dematerialize_mapper)
         d_kwargs = deep_map(kwargs, dematerialize_mapper)
 
-        return d_args, d_kwargs, input_tables
+        return d_args, d_kwargs
 
     def materialize_task(
         self,

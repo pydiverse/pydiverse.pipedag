@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from pydiverse.pipedag.context.run_context import StageLockStateHandler
     from pydiverse.pipedag.core import Flow, Stage, Task
     from pydiverse.pipedag.engine.base import OrchestrationEngine
+    from pydiverse.pipedag.materialize import Table
 
 
 class BaseContext:
@@ -90,6 +91,7 @@ class TaskContext(BaseContext):
     """
 
     task: Task
+    input_tables: list[Table] = None
     is_cache_valid: bool | None = None
     name_disambiguator: NameDisambiguator = field(factory=NameDisambiguator)
 

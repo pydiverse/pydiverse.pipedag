@@ -400,8 +400,12 @@ class MaterializationWrapper:
             with some additional metadata.
         """
 
-        task: MaterializingTask = TaskContext.get().task  # type: ignore
-        store = ConfigContext.get().store
+        task_context = TaskContext.get()
+        config_context = ConfigContext.get()
+        run_context = RunContext.get()
+
+        task: MaterializingTask = task_context.task  # type: ignore
+        store = config_context.store
         bound = self.fn_signature.bind(*args, **kwargs)
 
         if task is None:
@@ -424,8 +428,7 @@ class MaterializationWrapper:
 
         # Check if this task has already been run with the same inputs
         # If yes, return memoized result. This prevents DuplicateNameExceptions
-        ctx = RunContext.get()
-        with ctx.task_memo(task, memo_cache_key) as (success, memo):
+        with run_context.task_memo(task, memo_cache_key) as (success, memo):
             if success:
                 task.logger.info(
                     "Task has already been run with the same inputs."
@@ -438,10 +441,9 @@ class MaterializationWrapper:
                 store, task, input_hash, cache_fn_hash
             )
             if not task.lazy:
-                ctx = RunContext.get()
                 TaskContext.get().is_cache_valid = task_cache_info.is_cache_valid()
                 if task_cache_info.is_cache_valid():
-                    ctx.store_task_memo(
+                    run_context.store_task_memo(
                         task, memo_cache_key, task_cache_info.get_cached_output()
                     )
                     # Task isn't lazy -> copy cache to transaction stage
@@ -451,15 +453,24 @@ class MaterializationWrapper:
                 # store.materialize_task procedure
                 TaskContext.get().is_cache_valid = True
 
+            # Compute the input_tables value of the TaskContext
+            input_tables = []
+
+            def _input_tables_visitor(x):
+                if isinstance(x, Table):
+                    input_tables.append(x)
+                return x
+
+            deep_map(bound.arguments.values(), _input_tables_visitor)
+            task_context.input_tables = input_tables
+
             # Not found in cache / lazy -> Evaluate Function
-            args, kwargs, input_tables = store.dematerialize_task_inputs(
+            args, kwargs = store.dematerialize_task_inputs(
                 task, bound.args, bound.kwargs
             )
 
             result = self.fn(*args, **kwargs)
-            result = store.materialize_task(
-                task, TaskInfo(task_cache_info, input_tables), result
-            )
+            result = store.materialize_task(task, TaskInfo(task_cache_info), result)
 
             # Delete underlying objects from result (after materializing them)
             def obj_del_mutator(x):
@@ -470,7 +481,7 @@ class MaterializationWrapper:
                 return x
 
             result = deep_map(result, obj_del_mutator)
-            ctx.store_task_memo(task, memo_cache_key, result)
+            run_context.store_task_memo(task, memo_cache_key, result)
             self.value = result
 
             return result
@@ -494,4 +505,3 @@ def _get_output_from_store(
 @dataclass
 class TaskInfo:
     task_cache_info: TaskCacheInfo
-    input_tables: list[Table]
