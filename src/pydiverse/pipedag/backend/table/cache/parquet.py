@@ -12,7 +12,7 @@ from packaging.version import Version
 from pydiverse.pipedag import ConfigContext, Stage, Table
 from pydiverse.pipedag.backend.table.base import TableHook
 from pydiverse.pipedag.backend.table.cache.base import BaseTableCache
-from pydiverse.pipedag.materialize.core import MaterializingTask, TaskInfo
+from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.util import normalize_name
 
 
@@ -55,8 +55,8 @@ class ParquetTableCache(BaseTableCache):
     def clear_cache(self, stage: Stage):
         shutil.rmtree(self.get_stage_path(stage))
 
-    def _store_table(self, table: Table, task: MaterializingTask, task_info: TaskInfo):
-        if not super()._store_table(table, task, task_info):
+    def _store_table(self, table: Table, task: MaterializingTask):
+        if not super()._store_table(table, task):
             return
 
         metadata = {
@@ -96,13 +96,7 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         return type_ == pd.DataFrame
 
     @classmethod
-    def materialize(
-        cls,
-        store: ParquetTableCache,
-        table: Table,
-        stage_name: str,
-        task_info: TaskInfo,
-    ):
+    def materialize(cls, store: ParquetTableCache, table: Table, stage_name: str):
         path = store.get_table_path(table, ".parquet")
 
         df: pd.DataFrame = table.obj
@@ -159,11 +153,7 @@ class PolarsTableHook(TableHook[ParquetTableCache]):
 
     @classmethod
     def materialize(
-        cls,
-        store: ParquetTableCache,
-        table: Table[polars.DataFrame],
-        stage_name: str,
-        task_info: TaskInfo,
+        cls, store: ParquetTableCache, table: Table[polars.DataFrame], stage_name: str
     ):
         path = store.get_table_path(table, ".parquet")
         table.obj.write_parquet(path)
@@ -200,11 +190,7 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
 
     @classmethod
     def materialize(
-        cls,
-        store: ParquetTableCache,
-        table: Table[pdt.Table],
-        stage_name: str,
-        task_info: TaskInfo,
+        cls, store: ParquetTableCache, table: Table[pdt.Table], stage_name: str
     ):
         from pydiverse.transform.core.verbs import collect
         from pydiverse.transform.eager import PandasTableImpl
@@ -215,7 +201,7 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
         if isinstance(t._impl, PandasTableImpl):
             table.obj = t >> collect()
             return store.get_hook_subclass(PandasTableHook).materialize(
-                store, table, stage_name, task_info
+                store, table, stage_name
             )
 
         raise TypeError(f"Unsupported type {type(t._impl).__name__}")

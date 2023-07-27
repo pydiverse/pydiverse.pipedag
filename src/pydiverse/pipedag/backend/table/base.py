@@ -9,7 +9,7 @@ from typing_extensions import Self
 
 from pydiverse.pipedag._typing import T, TableHookResolverT
 from pydiverse.pipedag.context import RunContext, TaskContext
-from pydiverse.pipedag.materialize.cache import CacheManager
+from pydiverse.pipedag.materialize.cache import CacheManager, TaskCacheInfo
 from pydiverse.pipedag.materialize.container import RawSql, Table
 from pydiverse.pipedag.materialize.metadata import (
     LazyTableMetadata,
@@ -22,7 +22,7 @@ from pydiverse.pipedag.util.hashing import stable_hash
 if TYPE_CHECKING:
     from pydiverse.pipedag import Stage
     from pydiverse.pipedag.backend.table.cache.base import BaseTableCache
-    from pydiverse.pipedag.materialize.core import MaterializingTask, TaskInfo
+    from pydiverse.pipedag.materialize.core import MaterializingTask
 
 
 class TableHookResolver:
@@ -131,12 +131,7 @@ class TableHookResolver:
 
         return type_
 
-    def store_table(
-        self,
-        table: Table,
-        task: MaterializingTask | None,
-        task_info: TaskInfo | None,
-    ):
+    def store_table(self, table: Table, task: MaterializingTask | None):
         """Stores a table in the associated transaction stage
 
         The store must convert the table object (`table.obj`) to the correct
@@ -155,7 +150,7 @@ class TableHookResolver:
 
         # Materialize
         hook = self.get_m_table_hook(type(table.obj))
-        hook.materialize(self, table, table.stage.transaction_name, task_info)
+        hook.materialize(self, table, table.stage.transaction_name)
 
     def retrieve_table_obj(
         self,
@@ -253,15 +248,10 @@ class BaseTableStore(TableHookResolver, Disposable):
 
     # Materialize
 
-    def store_table(
-        self,
-        table: Table,
-        task: MaterializingTask | None,
-        task_info: TaskInfo | None,
-    ):
-        super().store_table(table, task, task_info)
+    def store_table(self, table: Table, task: MaterializingTask | None):
+        super().store_table(table, task)
         if self.local_table_cache:
-            self.local_table_cache.store_table(table, task, task_info)
+            self.local_table_cache.store_table(table, task)
 
     def execute_raw_sql(self, raw_sql: RawSql):
         """Executed raw SQL statements in the associated transaction stage
@@ -277,7 +267,7 @@ class BaseTableStore(TableHookResolver, Disposable):
         self,
         table: Table,
         task: MaterializingTask,
-        task_info: TaskInfo,
+        task_cache_info: TaskCacheInfo,
     ):
         """Lazily stores a table in the associated commit stage
 
@@ -297,23 +287,23 @@ class BaseTableStore(TableHookResolver, Disposable):
         except TypeError:
             # This table type doesn't provide a query string
             # -> Fallback to default implementation
-            return self.store_table(table, task, task_info)
+            return self.store_table(table, task)
 
         table_cache_info = CacheManager.lazy_table_cache_lookup(
-            self, task_info.task_cache_info, table, query_hash
+            self, task_cache_info, table, query_hash
         )
         if not table_cache_info.is_cache_valid():
             TaskContext.get().is_cache_valid = False
-            self.store_table(table, task, task_info)
+            self.store_table(table, task)
 
         # At this point we MUST also update the cache info, so that any downstream
         # tasks get invalidated if the sql query string changed.
         table.cache_key = CacheManager.lazy_table_cache_key(
-            task_info.task_cache_info.get_task_cache_key(), query_hash
+            task_cache_info.cache_key, query_hash
         )
 
     def store_raw_sql(
-        self, raw_sql: RawSql, task: MaterializingTask, task_info: TaskInfo
+        self, raw_sql: RawSql, task: MaterializingTask, task_cache_info: TaskCacheInfo
     ):
         """Lazily stores a table in the associated commit stage
 
@@ -337,7 +327,7 @@ class BaseTableStore(TableHookResolver, Disposable):
         query_hash = stable_hash("RAW-SQL", query_str)
 
         table_cache_info, raw_sql_metadata = CacheManager.raw_sql_cache_lookup(
-            self, task_info.task_cache_info, raw_sql, query_hash
+            self, task_cache_info, raw_sql, query_hash
         )
         if not table_cache_info.is_cache_valid():
             TaskContext.get().is_cache_valid = False
@@ -362,7 +352,7 @@ class BaseTableStore(TableHookResolver, Disposable):
         # At this point we MUST also update the cache info, so that any downstream
         # tasks get invalidated if the sql query string changed.
         raw_sql.cache_key = CacheManager.lazy_table_cache_key(
-            task_info.task_cache_info.get_task_cache_key(), query_hash
+            task_cache_info.cache_key, query_hash
         )
 
         # Store new_objects as part of raw_sql.
@@ -427,7 +417,7 @@ class BaseTableStore(TableHookResolver, Disposable):
         if self.local_table_cache:
             t = table.copy_without_obj()
             t.obj = obj
-            self.local_table_cache.store_input(t, task=None, task_info=None)
+            self.local_table_cache.store_input(t, task=None)
 
         return obj
 
@@ -574,11 +564,7 @@ class TableHook(Generic[TableHookResolverT], ABC):
     @classmethod
     @abstractmethod
     def materialize(
-        cls,
-        store: TableHookResolverT,
-        table: Table,
-        stage_name: str,
-        task_info: TaskInfo,
+        cls, store: TableHookResolverT, table: Table, stage_name: str
     ) -> None:
         """Materialize a table object
 
@@ -586,7 +572,6 @@ class TableHook(Generic[TableHookResolverT], ABC):
         :param table: The table that should be materialized
         :param stage_name: The name of the stage in which the table should
             be stored - can either be `stage.name` or `stage.transaction_name`.
-        :param task_info: Information about task execution
         """
 
     @classmethod

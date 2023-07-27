@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-import copy
-import uuid
 from dataclasses import dataclass
-from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.metadata import (
     LazyTableMetadata,
     RawSqlMetadata,
-    TaskMetadata,
 )
 from pydiverse.pipedag.util.hashing import stable_hash
 
@@ -22,47 +17,12 @@ if TYPE_CHECKING:
     from pydiverse.pipedag.materialize.core import MaterializingTask
 
 
-@dataclass
+@dataclass(frozen=True)
 class TaskCacheInfo:
-    # Only CacheManager class should access these members directly
-    _task: MaterializingTask
-    _input_hash: str
-    _cache_fn_hash: str
-    _task_cache_key: str
-    _cached_output: dict[str, Any] | None
-    _cached_metadata: TaskMetadata | None
-    _is_cache_valid: bool
-
-    # The public interface is exposed as functions
-    def is_cache_valid(self):
-        return self._is_cache_valid
-
-    def copy_cached_output_to_transaction_stage(self, store, task):
-        assert self._is_cache_valid
-        store.copy_cached_output_to_transaction_stage(
-            self._cached_output, self._cached_metadata, task
-        )
-
-    def get_cached_output(self):
-        return self._cached_output
-
-    def get_task_cache_key(self):
-        return self._task_cache_key
-
-    def store_task_metadata(self, output_json, table_store, stage):
-        ctx = RunContext.get()
-        metadata = TaskMetadata(
-            name=self._task.name,
-            stage=stage.name,
-            version=self._task.version,
-            timestamp=datetime.now(),
-            run_id=ctx.run_id,
-            position_hash=self._task.position_hash,
-            input_hash=self._input_hash,
-            cache_fn_hash=self._cache_fn_hash,
-            output_json=output_json,
-        )
-        table_store.store_task_metadata(metadata, stage)
+    task: MaterializingTask
+    input_hash: str
+    cache_fn_hash: str
+    cache_key: str
 
 
 @dataclass
@@ -96,69 +56,13 @@ class TableCacheInfo:
 
 class CacheManager:
     @staticmethod
-    def cache_lookup(
-        store: BaseTableStore,
-        task: MaterializingTask,
-        input_hash: str,
-        cache_fn_hash: str,
-    ):
-        if (
-            not ConfigContext.get().ignore_task_version and task.version is not None
-        ) or task.lazy:
-            # Check the cache
-            try:
-                # `cache_fn_hash` is not used for cache retrieval if ignore_fresh_input
-                # is set to True. In that case, cache_metadata.cache_fn_hash may be
-                # different form the cache_fn_hash of the current task run.
-                cached_output, cache_metadata = store.retrieve_cached_output(
-                    task, input_hash, cache_fn_hash
-                )
-                if not task.lazy:
-                    # Task isn't lazy -> copy cache to transaction stage
-                    store.copy_cached_output_to_transaction_stage(
-                        cached_output, cache_metadata, task
-                    )
-                    task.logger.info("Found task in cache. Using cached result.")
-                task_cache_key = CacheManager.task_cache_key(
-                    task, cache_metadata.input_hash, cache_metadata.cache_fn_hash
-                )
-                return TaskCacheInfo(
-                    task,
-                    cache_metadata.input_hash,
-                    cache_metadata.cache_fn_hash,
-                    task_cache_key,
-                    cached_output,
-                    cache_metadata,
-                    _is_cache_valid=True,
-                )
-            except CacheError as e:
-                task.logger.info("Failed to retrieve task from cache", cause=str(e))
-        else:
-            if not task.lazy:
-                # choose a deliberately random version since caching was disabled
-                task = copy.deepcopy(task)
-                task.version = uuid.uuid4().hex
-        new_task_cache_key = CacheManager.task_cache_key(
-            task, input_hash, cache_fn_hash
-        )
-        return TaskCacheInfo(
-            task,
-            input_hash,
-            cache_fn_hash,
-            new_task_cache_key,
-            _cached_output=None,
-            _cached_metadata=None,
-            _is_cache_valid=False,
-        )
-
-    @staticmethod
     def lazy_table_cache_lookup(
         store: BaseTableStore,
         task_cache_info: TaskCacheInfo,
         table: Table,
         query_hash: str,
     ):
-        task_hash = task_cache_info.get_task_cache_key()
+        task_hash = task_cache_info.cache_key
         # Store table
         try:
             # Try retrieving the table from the cache and then copying it
@@ -195,7 +99,7 @@ class CacheManager:
         raw_sql: RawSql,
         query_hash: str,
     ) -> tuple[TableCacheInfo, RawSqlMetadata | None]:
-        task_hash = task_cache_info.get_task_cache_key()
+        task_hash = task_cache_info.cache_key
         # Store tables
         try:
             # Try retrieving the table from the cache and then copying it

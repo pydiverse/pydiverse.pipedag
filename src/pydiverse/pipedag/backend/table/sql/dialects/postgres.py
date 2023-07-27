@@ -18,7 +18,6 @@ from pydiverse.pipedag.backend.table.sql.hooks import (
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.materialize import Table
-from pydiverse.pipedag.materialize.core import TaskInfo
 
 
 class PostgresTableStore(SQLTableStore):
@@ -63,7 +62,6 @@ class SQLAlchemyTableHook(SQLAlchemyTableHook):
         store: PostgresTableStore,
         table: Table[sa.sql.expression.TextClause | sa.Text],
         stage_name,
-        task_info: TaskInfo | None,
     ):
         obj = table.obj
         if isinstance(table.obj, (sa.Table, sa.sql.expression.Alias)):

@@ -9,7 +9,7 @@ from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.table.base import TableHookResolver
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.materialize.container import Table
-from pydiverse.pipedag.materialize.core import MaterializingTask, TaskInfo
+from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.util import Disposable
 
 
@@ -46,20 +46,15 @@ class BaseTableCache(ABC, TableHookResolver, Disposable):
     def clear_cache(self, stage: Stage):
         """Delete the cache for a specific stage"""
 
-    def store_table(self, table: Table, task: MaterializingTask, task_info: TaskInfo):
+    def store_table(self, table: Table, task: MaterializingTask):
         if self.should_store_output:
-            return self._store_table(table, task, task_info)
+            return self._store_table(table, task)
 
-    def store_input(self, table: Table, task: MaterializingTask, task_info: TaskInfo):
+    def store_input(self, table: Table, task: MaterializingTask):
         if self.should_store_input:
-            return self._store_table(table, task, task_info)
+            return self._store_table(table, task)
 
-    def _store_table(
-        self,
-        table: Table,
-        task: MaterializingTask | None,
-        task_info: TaskInfo | None,
-    ) -> bool:
+    def _store_table(self, table: Table, task: MaterializingTask | None) -> bool:
         """
         :return: bool flag indicating if storing was successful
         """
@@ -72,7 +67,7 @@ class BaseTableCache(ABC, TableHookResolver, Disposable):
             # Prevent multiple tasks writing at the same time
             return False
 
-        hook.materialize(self, table, table.stage.transaction_name, task_info)
+        hook.materialize(self, table, table.stage.transaction_name)
         return True
 
     def retrieve_table_obj(self, table: Table, as_type: type[T]) -> T:

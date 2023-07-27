@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import copy
 import functools
 import inspect
-from dataclasses import dataclass
+import uuid
 from functools import partial
 from typing import TYPE_CHECKING, Any, Callable, overload
 
 from pydiverse.pipedag._typing import CallableT
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.core.task import Task, TaskGetItem, UnboundTask
+from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.cache import CacheManager, TaskCacheInfo
 from pydiverse.pipedag.materialize.container import Blob, RawSql, Table
 from pydiverse.pipedag.util import deep_map
@@ -405,7 +407,6 @@ class MaterializationWrapper:
         run_context = RunContext.get()
 
         task: MaterializingTask = task_context.task  # type: ignore
-        store = config_context.store
         bound = self.fn_signature.bind(*args, **kwargs)
 
         if task is None:
@@ -413,6 +414,7 @@ class MaterializationWrapper:
 
         # If this is the first task in this stage to be executed, ensure that
         # the stage has been initialized and locked.
+        store = config_context.store
         store.ensure_stage_is_ready(task.stage)
 
         # Compute the cache key for the task inputs
@@ -437,21 +439,60 @@ class MaterializationWrapper:
 
                 return memo
 
-            task_cache_info = CacheManager.cache_lookup(
-                store, task, input_hash, cache_fn_hash
+            # Cache Lookup (only required if task isn't lazy)
+            skip_cache_lookup = (
+                config_context.ignore_task_version or task.version is None
             )
-            if not task.lazy:
-                TaskContext.get().is_cache_valid = task_cache_info.is_cache_valid()
-                if task_cache_info.is_cache_valid():
-                    run_context.store_task_memo(
-                        task, memo_cache_key, task_cache_info.get_cached_output()
+
+            if not task.lazy and not skip_cache_lookup:
+                try:
+                    cached_output, cache_metadata = store.retrieve_cached_output(
+                        task, input_hash, cache_fn_hash
                     )
-                    # Task isn't lazy -> copy cache to transaction stage
-                    return task_cache_info.get_cached_output()
-            else:
+                    store.copy_cached_output_to_transaction_stage(
+                        cached_output, cache_metadata, task
+                    )
+                    run_context.store_task_memo(task, memo_cache_key, cached_output)
+                    task.logger.info("Found task in cache. Using cached result.")
+                    TaskContext.get().is_cache_valid = True
+                    return cached_output
+                except CacheError as e:
+                    task.logger.info("Failed to retrieve task from cache", cause=str(e))
+                    TaskContext.get().is_cache_valid = False
+
+            if task.lazy:
                 # For lazy tasks, is_cache_valid gets set to false during the
                 # store.materialize_task procedure
                 TaskContext.get().is_cache_valid = True
+
+                if config_context.ignore_fresh_input:
+                    # `cache_fn_hash` is not used for cache retrieval if
+                    # ignore_fresh_input is set to True.
+                    # In that case, cache_metadata.cache_fn_hash may be different
+                    # from the cache_fn_hash of the current task run.
+
+                    try:
+                        _, cache_metadata = store.retrieve_cached_output(
+                            task, input_hash, cache_fn_hash
+                        )
+                        cache_fn_hash = cache_metadata.cache_fn_hash
+                    except CacheError as e:
+                        task.logger.info(
+                            "Failed to retrieve task from cache", cause=str(e)
+                        )
+
+            # Prepare TaskCacheInfo
+            if not task.lazy and skip_cache_lookup:
+                # Assign random version to disable caching for this task
+                task = copy.copy(task)
+                task.version = uuid.uuid4().hex
+
+            task_cache_info = TaskCacheInfo(
+                task=task,
+                input_hash=input_hash,
+                cache_fn_hash=cache_fn_hash,
+                cache_key=CacheManager.task_cache_key(task, input_hash, cache_fn_hash),
+            )
 
             # Compute the input_tables value of the TaskContext
             input_tables = []
@@ -470,7 +511,7 @@ class MaterializationWrapper:
             )
 
             result = self.fn(*args, **kwargs)
-            result = store.materialize_task(task, TaskInfo(task_cache_info), result)
+            result = store.materialize_task(task, task_cache_info, result)
 
             # Delete underlying objects from result (after materializing them)
             def obj_del_mutator(x):
@@ -500,8 +541,3 @@ def _get_output_from_store(
     with DematerializeRunContext(root_task.flow):
         cached_output, _ = store.retrieve_most_recent_task_output_from_cache(root_task)
         return dematerialize_output_from_store(store, task, cached_output, as_type)
-
-
-@dataclass
-class TaskInfo:
-    task_cache_info: TaskCacheInfo

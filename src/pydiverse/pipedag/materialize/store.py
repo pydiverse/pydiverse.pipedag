@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+from datetime import datetime
 from typing import Any, Callable
 
 import structlog
@@ -12,8 +13,9 @@ from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.core.task import Task, TaskGetItem
 from pydiverse.pipedag.errors import CacheError, DuplicateNameError, StageError
+from pydiverse.pipedag.materialize.cache import TaskCacheInfo
 from pydiverse.pipedag.materialize.container import RawSql
-from pydiverse.pipedag.materialize.core import MaterializingTask, TaskInfo
+from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import TaskMetadata
 from pydiverse.pipedag.util import Disposable, deep_map
 
@@ -166,7 +168,7 @@ class PipeDAGStore(Disposable):
     def materialize_task(
         self,
         task: MaterializingTask,
-        task_info: TaskInfo,
+        task_cache_info: TaskCacheInfo,
         value: Materializable,
     ) -> Materializable:
         """Stores the output of a task in the backend
@@ -177,7 +179,7 @@ class PipeDAGStore(Disposable):
 
         :param task: The task instance which produced `value`. Must have
             the correct `cache_key` attribute set.
-        :param task_info: Information about task carried through materialization
+        :param task_cache_info: Task cache information.
         :param value: The output of the task. Must be materializable; this
             means it can only contain the following object types:
             `dict`, `list`, `tuple`,
@@ -225,7 +227,7 @@ class PipeDAGStore(Disposable):
             if isinstance(x, (Table, RawSql, Blob)):
                 if not task.lazy:
                     # task cache_key is output cache_key for eager tables
-                    x.cache_key = task_info.task_cache_info.get_task_cache_key()
+                    x.cache_key = task_cache_info.cache_key
 
                 x.stage = stage
 
@@ -233,10 +235,7 @@ class PipeDAGStore(Disposable):
                 # - If no name has been provided, generate on automatically
                 # - If the provided name ends with %%, perform name mangling
                 object_number = next(auto_suffix_counter)
-                auto_suffix = (
-                    f"{task_info.task_cache_info.get_task_cache_key()}"
-                    f"_{object_number:04d}"
-                )
+                auto_suffix = f"{task_cache_info.cache_key}" f"_{object_number:04d}"
 
                 if x.name is None:
                     x.name = task.name + "_" + auto_suffix
@@ -273,15 +272,24 @@ class PipeDAGStore(Disposable):
             can get changed.
             """
             output_json = self.json_encode(m_value)
-            task_info.task_cache_info.store_task_metadata(
-                output_json, self.table_store, stage
+            metadata = TaskMetadata(
+                name=task.name,
+                stage=task.stage.name,
+                version=task.version,
+                timestamp=datetime.now(),
+                run_id=ctx.run_id,
+                position_hash=task.position_hash,
+                input_hash=task_cache_info.input_hash,
+                cache_fn_hash=task_cache_info.cache_fn_hash,
+                output_json=output_json,
             )
+            self.table_store.store_task_metadata(metadata, stage)
 
         def store_table(table: Table):
             if task.lazy:
-                self.table_store.store_table_lazy(table, task, task_info)
+                self.table_store.store_table_lazy(table, task, task_cache_info)
             else:
-                self.table_store.store_table(table, task, task_info)
+                self.table_store.store_table(table, task)
 
         # Materialize
         self._check_names(task, tables, blobs)
@@ -291,7 +299,9 @@ class PipeDAGStore(Disposable):
             raw_sqls,
             blobs,
             store_table,
-            lambda raw_sql: self.table_store.store_raw_sql(raw_sql, task, task_info),
+            lambda raw_sql: self.table_store.store_raw_sql(
+                raw_sql, task, task_cache_info
+            ),
             self.blob_store.store_blob,
             store_metadata,
         )

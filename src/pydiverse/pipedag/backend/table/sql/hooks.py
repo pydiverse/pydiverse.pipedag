@@ -25,7 +25,6 @@ from pydiverse.pipedag.backend.table.util import (
 )
 from pydiverse.pipedag.context import TaskContext
 from pydiverse.pipedag.materialize import Table
-from pydiverse.pipedag.materialize.core import TaskInfo
 
 # region SQLALCHEMY
 
@@ -44,11 +43,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def materialize(
-        cls,
-        store,
-        table: Table[sa.sql.expression.TextClause | sa.Text],
-        stage_name,
-        task_info: TaskInfo | None,
+        cls, store, table: Table[sa.sql.expression.TextClause | sa.Text], stage_name
     ):
         obj = table.obj
         if isinstance(table.obj, (sa.Table, sa.sql.expression.Alias)):
@@ -124,13 +119,7 @@ class TableReferenceHook(TableHook[SQLTableStore]):
         return False
 
     @classmethod
-    def materialize(
-        cls,
-        store: SQLTableStore,
-        table: Table,
-        stage_name,
-        task_info: TaskInfo | None,
-    ):
+    def materialize(cls, store: SQLTableStore, table: Table, stage_name):
         # For a table reference, we don't need to materialize anything.
         # This is any table referenced by a table reference should already exist
         # in the schema.
@@ -186,13 +175,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         return super().auto_table(obj)
 
     @classmethod
-    def materialize(
-        cls,
-        store: SQLTableStore,
-        table: Table[pd.DataFrame],
-        stage_name,
-        task_info: TaskInfo | None,
-    ):
+    def materialize(cls, store: SQLTableStore, table: Table[pd.DataFrame], stage_name):
         df = table.obj.copy(deep=False)
         schema = store.get_schema(stage_name)
 
@@ -413,13 +396,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         return type_ == polars.dataframe.DataFrame
 
     @classmethod
-    def materialize(
-        cls,
-        store,
-        table: Table[polars.dataframe.DataFrame],
-        stage_name,
-        task_info: TaskInfo | None,
-    ):
+    def materialize(cls, store, table: Table[polars.dataframe.DataFrame], stage_name):
         # Materialization for polars happens by first converting the dataframe to
         # a pyarrow backed pandas dataframe, and then calling the PandasTableHook
         # for materialization.
@@ -487,19 +464,13 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         return type_ == tidypolars.Tibble
 
     @classmethod
-    def materialize(
-        cls,
-        store,
-        table: Table[tidypolars.Tibble],
-        stage_name,
-        task_info: TaskInfo | None,
-    ):
+    def materialize(cls, store, table: Table[tidypolars.Tibble], stage_name):
         t = table.obj
         table = table.copy_without_obj()
         table.obj = t.to_polars()
 
         hook = store.get_hook_subclass(PolarsTableHook)
-        return hook.materialize(store, table, stage_name, task_info)
+        return hook.materialize(store, table, stage_name)
 
     @classmethod
     def retrieve(
@@ -546,9 +517,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         return issubclass(type_, (PandasTableImpl, SQLTableImpl))
 
     @classmethod
-    def materialize(
-        cls, store, table: Table[pdt.Table], stage_name, task_info: TaskInfo | None
-    ):
+    def materialize(cls, store, table: Table[pdt.Table], stage_name):
         from pydiverse.transform.core.verbs import collect
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
@@ -558,11 +527,11 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         if isinstance(t._impl, PandasTableImpl):
             table.obj = t >> collect()
             hook = store.get_hook_subclass(PandasTableHook)
-            return hook.materialize(store, table, stage_name, task_info)
+            return hook.materialize(store, table, stage_name)
         if isinstance(t._impl, SQLTableImpl):
             table.obj = t._impl.build_select()
             hook = store.get_hook_subclass(SQLAlchemyTableHook)
-            return hook.materialize(store, table, stage_name, task_info)
+            return hook.materialize(store, table, stage_name)
         raise NotImplementedError
 
     @classmethod
@@ -637,19 +606,13 @@ class IbisTableHook(TableHook[SQLTableStore]):
         return issubclass(type_, ibis.api.Table)
 
     @classmethod
-    def materialize(
-        cls,
-        store,
-        table: Table[ibis.api.Table],
-        stage_name,
-        task_info: TaskInfo | None,
-    ):
+    def materialize(cls, store, table: Table[ibis.api.Table], stage_name):
         t = table.obj
         table = table.copy_without_obj()
         table.obj = sa.text(cls.lazy_query_str(store, t))
 
         sa_hook = store.get_hook_subclass(SQLAlchemyTableHook)
-        return sa_hook.materialize(store, table, stage_name, task_info)
+        return sa_hook.materialize(store, table, stage_name)
 
     @classmethod
     def retrieve(
