@@ -410,11 +410,6 @@ class MaterializationWrapper:
         # If this is the first task in this stage to be executed, ensure that
         # the stage has been initialized and locked.
         store.ensure_stage_is_ready(task.stage)
-        open_stages = {task.stage}
-        outer_stage = task.stage.outer_stage
-        while outer_stage is not None:
-            open_stages.add(outer_stage)
-            outer_stage = outer_stage.outer_stage
 
         # Compute the cache key for the task inputs
         input_json = store.json_encode(bound.arguments)
@@ -463,7 +458,7 @@ class MaterializationWrapper:
 
             result = self.fn(*args, **kwargs)
             result = store.materialize_task(
-                task, TaskInfo(task_cache_info, input_tables, open_stages), result
+                task, TaskInfo(task_cache_info, input_tables), result
             )
 
             # Delete underlying objects from result (after materializing them)
@@ -500,4 +495,3 @@ def _get_output_from_store(
 class TaskInfo:
     task_cache_info: TaskCacheInfo
     input_tables: list[Table]
-    open_stages: set[Stage]

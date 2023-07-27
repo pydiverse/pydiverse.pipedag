@@ -57,11 +57,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         source_tables = [
             dict(
                 name=tbl.name,
-                schema=store.get_schema(
-                    tbl.stage.transaction_name
-                    if tbl.stage in task_info.open_stages
-                    else tbl.stage.name
-                ).get(),
+                schema=store.get_schema(tbl.stage.current_name).get(),
             )
             for tbl in task_info.input_tables
         ]
