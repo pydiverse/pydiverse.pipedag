@@ -100,8 +100,9 @@ def json_object_hook(d: dict):
 
     type_ = Type(d[TYPE_KEY])
 
-    run_context = RunContext.get()
-    stages = run_context.flow.stages
+    def get_stage(name: str):
+        stages = RunContext.get().flow.stages
+        return stages[name]
 
     if type_ == Type.TABLE:
         tbl = Table(
@@ -109,22 +110,22 @@ def json_object_hook(d: dict):
             primary_key=d["primary_key"],
             indexes=d["indexes"],
         )
-        tbl.stage = stages[d["stage"]]
+        tbl.stage = get_stage(d["stage"])
         tbl.cache_key = d["cache_key"]
         return tbl
     if type_ == Type.RAW_SQL:
         raw_sql = RawSql(name=d["name"])
-        raw_sql.stage = stages[d["stage"]]
+        raw_sql.stage = get_stage(d["stage"])
         raw_sql.cache_key = d["cache_key"]
         raw_sql.table_names = d["table_names"]
         return raw_sql
     if type_ == Type.BLOB:
         blob = Blob(name=d["name"])
-        blob.stage = stages[d["stage"]]
+        blob.stage = get_stage(d["stage"])
         blob.cache_key = d["cache_key"]
         return blob
     if type_ == Type.STAGE:
-        return stages[d["name"]]
+        return get_stage(d["name"])
     if type_ == Type.PIPEDAG_CONFIG:
         # PipedagConfig objects are allowed as input to @materialize tasks,
         # but it is not allowed as output since this might cause trouble

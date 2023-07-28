@@ -166,6 +166,9 @@ class ConfigContext(BaseAttrsContext):
     # INTERNAL FLAGS - ONLY FOR PIPEDAG USE
     # When set to True, exceptions raised in a flow don't get logged
     _swallow_exceptions: bool = False
+    # When set to True, indicates that all tasks should get run, independent
+    # of their cache validity
+    _force_task_execution: bool = False
 
     @cached_property
     def auto_table(self) -> tuple[type, ...]:

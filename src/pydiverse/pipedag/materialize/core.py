@@ -306,6 +306,11 @@ class MaterializingTask(Task):
         # get calculated during flow execution. As a consequence, we must load
         # those inputs from the cache.
 
+        def replace_stage_with_pseudo_stage(x):
+            if isinstance(x, (Table, Blob, RawSql)):
+                x.stage = PseudoStage(x.stage, did_commit=True)
+            return x
+
         for in_id, in_task in self.input_tasks.items():
             if in_id in inputs:
                 continue
@@ -315,6 +320,7 @@ class MaterializingTask(Task):
                 in_task
             )
 
+            cached_output = deep_map(cached_output, replace_stage_with_pseudo_stage)
             inputs[in_id] = cached_output
 
         return super().run(inputs, **kwargs)
@@ -440,11 +446,12 @@ class MaterializationWrapper:
                 return memo
 
             # Cache Lookup (only required if task isn't lazy)
+            force_task_execution = config_context._force_task_execution
             skip_cache_lookup = (
                 config_context.ignore_task_version or task.version is None
             )
 
-            if not task.lazy and not skip_cache_lookup:
+            if not task.lazy and not skip_cache_lookup and not force_task_execution:
                 try:
                     cached_output, cache_metadata = store.retrieve_cached_output(
                         task, input_hash, cache_fn_hash
@@ -541,3 +548,28 @@ def _get_output_from_store(
     with DematerializeRunContext(root_task.flow):
         cached_output, _ = store.retrieve_most_recent_task_output_from_cache(root_task)
         return dematerialize_output_from_store(store, task, cached_output, as_type)
+
+
+class PseudoStage:
+    def __init__(self, stage: Stage, did_commit: bool):
+        self._stage = stage
+        self._name = stage.name
+        self._transaction_name = stage.name
+        self._did_commit = did_commit
+
+        self.id = stage.id
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def transaction_name(self) -> str:
+        return self._transaction_name
+
+    @property
+    def current_name(self) -> str:
+        if self._did_commit:
+            return self.name
+        else:
+            return self.transaction_name

@@ -282,12 +282,11 @@ class Flow:
         config = config.evolve(
             fail_fast=(fail_fast if fail_fast is not None else config.fail_fast),
             ignore_fresh_input=ignore_fresh_input,
-            ignore_task_version=(
+            force_task_execution=(
                 # If subflow consists of a subset of tasks (-> not a subset of stages)
-                # then we want to ignore the task version to ensure the tasks always
-                # get executed.
+                # then we want to skip cache validity checking to ensure the tasks
+                # always get executed.
                 subflow.is_tasks_subflow
-                or config.ignore_task_version
             ),
         )
 

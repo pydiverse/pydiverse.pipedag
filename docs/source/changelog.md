@@ -2,6 +2,7 @@
 
 ## Latest
 - Fix race condition leading to `JSONDecodeError` in [](#ParquetTableCache) when setting `store_input: true` together with the `DaskEngine`.
+- Fix running subset of tasks not working due to tables and blobs being retrieved from wrong schema.
 
 ## 0.6.3 (2023-07-25)
 - Fix crash during config initialization when using [](#DatabaseLockManager) together with `PostgreSQL`.

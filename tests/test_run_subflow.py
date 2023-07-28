@@ -181,3 +181,51 @@ def test_run_specific_stage_ambiguous_input(mocker):
     s1_spy.assert_not_called()
     y1_spy.assert_not_called()  # Should be cached
     s2_spy.assert_called_once()
+
+
+def test_run_specific_task_with_table_blob():
+    with Flow() as f:
+        with Stage("subflow_t1"):
+            x1 = m.noop({"x": [1]})
+            x2 = m.noop({"x": [2]})
+            x3 = m.as_blob("blob")
+            x4 = m.noop(x3)
+
+        with Stage("subflow_t2"):
+            y1 = m.pd_dataframe(x1)
+            y2 = m.pd_dataframe(x2)
+            y3 = m.noop((y1, y2, x3, x4))
+
+        with Stage("subflow_t3"):
+            z1 = m.noop(y3)
+            z2 = m.noop(z1)
+
+    f.run()
+    f.run(x4)
+    f.run(y1)
+    f.run(y3)
+    f.run(x1, y2, z1)
+    f.run(z2)
+
+
+def test_run_specific_stage_with_table_blob():
+    with Flow() as f:
+        with Stage("subflow_t1") as s1:
+            x1 = m.noop({"x": [1]})
+            x2 = m.noop({"x": [2]})
+            x3 = m.as_blob("blob")
+            x4 = m.noop(x3)
+
+        with Stage("subflow_t2") as s2:
+            y1 = m.pd_dataframe(x1)
+            y2 = m.pd_dataframe(x2)
+            y3 = m.noop((y1, y2, x3, x4))
+
+        with Stage("subflow_t3") as s3:
+            z1 = m.noop(y3)
+            m.noop(z1)
+
+    f.run(s1)
+    f.run(s2)
+    f.run(s3)
+    f.run(s1, s3)
