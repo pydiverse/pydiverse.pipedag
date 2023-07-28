@@ -9,6 +9,7 @@ from typing_extensions import Self
 
 from pydiverse.pipedag._typing import T, TableHookResolverT
 from pydiverse.pipedag.context import RunContext, TaskContext
+from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.cache import CacheManager, TaskCacheInfo
 from pydiverse.pipedag.materialize.container import RawSql, Table
 from pydiverse.pipedag.materialize.metadata import (
@@ -279,7 +280,7 @@ class BaseTableStore(TableHookResolver, Disposable):
 
         Used when `lazy = True` is set for a materializing task.
         """
-        _ = task
+
         try:
             hook = self.get_m_table_hook(type(table.obj))
             query_str = hook.lazy_query_str(self, table.obj)
@@ -289,12 +290,34 @@ class BaseTableStore(TableHookResolver, Disposable):
             # -> Fallback to default implementation
             return self.store_table(table, task)
 
-        table_cache_info = CacheManager.lazy_table_cache_lookup(
-            self, task_cache_info, table, query_hash
-        )
-        if not table_cache_info.is_cache_valid():
+        # Store the table
+        try:
+            # Try retrieving the table from the cache and then copying it
+            # to the transaction stage
+            metadata = self.retrieve_lazy_table_metadata(
+                query_hash, task_cache_info.cache_key, table.stage
+            )
+            self.copy_lazy_table_to_transaction(metadata, table)
+            self.logger.info(f"Lazy cache of table '{table.name}' found")
+        except CacheError as e:
+            # Either not found in cache, or copying failed
+            # -> Store using default method
+            self.logger.warning(
+                "Cache miss", table=table.name, stage=table.stage.name, cause=str(e)
+            )
+
             TaskContext.get().is_cache_valid = False
             self.store_table(table, task)
+
+        # Store table metadata
+        self.store_lazy_table_metadata(
+            LazyTableMetadata(
+                name=table.name,
+                stage=table.stage.name,
+                query_hash=query_hash,
+                task_hash=task_cache_info.cache_key,
+            )
+        )
 
         # At this point we MUST also update the cache info, so that any downstream
         # tasks get invalidated if the sql query string changed.
@@ -312,7 +335,6 @@ class BaseTableStore(TableHookResolver, Disposable):
         has already been executed before. If yes, instead of evaluating
         the query, it just copies the previous result to the commit stage.
         """
-        _ = task
 
         # hacky way to canonicalize query (despite __tmp/__even/__odd suffixes
         # and alias resolution)
@@ -326,10 +348,23 @@ class BaseTableStore(TableHookResolver, Disposable):
 
         query_hash = stable_hash("RAW-SQL", query_str)
 
-        table_cache_info, raw_sql_metadata = CacheManager.raw_sql_cache_lookup(
-            self, task_cache_info, raw_sql, query_hash
-        )
-        if not table_cache_info.is_cache_valid():
+        # Store raw sql
+        try:
+            # Try retrieving the table from the cache and then copying it
+            # to the transaction stage
+            metadata = self.retrieve_raw_sql_metadata(
+                query_hash, task_cache_info.cache_key, raw_sql.stage
+            )
+            self.copy_raw_sql_tables_to_transaction(metadata, raw_sql.stage)
+            self.logger.info(f"Lazy cache of stage '{raw_sql.stage}' found")
+
+            prev_objects = metadata.prev_objects
+            new_objects = metadata.new_objects
+        except CacheError as e:
+            # Either not found in cache, or copying failed
+            # -> Store using default method
+            self.logger.warning("Cache miss for raw-SQL", cause=str(e))
+
             TaskContext.get().is_cache_valid = False
             RunContext.get().set_stage_has_changed(task.stage)
 
@@ -343,11 +378,19 @@ class BaseTableStore(TableHookResolver, Disposable):
 
             prev_objects_set = set(prev_objects)
             new_objects = [o for o in post_objects if o not in prev_objects_set]
-        else:
-            prev_objects = raw_sql_metadata.prev_objects
-            new_objects = raw_sql_metadata.new_objects
 
-        table_cache_info.store_raw_sql_metadata(self, prev_objects, new_objects)
+        # Store metadata
+        # Attention: Raw SQL statements may only be executed sequentially within
+        #            stage for store.get_objects_in_stage to work
+        self.store_raw_sql_metadata(
+            RawSqlMetadata(
+                prev_objects=prev_objects,
+                new_objects=new_objects,
+                stage=raw_sql.stage.name,
+                query_hash=query_hash,
+                task_hash=task_cache_info.cache_key,
+            )
+        )
 
         # At this point we MUST also update the cache info, so that any downstream
         # tasks get invalidated if the sql query string changed.
