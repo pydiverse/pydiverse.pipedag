@@ -8,7 +8,7 @@ import structlog
 
 from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext, TaskContext
 from pydiverse.pipedag.context.run_context import FinalTaskState
-from pydiverse.pipedag.errors import FlowError, StageError
+from pydiverse.pipedag.errors import StageError
 from pydiverse.pipedag.util import deep_map
 from pydiverse.pipedag.util.hashing import stable_hash
 
@@ -56,11 +56,17 @@ class UnboundTask:
         return f"<UnboundTask 'name' {hex(id(self))}>"
 
     def __call__(self, *args, **kwargs) -> Task:
-        """Constructs a `Task` with bound inputs"""
+        """
+        When called inside a flow definition context:
+        Constructs a `Task` with bound inputs
+
+        When called outside a flow definition context:
+        Invoke to original function.
+        """
         try:
             ctx = DAGContext.get()
         except LookupError:
-            raise FlowError("Can't call pipedag task outside of a flow.") from None
+            return self._call_original_function(*args, **kwargs)
 
         if ctx.stage is None:
             raise StageError("Can't call pipedag task outside of a stage.")
@@ -68,6 +74,9 @@ class UnboundTask:
         # Construct Task
         bound_args = self._signature.bind(*args, **kwargs)
         return self._bound_task_type(self, bound_args, ctx.flow, ctx.stage)
+
+    def _call_original_function(self, *args, **kwargs):
+        return self.fn(*args, **kwargs)
 
 
 class Task:

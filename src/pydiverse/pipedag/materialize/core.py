@@ -196,8 +196,9 @@ class UnboundMaterializingTask(UnboundTask):
 
     Instances of this class get initialized using the
     :py:func:`@materialize <pydiverse.pipedag.materialize>` decorator.
-    By calling this object, a :py:class:`~.MaterializingTask` gets created
-    that binds the provided arguments to the task.
+    By calling this object inside a ``with Flow(...)`` context,
+    a :py:class:`~.MaterializingTask` gets created that binds the provided
+    arguments to the task.
 
     >>> @materialize
     ... def some_task(arg):
@@ -212,6 +213,28 @@ class UnboundMaterializingTask(UnboundTask):
     ...
     >>> type(x)
     <class 'pydiverse.pipedag.materialize.core.MaterializingTask'>
+
+    When you call a `UnboundMaterializingTask` outside a flow definition context,
+    then the original function (that was decorated with :py:func:`@materialize
+    <pydiverse.pipedag.materialize>`) gets called. The only difference being, that
+    any :py:class:`~.Table`, :py:class:`~.Blob` or :py:class:`~.RawSql` objects
+    returned from the task get replaced with the object that they wrap:
+
+    >>> import pandas as pd
+    >>>
+    >>> @materialize(input_type=pd.DataFrame)
+    ... def double_it(df):
+    ...     return Table(df * 2)
+    ...
+    >>> x = pd.DataFrame({"x": [0, 1, 2, 3]})
+    >>> double_it(x)
+       x
+    0  0
+    1  2
+    2  4
+    3  6
+
+
     """
 
     def __init__(
@@ -232,6 +255,7 @@ class UnboundMaterializingTask(UnboundTask):
         )
 
         self._bound_task_type = MaterializingTask
+        self._original_fn = fn
 
         self.input_type = input_type
         self.version = version
@@ -240,6 +264,18 @@ class UnboundMaterializingTask(UnboundTask):
 
     def __call__(self, *args, **kwargs) -> MaterializingTask:
         return super().__call__(*args, **kwargs)  # type: ignore
+
+    def _call_original_function(self, *args, **kwargs):
+        result = self._original_fn(*args, **kwargs)
+
+        def unwrap_mutator(x):
+            if isinstance(x, (Task, Blob)):
+                return x.obj
+            if isinstance(x, RawSql):
+                return x.sql
+            return x
+
+        return deep_map(result, unwrap_mutator)
 
 
 class MaterializingTask(Task):

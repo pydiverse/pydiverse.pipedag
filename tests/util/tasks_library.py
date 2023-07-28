@@ -4,7 +4,7 @@ import pandas as pd
 import sqlalchemy as sa
 import sqlalchemy.dialects
 
-from pydiverse.pipedag import Blob, Table, materialize
+from pydiverse.pipedag import Blob, RawSql, Table, materialize
 
 
 @materialize(input_type=pd.DataFrame, version="1.0")
@@ -186,6 +186,11 @@ def pd_dataframe(data: dict[str, list]):
 @materialize(version="1.0")
 def as_blob(x):
     return Blob(x)
+
+
+@materialize(lazy=True)
+def as_raw_sql(sql: str):
+    return RawSql(sql)
 
 
 class _SomeClass:

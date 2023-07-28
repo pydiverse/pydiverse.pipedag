@@ -340,10 +340,6 @@ class TestDAGConstructionExceptions:
             with Stage("stage"):
                 ...
 
-    def test_task_outside_flow(self):
-        with pytest.raises(FlowError):
-            t("task")()
-
     def test_task_outside_stage(self):
         with Flow("flow"):
             with pytest.raises(StageError):
@@ -519,3 +515,13 @@ def test_task_getitem():
     assert task[1].resolve_value((1, 2)) == 2
     assert task[1][0].resolve_value(((1, 2), (3, 4))) == 3
     assert task["x"][1:3].resolve_value({"x": [1, 2, 3, 4]}) == [2, 3]
+
+
+def test_task_outside_flow():
+    task = t("task")
+    assert task(1, 2) == (1, 2)
+    assert task("foo", "bar") == ("foo", "bar")
+
+    task = t_kw("task")
+    assert task(a=1, b=2) == {"a": 1, "b": 2}
+    assert task(x="foo", y="bar") == {"x": "foo", "y": "bar"}

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Latest
+- Allow invocation of undecorated task functions when calling task object outside of flow definition context.
 - Fix race condition leading to `JSONDecodeError` in [](#ParquetTableCache) when setting `store_input: true` together with the `DaskEngine`.
 - Fix running subset of tasks not working due to tables and blobs being retrieved from wrong schema.
 
