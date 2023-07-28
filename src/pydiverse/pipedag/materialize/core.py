@@ -11,7 +11,7 @@ from pydiverse.pipedag._typing import CallableT
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.core.task import Task, TaskGetItem, UnboundTask
 from pydiverse.pipedag.errors import CacheError
-from pydiverse.pipedag.materialize.cache import CacheManager, TaskCacheInfo
+from pydiverse.pipedag.materialize.cache import TaskCacheInfo, task_cache_key
 from pydiverse.pipedag.materialize.container import Blob, RawSql, Table
 from pydiverse.pipedag.util import deep_map
 from pydiverse.pipedag.util.hashing import stable_hash
@@ -426,7 +426,7 @@ class MaterializationWrapper:
             cache_fn_output = store.json_encode(task.cache(*args, **kwargs))
             cache_fn_hash = stable_hash("CACHE_FN", cache_fn_output)
 
-        memo_cache_key = CacheManager.task_cache_key(task, input_hash, cache_fn_hash)
+        memo_cache_key = task_cache_key(task, input_hash, cache_fn_hash)
 
         # Check if this task has already been run with the same inputs
         # If yes, return memoized result. This prevents DuplicateNameExceptions
@@ -491,7 +491,7 @@ class MaterializationWrapper:
                 task=task,
                 input_hash=input_hash,
                 cache_fn_hash=cache_fn_hash,
-                cache_key=CacheManager.task_cache_key(task, input_hash, cache_fn_hash),
+                cache_key=task_cache_key(task, input_hash, cache_fn_hash),
             )
 
             # Compute the input_tables value of the TaskContext

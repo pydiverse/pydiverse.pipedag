@@ -10,7 +10,7 @@ from typing_extensions import Self
 from pydiverse.pipedag._typing import T, TableHookResolverT
 from pydiverse.pipedag.context import RunContext, TaskContext
 from pydiverse.pipedag.errors import CacheError
-from pydiverse.pipedag.materialize.cache import CacheManager, TaskCacheInfo
+from pydiverse.pipedag.materialize.cache import TaskCacheInfo, lazy_table_cache_key
 from pydiverse.pipedag.materialize.container import RawSql, Table
 from pydiverse.pipedag.materialize.metadata import (
     LazyTableMetadata,
@@ -321,9 +321,7 @@ class BaseTableStore(TableHookResolver, Disposable):
 
         # At this point we MUST also update the cache info, so that any downstream
         # tasks get invalidated if the sql query string changed.
-        table.cache_key = CacheManager.lazy_table_cache_key(
-            task_cache_info.cache_key, query_hash
-        )
+        table.cache_key = lazy_table_cache_key(task_cache_info.cache_key, query_hash)
 
     def store_raw_sql(
         self, raw_sql: RawSql, task: MaterializingTask, task_cache_info: TaskCacheInfo
@@ -394,9 +392,7 @@ class BaseTableStore(TableHookResolver, Disposable):
 
         # At this point we MUST also update the cache info, so that any downstream
         # tasks get invalidated if the sql query string changed.
-        raw_sql.cache_key = CacheManager.lazy_table_cache_key(
-            task_cache_info.cache_key, query_hash
-        )
+        raw_sql.cache_key = lazy_table_cache_key(task_cache_info.cache_key, query_hash)
 
         # Store new_objects as part of raw_sql.
         all_table_names = set(self.get_table_objects_in_stage(raw_sql.stage))
