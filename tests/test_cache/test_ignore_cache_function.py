@@ -18,7 +18,7 @@ pytestmark = [with_instances(ALL_INSTANCES)]
 
 
 # Test that running a flow that contains a task with an invalid cache function
-# doesn't trigger that task when run with ignore_fresh_input=True, and it is
+# doesn't trigger that task when run with ignore_cache_function=True, and it is
 # otherwise cache valid.
 
 
@@ -53,12 +53,12 @@ def test_literal(mocker):
         out_spy.assert_not_called()
         child_spy.assert_not_called()
 
-    # Changing the cache value while setting ignore_fresh_input=True should
+    # Changing the cache value while setting ignore_cache_function=True should
     # ignore the cache function.
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(ignore_fresh_input=True)
+            result = flow.run(ignore_cache_function=True)
             assert result.get(out) == 0
             assert result.get(child) == 0
             out_spy.assert_not_called()
@@ -106,12 +106,12 @@ def test_table(mocker):
         out_spy.assert_not_called()
         child_spy.assert_not_called()
 
-    # Changing the cache value while setting ignore_fresh_input=True should
+    # Changing the cache value while setting ignore_cache_function=True should
     # ignore the cache function.
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(ignore_fresh_input=True)
+            result = flow.run(ignore_cache_function=True)
             assert result.get(child) == 0
             out_spy.assert_not_called()
             child_spy.assert_not_called()
@@ -163,11 +163,11 @@ def test_lazy_table(mocker):
             child_spy.assert_not_called()
             cache_spy.assert_not_called()
 
-    # Changing the cache value while setting ignore_fresh_input=True should
+    # Changing the cache value while setting ignore_cache_function=True should
     # still call the lazy task.
     cache_value = 1
     with StageLockContext():
-        result = flow.run(ignore_fresh_input=True)
+        result = flow.run(ignore_cache_function=True)
         assert result.get(child) == 0
         assert result.get(cache_child) == 1
         out_spy.assert_called_once()
@@ -177,7 +177,7 @@ def test_lazy_table(mocker):
     # Only changing the lazy_value should cause the child task to get called
     lazy_value = 1
     with StageLockContext():
-        result = flow.run(ignore_fresh_input=True)
+        result = flow.run(ignore_cache_function=True)
         assert result.get(child) == 1
         assert result.get(cache_child) == 1
         out_spy.assert_called_once()
@@ -185,7 +185,7 @@ def test_lazy_table(mocker):
         cache_spy.assert_not_called()
 
     # We can't avoid the cache invalidation of get_first here since we do
-    # ignore_fresh_input based cache_fn_hash filtering on task level and
+    # ignore_cache_function based cache_fn_hash filtering on task level and
     # not on lazy table level.
     with StageLockContext():
         result = flow.run()
@@ -237,12 +237,12 @@ def test_blob(mocker):
         out_spy.assert_not_called()
         child_spy.assert_not_called()
 
-    # Changing the cache value while setting ignore_fresh_input=True should
+    # Changing the cache value while setting ignore_cache_function=True should
     # ignore the cache function.
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(ignore_fresh_input=True)
+            result = flow.run(ignore_cache_function=True)
             assert result.get(out) == 0
             assert result.get(child) == 0
             out_spy.assert_not_called()
@@ -298,12 +298,12 @@ def test_raw_sql(mocker):
         out_spy.assert_called_once()
         child_spy.assert_not_called()
 
-    # Changing the cache value while setting ignore_fresh_input=True should
+    # Changing the cache value while setting ignore_cache_function=True should
     # still call the raw sql task.
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(ignore_fresh_input=True)
+            result = flow.run(ignore_cache_function=True)
             assert result.get(child, as_type=pd.DataFrame)["x"][0] == 0
             out_spy.assert_called_once()
             child_spy.assert_not_called()
@@ -311,13 +311,13 @@ def test_raw_sql(mocker):
     # Only changing the raw_value should cause the child task to get called
     raw_value = 1
     with StageLockContext():
-        result = flow.run(ignore_fresh_input=True)
+        result = flow.run(ignore_cache_function=True)
         assert result.get(child, as_type=pd.DataFrame)["x"][0] == 1
         out_spy.assert_called_once()
         child_spy.assert_called_once()
 
     # We can't avoid the cache invalidation of get_first here since we do
-    # ignore_fresh_input based cache_fn_hash filtering on task level and
+    # ignore_cache_function based cache_fn_hash filtering on task level and
     # not on lazy table level.
     with StageLockContext():
         result = flow.run()
@@ -335,7 +335,7 @@ def test_raw_sql(mocker):
 
 
 # Some more complicated tests that validate the behaviour of
-# ignore_fresh_input=True
+# ignore_cache_function=True
 
 
 def test_input_invalid(mocker):
@@ -357,21 +357,21 @@ def test_input_invalid(mocker):
         assert result.get(out) == 0
         assert result.get(child) == 0
 
-    # Setting ignore_fresh_input shouldn't have an influence on a lazy task
+    # Setting ignore_cache_function shouldn't have an influence on a lazy task
     out_spy = spy_task(mocker, out)
     child_spy = spy_task(mocker, child)
     with StageLockContext():
-        result = flow.run(ignore_fresh_input=True)
+        result = flow.run(ignore_cache_function=True)
         assert result.get(out) == 0
         assert result.get(child) == 0
         out_spy.assert_called_once()
         child_spy.assert_not_called()
 
-    # Despite ignore_fresh_input=True, the child tasks should still run
+    # Despite ignore_cache_function=True, the child tasks should still run
     # because its inputs changed
     lazy_value = 1
     with StageLockContext():
-        result = flow.run(ignore_fresh_input=True)
+        result = flow.run(ignore_cache_function=True)
         assert result.get(out) == 1
         assert result.get(child) == 1
         out_spy.assert_called_once()
@@ -409,12 +409,12 @@ def test_cache_temporarily_different(mocker):
         out_spy.assert_not_called()
         child_spy.assert_not_called()
 
-    # Changing the cache value while setting ignore_fresh_input=True should
+    # Changing the cache value while setting ignore_cache_function=True should
     # ignore the cache function.
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(ignore_fresh_input=True)
+            result = flow.run(ignore_cache_function=True)
             assert result.get(out) == 0
             assert result.get(child) == 0
             out_spy.assert_not_called()

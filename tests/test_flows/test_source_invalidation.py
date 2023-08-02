@@ -86,7 +86,7 @@ def test_source_invalidation():
 
     with StageLockContext():
         # this run should ignore fresh input at source nodes and not change outputs
-        result = flow.run(ignore_fresh_input=True)
+        result = flow.run(ignore_cache_function=True)
         assert result.successful
 
         v_out1, v_out2 = result.get(out1), result.get(out2)

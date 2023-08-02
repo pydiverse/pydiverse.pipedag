@@ -508,9 +508,9 @@ class MaterializationWrapper:
                 # store.materialize_task procedure
                 TaskContext.get().is_cache_valid = True
 
-                if config_context.ignore_fresh_input:
+                if config_context.ignore_cache_function:
                     # `cache_fn_hash` is not used for cache retrieval if
-                    # ignore_fresh_input is set to True.
+                    # ignore_cache_function is set to True.
                     # In that case, cache_metadata.cache_fn_hash may be different
                     # from the cache_fn_hash of the current task run.
 

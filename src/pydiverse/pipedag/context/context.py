@@ -161,7 +161,7 @@ class ConfigContext(BaseAttrsContext):
     table_hook_args: Box
 
     # run specific options
-    ignore_fresh_input: bool = False
+    ignore_cache_function: bool = False
 
     # INTERNAL FLAGS - ONLY FOR PIPEDAG USE
     # When set to True, exceptions raised in a flow don't get logged

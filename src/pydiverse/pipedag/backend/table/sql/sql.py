@@ -964,7 +964,7 @@ class SQLTableStore(BaseTableStore):
                 f" cache: {task}"
             )
 
-        ignore_fresh_input = ConfigContext.get().ignore_fresh_input
+        ignore_cache_function = ConfigContext.get().ignore_cache_function
         try:
             with self.engine_connect() as conn:
                 result = (
@@ -976,7 +976,7 @@ class SQLTableStore(BaseTableStore):
                         .where(self.tasks_table.c.input_hash == input_hash)
                         .where(
                             self.tasks_table.c.cache_fn_hash == cache_fn_hash
-                            if not ignore_fresh_input
+                            if not ignore_cache_function
                             else sa.literal(True)
                         )
                         .where(self.tasks_table.c.in_transaction_schema.in_([False]))

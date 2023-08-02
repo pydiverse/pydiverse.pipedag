@@ -209,7 +209,7 @@ class Flow:
         config: ConfigContext = None,
         orchestration_engine: OrchestrationEngine = None,
         fail_fast: bool | None = None,
-        ignore_fresh_input: bool = False,
+        ignore_cache_function: bool = False,
         **kwargs,
     ) -> Result:
         """Execute the flow.
@@ -235,7 +235,7 @@ class Flow:
             Whether exceptions should get raised or swallowed.
             If set to True, exceptions that occur get immediately raised and the
             flow gets aborted.
-        :param ignore_fresh_input:
+        :param ignore_cache_function:
             When set to True, the task's cache function gets ignored when determining
             the cache validity of a task.
         :param kwargs:
@@ -281,7 +281,7 @@ class Flow:
         # Evolve config using the arguments passed to flow.run
         config = config.evolve(
             fail_fast=(fail_fast if fail_fast is not None else config.fail_fast),
-            ignore_fresh_input=ignore_fresh_input,
+            ignore_cache_function=ignore_cache_function,
             force_task_execution=(
                 # If subflow consists of a subset of tasks (-> not a subset of stages)
                 # then we want to skip cache validity checking to ensure the tasks
