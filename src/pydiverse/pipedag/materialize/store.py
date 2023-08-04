@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import itertools
 from datetime import datetime
 from typing import Any, Callable
@@ -275,6 +276,7 @@ class PipeDAGStore(Disposable):
             metadata = TaskMetadata(
                 name=task.name,
                 stage=task.stage.name,
+                cache_slot=task.stage.transaction_name,
                 version=task.version,
                 timestamp=datetime.now(),
                 run_id=ctx.run_id,
@@ -283,7 +285,7 @@ class PipeDAGStore(Disposable):
                 cache_fn_hash=task_cache_info.cache_fn_hash,
                 output_json=output_json,
             )
-            self.table_store.store_task_metadata(metadata, stage)
+            self.table_store.store_task_metadata(metadata)
 
         def store_table(table: Table):
             if task.lazy:
@@ -408,6 +410,15 @@ class PipeDAGStore(Disposable):
         metadata = self.table_store.retrieve_task_metadata(
             task, input_hash, cache_fn_hash
         )
+
+        output_jsons = [m.output_json for m in metadata]
+        if not all(e == output_jsons[0] for e in output_jsons):
+            raise CacheError(
+                "Multiple matching cache slots with incompatible outputs found."
+            )
+
+        # TODO: [n_cache_slots] Fix for deferred table copy
+        metadata = metadata[0]
         return self.json_decode(metadata.output_json), metadata
 
     def copy_cached_output_to_transaction_stage(
@@ -445,6 +456,10 @@ class PipeDAGStore(Disposable):
         def store_raw_sql(raw_sql):
             raise Exception("raw sql scripts cannot be part of a non-lazy task")
 
+        # Update metadata
+        metadata = copy.copy(original_metadata)
+        metadata.cache_slot = task.stage.transaction_name
+
         # Materialize
         self._check_names(task, tables, blobs)
         self._store_task_transaction(
@@ -455,7 +470,7 @@ class PipeDAGStore(Disposable):
             self.table_store.copy_table_to_transaction,
             store_raw_sql,
             self.blob_store.copy_blob_to_transaction,
-            lambda: self.table_store.store_task_metadata(original_metadata, task.stage),
+            lambda: self.table_store.store_task_metadata(metadata),
         )
 
     def retrieve_most_recent_task_output_from_cache(

@@ -86,6 +86,8 @@ class FileBlobStore(BaseBlobStore):
 
     To commit a stage, the only thing that has to be done is to rename
     the appropriate folders.
+
+    TODO: [n_cache_slots] ALSO IMPLEMENT N CACHE SLOTS
     """
 
     @classmethod

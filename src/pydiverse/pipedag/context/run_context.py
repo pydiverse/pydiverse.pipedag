@@ -92,6 +92,7 @@ class RunContextServer(IPCServer):
         self.ref_count = [0] * num_stages
         self.task_state = [FinalTaskState.UNKNOWN] * len(self.tasks)
         self.stage_state = [StageState.UNINITIALIZED] * num_stages
+        self.stage_transaction_name: list[str | None] = [None] * num_stages
 
         self.table_names = [set() for _ in range(num_stages)]
         self.blob_names = [set() for _ in range(num_stages)]
@@ -302,6 +303,22 @@ class RunContextServer(IPCServer):
                 self.stage_state[stage_id] = to
             else:
                 raise RuntimeError
+
+    def set_stage_transaction_name(self, stage_id: int, transaction_name: str):
+        if self.stage_transaction_name[stage_id] is not None:
+            raise RuntimeError(
+                f"Transaction name of stage {self.stages[stage_id]} has already "
+                "been set."
+            )
+        self.stage_transaction_name[stage_id] = transaction_name
+
+    def get_stage_transaction_name(self, stage_id: int) -> str:
+        if self.stage_transaction_name[stage_id] is None:
+            raise RuntimeError(
+                f"Transaction name of stage {self.stages[stage_id]} hasn't "
+                "been set yet."
+            )
+        return self.stage_transaction_name[stage_id]
 
     # LOCKING
 
@@ -579,6 +596,12 @@ class RunContext(BaseContext):
             raise StageError from e
         else:
             self._request("exit_commit_stage", stage.id, True)
+
+    def set_stage_transaction_name(self, stage: Stage, transaction_name: str):
+        self._request("set_stage_transaction_name", stage.id, transaction_name)
+
+    def get_stage_transaction_name(self, stage: Stage) -> str:
+        return self._request("get_stage_transaction_name", stage.id)
 
     # STAGE: Lock
 

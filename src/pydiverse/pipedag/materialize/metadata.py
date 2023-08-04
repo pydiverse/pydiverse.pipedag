@@ -16,6 +16,7 @@ class TaskMetadata:
 
     name: str
     stage: str
+    cache_slot: str
     version: str | None
     timestamp: datetime.datetime
     run_id: str
@@ -45,6 +46,7 @@ class LazyTableMetadata:
 
     name: str
     stage: str
+    cache_slot: str
     query_hash: str
     task_hash: str
 
@@ -64,8 +66,9 @@ class RawSqlMetadata:
     Instead, it refers to the task that originally produced this object.
     """
 
+    stage: str
+    cache_slot: str
     prev_objects: list[str]
     new_objects: list[str]
-    stage: str
     query_hash: str
     task_hash: str

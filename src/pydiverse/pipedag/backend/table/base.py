@@ -297,6 +297,10 @@ class BaseTableStore(TableHookResolver, Disposable):
             metadata = self.retrieve_lazy_table_metadata(
                 query_hash, task_cache_info.cache_key, table.stage
             )
+
+            # TODO: [n_cache_slots] Fix for deferred copy
+            metadata = metadata[0]
+
             self.copy_lazy_table_to_transaction(metadata, table)
             self.logger.info(f"Lazy cache of table '{table.name}' found")
         except CacheError as e:
@@ -314,6 +318,7 @@ class BaseTableStore(TableHookResolver, Disposable):
             LazyTableMetadata(
                 name=table.name,
                 stage=table.stage.name,
+                cache_slot=table.stage.transaction_name,
                 query_hash=query_hash,
                 task_hash=task_cache_info.cache_key,
             )
@@ -353,6 +358,10 @@ class BaseTableStore(TableHookResolver, Disposable):
             metadata = self.retrieve_raw_sql_metadata(
                 query_hash, task_cache_info.cache_key, raw_sql.stage
             )
+
+            # TODO: [n_cache_slots] Fix for deferred copy
+            metadata = metadata[0]
+
             self.copy_raw_sql_tables_to_transaction(metadata, raw_sql.stage)
             self.logger.info(f"Lazy cache of stage '{raw_sql.stage}' found")
 
@@ -382,9 +391,10 @@ class BaseTableStore(TableHookResolver, Disposable):
         #            stage for store.get_objects_in_stage to work
         self.store_raw_sql_metadata(
             RawSqlMetadata(
+                stage=raw_sql.stage.name,
+                cache_slot=raw_sql.stage.transaction_name,
                 prev_objects=prev_objects,
                 new_objects=new_objects,
-                stage=raw_sql.stage.name,
                 query_hash=query_hash,
                 task_hash=task_cache_info.cache_key,
             )
@@ -463,7 +473,7 @@ class BaseTableStore(TableHookResolver, Disposable):
     # Metadata
 
     @abstractmethod
-    def store_task_metadata(self, metadata: TaskMetadata, stage: Stage):
+    def store_task_metadata(self, metadata: TaskMetadata):
         """Stores the metadata of a task
 
         The metadata must always be stored in such a way that it is
@@ -474,8 +484,10 @@ class BaseTableStore(TableHookResolver, Disposable):
     @abstractmethod
     def retrieve_task_metadata(
         self, task: MaterializingTask, input_hash: str, cache_fn_hash: str
-    ) -> TaskMetadata:
+    ) -> [TaskMetadata]:
         """Retrieve a task's metadata from the store
+
+        If multiple matching metadata entries are found, return all of them.
 
         :raises CacheError: if no metadata for this task can be found.
         """
@@ -502,8 +514,10 @@ class BaseTableStore(TableHookResolver, Disposable):
     @abstractmethod
     def retrieve_lazy_table_metadata(
         self, query_hash: str, task_hash: str, stage: Stage
-    ) -> LazyTableMetadata:
+    ) -> [LazyTableMetadata]:
         """Retrieve a lazy table's metadata from the store
+
+        If multiple matching metadata entries are found, return all of them.
 
         :param query_hash: A hash of the query that produced this lazy table
         :param task_hash: The hash of the task for which we want to retrieve this
@@ -529,8 +543,10 @@ class BaseTableStore(TableHookResolver, Disposable):
 
     def retrieve_raw_sql_metadata(
         self, query_hash: str, task_hash: str, stage: Stage
-    ) -> RawSqlMetadata:
+    ) -> [RawSqlMetadata]:
         """Retrieve raw SQL metadata from the store
+
+        If multiple matching metadata entries are found, return all of them.
 
         :param query_hash: A hash of the query that produced this raw sql object
         :param task_hash: The hash of the task for which we want to retrieve this

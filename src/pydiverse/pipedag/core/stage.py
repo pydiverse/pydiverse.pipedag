@@ -40,7 +40,7 @@ class Stage:
 
     def __init__(self, name: str):
         self._name = normalize_name(name)
-        self._transaction_name = f"{self._name}__tmp"
+        self._transaction_name: str | None = None
 
         self.tasks: list[Task] = []
         self.commit_task: CommitStageTask = None  # type: ignore
@@ -58,13 +58,22 @@ class Stage:
 
     @property
     def transaction_name(self) -> str:
-        """The name temporary transaction stage."""
+        if self._transaction_name is None:
+            # Lazy load transaction name
+            from pydiverse.pipedag.context.run_context import RunContext
+
+            self._transaction_name = RunContext.get().get_stage_transaction_name(self)
+            self.logger.info(
+                "Did set transaction name", transaction_name=self._transaction_name
+            )
+
         return self._transaction_name
 
-    def set_transaction_name(self, new_transaction_name):
-        # used by stage_commit_technique=READ_VIEWS to change odd/even
-        # transaction schemas
-        self._transaction_name = new_transaction_name
+    @transaction_name.setter
+    def transaction_name(self, value: str):
+        from pydiverse.pipedag.context.run_context import RunContext
+
+        RunContext.get().set_stage_transaction_name(self, value)
 
     @property
     def current_name(self) -> str:
