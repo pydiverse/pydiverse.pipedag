@@ -298,7 +298,9 @@ class BaseTableStore(TableHookResolver, Disposable):
                 query_hash, task_cache_info.cache_key, table.stage
             )
 
-            # TODO: [n_cache_slots] Fix for deferred copy
+            valid_cache_slots = [m.cache_slot for m in metadata]
+            RunContext.get().update_valid_cache_slots(task.stage, valid_cache_slots)
+
             metadata = metadata[0]
 
             self.copy_lazy_table_to_transaction(metadata, table)
@@ -359,9 +361,10 @@ class BaseTableStore(TableHookResolver, Disposable):
                 query_hash, task_cache_info.cache_key, raw_sql.stage
             )
 
-            # TODO: [n_cache_slots] Fix for deferred copy
-            metadata = metadata[0]
+            valid_cache_slots = [m.cache_slot for m in metadata]
+            RunContext.get().update_valid_cache_slots(task.stage, valid_cache_slots)
 
+            metadata = metadata[0]
             self.copy_raw_sql_tables_to_transaction(metadata, raw_sql.stage)
             self.logger.info(f"Lazy cache of stage '{raw_sql.stage}' found")
 

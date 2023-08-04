@@ -416,9 +416,11 @@ class PipeDAGStore(Disposable):
             return len({x.output_json for x in it}) == 1
 
         def return_(valid_metadata_choices):
-            # TODO: [n_cache_slots] Fix for deferred table copy
+            valid_cache_slots = [m.cache_slot for m in valid_metadata_choices]
+            RunContext.get().update_valid_cache_slots(task.stage, valid_cache_slots)
+
+            # Choose the latest (this is the first element, because we sorted metadata
             metadata = valid_metadata_choices[0]
-            print("CHOSEN METADATA:", metadata)
             return self.json_decode(metadata.output_json), metadata
 
         if is_output_json_unique(metadata):
@@ -438,7 +440,13 @@ class PipeDAGStore(Disposable):
                 if is_output_json_unique(metadata_with_matching_cache_fn_hash):
                     return return_(metadata_with_matching_cache_fn_hash)
             else:
-                return return_(metadata)
+                # Choose latest, and then filter out all other metadata objects
+                # with a different output json, as those cache slots are
+                # incompatible with the one we choose.
+                chosen_output_json = metadata[0]
+                return return_(
+                    [m for m in metadata if m.output_json == chosen_output_json]
+                )
 
         raise CacheError(
             "Multiple matching cache slots with incompatible outputs found."

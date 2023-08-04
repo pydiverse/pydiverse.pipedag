@@ -105,6 +105,7 @@ class RunContextServer(IPCServer):
         self.deferred_thread_pool = ThreadPoolExecutor()
         self.deferred_ts_ops: dict[int, list[DeferredTableStoreOp]] = {}
         self.deferred_ts_ops_futures: dict[int, list[Future]] = {}
+        self.valid_cache_slots: dict[int, set[str]] = {}
         self.changed_stages: set[int] = set()
 
         # STATE LOCKS
@@ -351,6 +352,19 @@ class RunContextServer(IPCServer):
             self._trigger_deferred_ts_ops(
                 stage_id, DeferredTableStoreOp.Condition.ON_STAGE_CHANGED
             )
+
+    @synchronized("deferred_ops_lock")
+    def update_valid_cache_slots(self, stage_id: int, cache_slots: list[str]):
+        cache_slots = set(cache_slots)
+
+        if stage_id in self.valid_cache_slots:
+            self.valid_cache_slots[stage_id].intersection_update(cache_slots)
+        else:
+            self.valid_cache_slots[stage_id] = cache_slots
+
+    @synchronized("deferred_ops_lock")
+    def get_valid_cache_slots(self, stage_id: int) -> list[str]:
+        return list(self.valid_cache_slots.get(stage_id, []))
 
     @synchronized("deferred_ops_lock")
     def has_stage_changed(self, stage_id: int) -> bool:
@@ -619,6 +633,12 @@ class RunContext(BaseContext):
     def defer_table_store_op(self, stage: Stage, op: DeferredTableStoreOp):
         """Defer running a table store operation until a specific stage event"""
         return self._request("defer_table_store_op", stage.id, op)
+
+    def update_valid_cache_slots(self, stage: Stage, cache_slots: list[str]):
+        return self._request("update_valid_cache_slots", stage.id, cache_slots)
+
+    def get_valid_cache_slots(self, stage: Stage) -> list[str]:
+        return self._request("get_valid_cache_slots", stage.id)
 
     def has_stage_changed(self, stage: Stage) -> bool:
         """Check if a stage has changed and still is 100% cache valid"""

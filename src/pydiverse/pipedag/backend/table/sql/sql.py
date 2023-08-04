@@ -599,15 +599,6 @@ class SQLTableStore(BaseTableStore):
                         .where(table.c.schema == stage.transaction_name)
                     )
 
-                # # Create new entry in cache slots table
-                # conn.execute(
-                #     self.cache_slots_table.insert().values(
-                #         stage=stage.name,
-                #         schema=stage.transaction_name,
-                #         creation_date=datetime.now(),
-                #     )
-                # )
-
     def _init_stage_read_views(self, stage: Stage):
         # TODO: [n_cache_slots] IMPLEMENT ...
         raise NotImplementedError
@@ -639,6 +630,20 @@ class SQLTableStore(BaseTableStore):
     def commit_stage(self, stage: Stage):
         # If the stage is 100% cache valid, then we just need to update the
         # "in_transaction_schema" column of the metadata tables.
+        run_context = RunContext.get()
+        valid_cache_slots = run_context.get_valid_cache_slots(stage)
+
+        if len(valid_cache_slots) >= 1:
+            # assert not run_context.has_stage_changed(stage)
+
+            # TODO: Choose one cache slot based on some metric (choose newest)
+            valid_cache_slots[0]
+
+            # Abort stage and swap `stage` with `stage__csXX`
+            # Rename tables in `stage` to match `stage__tmp`
+            # -> Deferred table store-op needs to provide alternatives for each
+            #    `stage__csXX` when renaming
+            ############################################################################
 
         # TODO: [n_cache_slots] Fix deferred copy
         # if not RunContext.get().has_stage_changed(stage):
@@ -1261,6 +1266,9 @@ class SQLTableStore(BaseTableStore):
 
     def get_stage_hash(self, stage: Stage) -> str:
         """Compute hash that represents entire stage's output metadata."""
+
+        raise NotImplementedError
+
         # We only need to look in tasks_table since the output_json column is updated
         # after evaluating lazy output objects for cache validity. This is the same
         # information we use for producing input_hash of downstream tasks.
