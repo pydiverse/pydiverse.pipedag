@@ -173,16 +173,19 @@ We don't use database transactionality features because of expected slowdowns, a
   :widths: 50 25 25
   :header-rows: 1
     
-  *   - Dialect
+  *   - Database
       - `schema_swap`
       - `read_views`
-  *   - postgres
+  *   - PostgreSQL
       - yes
       - yes
-  *   - mssql
+  *   - DuckDB
+      - no
+      - yes
+  *   - Microsoft SQL Server
       - yes
       - yes
-  *   - ibm_db_sa
+  *   - IBM Db2
       - no
       - yes
   ```
