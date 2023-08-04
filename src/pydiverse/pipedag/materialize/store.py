@@ -410,16 +410,39 @@ class PipeDAGStore(Disposable):
         metadata = self.table_store.retrieve_task_metadata(
             task, input_hash, cache_fn_hash
         )
+        metadata = sorted(metadata, key=lambda m: m.timestamp, reverse=True)
 
-        output_jsons = [m.output_json for m in metadata]
-        if not all(e == output_jsons[0] for e in output_jsons):
-            raise CacheError(
-                "Multiple matching cache slots with incompatible outputs found."
-            )
+        def is_output_json_unique(it):
+            return len({x.output_json for x in it}) == 1
 
-        # TODO: [n_cache_slots] Fix for deferred table copy
-        metadata = metadata[0]
-        return self.json_decode(metadata.output_json), metadata
+        def return_(valid_metadata_choices):
+            # TODO: [n_cache_slots] Fix for deferred table copy
+            metadata = valid_metadata_choices[0]
+            print("CHOSEN METADATA:", metadata)
+            return self.json_decode(metadata.output_json), metadata
+
+        if is_output_json_unique(metadata):
+            return return_(metadata)
+
+        if ConfigContext.get().ignore_cache_function:
+            # Choose cache slot:
+            # - If a cs exists with matching cache_fn_hash, use it
+            # - Otherwise, use the most recently created cs
+
+            metadata_with_matching_cache_fn_hash = []
+            for m in metadata:
+                if m.cache_fn_hash == cache_fn_hash:
+                    metadata_with_matching_cache_fn_hash.append(m)
+
+            if len(metadata_with_matching_cache_fn_hash) != 0:
+                if is_output_json_unique(metadata_with_matching_cache_fn_hash):
+                    return return_(metadata_with_matching_cache_fn_hash)
+            else:
+                return return_(metadata)
+
+        raise CacheError(
+            "Multiple matching cache slots with incompatible outputs found."
+        )
 
     def copy_cached_output_to_transaction_stage(
         self,
@@ -456,9 +479,16 @@ class PipeDAGStore(Disposable):
         def store_raw_sql(raw_sql):
             raise Exception("raw sql scripts cannot be part of a non-lazy task")
 
-        # Update metadata
-        metadata = copy.copy(original_metadata)
-        metadata.cache_slot = task.stage.transaction_name
+        def copy_table_to_transaction(table):
+            return self.table_store.copy_table_to_transaction(
+                table, from_cache_slot=original_metadata.cache_slot
+            )
+
+        def store_metadata():
+            metadata = copy.copy(original_metadata)
+            metadata.cache_slot = task.stage.transaction_name
+            metadata.timestamp = datetime.now()
+            self.table_store.store_task_metadata(metadata)
 
         # Materialize
         self._check_names(task, tables, blobs)
@@ -467,10 +497,10 @@ class PipeDAGStore(Disposable):
             tables,
             raw_sqls,
             blobs,
-            self.table_store.copy_table_to_transaction,
+            copy_table_to_transaction,
             store_raw_sql,
             self.blob_store.copy_blob_to_transaction,
-            lambda: self.table_store.store_task_metadata(metadata),
+            store_metadata,
         )
 
     def retrieve_most_recent_task_output_from_cache(

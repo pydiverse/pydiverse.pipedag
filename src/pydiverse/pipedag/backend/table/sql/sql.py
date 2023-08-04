@@ -177,7 +177,7 @@ class SQLTableStore(BaseTableStore):
         create_database_if_not_exists: bool = False,
         schema_prefix: str = "",
         schema_suffix: str = "",
-        num_cache_slots: int = 1,
+        num_cache_slots: int = 5,
         avoid_drop_create_schema: bool = False,
         print_materialize: bool = False,
         print_sql: bool = False,
@@ -775,8 +775,8 @@ class SQLTableStore(BaseTableStore):
             )
         )
 
-    def copy_table_to_transaction(self, table: Table):
-        from_schema = self.get_schema(table.stage.name)
+    def copy_table_to_transaction(self, table: Table, from_cache_slot: str):
+        from_schema = self.get_schema(from_cache_slot)
         from_name = table.name
 
         # TODO: [n_cache_slots] Fix deferred copy
@@ -788,7 +788,7 @@ class SQLTableStore(BaseTableStore):
         #     self._deferred_copy_table(table, from_schema, from_name)
 
     def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
-        from_schema = self.get_schema(metadata.stage)
+        from_schema = self.get_schema(metadata.cache_slot)
         from_name = metadata.name
 
         # TODO: [n_cache_slots] Fix deferred copy
@@ -950,7 +950,7 @@ class SQLTableStore(BaseTableStore):
         self, metadata: RawSqlMetadata, target_stage: Stage
     ):
         inspector = sa.inspect(self.engine)
-        src_schema = self.get_schema(metadata.stage)
+        src_schema = self.get_schema(metadata.cache_slot)
         dest_schema = self.get_schema(target_stage.transaction_name)
 
         # New tables (AND other objects)
@@ -1066,7 +1066,7 @@ class SQLTableStore(BaseTableStore):
 
     def retrieve_task_metadata(
         self, task: MaterializingTask, input_hash: str, cache_fn_hash: str
-    ) -> [TaskMetadata]:
+    ) -> list[TaskMetadata]:
         if self.disable_caching:
             raise CacheError(
                 "Caching is disabled, so we also don't even try to retrieve task"
@@ -1158,7 +1158,7 @@ class SQLTableStore(BaseTableStore):
     # noinspection DuplicatedCode
     def retrieve_lazy_table_metadata(
         self, query_hash: str, task_hash: str, stage: Stage
-    ) -> [LazyTableMetadata]:
+    ) -> list[LazyTableMetadata]:
         if self.disable_caching:
             raise CacheError(
                 "Caching is disabled, so we also don't even try to retrieve lazy table"
@@ -1210,7 +1210,7 @@ class SQLTableStore(BaseTableStore):
     # noinspection DuplicatedCode
     def retrieve_raw_sql_metadata(
         self, query_hash: str, task_hash: str, stage: Stage
-    ) -> [RawSqlMetadata]:
+    ) -> list[RawSqlMetadata]:
         if self.disable_caching:
             raise CacheError(
                 "Caching is disabled, so we also don't even try to retrieve raw sql"

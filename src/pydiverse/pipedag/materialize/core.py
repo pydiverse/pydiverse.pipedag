@@ -496,7 +496,10 @@ class MaterializationWrapper:
                         cached_output, cache_metadata, task
                     )
                     run_context.store_task_memo(task, memo_cache_key, cached_output)
-                    task.logger.info("Found task in cache. Using cached result.")
+                    task.logger.info(
+                        "Found task in cache. Using cached result.",
+                        cache_slot=cache_metadata.cache_slot,
+                    )
                     TaskContext.get().is_cache_valid = True
                     return cached_output
                 except CacheError as e:

@@ -44,6 +44,18 @@ class PipedagMock:
         __tracebackhide__ = True
         self._assert_call_count(times)
 
+    def assert_called_at_most(self, times):
+        __tracebackhide__ = True
+        m = self._calls_since_last_time()
+        if m <= times:
+            return
+        name = self.mock.mock.__dict__["_mock_name"]
+        msg = (
+            f"Expected function '{name}' to have been called at most {times} times, but"
+            f" it has been called {m} times ({self.mock.call_count} times in total)."
+        )
+        raise AssertionError(msg)
+
 
 def spy_task(mocker, task) -> PipedagMock:
     if isinstance(task, TaskGetItem):

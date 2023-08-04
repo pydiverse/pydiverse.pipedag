@@ -4,6 +4,7 @@ import pandas as pd
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import StageLockContext
+from tests.util.spy import spy_task
 
 dfA_source = pd.DataFrame(
     {
@@ -12,7 +13,7 @@ dfA_source = pd.DataFrame(
     }
 )
 dfA = dfA_source.copy()
-input_hash = hash(str(dfA))
+input_hash = str(dfA)
 
 
 def has_new_input(dummy_arg):
@@ -54,12 +55,15 @@ def get_flow():
     return flow, b2, a3
 
 
-def test_source_invalidation():
+def test_source_invalidation(mocker):
     # trigger reload of input data
     global dfA
     global input_hash
 
     flow, out1, out2 = get_flow()
+
+    out1_spy = spy_task(mocker, out1)
+    out2_spy = spy_task(mocker, out2)
 
     with StageLockContext():
         result = flow.run()
@@ -68,6 +72,9 @@ def test_source_invalidation():
         v_out1, v_out2 = result.get(out1), result.get(out2)
         pd.testing.assert_frame_equal(dfA_source * 2, v_out1, check_dtype=False)
         pd.testing.assert_frame_equal(dfA_source * 4, v_out2, check_dtype=False)
+
+        out1_spy.assert_called_at_most(1)
+        out2_spy.assert_called_at_most(1)
 
     # modify input without updating input hash => cached version is used
     dfA["a"] = 10 + dfA_source["a"]
@@ -81,26 +88,31 @@ def test_source_invalidation():
         pd.testing.assert_frame_equal(dfA_source * 2, v_out1, check_dtype=False)
         pd.testing.assert_frame_equal(dfA_source * 4, v_out2, check_dtype=False)
 
+        out1_spy.assert_not_called()
+        out2_spy.assert_not_called()
+
     # update input hash trigger reload of new input data
-    input_hash = hash(str(dfA))
+    input_hash = str(dfA)
 
     with StageLockContext():
-        # this run should ignore fresh input at source nodes and not change outputs
+        # this run should not result in any task being called,
+        # because ignore_cache_function is set to True
         result = flow.run(ignore_cache_function=True)
         assert result.successful
 
-        v_out1, v_out2 = result.get(out1), result.get(out2)
-        pd.testing.assert_frame_equal(dfA_source * 2, v_out1, check_dtype=False)
-        pd.testing.assert_frame_equal(dfA_source * 4, v_out2, check_dtype=False)
+        out1_spy.assert_not_called()
+        out2_spy.assert_not_called()
 
     with StageLockContext():
         result = flow.run()
         assert result.successful
 
         v_out1, v_out2 = result.get(out1), result.get(out2)
-
         pd.testing.assert_frame_equal(dfA * 2, v_out1, check_dtype=False)
         pd.testing.assert_frame_equal(dfA * 4, v_out2, check_dtype=False)
+
+        out1_spy.assert_called_at_most(1)
+        out2_spy.assert_called_at_most(1)
 
 
 if __name__ == "__main__":
