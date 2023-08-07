@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Generic
@@ -30,6 +31,7 @@ class TableHookResolver:
     _registered_table_hooks: list[type[TableHook]] = []
     _m_hook_cache: dict[type, type[TableHook]] = {}
     _r_hook_cache: dict[type, type[TableHook]] = {}
+    _av_hook_cache: dict[type, type[TableHook]] = {}
     _hook_subclass_cache: dict[type, type[TableHook]] = {}
 
     @classmethod
@@ -64,6 +66,7 @@ class TableHookResolver:
             cls._registered_table_hooks = []
             cls._m_hook_cache = {}
             cls._r_hook_cache = {}
+            cls._av_hook_cache = {}
             cls._hook_subclass_cache = {}
 
         def decorator(hook_cls):
@@ -80,6 +83,7 @@ class TableHookResolver:
             cls._registered_table_hooks.append(hook_cls)
             cls._m_hook_cache.clear()
             cls._r_hook_cache.clear()
+            cls._av_hook_cache.clear()
             cls._hook_subclass_cache.clear()
             return hook_cls
 
@@ -129,17 +133,47 @@ class TableHookResolver:
             + self.__hook_unmet_requirements_message()
         )
 
+    def get_av_table_hook(self: Self, type_: type) -> type[TableHook[Self]]:
+        """Get a table hook that supports auto versioning for the specified type"""
+        if type_ in self._av_hook_cache:
+            return self._av_hook_cache[type_]
+
+        for hook in self.__registered_tables():
+            if hook.can_get_auto_version(type_):
+                self._av_hook_cache[type_] = hook
+                return hook
+
+        raise TypeError(f"Auto versioning not supported for type {type_}.")
+
     def get_hook_subclass(self, type_: type[TableHook[T]]) -> type[TableHook[T]]:
         """Finds a table hook that is a subclass of the provided type"""
         if type_ in self._hook_subclass_cache:
             return self._hook_subclass_cache[type_]
 
-        for hook in self.__registered_tables():
-            if issubclass(hook, type_):
-                self._hook_subclass_cache[type_] = hook
-                return hook
+        min_distance = sys.maxsize
+        min_subclass = None
 
-        return type_
+        for cls in type(self).__mro__:
+            if "_registered_table_hooks" in cls.__dict__:
+                for hook in cls._registered_table_hooks[::-1]:  # noqa
+                    if issubclass(hook, type_):
+                        # Calculate distance between superclass and child class
+                        try:
+                            dist = hook.__mro__.index(type_)
+                            if dist < min_distance:
+                                min_distance = dist
+                                min_subclass = hook
+                        except ValueError:
+                            pass
+
+                if min_subclass:
+                    break
+
+        if min_subclass:
+            self._hook_subclass_cache[type_] = min_subclass
+            return min_subclass
+
+        raise RuntimeError
 
     def store_table(self, table: Table, task: MaterializingTask | None):
         """Stores a table in the associated transaction stage
@@ -166,6 +200,7 @@ class TableHookResolver:
         self,
         table: Table,
         as_type: type[T],
+        for_auto_versioning: bool = False,
     ) -> T:
         """Loads a table from the store
 
@@ -186,6 +221,11 @@ class TableHookResolver:
 
         hook = self.get_r_table_hook(as_type)
         try:
+            if for_auto_versioning:
+                return hook.retrieve_for_auto_versioning(
+                    self, table, table.stage.current_name, as_type
+                )
+
             return hook.retrieve(self, table, table.stage.current_name, as_type)
         except Exception as e:
             raise RuntimeError(f"Failed to retrieve table '{table}'") from e
@@ -468,7 +508,11 @@ class BaseTableStore(TableHookResolver, Disposable):
         self,
         table: Table,
         as_type: type[T],
+        for_auto_versioning: bool = False,
     ) -> T:
+        if for_auto_versioning:
+            return super().retrieve_table_obj(table, as_type, for_auto_versioning)
+
         if self.local_table_cache:
             obj = self.local_table_cache.retrieve_table_obj(table, as_type)
             if obj is not None:
@@ -679,3 +723,35 @@ class TableHook(Generic[TableHookResolverT], ABC):
         :raises TypeError: if the type doesn't support lazy queries.
         """
         raise TypeError(f"Lazy query not supported with object of type {type(obj)}")
+
+    @classmethod
+    def can_get_auto_version(cls, type_: type) -> bool:
+        """
+        Return `True` if this hook supports `get_auto_version` with this type.
+        """
+        return False
+
+    @classmethod
+    def retrieve_for_auto_versioning(
+        cls,
+        store: TableHookResolverT,
+        table: Table,
+        stage_name: str,
+        as_type: type[T] | tuple | dict[str, Any],
+    ) -> T:
+        """
+        Retrieve a table (or table like object) from the store to be used for
+        automatic version number determination.
+
+        This function gets called with the same arguments as ``.retrieve``.
+        :raises TypeError: if the type doesn't support automatic versioning.
+        """
+        raise TypeError(f"Auto versioning not supported for type {as_type}")
+
+    @classmethod
+    def get_auto_version(cls, obj) -> str:
+        """
+        :param obj: object returned from task
+        :return: string representation of the operations performed on this object.
+        :raises TypeError: if the object doesn't support automatic versioning.
+        """

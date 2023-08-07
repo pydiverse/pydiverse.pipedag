@@ -18,6 +18,17 @@ from pydiverse.pipedag.util.hashing import stable_hash
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Flow, Stage
+    from pydiverse.pipedag.materialize.store import PipeDAGStore
+
+
+AUTO_VERSION = type(
+    "AUTO_VERSION",
+    (object,),
+    {
+        "__str__": lambda x: "AUTO_VERSION",
+        "__repr__": lambda x: "AUTO_VERSION",
+    },
+)()
 
 
 @overload
@@ -262,6 +273,9 @@ class UnboundMaterializingTask(UnboundTask):
         self.cache = cache
         self.lazy = lazy
 
+        if lazy and version is AUTO_VERSION:
+            raise ValueError("Task can't be lazy and auto-versioning at the same time")
+
     def __call__(self, *args, **kwargs) -> MaterializingTask:
         return super().__call__(*args, **kwargs)  # type: ignore
 
@@ -301,9 +315,28 @@ class MaterializingTask(Task):
         super().__init__(unbound_task, bound_args, flow, stage)
 
         self.input_type = unbound_task.input_type
-        self.version = unbound_task.version
+        self._version = unbound_task.version
         self.cache = unbound_task.cache
         self.lazy = unbound_task.lazy
+
+    @property
+    def version(self):
+        try:
+            if v := TaskContext.get().override_version:
+                return v
+        except LookupError:
+            pass
+
+        return self._version
+
+    @version.setter
+    def version(self, version):
+        try:
+            TaskContext.get().override_version = version
+        except LookupError:
+            raise AttributeError(
+                "Can't set task version outside of a TaskContext"
+            ) from None
 
     def __getitem__(self, item) -> MaterializingTaskGetItem:
         """Construct a :py:class:`~.MaterializingTaskGetItem`.
@@ -481,6 +514,13 @@ class MaterializationWrapper:
 
                 return memo
 
+            if task.version is AUTO_VERSION:
+                assert not task.lazy
+
+                auto_version = self.compute_auto_version(task, store, bound)
+                task.version = auto_version
+                task.logger.info("Assigned auto version to task", version=auto_version)
+
             # Cache Lookup (only required if task isn't lazy)
             force_task_execution = config_context._force_task_execution
             skip_cache_lookup = (
@@ -569,6 +609,59 @@ class MaterializationWrapper:
             self.value = result
 
             return result
+
+    def compute_auto_version(
+        self,
+        task: MaterializingTask,
+        store: PipeDAGStore,
+        bound: inspect.BoundArguments,
+    ) -> str:
+        args, kwargs = store.dematerialize_task_inputs(
+            task, bound.args, bound.kwargs, for_auto_versioning=True
+        )
+
+        try:
+            result = self.fn(*args, **kwargs)
+        except Exception as e:
+            raise RuntimeError("Auto versioning failed") from e
+
+        task_cache_info = TaskCacheInfo(
+            task=task,
+            input_hash="AUTO_VERSION",
+            cache_fn_hash="AUTO_VERSION",
+            cache_key="AUTO_VERSION",
+        )
+
+        result, tables, raw_sqls, blobs = store.prepare_task_output_for_materialization(
+            task, task_cache_info, result
+        )
+
+        if len(raw_sqls) != 0:
+            raise ValueError(f"Task with version={AUTO_VERSION} can't return RawSql.")
+
+        if len(blobs) != 0:
+            raise ValueError(f"Task with version={AUTO_VERSION} can't return Blobs.")
+
+        if len(tables) == 0:
+            raise ValueError(
+                f"Task with version={AUTO_VERSION} must return at least one Table."
+            )
+
+        auto_version_info = []
+        for table in tables:
+            obj = table.obj
+            hook = store.table_store.get_av_table_hook(type(obj))
+            auto_version_info.append(hook.get_auto_version(obj))
+
+        # Compute auto version
+        info_json = store.json_encode(
+            {
+                "task_output": result,
+                "auto_version_info": auto_version_info,
+            }
+        )
+
+        return "auto_" + stable_hash("AUTO-VERSION", info_json)
 
 
 def _get_output_from_store(

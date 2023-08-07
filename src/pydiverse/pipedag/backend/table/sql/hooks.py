@@ -389,14 +389,14 @@ class PolarsTableHook(TableHook[SQLTableStore]):
     @classmethod
     def can_materialize(cls, type_) -> bool:
         # attention: tidypolars.Tibble is subclass of polars DataFrame
-        return type_ == polars.dataframe.DataFrame
+        return type_ == polars.DataFrame
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        return type_ == polars.dataframe.DataFrame
+        return type_ == polars.DataFrame
 
     @classmethod
-    def materialize(cls, store, table: Table[polars.dataframe.DataFrame], stage_name):
+    def materialize(cls, store, table: Table[polars.DataFrame], stage_name):
         # Materialization for polars happens by first converting the dataframe to
         # a pyarrow backed pandas dataframe, and then calling the PandasTableHook
         # for materialization.
@@ -412,8 +412,8 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         dtypes = dict(zip(df.columns, map(DType.from_polars, df.dtypes)))
 
         pd_df = df.to_pandas(use_pyarrow_extension_array=True, zero_copy_only=True)
-        hook = store.get_hook_subclass(PandasTableHook)
-        return hook.materialize_(
+        pandas_hook = store.get_hook_subclass(PandasTableHook)
+        return pandas_hook.materialize_(
             df=pd_df,
             dtypes=dtypes,
             store=store,
@@ -427,8 +427,8 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         store: SQLTableStore,
         table: Table,
         stage_name: str,
-        as_type: type[polars.dataframe.DataFrame],
-    ) -> polars.dataframe.DataFrame:
+        as_type: type[polars.DataFrame],
+    ) -> polars.DataFrame:
         schema = store.get_schema(stage_name).get()
         table_name, schema = store.resolve_alias(table.name, schema)
         connection_uri = store.engine_url.render_as_string(hide_password=False)
@@ -441,9 +441,100 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         return df
 
     @classmethod
-    def auto_table(cls, obj: polars.dataframe.DataFrame):
+    def auto_table(cls, obj: polars.DataFrame):
         # currently, we don't know how to store a table name inside polars dataframe
         return super().auto_table(obj)
+
+
+@SQLTableStore.register_table(polars, connectorx)
+class LazyPolarsTableHook(TableHook[SQLTableStore]):
+    @classmethod
+    def can_materialize(cls, type_) -> bool:
+        return type_ == polars.LazyFrame
+
+    @classmethod
+    def can_retrieve(cls, type_) -> bool:
+        return type_ == polars.LazyFrame
+
+    @classmethod
+    def materialize(cls, store, table: Table[polars.LazyFrame], stage_name):
+        t = table.obj
+        table = table.copy_without_obj()
+        table.obj = t.collect()
+
+        polars_hook = store.get_hook_subclass(PolarsTableHook)
+        return polars_hook.materialize(store, table, stage_name)
+
+    @classmethod
+    def retrieve(
+        cls,
+        store: SQLTableStore,
+        table: Table,
+        stage_name: str,
+        as_type: type[polars.DataFrame],
+    ) -> polars.LazyFrame:
+        polars_hook = store.get_hook_subclass(PolarsTableHook)
+        result = polars_hook.retrieve(
+            store=store,
+            table=table,
+            stage_name=stage_name,
+            as_type=as_type,
+        )
+
+        return result.lazy()
+
+    @classmethod
+    def can_get_auto_version(cls, type_: type) -> bool:
+        return type_ == polars.LazyFrame
+
+    @classmethod
+    def retrieve_for_auto_versioning(
+        cls,
+        store: SQLTableStore,
+        table: Table,
+        stage_name: str,
+        as_type: type[polars.LazyFrame],
+    ) -> polars.LazyFrame:
+        schema = store.get_schema(stage_name).get()
+        table_name, schema = store.resolve_alias(table.name, schema)
+        connection_uri = store.engine_url.render_as_string(hide_password=False)
+
+        preparer = store.engine.dialect.identifier_preparer
+        q_table = preparer.quote(table_name)
+        q_schema = preparer.format_schema(schema)
+
+        # Retrieve with LIMIT 0 -> only get schema but no data
+        df = polars.read_database(
+            f"SELECT * FROM {q_schema}.{q_table} LIMIT 0", connection_uri
+        )
+
+        # Create lazy frame where each column is identified by:
+        #     stage name, table name, column name
+        # We then rename all columns to match the names of the table.
+        #
+        # This allows us to properly trace the origin of each column in
+        # the output `.write_json` back to the table where it originally came from.
+
+        schema = {}
+        rename = {}
+        for col in df:
+            qualified_name = f"[{stage_name}].[{table.name}].[{col.name}]"
+            schema[qualified_name] = col.dtype
+            rename[qualified_name] = col.name
+
+        lf = polars.LazyFrame(schema=schema).rename(rename)
+        return lf
+
+    @classmethod
+    def get_auto_version(cls, obj) -> str:
+        """
+        :param obj: object returned from task
+        :return: string representation of the operations performed on this object.
+        :raises TypeError: if the object doesn't support automatic versioning.
+        """
+        if not isinstance(obj, polars.LazyFrame):
+            raise TypeError("Expected LazyFrame")
+        return obj.write_json()
 
 
 try:
@@ -469,8 +560,8 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         table = table.copy_without_obj()
         table.obj = t.to_polars()
 
-        hook = store.get_hook_subclass(PolarsTableHook)
-        return hook.materialize(store, table, stage_name)
+        polars_hook = store.get_hook_subclass(PolarsTableHook)
+        return polars_hook.materialize(store, table, stage_name)
 
     @classmethod
     def retrieve(
@@ -480,8 +571,8 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         stage_name: str,
         as_type: type[tidypolars.Tibble],
     ) -> tidypolars.Tibble:
-        hook = store.get_hook_subclass(PolarsTableHook)
-        df = hook.retrieve(store, table, stage_name, as_type)
+        polars_hook = store.get_hook_subclass(PolarsTableHook)
+        df = polars_hook.retrieve(store, table, stage_name, as_type)
         return tidypolars.from_polars(df)
 
     @classmethod

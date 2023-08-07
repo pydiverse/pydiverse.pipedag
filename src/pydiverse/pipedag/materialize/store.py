@@ -113,13 +113,18 @@ class PipeDAGStore(Disposable):
         item: Table | RawSql | Blob | Any,
         as_type: type[T],
         ctx: RunContext | None = None,
+        for_auto_versioning: bool = False,
     ):
         if ctx is None:
             ctx = RunContext.get()
 
         if isinstance(item, Table):
             ctx.validate_stage_lock(item.stage)
-            obj = self.table_store.retrieve_table_obj(item, as_type=as_type)
+            obj = self.table_store.retrieve_table_obj(
+                item,
+                as_type=as_type,
+                for_auto_versioning=for_auto_versioning,
+            )
             return obj
         elif isinstance(item, RawSql):
             ctx.validate_stage_lock(item.stage)
@@ -127,7 +132,11 @@ class PipeDAGStore(Disposable):
             loaded_tables = {}
             for table_name in item:
                 table = item[table_name]
-                obj = self.table_store.retrieve_table_obj(table, as_type=as_type)
+                obj = self.table_store.retrieve_table_obj(
+                    table,
+                    as_type=as_type,
+                    for_auto_versioning=for_auto_versioning,
+                )
                 loaded_tables[table_name] = obj
 
             new_raw_sql = item.copy_without_obj()
@@ -143,6 +152,8 @@ class PipeDAGStore(Disposable):
         task: MaterializingTask,
         args: tuple[Materializable],
         kwargs: dict[str, Materializable],
+        *,
+        for_auto_versioning: bool = False,
     ) -> tuple[tuple, dict]:
         """Loads the inputs for a task from the storage backends
 
@@ -152,13 +163,20 @@ class PipeDAGStore(Disposable):
         :param task: The task for which the arguments should be dematerialized
         :param args: The positional arguments
         :param kwargs: The keyword arguments
+        :param for_auto_versioning: If the task inputs should be retrieved
+            for use with auto versioning.
         :return: A tuple with the dematerialized args and kwargs
         """
 
         ctx = RunContext.get()
 
         def dematerialize_mapper(x):
-            return self.dematerialize_item(x, as_type=task.input_type, ctx=ctx)
+            return self.dematerialize_item(
+                x,
+                as_type=task.input_type,
+                ctx=ctx,
+                for_auto_versioning=for_auto_versioning,
+            )
 
         d_args = deep_map(args, dematerialize_mapper)
         d_kwargs = deep_map(kwargs, dematerialize_mapper)
@@ -197,73 +215,9 @@ class PipeDAGStore(Disposable):
                 f"(state: {state})."
             )
 
-        tables = []
-        raw_sqls = []
-        blobs = []
-
-        config = ConfigContext.get()
-        auto_suffix_counter = itertools.count()
-
-        def materialize_mutator(x):
-            # Automatically convert an object to a table / blob if its
-            # type is inside either `config.auto_table` or `.auto_blob`.
-            if isinstance(x, config.auto_table):
-                try:
-                    hook = self.table_store.get_m_table_hook(type(x))
-                    x = hook.auto_table(x)
-                except TypeError:
-                    x = Table(x)
-            if isinstance(x, config.auto_blob):
-                x = Blob(x)
-
-            if isinstance(x, PipedagConfig):
-                # Config objects are not an allowed return type,
-                # because they might mess up caching.
-                raise TypeError(
-                    "You can't return a PipedagConfig object from a materializing task."
-                )
-
-            # Do the materialization
-            if isinstance(x, (Table, RawSql, Blob)):
-                if not task.lazy:
-                    # task cache_key is output cache_key for eager tables
-                    x.cache_key = task_cache_info.cache_key
-
-                x.stage = stage
-
-                # Update name:
-                # - If no name has been provided, generate on automatically
-                # - If the provided name ends with %%, perform name mangling
-                object_number = next(auto_suffix_counter)
-                auto_suffix = f"{task_cache_info.cache_key}" f"_{object_number:04d}"
-
-                if x.name is None:
-                    x.name = task.name + "_" + auto_suffix
-                elif x.name.endswith("%%"):
-                    x.name = x.name[:-2] + auto_suffix
-
-                ctx.validate_stage_lock(stage)
-                if isinstance(x, Table):
-                    if x.obj is None:
-                        raise TypeError("Underlying table object can't be None")
-                    tables.append(x)
-                elif isinstance(x, RawSql):
-                    if x.sql is None:
-                        raise TypeError("Underlying raw sql string can't be None")
-                    raw_sqls.append(x)
-                elif isinstance(x, Blob):
-                    if task.lazy:
-                        raise NotImplementedError(
-                            "Can't use Blobs with lazy tasks. Invalidation of the"
-                            " downstream dependencies is not implemented."
-                        )
-                    blobs.append(x)
-                else:
-                    raise NotImplementedError
-
-            return x
-
-        m_value = deep_map(value, materialize_mutator)
+        value, tables, raw_sqls, blobs = self.prepare_task_output_for_materialization(
+            task, task_cache_info, value
+        )
 
         def store_metadata():
             """
@@ -271,7 +225,7 @@ class PipeDAGStore(Disposable):
             because during materialization the cache_key of the different objects
             can get changed.
             """
-            output_json = self.json_encode(m_value)
+            output_json = self.json_encode(value)
             metadata = TaskMetadata(
                 name=task.name,
                 stage=task.stage.name,
@@ -306,7 +260,82 @@ class PipeDAGStore(Disposable):
             store_metadata,
         )
 
-        return m_value
+        return value
+
+    def prepare_task_output_for_materialization(
+        self,
+        task: MaterializingTask,
+        task_cache_info: TaskCacheInfo,
+        value: Materializable,
+    ) -> tuple[Materializable, list[Table], list[RawSql], list[Blob]]:
+        tables = []
+        raw_sqls = []
+        blobs = []
+
+        config = ConfigContext.get()
+        auto_suffix_counter = itertools.count()
+
+        def preparation_mutator(x):
+            # Automatically convert an object to a table / blob if its
+            # type is inside either `config.auto_table` or `.auto_blob`.
+            if isinstance(x, config.auto_table):
+                try:
+                    hook = self.table_store.get_m_table_hook(type(x))
+                    x = hook.auto_table(x)
+                except TypeError:
+                    x = Table(x)
+            if isinstance(x, config.auto_blob):
+                x = Blob(x)
+
+            if isinstance(x, PipedagConfig):
+                # Config objects are not an allowed return type,
+                # because they might mess up caching.
+                raise TypeError(
+                    "You can't return a PipedagConfig object from a materializing task."
+                )
+
+            # Add missing metadata
+            if isinstance(x, (Table, RawSql, Blob)):
+                if not task.lazy:
+                    # task cache_key is output cache_key for eager tables
+                    x.cache_key = task_cache_info.cache_key
+
+                x.stage = task.stage
+
+                # Update name:
+                # - If no name has been provided, generate on automatically
+                # - If the provided name ends with %%, perform name mangling
+                object_number = next(auto_suffix_counter)
+                auto_suffix = f"{task_cache_info.cache_key}" f"_{object_number:04d}"
+
+                if x.name is None:
+                    x.name = task.name + "_" + auto_suffix
+                elif x.name.endswith("%%"):
+                    x.name = x.name[:-2] + auto_suffix
+
+                if isinstance(x, Table):
+                    if x.obj is None:
+                        raise TypeError("Underlying table object can't be None")
+                    tables.append(x)
+                elif isinstance(x, RawSql):
+                    if x.sql is None:
+                        raise TypeError("Underlying raw sql string can't be None")
+                    raw_sqls.append(x)
+                elif isinstance(x, Blob):
+                    if task.lazy:
+                        raise NotImplementedError(
+                            "Can't use Blobs with lazy tasks. Invalidation of the"
+                            " downstream dependencies is not implemented."
+                        )
+                    blobs.append(x)
+                else:
+                    raise NotImplementedError
+
+            return x
+
+        value = deep_map(value, preparation_mutator)
+
+        return value, tables, raw_sqls, blobs
 
     @staticmethod
     def _check_names(task: MaterializingTask, tables: list[Table], blobs: list[Blob]):

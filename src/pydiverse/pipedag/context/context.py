@@ -94,6 +94,7 @@ class TaskContext(BaseContext):
     input_tables: list[Table] = None
     is_cache_valid: bool | None = None
     name_disambiguator: NameDisambiguator = field(factory=NameDisambiguator)
+    override_version: str | None = None
 
     _context_var = ContextVar("task_context")
 

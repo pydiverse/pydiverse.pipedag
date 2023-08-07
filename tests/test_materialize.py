@@ -15,7 +15,7 @@ from tests.fixtures.instances import (
     ORCHESTRATION_INSTANCES,
     with_instances,
 )
-from tests.util import select_as
+from tests.util import select_as, swallowing_raises
 from tests.util import tasks_library as m
 
 pytestmark = [with_instances(ALL_INSTANCES, ORCHESTRATION_INSTANCES)]
@@ -115,18 +115,16 @@ def test_failure():
         with Stage("failure_stage"):
             m.exception(0, True)
 
-    with ConfigContext.get().evolve(swallow_exceptions=True):
-        with pytest.raises(Exception, match="THIS EXCEPTION IS EXPECTED"):
-            f.run(fail_fast=True)
+    with swallowing_raises(Exception, match="THIS EXCEPTION IS EXPECTED"):
+        f.run(fail_fast=True)
 
     with Flow("flow") as f:
         with Stage("failure_stage"):
             x = m.exception(0, True)
             m.noop(x)
 
-    with ConfigContext.get().evolve(swallow_exceptions=True):
-        with pytest.raises(Exception, match="THIS EXCEPTION IS EXPECTED"):
-            f.run(fail_fast=True)
+    with swallowing_raises(Exception, match="THIS EXCEPTION IS EXPECTED"):
+        f.run(fail_fast=True)
 
 
 def test_return_pipedag_config():
@@ -134,9 +132,8 @@ def test_return_pipedag_config():
         with Stage("failure_stage"):
             m.noop(PipedagConfig.default)
 
-    with ConfigContext.get().evolve(swallow_exceptions=True):
-        with pytest.raises(TypeError, match="PipedagConfig"):
-            f.run(fail_fast=True)
+    with swallowing_raises(TypeError, match="PipedagConfig"):
+        f.run(fail_fast=True)
 
 
 def test_materialize_memo_literal():

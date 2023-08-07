@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
 from pydiverse.pipedag import *
 from pydiverse.pipedag.backend.table.sql import TableReference
@@ -10,6 +9,7 @@ from pydiverse.pipedag.context import TaskContext
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.util import swallowing_raises
 from tests.util.sql import sql_table_expr
 from tests.util.tasks_library import assert_table_equal
 
@@ -65,6 +65,5 @@ def test_bad_table_reference():
         with Stage("sql_table_reference"):
             bad_table_reference()
 
-    with ConfigContext.get().evolve(swallow_exceptions=True):
-        with pytest.raises(ValueError, match="this_table_does_not_exist"):
-            f.run()
+    with swallowing_raises(ValueError, match="this_table_does_not_exist"):
+        f.run()
