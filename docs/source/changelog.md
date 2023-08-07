@@ -1,6 +1,6 @@
 # Changelog
 
-## Latest
+## 0.6.4 (2023-08-07)
 - Allow invocation of undecorated task functions when calling task object outside of flow definition context.
 - Rename `ignore_fresh_input` to `ignore_cache_function`.
 - Fix race condition leading to `JSONDecodeError` in [](#ParquetTableCache) when setting `store_input: true` together with the `DaskEngine`.
