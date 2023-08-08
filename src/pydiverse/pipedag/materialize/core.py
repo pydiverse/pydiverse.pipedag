@@ -21,16 +21,6 @@ if TYPE_CHECKING:
     from pydiverse.pipedag.materialize.store import PipeDAGStore
 
 
-AUTO_VERSION = type(
-    "AUTO_VERSION",
-    (object,),
-    {
-        "__str__": lambda x: "AUTO_VERSION",
-        "__repr__": lambda x: "AUTO_VERSION",
-    },
-)()
-
-
 @overload
 def materialize(
     *,
@@ -702,3 +692,50 @@ class PseudoStage:
             return self.name
         else:
             return self.transaction_name
+
+
+class AutoVersionType:
+    """
+    Special constant used to indicate that pipedag should automatically determine
+    a version number for a task.
+
+    The version is determined by running the task once with empty tables as input
+    to construct some kind of representation of the computations performed on the
+    tables (e.g. a computational graph).
+    Using this representation a unique version number is constructed such that
+    if the computation changes the version number also changes.
+    Then, if the task is deemed to be cache invalid, it is run again, but this
+    time with actual data.
+
+    This puts the following constraints on which tasks can use `AUTO_VERSION`:
+
+    * The task must be a pure function.
+    * The task may not inspect the contents of the input tables.
+    * The task must return at least one table.
+    * The task may not return :py:class:`RawSql`.
+    * The task may not return :py:class:`Blob`.
+
+    Currently, this feature is only supported by
+    :external+pl:doc:`polars.LazyFrame <reference/lazyframe/index>`.
+
+    Example
+    -------
+    ::
+
+        @materialize(input_type=pl.LazyFrame, version=AUTO_VERSION)
+        def polars_task(x: pl.LazyFrame):
+            # Some operations that only utilize pl.LazyFrame...
+            return x.with_columns(
+                (pl.col("col1") * pl.col("col2")).alias("col3")
+            )
+
+    """
+
+    def __str__(self):
+        return "AUTO_VERSION"
+
+    def __repr__(self):
+        return "AUTO_VERSION"
+
+
+AUTO_VERSION = AutoVersionType()

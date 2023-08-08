@@ -18,6 +18,8 @@ Public
 
 .. autodecorator:: materialize
 
+.. autodata:: AUTO_VERSION
+
 .. autoclass:: Table
 .. autoclass:: RawSql
     :members:
