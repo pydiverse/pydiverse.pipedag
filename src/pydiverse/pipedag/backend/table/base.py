@@ -68,6 +68,9 @@ class TableHookResolver:
 
         def decorator(hook_cls):
             if not all(requirements):
+                cls.__hooks_with_unmet_requirements.append(
+                    hook_cls.__module__ + "." + hook_cls.__qualname__
+                )
                 return requires(
                     False,
                     Exception(f"Not all requirements met for {hook_cls.__name__}"),
@@ -99,7 +102,10 @@ class TableHookResolver:
                 self._m_hook_cache[type_] = hook
                 return hook
 
-        raise TypeError(f"Can't materialize Table with underlying type {type_}")
+        raise TypeError(
+            f"Can't materialize Table with underlying type {type_}. "
+            + self.__hook_unmet_requirements_message()
+        )
 
     def get_r_table_hook(
         self: Self, type_: type[T] | tuple | dict
@@ -118,7 +124,10 @@ class TableHookResolver:
                 self._r_hook_cache[type_] = hook
                 return hook
 
-        raise TypeError(f"Can't retrieve Table as type {type_}")
+        raise TypeError(
+            f"Can't retrieve Table as type {type_}. "
+            + self.__hook_unmet_requirements_message()
+        )
 
     def get_hook_subclass(self, type_: type[TableHook[T]]) -> type[TableHook[T]]:
         """Finds a table hook that is a subclass of the provided type"""
@@ -180,6 +189,20 @@ class TableHookResolver:
             return hook.retrieve(self, table, table.stage.current_name, as_type)
         except Exception as e:
             raise RuntimeError(f"Failed to retrieve table '{table}'") from e
+
+    __hooks_with_unmet_requirements: list[str] = []
+
+    @classmethod
+    def __hook_unmet_requirements_message(cls) -> str:
+        if len(cls.__hooks_with_unmet_requirements) == 0:
+            return "This is is because no TableHook has been registered for this type."
+
+        return (
+            "This is either because no TableHook has been registered for this type, "
+            "or because not all requirements have been met for the corresponding hook."
+            "\nHooks with unmet requirements: "
+            + ", ".join(cls.__hooks_with_unmet_requirements)
+        )
 
 
 class BaseTableStore(TableHookResolver, Disposable):

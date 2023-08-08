@@ -6,6 +6,14 @@ import os
 from collections.abc import Collection
 from typing import Any
 
+_allowed_getattr = [
+    "__class__",
+    "__doc__",
+    "__name__",
+    "__qualname__",
+    "__module__",
+]
+
 
 def requires(requirements: Any | list, exception: BaseException | type[BaseException]):
     """Class decorator for handling optional imports.
@@ -30,7 +38,7 @@ def requires(requirements: Any | list, exception: BaseException | type[BaseExcep
                 # without raising exceptions.
                 if os.environ.get("SPHINX_BUILD"):
                     return getattr(cls, x)
-                if x in ["__class__", "__doc__", "__name__", "__qualname__"]:
+                if x in _allowed_getattr:
                     return getattr(cls, x)
                 raise exception
 
