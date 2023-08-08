@@ -429,21 +429,31 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         stage_name: str,
         as_type: type[polars.DataFrame],
     ) -> polars.DataFrame:
-        schema = store.get_schema(stage_name).get()
-        table_name, schema = store.resolve_alias(table.name, schema)
+        query = cls._read_db_query(store, table, stage_name)
+        query = cls._compile_query(store, query)
         connection_uri = store.engine_url.render_as_string(hide_password=False)
 
-        preparer = store.engine.dialect.identifier_preparer
-        q_table = preparer.quote(table_name)
-        q_schema = preparer.format_schema(schema)
-
-        df = polars.read_database(f"SELECT * FROM {q_schema}.{q_table}", connection_uri)
+        df = polars.read_database(query, connection_uri)
         return df
 
     @classmethod
     def auto_table(cls, obj: polars.DataFrame):
         # currently, we don't know how to store a table name inside polars dataframe
         return super().auto_table(obj)
+
+    @classmethod
+    def _read_db_query(cls, store: SQLTableStore, table: Table, stage_name: str):
+        schema = store.get_schema(stage_name).get()
+        table_name, schema = store.resolve_alias(table.name, schema)
+
+        t = sa.table(table_name, schema=schema)
+        q = sa.select("*").select_from(t)
+
+        return q
+
+    @classmethod
+    def _compile_query(cls, store: SQLTableStore, query: sa.Select) -> str:
+        return str(query.compile(store.engine, compile_kwargs={"literal_binds": True}))
 
 
 @SQLTableStore.register_table(polars, connectorx)
@@ -495,18 +505,13 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         stage_name: str,
         as_type: type[polars.LazyFrame],
     ) -> polars.LazyFrame:
-        schema = store.get_schema(stage_name).get()
-        table_name, schema = store.resolve_alias(table.name, schema)
+        # Retrieve with LIMIT 0 -> only get schema but no data
+        query = PolarsTableHook._read_db_query(store, table, stage_name)
+        query = query.limit(sa.literal_column("0"))
+        query = PolarsTableHook._compile_query(store, query)
         connection_uri = store.engine_url.render_as_string(hide_password=False)
 
-        preparer = store.engine.dialect.identifier_preparer
-        q_table = preparer.quote(table_name)
-        q_schema = preparer.format_schema(schema)
-
-        # Retrieve with LIMIT 0 -> only get schema but no data
-        df = polars.read_database(
-            f"SELECT * FROM {q_schema}.{q_table} LIMIT 0", connection_uri
-        )
+        df = polars.read_database(query, connection_uri)
 
         # Create lazy frame where each column is identified by:
         #     stage name, table name, column name
