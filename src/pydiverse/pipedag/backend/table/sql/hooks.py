@@ -507,7 +507,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
     ) -> polars.LazyFrame:
         # Retrieve with LIMIT 0 -> only get schema but no data
         query = PolarsTableHook._read_db_query(store, table, stage_name)
-        query = query.limit(sa.literal_column("0"))
+        query = query.where(sa.false())  # LIMIT 0
         query = PolarsTableHook._compile_query(store, query)
         connection_uri = store.engine_url.render_as_string(hide_password=False)
 

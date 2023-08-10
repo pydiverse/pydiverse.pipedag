@@ -145,7 +145,7 @@ class TableHookResolver:
 
         raise TypeError(f"Auto versioning not supported for type {type_}.")
 
-    def get_hook_subclass(self, type_: type[TableHook[T]]) -> type[TableHook[T]]:
+    def get_hook_subclass(self, type_: type[T]) -> type[T]:
         """Finds a table hook that is a subclass of the provided type"""
         if type_ in self._hook_subclass_cache:
             return self._hook_subclass_cache[type_]
