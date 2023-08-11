@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import dis
+import inspect
 from enum import Enum
+from typing import Any
 
 from pydiverse.pipedag.util import deep_map
 
 
 class Operation(Enum):
-    COMPUTATION_START = 0
+    OBJECT = 0
     GETATTR = 10
     SETATTR = 11
     DELATTR = 12
@@ -14,6 +17,7 @@ class Operation(Enum):
     SETITEM = 21
     DELITEM = 22
     CALL = 50
+    GET = 60
 
     def __repr__(self):
         return self.name
@@ -24,40 +28,73 @@ def _get_tracer(proxy: ComputationTracerProxy) -> ComputationTracer:
 
 
 class ComputationTracer:
+    proxy_type: type[ComputationTracerProxy]
+
     def __init__(self):
         self.trace = []
+        self.patcher = MonkeyPatcher()
+        self.did_enter = False
+        self.proxy_type = ComputationTracerProxy
 
     def create_proxy(self, identifier=None):
-        return self._get_proxy((Operation.COMPUTATION_START, identifier))
+        return self._get_proxy((Operation.OBJECT, identifier))
 
     def __enter__(self):
+        self.did_enter = True
+        self._monkey_patch()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
+        self.patcher.undo()
+        self.did_enter = False
 
     def _get_proxy(self, computation: tuple):
         idx = len(self.trace)
         self._add_computation(computation)
-        return ComputationTracerProxy(self, idx)
+        return self.proxy_type(self, idx)
 
     def _add_computation(self, computation: tuple):
-        computation = deep_map(computation, self._computation_mapper)
-        self.trace.append(computation)
+        if self.did_enter:
+            computation = deep_map(computation, self._computation_mapper)
+            self.trace.append(computation)
+        else:
+            raise RuntimeError(
+                "Can't modify ComputationTrace after exiting the context."
+            )
 
     @staticmethod
     def _computation_mapper(x):
         if isinstance(x, ComputationTracerProxy):
             return ComputationTraceRef(x)
+
+        if inspect.isfunction(x):
+            bytecode = dis.Bytecode(x)
+            return (
+                Operation.OBJECT,
+                "BYTECODE",
+                tuple((instr.opcode, instr.argval) for instr in bytecode),
+            )
+
         return x
+
+    def _monkey_patch(self):
+        ...
+
+    def trace_hash(self) -> str:
+        from dask.base import tokenize
+
+        return tokenize(self.trace)
 
 
 class ComputationTracerProxy:
-    def __init__(self, tracer: ComputationTracer, idx: int):
+    def __init__(self, tracer: ComputationTracer, identifier: int | str):
         object.__setattr__(self, "_computation_tracer_", tracer)
-        object.__setattr__(self, "_computation_tracer_idx_", idx)
+        object.__setattr__(self, "_computation_tracer_id_", identifier)
 
     def __getattribute__(self, item):
+        if item in ("__class__", "__module__"):
+            return object.__getattribute__(self, item)
+
         tracer = _get_tracer(self)
         return tracer._get_proxy((Operation.GETATTR, self, item))
 
@@ -84,6 +121,10 @@ class ComputationTracerProxy:
     def __call__(self, *args, **kwargs):
         tracer = _get_tracer(self)
         return tracer._get_proxy((Operation.CALL, self, args, kwargs))
+
+    def __get__(self, instance, owner):
+        tracer = _get_tracer(self)
+        return tracer._get_proxy((Operation.GET, instance, self))
 
     def __bool__(self):
         raise RuntimeError("Can't convert a ComputationTracerProxy to a boolean")
@@ -147,16 +188,140 @@ for dunder_ in __supported_dunder:
 
 
 class ComputationTraceRef:
-    __slots__ = ("idx",)
+    __slots__ = ("id",)
 
     def __init__(self, proxy: ComputationTracerProxy):
-        self.idx = object.__getattribute__(proxy, "_computation_tracer_idx_")
+        self.id = object.__getattribute__(proxy, "_computation_tracer_id_")
 
     def __str__(self):
-        return f"ComputationTraceRef<{self.idx}>"
+        return f"ComputationTraceRef<{self.id}>"
 
     def __repr__(self):
-        return f"ComputationTraceRef<{self.idx}>"
+        return f"ComputationTraceRef<{self.id}>"
 
     def __dask_tokenize__(self):
-        return self.idx
+        return "ComputationTraceRef", self.id
+
+
+class MonkeyPatcher:
+    """Monkey Patching class inspired by pytest's MonkeyPatch class"""
+
+    def __init__(self):
+        self._setattr: list[tuple[object, str, Any]] = []
+
+    def patch_attr(self, obj: object, name: str, value: Any):
+        old_value = getattr(obj, name)
+        setattr(obj, name, value)
+        self._setattr.append((obj, name, old_value))
+
+    def undo(self):
+        for obj, name, value in reversed(self._setattr):
+            setattr(obj, name, value)
+
+
+def fully_qualified_name(obj):
+    if type(obj).__name__ == "builtin_function_or_method":
+        if obj.__module__ is not None:
+            module = obj.__module__
+        else:
+            if inspect.isclass(obj.__self__):
+                module = obj.__self__.__module__
+            else:
+                module = obj.__self__.__class__.__module__
+        return f"{module}.{obj.__qualname__}"
+
+    if type(obj).__name__ == "function":
+        if hasattr(obj, "__wrapped__"):
+            qualname = obj.__wrapped__.__qualname__
+        else:
+            qualname = obj.__qualname__
+        return f"{obj.__module__}.{qualname}"
+
+    if type(obj).__name__ in (
+        "member_descriptor",
+        "method_descriptor",
+        "wrapper_descriptor",
+    ):
+        return f"{obj.__objclass__.__module__}.{obj.__qualname__}"
+
+    if type(obj).__name__ == "method":
+        if inspect.isclass(obj.__self__):
+            cls = obj.__self__.__qualname__
+        else:
+            cls = obj.__self__.__class__.__qualname__
+        return f"{obj.__self__.__module__}.{cls}.{obj.__name__}"
+
+    if type(obj).__name__ == "method-wrapper":
+        return f"{fully_qualified_name(obj.__self__)}.{obj.__name__}"
+
+    if type(obj).__name__ == "module":
+        return obj.__name__
+
+    if type(obj).__name__ == "property":
+        return f"{obj.fget.__module__}.{obj.fget.__qualname__}"
+
+    if inspect.isclass(obj):
+        return f"{obj.__module__}.{obj.__qualname__}"
+
+    return f"{obj.__class__.__module__}.{obj.__class__.__qualname__}"
+
+
+def patch(tracer: ComputationTracer, target: object, name: str):
+    if isinstance(target, ComputationTracerProxy):
+        return
+
+    val = getattr(target, name)
+
+    if isinstance(val, type):
+        return patch_type(tracer, target, name)
+    if inspect.isfunction(val):
+        return patch_function(tracer, target, name)
+    if isinstance(val, object):
+        return patch_value(tracer, target, name)
+
+    raise RuntimeError
+
+
+def patch_type(tracer: ComputationTracer, target: object, name: str):
+    val = getattr(target, name)
+    full_name = fully_qualified_name(val)
+
+    dunder_to_patch = (
+        "__getattr__",
+        "__setattr__",
+        "__delattr__",
+        "__getitem__",
+        "__setitem__",
+        "__delitem__",
+        "__call__",
+        "__repr__",
+        "__str__",
+    )
+
+    for key, _value in object.__getattribute__(val, "__dict__").items():
+        if key.startswith("__"):
+            if key in dunder_to_patch:
+                try:
+                    tracer.patcher.patch_attr(
+                        val, key, tracer.proxy_type(tracer, full_name + "." + key)
+                    )
+                except AttributeError:
+                    pass
+            continue
+        else:
+            tracer.patcher.patch_attr(
+                val, key, tracer.proxy_type(tracer, full_name + "." + key)
+            )
+
+    tracer.patcher.patch_attr(target, name, tracer.proxy_type(tracer, full_name))
+
+
+def patch_function(tracer: ComputationTracer, target: object, name: str):
+    val = getattr(target, name)
+    full_name = fully_qualified_name(val)
+    tracer.patcher.patch_attr(target, name, tracer.proxy_type(tracer, full_name))
+
+
+def patch_value(tracer: ComputationTracer, target: object, name: str):
+    full_name = fully_qualified_name(target) + "." + name
+    tracer.patcher.patch_attr(target, name, tracer.proxy_type(tracer, full_name))
