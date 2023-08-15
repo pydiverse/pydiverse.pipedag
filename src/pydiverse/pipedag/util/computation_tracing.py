@@ -211,12 +211,18 @@ class MonkeyPatcher:
 
     def patch_attr(self, obj: object, name: str, value: Any):
         old_value = getattr(obj, name)
+
+        # avoid class descriptors like staticmethod / classmethod
+        if inspect.isclass(obj):
+            old_value = obj.__dict__[name]
+
         setattr(obj, name, value)
         self._setattr.append((obj, name, old_value))
 
     def undo(self):
         for obj, name, value in reversed(self._setattr):
             setattr(obj, name, value)
+        self._setattr.clear()
 
 
 def fully_qualified_name(obj):
