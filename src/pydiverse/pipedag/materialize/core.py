@@ -14,10 +14,15 @@ from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.cache import TaskCacheInfo, task_cache_key
 from pydiverse.pipedag.materialize.container import Blob, RawSql, Table
 from pydiverse.pipedag.util import deep_map
+from pydiverse.pipedag.util.computation_tracing import (
+    ComputationTraceRef,
+    ComputationTracerProxy,
+)
 from pydiverse.pipedag.util.hashing import stable_hash
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Flow, Stage
+    from pydiverse.pipedag.backend.table.base import TableHook
     from pydiverse.pipedag.materialize.store import PipeDAGStore
 
 
@@ -263,8 +268,15 @@ class UnboundMaterializingTask(UnboundTask):
         self.cache = cache
         self.lazy = lazy
 
-        if lazy and version is AUTO_VERSION:
-            raise ValueError("Task can't be lazy and auto-versioning at the same time")
+        if version is AUTO_VERSION:
+            if input_type is None:
+                # The input_type is used to determine which type of auto versioning
+                # to use (either not supported, lazy or tracing)
+                raise ValueError("Auto-versioning task must specify an input type")
+            if lazy:
+                raise ValueError(
+                    "Task can't be lazy and auto-versioning at the same time"
+                )
 
     def __call__(self, *args, **kwargs) -> MaterializingTask:
         return super().__call__(*args, **kwargs)  # type: ignore
@@ -606,6 +618,38 @@ class MaterializationWrapper:
         store: PipeDAGStore,
         bound: inspect.BoundArguments,
     ) -> str:
+        # Decide on which type of auto versioning to use.
+        # For this, we go off the `auto_version_support` flag of the retrieve
+        # table hook of the input type
+        from pydiverse.pipedag.backend.table.base import AutoVersionSupport
+
+        hook = store.table_store.get_r_table_hook(task.input_type)
+        auto_version_support = hook.auto_version_support
+
+        if auto_version_support == AutoVersionSupport.NONE:
+            raise TypeError(
+                f"Auto versioning not supported for input type {task.input_type}."
+            )
+
+        # Perform auto versioning
+        info = None
+        if auto_version_support == AutoVersionSupport.LAZY:
+            info = self.compute_auto_version_lazy(task, hook, store, bound)
+        elif auto_version_support == AutoVersionSupport.TRACE:
+            info = self.compute_auto_version_trace(task, hook, store, bound)
+
+        assert isinstance(info, str)
+
+        auto_version = "auto_" + stable_hash("AUTO-VERSION", info)
+        return auto_version
+
+    def compute_auto_version_lazy(
+        self,
+        task: MaterializingTask,
+        hook: type[TableHook],
+        store: PipeDAGStore,
+        bound: inspect.BoundArguments,
+    ) -> str:
         args, kwargs = store.dematerialize_task_inputs(
             task, bound.args, bound.kwargs, for_auto_versioning=True
         )
@@ -615,6 +659,84 @@ class MaterializationWrapper:
         except Exception as e:
             raise RuntimeError("Auto versioning failed") from e
 
+        result, tables = self._auto_version_prepare_and_check_task_output(
+            task, store, result
+        )
+
+        if len(tables) == 0:
+            raise ValueError(
+                f"Task with version={AUTO_VERSION} must return at least one Table."
+            )
+
+        # Compute auto version
+        auto_version_info = []
+        for table in tables:
+            obj = table.obj
+            auto_version_info.append(hook.get_auto_version_lazy(obj))
+
+        return store.json_encode(
+            {
+                "task_output": result,
+                "auto_version_info": auto_version_info,
+            }
+        )
+
+    def compute_auto_version_trace(
+        self,
+        task: MaterializingTask,
+        hook: type[TableHook],
+        store: PipeDAGStore,
+        bound: inspect.BoundArguments,
+    ) -> str | None:
+        computation_tracer = hook.get_computation_tracer()
+
+        def tracer_proxy_mapper(x):
+            if isinstance(x, Table):
+                return computation_tracer.create_proxy(("TABLE", x.stage.name, x.name))
+            if isinstance(x, RawSql):
+                return computation_tracer.create_proxy(
+                    ("RAW_SQL", x.stage.name, x.name, x.cache_key)
+                )
+            if isinstance(x, Blob):
+                return computation_tracer.create_proxy(("BLOB", x.stage.name, x.name))
+
+            return x
+
+        args = deep_map(bound.args, tracer_proxy_mapper)
+        kwargs = deep_map(bound.kwargs, tracer_proxy_mapper)
+
+        with computation_tracer:
+            try:
+                result = self.fn(*args, **kwargs)
+            except Exception as e:
+                raise RuntimeError("Auto versioning failed") from e
+
+        result, tables = self._auto_version_prepare_and_check_task_output(
+            task, store, result
+        )
+
+        # Compute auto version
+        trace_hash = computation_tracer.trace_hash()
+        table_info = []
+
+        # Include the computation tracers in the returned tables in the version
+        # to invalidate the task when outputs get switched
+        for table in tables:
+            obj = table.obj
+            assert isinstance(obj, ComputationTracerProxy)
+            table_info.append(ComputationTraceRef(obj).id)
+
+        return store.json_encode(
+            {
+                "task_output": result,
+                "table_info": table_info,
+                "trace_hash": trace_hash,
+            }
+        )
+
+    def _auto_version_prepare_and_check_task_output(
+        self, task: MaterializingTask, store: PipeDAGStore, output
+    ):
         task_cache_info = TaskCacheInfo(
             task=task,
             input_hash="AUTO_VERSION",
@@ -622,8 +744,18 @@ class MaterializationWrapper:
             cache_key="AUTO_VERSION",
         )
 
-        result, tables, raw_sqls, blobs = store.prepare_task_output_for_materialization(
-            task, task_cache_info, result
+        # Replace computation tracer proxy objects in output
+        def replace_proxy(x):
+            if isinstance(x, ComputationTracerProxy):
+                return {
+                    "__pipedag_type__": "computation_tracer_proxy",
+                    "id": ComputationTraceRef(x).id,
+                }
+            return x
+
+        output = deep_map(output, replace_proxy)
+        output, tables, raw_sqls, blobs = store.prepare_task_output_for_materialization(
+            task, task_cache_info, output
         )
 
         if len(raw_sqls) != 0:
@@ -632,26 +764,7 @@ class MaterializationWrapper:
         if len(blobs) != 0:
             raise ValueError(f"Task with version={AUTO_VERSION} can't return Blobs.")
 
-        if len(tables) == 0:
-            raise ValueError(
-                f"Task with version={AUTO_VERSION} must return at least one Table."
-            )
-
-        auto_version_info = []
-        for table in tables:
-            obj = table.obj
-            hook = store.table_store.get_av_table_hook(type(obj))
-            auto_version_info.append(hook.get_auto_version(obj))
-
-        # Compute auto version
-        info_json = store.json_encode(
-            {
-                "task_output": result,
-                "auto_version_info": auto_version_info,
-            }
-        )
-
-        return "auto_" + stable_hash("AUTO-VERSION", info_json)
+        return output, tables
 
 
 def _get_output_from_store(

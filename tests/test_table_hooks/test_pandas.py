@@ -8,6 +8,7 @@ import pyarrow as pa
 import pytest
 import sqlalchemy as sa
 from packaging.version import Version
+from util.spy import spy_task
 
 import tests.util.tasks_library as m
 from pydiverse.pipedag import *
@@ -276,3 +277,45 @@ def test_pandas_table_hook_postgres_null_string():
     assert df["strNA"][0] == ""
     assert df["strNA"][1] is pd.NA
     assert df["strNA"][2] == "\\N"
+
+
+@with_instances("postgres", "local_table_store")
+class TestPandasAutoVersion:
+    def test_smoke(self, mocker):
+        should_swap_inputs = False
+        global_df = pd.DataFrame({"global_col": [1, 0, 1, 0]})
+
+        @materialize(input_type=pd.DataFrame, version=AUTO_VERSION, nout=2)
+        def in_tables():
+            in_table_1 = pd.DataFrame({"col": [1, 2, 3, 4]})
+            in_table_2 = pd.DataFrame({"col": [4, 3, 2, 1]})
+
+            if should_swap_inputs:
+                return Table(in_table_2), Table(in_table_1)
+            else:
+                return Table(in_table_1), Table(in_table_2)
+
+        @materialize(input_type=pd.DataFrame, version=AUTO_VERSION)
+        def noop(df):
+            return df, Table(df)
+
+        @materialize(input_type=pd.DataFrame, version=AUTO_VERSION)
+        def global_df_task(df):
+            df["col"] *= global_df["global_col"]
+            return df
+
+        with Flow() as f:
+            with Stage("stage"):
+                in_tables_ = in_tables()
+                noop_ = noop(in_tables_[0])
+                global_df_task(noop_[0])
+
+        f.run()
+        in_tables_spy = spy_task(mocker, in_tables_)
+
+        f.run()
+        in_tables_spy.assert_called_once()
+
+        should_swap_inputs = True
+        f.run()
+        in_tables_spy.assert_called(2)

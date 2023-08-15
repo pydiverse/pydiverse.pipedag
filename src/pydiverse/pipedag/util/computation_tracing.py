@@ -33,20 +33,19 @@ class ComputationTracer:
     def __init__(self):
         self.trace = []
         self.patcher = MonkeyPatcher()
-        self.did_enter = False
+        self.did_exit = False
         self.proxy_type = ComputationTracerProxy
 
     def create_proxy(self, identifier=None):
         return self._get_proxy((Operation.OBJECT, identifier))
 
     def __enter__(self):
-        self.did_enter = True
         self._monkey_patch()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.patcher.undo()
-        self.did_enter = False
+        self.did_exit = True
 
     def _get_proxy(self, computation: tuple):
         idx = len(self.trace)
@@ -54,7 +53,7 @@ class ComputationTracer:
         return self.proxy_type(self, idx)
 
     def _add_computation(self, computation: tuple):
-        if self.did_enter:
+        if not self.did_exit:
             computation = deep_map(computation, self._computation_mapper)
             self.trace.append(computation)
         else:

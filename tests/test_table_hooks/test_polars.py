@@ -139,7 +139,7 @@ def test_auto_version_1(mocker):
 def test_auto_version_2(mocker):
     should_swap_inputs = False
 
-    @materialize(version=AUTO_VERSION, nout=2)
+    @materialize(input_type=pl.LazyFrame, version=AUTO_VERSION, nout=2)
     def in_tables():
         in_table_1 = pl.LazyFrame({"col": [1, 2, 3, 4]})
         in_table_2 = pl.LazyFrame({"col": [4, 3, 2, 1]})
@@ -154,7 +154,6 @@ def test_auto_version_2(mocker):
             in_tables_ = in_tables()
 
     f.run()
-
     in_tables_spy = spy_task(mocker, in_tables_)
 
     f.run()

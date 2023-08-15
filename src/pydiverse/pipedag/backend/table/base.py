@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Generic
 
 import structlog
@@ -19,6 +20,7 @@ from pydiverse.pipedag.materialize.metadata import (
     TaskMetadata,
 )
 from pydiverse.pipedag.util import Disposable, requires
+from pydiverse.pipedag.util.computation_tracing import ComputationTracer
 from pydiverse.pipedag.util.hashing import stable_hash
 
 if TYPE_CHECKING:
@@ -31,7 +33,6 @@ class TableHookResolver:
     _registered_table_hooks: list[type[TableHook]] = []
     _m_hook_cache: dict[type, type[TableHook]] = {}
     _r_hook_cache: dict[type, type[TableHook]] = {}
-    _av_hook_cache: dict[type, type[TableHook]] = {}
     _hook_subclass_cache: dict[type, type[TableHook]] = {}
 
     @classmethod
@@ -67,7 +68,6 @@ class TableHookResolver:
             cls._m_hook_cache = {}
             cls._r_hook_cache = {}
             cls._av_hook_cache = {}
-            cls._hook_subclass_cache = {}
 
         def decorator(hook_cls):
             if not all(requirements):
@@ -83,7 +83,6 @@ class TableHookResolver:
             cls._registered_table_hooks.append(hook_cls)
             cls._m_hook_cache.clear()
             cls._r_hook_cache.clear()
-            cls._av_hook_cache.clear()
             cls._hook_subclass_cache.clear()
             return hook_cls
 
@@ -120,6 +119,9 @@ class TableHookResolver:
         elif isinstance(type_, dict):
             type_ = type_["type"]
 
+        if type_ is None:
+            raise ValueError("type_ argument can't be None")
+
         if type_ in self._r_hook_cache:
             return self._r_hook_cache[type_]
 
@@ -132,18 +134,6 @@ class TableHookResolver:
             f"Can't retrieve Table as type {type_}. "
             + self.__hook_unmet_requirements_message()
         )
-
-    def get_av_table_hook(self: Self, type_: type) -> type[TableHook[Self]]:
-        """Get a table hook that supports auto versioning for the specified type"""
-        if type_ in self._av_hook_cache:
-            return self._av_hook_cache[type_]
-
-        for hook in self.__registered_tables():
-            if hook.can_get_auto_version(type_):
-                self._av_hook_cache[type_] = hook
-                return hook
-
-        raise TypeError(f"Auto versioning not supported for type {type_}.")
 
     def get_hook_subclass(self, type_: type[T]) -> type[T]:
         """Finds a table hook that is a subclass of the provided type"""
@@ -222,7 +212,7 @@ class TableHookResolver:
         hook = self.get_r_table_hook(as_type)
         try:
             if for_auto_versioning:
-                return hook.retrieve_for_auto_versioning(
+                return hook.retrieve_for_auto_versioning_lazy(
                     self, table, table.stage.current_name, as_type
                 )
 
@@ -640,6 +630,12 @@ class BaseTableStore(TableHookResolver, Disposable):
         """
 
 
+class AutoVersionSupport(Enum):
+    NONE = 0
+    LAZY = 1
+    TRACE = 2
+
+
 class TableHook(Generic[TableHookResolverT], ABC):
     """Base class to define how to handle a specific table
 
@@ -648,6 +644,7 @@ class TableHook(Generic[TableHookResolverT], ABC):
     """
 
     __slots__ = ()
+    auto_version_support: AutoVersionSupport = AutoVersionSupport.NONE
 
     @classmethod
     @abstractmethod
@@ -725,14 +722,7 @@ class TableHook(Generic[TableHookResolverT], ABC):
         raise TypeError(f"Lazy query not supported with object of type {type(obj)}")
 
     @classmethod
-    def can_get_auto_version(cls, type_: type) -> bool:
-        """
-        Return `True` if this hook supports `get_auto_version` with this type.
-        """
-        return False
-
-    @classmethod
-    def retrieve_for_auto_versioning(
+    def retrieve_for_auto_versioning_lazy(
         cls,
         store: TableHookResolverT,
         table: Table,
@@ -744,14 +734,28 @@ class TableHook(Generic[TableHookResolverT], ABC):
         automatic version number determination.
 
         This function gets called with the same arguments as ``.retrieve``.
+
+        Must be implemented for ``auto_version_support == AutoVersionSupport.LAZY``.
+
         :raises TypeError: if the type doesn't support automatic versioning.
         """
         raise TypeError(f"Auto versioning not supported for type {as_type}")
 
     @classmethod
-    def get_auto_version(cls, obj) -> str:
+    def get_auto_version_lazy(cls, obj) -> str:
         """
+        Must be implemented for ``auto_version_support == AutoVersionSupport.LAZY``.
+
         :param obj: object returned from task
         :return: string representation of the operations performed on this object.
         :raises TypeError: if the object doesn't support automatic versioning.
         """
+        raise NotImplementedError
+
+    @classmethod
+    def get_computation_tracer(cls) -> ComputationTracer:
+        """
+        Get a computation tracer for this type of task.
+        Must be implemented for ``auto_version_support == AutoVersionSupport.TRACE``.
+        """
+        raise NotImplementedError

@@ -13,7 +13,7 @@ from packaging.version import Version
 
 from pydiverse.pipedag import ConfigContext
 from pydiverse.pipedag._typing import T
-from pydiverse.pipedag.backend.table.base import TableHook
+from pydiverse.pipedag.backend.table.base import AutoVersionSupport, TableHook
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateTableAsSelect,
     Schema,
@@ -25,6 +25,7 @@ from pydiverse.pipedag.backend.table.util import (
 )
 from pydiverse.pipedag.context import TaskContext
 from pydiverse.pipedag.materialize import Table
+from pydiverse.pipedag.util.computation_tracing import ComputationTracer
 
 # region SQLALCHEMY
 
@@ -159,6 +160,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
     """
 
     pd_version = Version(pd.__version__)
+    auto_version_support = AutoVersionSupport.TRACE
 
     @classmethod
     def can_materialize(cls, type_) -> bool:
@@ -369,6 +371,31 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
         return df
 
+    # Auto Version
+
+    class ComputationTracer(ComputationTracer):
+        def _monkey_patch(self):
+            import numpy
+            import pandas
+
+            from pydiverse.pipedag.util.computation_tracing import patch
+
+            for name in sorted(pandas.__all__):
+                try:
+                    patch(self, pandas, name)
+                except TypeError:
+                    pass
+
+            for name in sorted(numpy.__all__):
+                try:
+                    patch(self, numpy, name)
+                except TypeError:
+                    pass
+
+    @classmethod
+    def get_computation_tracer(cls):
+        return cls.ComputationTracer()
+
 
 # endregion
 
@@ -458,6 +485,8 @@ class PolarsTableHook(TableHook[SQLTableStore]):
 
 @SQLTableStore.register_table(polars, connectorx)
 class LazyPolarsTableHook(TableHook[SQLTableStore]):
+    auto_version_support = AutoVersionSupport.LAZY
+
     @classmethod
     def can_materialize(cls, type_) -> bool:
         return type_ == polars.LazyFrame
@@ -494,11 +523,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         return result.lazy()
 
     @classmethod
-    def can_get_auto_version(cls, type_: type) -> bool:
-        return type_ == polars.LazyFrame
-
-    @classmethod
-    def retrieve_for_auto_versioning(
+    def retrieve_for_auto_versioning_lazy(
         cls,
         store: SQLTableStore,
         table: Table,
@@ -531,7 +556,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         return lf
 
     @classmethod
-    def get_auto_version(cls, obj) -> str:
+    def get_auto_version_lazy(cls, obj) -> str:
         """
         :param obj: object returned from task
         :return: string representation of the operations performed on this object.
