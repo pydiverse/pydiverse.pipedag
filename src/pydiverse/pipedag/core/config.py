@@ -207,6 +207,7 @@ class PipedagConfig:
             stage_commit_technique=stage_commit_technique,
             fail_fast=config["fail_fast"],
             network_interface=config["network_interface"],
+            kroki_url=config.get("kroki_url"),
             attrs=Box(config["attrs"], frozen_box=True),
             table_hook_args=Box(
                 config["table_store"].get("hook_args", {}), frozen_box=True

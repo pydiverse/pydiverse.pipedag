@@ -295,8 +295,8 @@ class Flow:
                 orchestration_engine = config.create_orchestration_engine()
             result = orchestration_engine.run(subflow, **kwargs)
 
-        visualization_url = result.visualize_url()
-        self.logger.info("Flow visualization", url=visualization_url)
+            visualization_url = result.visualize_url()
+            self.logger.info("Flow visualization", url=visualization_url)
 
         if not result.successful and config.fail_fast:
             raise result.exception or Exception("Flow run failed")
@@ -592,7 +592,16 @@ def _pydot_url(dot: pydot.Dot) -> str:
     import base64
     import zlib
 
+    try:
+        config = ConfigContext.get()
+    except LookupError:
+        config = PipedagConfig.default.get()
+
+    kroki_url = config.kroki_url
+    if kroki_url is None:
+        kroki_url = "https://kroki.io"
+
     query_data = zlib.compress(str(dot).encode("utf-8"), 9)
     query = base64.urlsafe_b64encode(query_data).decode("ascii")
 
-    return f"https://kroki.io/graphviz/svg/{query}"
+    return f"{kroki_url}/graphviz/svg/{query}"

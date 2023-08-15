@@ -525,3 +525,21 @@ def test_task_outside_flow():
     task = t_kw("task")
     assert task(a=1, b=2) == {"a": 1, "b": 2}
     assert task(x="foo", y="bar") == {"x": "foo", "y": "bar"}
+
+
+def test_flow_visualize_url():
+    from pydiverse.pipedag.core import PipedagConfig
+
+    with Flow("flow") as f:
+        with Stage("stage"):
+            _ = t("task")()
+
+    # Use kroki.io as default url
+    with PipedagConfig.default.get().evolve(kroki_url=None):
+        visualization_url = f.visualize_url()
+        assert visualization_url.startswith("https://kroki.io/graphviz/")
+
+    # Check that overriding works
+    with PipedagConfig.default.get().evolve(kroki_url="THIS_IS_A_TEST_URL"):
+        visualization_url = f.visualize_url()
+        assert visualization_url.startswith("THIS_IS_A_TEST_URL/graphviz/")

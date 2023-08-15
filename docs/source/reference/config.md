@@ -217,6 +217,15 @@ network_interface
 
   (default: `127.0.0.1`)
 
+(kroki_url)=
+kroki_url
+: A url that points to a [Kroki](https://kroki.io) instance. *Optional*
+
+  Pipedag uses a free service called Kroki to visualize flows (see [](Flow.visualize_url) and [](Result.visualize_url)).
+  If you want to self-host a Kroki instance (for example, if your flow contains sensitive information), you can specify a custom url that pipedag should use.
+
+  (default: `https://kroki.io`)
+
 (auto_table)=
 auto_table
 : A list of tables classes.
