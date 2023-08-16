@@ -2,7 +2,7 @@
 
 ## Latest
 - Implemented automatic versioning of tasks by setting task version to [](#AUTO_VERSION).
-  This feature is currently only supported by Polars [`LazyFrame`](inv:pl#reference/lazyframe/index).
+  This feature is currently only supported by Polars [`LazyFrame`](inv:pl#reference/lazyframe/index) and by Pandas.
 
 ## 0.6.4 (2023-08-07)
 - Allow invocation of undecorated task functions when calling task object outside of flow definition context.

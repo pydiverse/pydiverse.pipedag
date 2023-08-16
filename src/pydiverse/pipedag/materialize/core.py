@@ -812,10 +812,10 @@ class AutoVersionType:
     Special constant used to indicate that pipedag should automatically determine
     a version number for a task.
 
-    The version is determined by running the task once with empty tables as input
-    to construct some kind of representation of the computations performed on the
-    tables (e.g. a computational graph).
-    Using this representation a unique version number is constructed such that
+    The version is determined by running the task once to construct a representation
+    of the computation performed on the tables (e.g. construct a query plan /
+    computational graph).
+    Using this representation, a unique version number is constructed such that
     if the computation changes the version number also changes.
     Then, if the task is deemed to be cache invalid, it is run again, but this
     time with actual data.
@@ -828,8 +828,25 @@ class AutoVersionType:
     * The task may not return :py:class:`RawSql`.
     * The task may not return :py:class:`Blob`.
 
-    Currently, this feature is only supported by
-    :external+pl:doc:`polars.LazyFrame <reference/lazyframe/index>`.
+    .. rubric:: Polars
+
+    Automatic versioning is best supported by polars.
+    To use it, you must specify
+    :external+pl:doc:`polars.LazyFrame <reference/lazyframe/index>`
+    as the task input type and only use LazyFrames inside your task.
+
+    .. rubric:: Pandas
+
+    Pandas support is still *experimental*. It is implemented using a technique
+    we call "computation tracing", where we run the task with proxy tables
+    as inputs that record all operations performed on them.
+    This requires heavily monkey patching the pandas and numpy modules.
+    As long as you only use pandas and numpy functions inside your task,
+    computation tracing should work successfully.
+    However, for the monkey patching to work, you only access pandas / numpy
+    functions through their namespace (e.g. ``pd.concat(...)`` is allowed, while
+    ``from pandas import concat; concat(...)`` is not allowed).
+
 
     Example
     -------
