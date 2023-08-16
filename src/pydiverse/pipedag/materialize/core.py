@@ -847,6 +847,8 @@ class AutoVersionType:
     functions through their namespace (e.g. ``pd.concat(...)`` is allowed, while
     ``from pandas import concat; concat(...)`` is not allowed).
 
+    Requires dask to be installed.
+
 
     Example
     -------
