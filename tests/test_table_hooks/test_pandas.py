@@ -8,13 +8,13 @@ import pyarrow as pa
 import pytest
 import sqlalchemy as sa
 from packaging.version import Version
-from util.spy import spy_task
 
 import tests.util.tasks_library as m
 from pydiverse.pipedag import *
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.util.spy import spy_task
 
 pytestmark = [with_instances(DATABASE_INSTANCES)]
 pd_version = Version(pd.__version__)
