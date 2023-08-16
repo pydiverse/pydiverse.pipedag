@@ -122,11 +122,14 @@ class PandasTableHook(PandasTableHook):
         )
         s_buf.seek(0)
 
+        table_name = engine.dialect.identifier_preparer.quote(table.name)
+        schema_name = engine.dialect.identifier_preparer.format_schema(schema.get())
+
         dbapi_conn = engine.raw_connection()
         try:
             with dbapi_conn.cursor() as cur:
                 sql = (
-                    f"COPY {schema.get()}.{table.name} FROM STDIN"
+                    f"COPY {schema_name}.{table_name} FROM STDIN"
                     " WITH (FORMAT CSV, NULL '\\N')"
                 )
                 cur.copy_expert(sql=sql, file=s_buf)
