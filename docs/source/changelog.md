@@ -2,6 +2,7 @@
 
 ## Latest
 - Implement support for loading polars dataframes from DuckDB.
+- Accelerate storing of dataframes (pandas and polars) to DuckDB (10-100x speedup).
 
 ## 0.6.5 (2023-08-16)
 - Implemented automatic versioning of tasks by setting task version to [](#AUTO_VERSION).

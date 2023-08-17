@@ -3,10 +3,18 @@ from __future__ import annotations
 import warnings
 from pathlib import Path
 
+import pandas as pd
 import sqlalchemy as sa
 
-from pydiverse.pipedag.backend.table.sql.hooks import IbisTableHook, PolarsTableHook
+from pydiverse.pipedag import Table
+from pydiverse.pipedag.backend.table.sql.ddl import Schema
+from pydiverse.pipedag.backend.table.sql.hooks import (
+    IbisTableHook,
+    PandasTableHook,
+    PolarsTableHook,
+)
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
+from pydiverse.pipedag.backend.table.util import DType
 
 try:
     import duckdb
@@ -47,6 +55,42 @@ class DuckDBTableStore(SQLTableStore):
 
         database_path = Path(database)
         database_path.parent.mkdir(parents=True, exist_ok=True)
+
+
+@DuckDBTableStore.register_table(pd)
+class PandasTableHook(PandasTableHook):
+    @classmethod
+    def _execute_materialize(
+        cls,
+        df: pd.DataFrame,
+        store: DuckDBTableStore,
+        table: Table[pd.DataFrame],
+        schema: Schema,
+        dtypes: dict[str, DType],
+    ):
+        engine = store.engine
+        dtypes = {name: dtype.to_sql() for name, dtype in dtypes.items()}
+        if table.type_map:
+            dtypes.update(table.type_map)
+
+        # Create empty table with correct schema
+        df[:0].to_sql(
+            table.name,
+            engine,
+            schema=schema.get(),
+            index=False,
+            dtype=dtypes,
+        )
+
+        # Copy dataframe directly to duckdb
+        # This is SIGNIFICANTLY faster than using pandas.to_sql
+        table_name = engine.dialect.identifier_preparer.quote(table.name)
+        schema_name = engine.dialect.identifier_preparer.format_schema(schema.get())
+
+        connection_uri = store.engine_url.render_as_string(hide_password=False)
+        connection_uri = connection_uri.replace("duckdb:///", "", 1)
+        with duckdb.connect(connection_uri) as conn:
+            conn.execute(f"INSERT INTO {schema_name}.{table_name} SELECT * FROM df")
 
 
 try:
