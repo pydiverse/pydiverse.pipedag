@@ -403,15 +403,13 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
 
 try:
-    import connectorx
     import polars
 except ImportError as e:
     warnings.warn(str(e), ImportWarning)
     polars = None
-    connectorx = None
 
 
-@SQLTableStore.register_table(polars, connectorx)
+@SQLTableStore.register_table(polars)
 class PolarsTableHook(TableHook[SQLTableStore]):
     @classmethod
     def can_materialize(cls, type_) -> bool:
@@ -459,9 +457,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         query = cls._read_db_query(store, table, stage_name)
         query = cls._compile_query(store, query)
         connection_uri = store.engine_url.render_as_string(hide_password=False)
-
-        df = polars.read_database(query, connection_uri)
-        return df
+        return cls._execute_query(query, connection_uri)
 
     @classmethod
     def auto_table(cls, obj: polars.DataFrame):
@@ -482,8 +478,13 @@ class PolarsTableHook(TableHook[SQLTableStore]):
     def _compile_query(cls, store: SQLTableStore, query: sa.Select) -> str:
         return str(query.compile(store.engine, compile_kwargs={"literal_binds": True}))
 
+    @classmethod
+    def _execute_query(cls, query: str, connection_uri: str):
+        df = polars.read_database(query, connection_uri)
+        return df
 
-@SQLTableStore.register_table(polars, connectorx)
+
+@SQLTableStore.register_table(polars)
 class LazyPolarsTableHook(TableHook[SQLTableStore]):
     auto_version_support = AutoVersionSupport.LAZY
 
@@ -530,13 +531,15 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         stage_name: str,
         as_type: type[polars.LazyFrame],
     ) -> polars.LazyFrame:
+        polars_hook = store.get_hook_subclass(PolarsTableHook)
+
         # Retrieve with LIMIT 0 -> only get schema but no data
-        query = PolarsTableHook._read_db_query(store, table, stage_name)
+        query = polars_hook._read_db_query(store, table, stage_name)
         query = query.where(sa.false())  # LIMIT 0
-        query = PolarsTableHook._compile_query(store, query)
+        query = polars_hook._compile_query(store, query)
         connection_uri = store.engine_url.render_as_string(hide_password=False)
 
-        df = polars.read_database(query, connection_uri)
+        df = polars_hook._execute_query(query, connection_uri)
 
         # Create lazy frame where each column is identified by:
         #     stage name, table name, column name
@@ -548,7 +551,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         schema = {}
         rename = {}
         for col in df:
-            qualified_name = f"[{stage_name}].[{table.name}].[{col.name}]"
+            qualified_name = f"[{table.stage.name}].[{table.name}].[{col.name}]"
             schema[qualified_name] = col.dtype
             rename[qualified_name] = col.name
 
@@ -574,7 +577,7 @@ except ImportError as e:
     tidypolars = None
 
 
-@SQLTableStore.register_table(tidypolars, polars, connectorx)
+@SQLTableStore.register_table(tidypolars, polars)
 class TidyPolarsTableHook(TableHook[SQLTableStore]):
     @classmethod
     def can_materialize(cls, type_) -> bool:

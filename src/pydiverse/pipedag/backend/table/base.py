@@ -67,7 +67,7 @@ class TableHookResolver:
             cls._registered_table_hooks = []
             cls._m_hook_cache = {}
             cls._r_hook_cache = {}
-            cls._av_hook_cache = {}
+            cls._hook_subclass_cache = {}
 
         def decorator(hook_cls):
             if not all(requirements):

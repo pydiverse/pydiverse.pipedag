@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 
 import sqlalchemy as sa
 
-from pydiverse.pipedag.backend.table.sql.hooks import IbisTableHook
+from pydiverse.pipedag.backend.table.sql.hooks import IbisTableHook, PolarsTableHook
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
+
+try:
+    import duckdb
+except ImportError as e:
+    warnings.warn(str(e), ImportWarning)
+    duckdb = None
 
 
 class DuckDBTableStore(SQLTableStore):
@@ -40,6 +47,27 @@ class DuckDBTableStore(SQLTableStore):
 
         database_path = Path(database)
         database_path.parent.mkdir(parents=True, exist_ok=True)
+
+
+try:
+    import polars
+except ImportError as e:
+    warnings.warn(str(e), ImportWarning)
+    polars = None
+
+
+@DuckDBTableStore.register_table(polars, duckdb)
+class PolarsTableHook(PolarsTableHook):
+    @classmethod
+    def _execute_query(cls, query: str, connection_uri: str):
+        # Connectorx doesn't support duckdb.
+        # Instead, we load it like this:  DuckDB -> PyArrow -> Polars
+        connection_uri = connection_uri.replace("duckdb:///", "", 1)
+        with duckdb.connect(connection_uri) as conn:
+            pl_table = conn.sql(query).arrow()
+
+        df = polars.from_arrow(pl_table)
+        return df
 
 
 try:

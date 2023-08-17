@@ -5,14 +5,13 @@ import pytest
 from pydiverse.pipedag import *
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
+from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
 from tests.util.spy import spy_task
 from tests.util.tasks_library import assert_table_equal
 
 pytestmark = [
     pytest.mark.polars,
     with_instances(DATABASE_INSTANCES),
-    skip_instances("duckdb"),
 ]
 
 try:

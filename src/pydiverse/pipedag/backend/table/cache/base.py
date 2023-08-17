@@ -67,10 +67,20 @@ class BaseTableCache(ABC, TableHookResolver, Disposable):
             # Prevent multiple tasks writing at the same time
             return False
 
-        hook.materialize(self, table, table.stage.transaction_name)
+        try:
+            hook.materialize(self, table, table.stage.transaction_name)
+        except TypeError:
+            return False
         return True
 
-    def retrieve_table_obj(self, table: Table, as_type: type[T]) -> T:
+    def retrieve_table_obj(
+        self,
+        table: Table,
+        as_type: type[T],
+        for_auto_versioning: bool = False,
+    ) -> T:
+        assert not for_auto_versioning
+
         if not self.should_use_stored_input_as_cache:
             return None
         if not self._has_table(table, as_type):

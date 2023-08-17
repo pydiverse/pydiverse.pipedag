@@ -102,8 +102,7 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/test
         with:
-          # --polars not supported
-          arguments: --workers 4 --duckdb -m duckdb --ibis --pdtransform
+          arguments: --workers 4 --duckdb -m duckdb --polars --ibis --pdtransform
 
   db2_test:
     name: "DB2 Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
