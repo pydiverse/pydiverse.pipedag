@@ -631,19 +631,14 @@ class SQLTableStore(BaseTableStore):
         # If the stage is 100% cache valid, then we just need to update the
         # "in_transaction_schema" column of the metadata tables.
         run_context = RunContext.get()
-        valid_cache_slots = run_context.get_valid_cache_slots(stage)
+        valid_cache_slot = None
 
+        valid_cache_slots = run_context.get_valid_cache_slots(stage)
         if len(valid_cache_slots) >= 1:
             # assert not run_context.has_stage_changed(stage)
 
             # TODO: Choose one cache slot based on some metric (choose newest)
-            valid_cache_slots[0]
-
-            # Abort stage and swap `stage` with `stage__csXX`
-            # Rename tables in `stage` to match `stage__tmp`
-            # -> Deferred table store-op needs to provide alternatives for each
-            #    `stage__csXX` when renaming
-            ############################################################################
+            valid_cache_slot = valid_cache_slots[0]
 
         # TODO: [n_cache_slots] Fix deferred copy
         # if not RunContext.get().has_stage_changed(stage):
@@ -652,11 +647,17 @@ class SQLTableStore(BaseTableStore):
         #         self._commit_stage_update_metadata(stage, conn)
         #     return
 
-        # Commit normally
+        # Commit
         stage_commit_technique = ConfigContext.get().stage_commit_technique
         if stage_commit_technique == StageCommitTechnique.SCHEMA_SWAP:
+            if valid_cache_slot:
+                return self._commit_valid_cache_slot_schema_swap(
+                    stage, valid_cache_slot
+                )
             return self._commit_stage_schema_swap(stage)
         if stage_commit_technique == StageCommitTechnique.READ_VIEWS:
+            if valid_cache_slot:
+                raise NotImplementedError
             return self._commit_stage_read_views(stage)
         raise ValueError(f"Invalid stage commit technique: {stage_commit_technique}")
 
@@ -674,17 +675,11 @@ class SQLTableStore(BaseTableStore):
         transaction_schema = self.get_schema(stage.transaction_name)
         cache_slot_schema = self.get_schema(cache_slot)
 
-        # potentially this disposal must be optional since it does not allow
-        # for multithreaded stage execution
         # dispose open connections which may prevent schema swapping
         self.engine.dispose()
 
-        # We might want to also append ', conn.begin()' to the with statement,
-        # but this collides with the inner conn.begin() used to execute
-        # statement parts as one transaction. This is solvable via complex code,
-        # but we typically don't want to rely on database transactions anyways.
+        # TODO: self.avoid_drop_create_schema is currently being ignored...
         with self.engine_connect() as conn:
-            # TODO: self.avoid_drop_create_schema is currently being ignored...
             self.execute(
                 DropSchema(
                     cache_slot_schema, if_exists=True, cascade=True, engine=self.engine
@@ -702,6 +697,107 @@ class SQLTableStore(BaseTableStore):
             )
 
             self._commit_stage_update_metadata(stage, cache_slot=cache_slot, conn=conn)
+
+    def _commit_valid_cache_slot_schema_swap(self, stage: Stage, cache_slot: str):
+        """
+        Committing for schema swapping with a valid cache slot works as follows:
+        - Drop transaction schema
+        - Rename cache slot schema to transaction schema
+        - Rename base schema to cache slot schema
+        - Rename transaction schema to base schema
+        """
+
+        if stage.name == cache_slot:
+            with self.engine_connect() as conn:
+                for table in [
+                    self.tasks_table,
+                    self.lazy_cache_table,
+                    self.raw_sql_cache_table,
+                    self.cache_slots_table,
+                ]:
+                    conn.execute(
+                        table.delete()
+                        .where(table.c.stage == stage.name)
+                        .where(table.c.schema == stage.transaction_name)
+                    )
+
+                conn.execute(
+                    self.cache_slots_table.update()
+                    .where(self.cache_slots_table.c.stage == stage.name)
+                    .where(self.cache_slots_table.c.schema == stage.name)
+                    .values(
+                        creation_date=datetime.now(),
+                    )
+                )
+
+            return
+
+        schema = self.get_schema(stage.name)
+        transaction_schema = self.get_schema(stage.transaction_name)
+        cache_slot_schema = self.get_schema(cache_slot)
+
+        # dispose open connections which may prevent schema swapping
+        self.engine.dispose()
+
+        with self.engine_connect() as conn:
+            # Drop transaction schema and swap cache slot with base schema
+            self.execute(
+                DropSchema(
+                    transaction_schema, if_exists=True, cascade=True, engine=self.engine
+                ),
+                conn=conn,
+            )
+            self.execute(
+                RenameSchema(cache_slot_schema, transaction_schema, self.engine),
+                conn=conn,
+            )
+            self.execute(
+                RenameSchema(schema, cache_slot_schema, self.engine),
+                conn=conn,
+            )
+            self.execute(
+                RenameSchema(transaction_schema, schema, self.engine),
+                conn=conn,
+            )
+
+            # Update Metadata
+            for table in [
+                self.tasks_table,
+                self.lazy_cache_table,
+                self.raw_sql_cache_table,
+                self.cache_slots_table,
+            ]:
+                conn.execute(
+                    table.delete()
+                    .where(table.c.stage == stage.name)
+                    .where(table.c.schema == stage.transaction_name)
+                )
+
+                conn.execute(
+                    table.update()
+                    .where(table.c.stage == stage.name)
+                    .where(
+                        (table.c.schema == stage.name) | (table.c.schema == cache_slot)
+                    )
+                    .values(
+                        schema=sa.case(
+                            {
+                                stage.name: cache_slot,
+                                cache_slot: stage.name,
+                            },
+                            value=table.c.schema,
+                        )
+                    )
+                )
+
+            conn.execute(
+                self.cache_slots_table.update()
+                .where(self.cache_slots_table.c.stage == stage.name)
+                .where(self.cache_slots_table.c.schema == stage.name)
+                .values(
+                    creation_date=datetime.now(),
+                )
+            )
 
     def _commit_stage_read_views(self, stage: Stage):
         raise NotImplementedError
@@ -784,25 +880,28 @@ class SQLTableStore(BaseTableStore):
         from_schema = self.get_schema(from_cache_slot)
         from_name = table.name
 
-        # TODO: [n_cache_slots] Fix deferred copy
-        self._copy_table(table, from_schema, from_name)
+        can_perform_deferred_copy = table.name == from_name
+        can_perform_deferred_copy &= not RunContext.get().has_stage_changed(table.stage)
 
-        # if RunContext.get().has_stage_changed(table.stage):
-        #     self._copy_table(table, from_schema, from_name)
-        # else:
-        #     self._deferred_copy_table(table, from_schema, from_name)
+        if can_perform_deferred_copy:
+            self._deferred_copy_table(table, from_schema)
+        else:
+            self._copy_table(table, from_schema, from_name)
 
     def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
         from_schema = self.get_schema(metadata.cache_slot)
         from_name = metadata.name
 
-        # TODO: [n_cache_slots] Fix deferred copy
-        self._copy_table(table, from_schema, from_name)
+        can_perform_deferred_copy = table.name == from_name
+        can_perform_deferred_copy &= not RunContext.get().has_stage_changed(table.stage)
 
-        # if RunContext.get().has_stage_changed(table.stage):
-        #     self._copy_table(table, from_schema, from_name)
-        # else:
-        #     self._deferred_copy_table(table, from_schema, from_name)
+        if can_perform_deferred_copy:
+            self._deferred_copy_table(table, from_schema)
+        else:
+            # TODO: has_stage_changed MUST be set to true
+            assert table.name == from_name
+
+            self._copy_table(table, from_schema, from_name)
 
     def _copy_table(self, table: Table, from_schema: Schema, from_name: str):
         """Copies the table immediately"""
@@ -834,7 +933,6 @@ class SQLTableStore(BaseTableStore):
         self,
         table: Table,
         from_schema: Schema,
-        from_name: str,
     ):
         """Tries to perform a deferred copy
 
@@ -843,24 +941,19 @@ class SQLTableStore(BaseTableStore):
         from the main schema to the transaction schema.
 
         If at the end of the stage, the all tables in the stage are cache valid, then
-        we don't actually need to commit the stage, and instead just rename the
-        tables from their old names to their new names.
+        we don't actually need to commit the stage, and instead just use the
+        valid cache slot.
 
         Otherwise, we copy the tables to the transaction schema in the background,
         and once we're ready to commit, we replace the aliases with the copied tables.
         """
-
-        raise NotImplementedError
-
-        assert from_schema == self.get_schema(table.stage.name)
-
         inspector = sa.inspect(self.engine)
-        has_table = inspector.has_table(from_name, schema=from_schema.get())
+        has_table = inspector.has_table(table.name, schema=from_schema.get())
         if not has_table:
             available_tables = inspector.get_table_names(from_schema.get())
             msg = (
-                f"Can't deferred copy table '{from_name}' (schema: '{from_schema}') to "
-                f"transaction because no such table exists.\n"
+                f"Can't deferred copy table '{table.name}' (schema: '{from_schema}') to"
+                f" transaction because no such table exists.\n"
                 f"Tables in schema: {available_tables}"
             )
             self.logger.error(msg)
@@ -872,7 +965,7 @@ class SQLTableStore(BaseTableStore):
 
             self.execute(
                 CreateAlias(
-                    from_name,
+                    table.name,
                     from_schema,
                     table.name,
                     self.get_schema(stage.transaction_name),
@@ -890,7 +983,7 @@ class SQLTableStore(BaseTableStore):
                     (
                         table_copy,
                         from_schema,
-                        from_name,
+                        table.name,
                     ),
                 ),
             )
@@ -903,18 +996,10 @@ class SQLTableStore(BaseTableStore):
                     {"table": table, "table_copy": table_copy},
                 ),
             )
-            ctx.defer_table_store_op(
-                stage,
-                DeferredTableStoreOp(
-                    "_rename_table",
-                    DeferredTableStoreOp.Condition.ON_STAGE_ABORT,
-                    (from_name, table.name, from_schema),
-                ),
-            )
 
         except Exception as _e:
             msg = (
-                f"Failed to copy table {from_name} (schema: '{from_schema}') "
+                f"Failed to copy table {table.name} (schema: '{from_schema}') "
                 f"to transaction."
             )
             self.logger.exception(msg)
@@ -944,12 +1029,6 @@ class SQLTableStore(BaseTableStore):
                 f"in place of alias."
             )
             raise RuntimeError(msg) from _e
-
-    def _rename_table(self, from_name: str, to_name: str, schema: Schema):
-        if from_name == to_name:
-            return
-        self.logger.info("RENAME", fr=from_name, to=to_name)
-        self.execute(RenameTable(from_name, to_name, schema))
 
     def copy_raw_sql_tables_to_transaction(
         self, metadata: RawSqlMetadata, target_stage: Stage
