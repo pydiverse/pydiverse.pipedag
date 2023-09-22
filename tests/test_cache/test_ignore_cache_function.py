@@ -429,3 +429,161 @@ def test_cache_temporarily_different(mocker):
         assert result.get(child) == 0
         out_spy.assert_not_called()
         child_spy.assert_not_called()
+
+
+def test_table_substage01(mocker):
+    cache_value = 0
+
+    def cache():
+        return cache_value
+
+    @materialize(cache=cache, version="1.0")
+    def return_cache_table():
+        return Table(select_as(cache_value, "x"))
+
+    @materialize(input_type=pd.DataFrame, version="1.0")
+    def get_first(table, col):
+        return int(table[col][0])
+
+    with Flow() as flow:
+        with Stage("stage_1"):
+            out = return_cache_table()
+            with Stage("stage_1a"):
+                child1 = get_first(out, "x")
+            with Stage("stage_1b"):
+                child2 = get_first(out, "x")
+
+    # Initial Call
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(child1) == 0
+        assert result.get(child2) == 0
+
+    # Calling flow.run again shouldn't call the task
+    out_spy = spy_task(mocker, out)
+    child1_spy = spy_task(mocker, child1)
+    child2_spy = spy_task(mocker, child2)
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(child1) == 0
+        assert result.get(child2) == 0
+        out_spy.assert_not_called()
+        child1_spy.assert_not_called()
+        child2_spy.assert_not_called()
+
+    # Changing the cache value while setting ignore_cache_function=True should
+    # ignore the cache function.
+    cache_value = 1
+    for _ in range(3):
+        with StageLockContext():
+            result = flow.run(ignore_cache_function=True)
+            assert result.get(child1) == 0
+            assert result.get(child2) == 0
+            out_spy.assert_not_called()
+            child1_spy.assert_not_called()
+            child2_spy.assert_not_called()
+
+    # Changing the cache value should cause it to get called again
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(child1) == 1
+        assert result.get(child2) == 1
+        out_spy.assert_called_once()
+        child1_spy.assert_called_once()
+        child2_spy.assert_called_once()
+
+
+def test_table_substage02(mocker):
+    cache_value = 0
+    inject_error = False
+
+    def cache():
+        return cache_value
+
+    @materialize(cache=cache, version="1.0")
+    def return_cache_table():
+        return Table(select_as(cache_value, "x"))
+
+    @materialize(input_type=pd.DataFrame, version="1.0")
+    def get_first(table, col):
+        return int(table[col][0])
+
+    @materialize(version="1.0")
+    def temporary_error(val):
+        _ = val
+        if inject_error:
+            raise ValueError("Injected Error")
+
+    with Flow() as flow:
+        with Stage("stage_1"):
+            with Stage("stage_1a"):
+                out = return_cache_table()
+            with Stage("stage_1b"):
+                child1 = get_first(out, "x")
+            with Stage("stage_1c"):
+                child2 = m.noop(child1)
+                _ = temporary_error(child2)
+
+    # Initial Call
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(child1) == 0
+        assert result.get(child2) == 0
+
+    # Calling flow.run again shouldn't call the task
+    out_spy = spy_task(mocker, out)
+    child1_spy = spy_task(mocker, child1)
+    child2_spy = spy_task(mocker, child2)
+    with StageLockContext():
+        result = flow.run()
+        assert result.successful
+        assert result.get(child1) == 0
+        assert result.get(child2) == 0
+        out_spy.assert_not_called()
+        child1_spy.assert_not_called()
+        child2_spy.assert_not_called()
+
+    # Changing the cache value while injecting temporary error
+    inject_error = True
+    cache_value = 1
+    with StageLockContext():
+        result = flow.run(fail_fast=False)
+        assert not result.successful
+        assert result.get(child1) == 1
+        out_spy.assert_called_once()
+        child1_spy.assert_called_once()
+        child2_spy.assert_called_once()
+
+    # Changing the cache value while setting ignore_cache_function=True should
+    # only recompute the child2 task
+    inject_error = False
+    cache_value = 2
+    with StageLockContext():
+        result = flow.run(ignore_cache_function=True)
+        assert result.successful
+        assert result.get(child1) == 1
+        assert result.get(child2) == 1
+        out_spy.assert_not_called()
+        child1_spy.assert_not_called()
+        child2_spy.assert_called_once()
+
+    # Changing the cache value while setting ignore_cache_function=True should
+    # ignore the cache function.
+    cache_value = 3
+    for _ in range(3):
+        with StageLockContext():
+            result = flow.run(ignore_cache_function=True)
+            assert result.get(child1) == 1
+            assert result.get(child2) == 1
+            out_spy.assert_not_called()
+            child1_spy.assert_not_called()
+            child2_spy.assert_not_called()
+
+    # Changing the cache value should cause it to get called again
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(child1) == 3
+        assert result.get(child2) == 3
+        out_spy.assert_called_once()
+        child1_spy.assert_called_once()
+        child2_spy.assert_called_once()
