@@ -108,6 +108,10 @@ class Task:
         # Compute input tasks
         self.input_tasks: dict[int, Task] = {}
 
+        # Flag is set if table was materialized for debugging.
+        # Setting this flag will fail the task.
+        self.debug_tainted = False
+
         def visitor(x):
             if isinstance(x, Task):
                 self.input_tasks[x.id] = x

@@ -95,6 +95,25 @@ def test_materialize_table_twice():
     assert f.run().successful
 
 
+def test_debug_materialize_table_no_taint():
+    with Flow("flow") as f:
+        with Stage("stage"):
+            x = m.simple_dataframe_debug_materialize_no_taint()
+            m.assert_table_equal(x, x)
+
+    assert f.run().successful
+
+
+def test_debug_materialize_table_twice():
+    with Flow("flow") as f:
+        with Stage("stage"):
+            x = m.simple_dataframe_debug_materialize_twice()
+            m.assert_table_equal(x, x)
+
+    with pytest.raises(RuntimeError, match="interactive debugging"):
+        assert f.run().successful
+
+
 def test_materialize_blob():
     with Flow("flow") as f:
         with Stage("stage_0"):

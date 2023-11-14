@@ -308,10 +308,7 @@ class PipeDAGStore(Disposable):
                 object_number = next(auto_suffix_counter)
                 auto_suffix = f"{task_cache_info.cache_key}" f"_{object_number:04d}"
 
-                if x.name is None:
-                    x.name = task.name + "_" + auto_suffix
-                elif x.name.endswith("%%"):
-                    x.name = x.name[:-2] + auto_suffix
+                x.name = mangle_table_name(x.name, task.name, auto_suffix)
 
                 if isinstance(x, Table):
                     if x.obj is None:
@@ -572,3 +569,11 @@ def dematerialize_output_from_store(
                 item, as_type=as_type, ctx=run_context
             ),
         )
+
+
+def mangle_table_name(table_name: str, task_name: str, suffix: str):
+    if table_name is None:
+        table_name = task_name + "_" + suffix
+    elif table_name.endswith("%%"):
+        table_name = table_name[:-2] + suffix
+    return table_name
