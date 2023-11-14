@@ -596,6 +596,11 @@ class MaterializationWrapper:
             )
 
             result = self.fn(*args, **kwargs)
+            if task.debug_tainted:
+                raise RuntimeError(
+                    f"The task {task.name} has been tainted by interactive debugging."
+                    f" Aborting."
+                )
             result = store.materialize_task(task, task_cache_info, result)
 
             # Delete underlying objects from result (after materializing them)

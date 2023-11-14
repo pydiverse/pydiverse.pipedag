@@ -5,6 +5,7 @@ import sqlalchemy as sa
 import sqlalchemy.dialects
 
 from pydiverse.pipedag import Blob, RawSql, Table, materialize
+from pydiverse.pipedag.debug import materialize_table
 
 
 @materialize(input_type=pd.DataFrame, version="1.0")
@@ -69,6 +70,37 @@ def simple_dataframe():
         }
     )
     return Table(df)
+
+
+@materialize(version="1.0")
+def simple_dataframe_debug_materialize_no_taint():
+    df = pd.DataFrame(
+        {
+            "col1": [0, 1, 2, 3],
+            "col2": ["0", "1", "2", "3"],
+        }
+    )
+    res = Table(df, name="test_table")
+    materialize_table(res, flag_task_debug_tainted=False, debug_suffix="debug")
+    return res
+
+
+@materialize(version="1.0")
+def simple_dataframe_debug_materialize_twice():
+    df = pd.DataFrame(
+        {
+            "col1": [0, 1, 2, 3],
+            "col2": ["0", "1", "2", "3"],
+        }
+    )
+    res = Table(df)
+    materialize_table(res, flag_task_debug_tainted=True, debug_suffix="debug")
+
+    df.iloc[3] = [4, "4"]
+    res = Table(df)
+    materialize_table(res, flag_task_debug_tainted=True, debug_suffix="debug")
+
+    return res
 
 
 @materialize(version="1.0")
