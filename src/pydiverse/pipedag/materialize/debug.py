@@ -9,6 +9,7 @@ from pydiverse.pipedag.backend import SQLTableStore
 from pydiverse.pipedag.backend.table.sql.ddl import DropTable
 from pydiverse.pipedag.context import TaskContext
 from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.store import mangle_table_name
 from pydiverse.pipedag.util.hashing import stable_hash
 
 
@@ -17,7 +18,7 @@ def materialize_table(
     debug_suffix: str | None = None,
     flag_task_debug_tainted: bool = True,
     keep_table_name: bool = True,
-    replace_table: bool = True,
+    drop_if_exists: bool = True,
 ):
     """
     This function allows the user to materialize a table ad-hoc
@@ -36,7 +37,7 @@ def materialize_table(
     :param keep_table_name: if False, the table.name will be equal to the debug name
         after return. Otherwise, the original name of the table is preserved.
         Default: True
-    :param replace_table: If True, try to drop the table (if exists) before recreating.
+    :param drop_if_exists: If True, try to drop the table (if exists) before recreating.
         This is only supported for SQL table stores.
     """
     config_context = ConfigContext.get()
@@ -48,29 +49,24 @@ def materialize_table(
     table.stage = task.stage
 
     suffix = (
-        stable_hash(str(random.randbytes(8))) + "_0000"
-        if debug_suffix is None
-        else debug_suffix
+        stable_hash(str(random.randbytes(8))) + "_0000" if debug_suffix is None else ""
     )
     old_table_name = table.name
-    if table.name is None:
-        table.name = task.name + "_" + suffix
-    elif table.name.endswith("%%"):
-        table.name = table.name[:-2] + suffix
-    elif debug_suffix is not None:
+    table.name = mangle_table_name(table.name, task.name, suffix)
+    if debug_suffix is not None:
         table.name += debug_suffix
 
     if flag_task_debug_tainted:
         task.debug_tainted = True
 
-    if replace_table:
+    if drop_if_exists:
         if isinstance(table_store, SQLTableStore):
             schema = table_store.get_schema(task.stage.transaction_name)
             table_store.execute(DropTable(table.name, schema, if_exists=True))
         else:
             logger = structlog.get_logger(logger_name="Debug materialize_table")
             logger.warning(
-                "replace_table not supported non SQLTableStore table stores."
+                "drop_if_exists not supported for non SQLTableStore table stores."
             )
     table_store.store_table(table, task)
 
