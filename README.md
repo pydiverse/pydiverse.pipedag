@@ -15,7 +15,7 @@ or to contribute early stage usage examples.
 To install the package locally in development mode, you first have to install
 [Poetry](https://python-poetry.org/docs/#installation).
 
-When installing poetry using conda(I know this sounds odd), it is recommended to install
+When installing poetry using conda (I know this sounds odd), it is recommended to install
 also compilers, so source packages can be built on `poetry install`. Since we use psycopg2,
 it also helps to install psycopg2 in conda to have pg_config available:
 
@@ -28,6 +28,24 @@ On OSX, a way to install pg_config (needed for source building psycopg2 by `poet
 
 ```bash
 brew install postgresql
+```
+
+On OS X with `arm64` architecture, an `x86_64` toolchain is required for DB2 development:
+- Ensure that Rosetta 2 is installed:
+```bash
+softwareupdate --install-rosetta
+```
+- Create the conda environment in `x86_64` mode:
+```bash
+conda create -n poetry
+conda activate poetry
+conda config --env --set subdir osx-64 
+conda install -c conda-forge poetry compilers cmake make psycopg2 docker-compose python=3.11
+```
+- Install homebrew for  `x86_64`  and use it to install gcc. We need this because ibm_db depends on `libstdc++.6.dylib`:
+```bash
+arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+arch -x86_64 /usr/local/bin/brew install gcc
 ```
 
 ## Installation
@@ -93,8 +111,15 @@ For running @pytest.mark.ibm_db2 tests, you need to spin up a docker container w
 the `--priviledged` option which `docker compose` does not offer.
 
 ```bash
-docker run -h db2server --name db2server --restart=always --detach --privileged=true -p 50000:50000 --env-file docker_db2.env_list -v /Docker:/database ibmcom/db2
+docker run -h db2server --name db2server --restart=always --detach --privileged=true -p 50000:50000 --env-file docker_db2.env_list -v /Docker:/database icr.io/db2_community/db2
 ```
+
+On OS X we need to use
+```bash
+docker run -h db2server  --platform linux/amd64 --name db2server --restart=always --detach --privileged=true -p 50000:50000
+ --env-file docker_db2.env_list --env IS_OSXFS=true --env PERSISTENT_HOME=false -v /Users/nicolas/Docker:/database icr.io/db2_community/db2
+```
+instead.
 
 Then check `docker logs db2server | grep -i completed` until you see `(*) Setup has completed.`.
 
