@@ -116,8 +116,7 @@ docker run -h db2server --name db2server --restart=always --detach --privileged=
 
 On OS X we need to use
 ```bash
-docker run -h db2server  --platform linux/amd64 --name db2server --restart=always --detach --privileged=true -p 50000:50000
- --env-file docker_db2.env_list --env IS_OSXFS=true --env PERSISTENT_HOME=false -v /Users/nicolas/Docker:/database icr.io/db2_community/db2
+docker run -h db2server  --platform linux/amd64 --name db2server --restart=always --detach --privileged=true -p 50000:50000 --env-file docker_db2.env_list --env IS_OSXFS=true --env PERSISTENT_HOME=false -v /Users/nicolas/Docker:/database icr.io/db2_community/db2
 ```
 instead.
 
