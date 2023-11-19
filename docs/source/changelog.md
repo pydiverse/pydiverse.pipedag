@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.6.7 (2023-MM-DD)
+- Update PR template
+
 ## 0.6.6 (2023-08-17)
 - Implement support for loading polars dataframes from DuckDB.
 - Accelerate storing of dataframes (pandas and polars) to DuckDB (10-100x speedup).
