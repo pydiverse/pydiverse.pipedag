@@ -3,6 +3,7 @@
 ## 0.6.7 (2023-MM-DD)
 - Add debug function `materialize_table`.
 - Update install instructions and dependencies to enable DB2 development on OS X with an `arm64` architecture.
+- Update PR template
 
 ## 0.6.6 (2023-08-17)
 - Implement support for loading polars dataframes from DuckDB.

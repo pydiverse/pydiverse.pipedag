@@ -5,4 +5,4 @@ Below are a few things we ask you kindly to self-check before getting a review. 
 
 # Checklist
 
-- [ ] Added a `CHANGELOG.rst` entry
+- [ ] Added a `docs/source/changelog.md` entry
