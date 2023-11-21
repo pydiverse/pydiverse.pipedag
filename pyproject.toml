@@ -64,6 +64,7 @@ pre-commit = ">=2.20.0"
 kazoo = ">=2.8.0"
 dask = ">=2022.1.0"
 psycopg2 = ">=2.9.3"
+psycopg2-binary = { version = ">=2.9.3", markers = "platform_machine == 'x86_64' and platform_system == 'Darwin'" }
 duckdb = "^0.8.1"
 duckdb-engine = "^0.7.3"
 
