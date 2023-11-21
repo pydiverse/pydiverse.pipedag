@@ -115,7 +115,7 @@ jobs:
         python-version: ['3.11']
     services:
       ibm_db2:
-        image: ibmcom/db2:11.5.5.1
+        image: icr.io/db2_community/db2
         env:
           LICENSE: accept
           DB2INSTANCE: db2inst1

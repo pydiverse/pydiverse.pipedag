@@ -7,18 +7,23 @@ class PipedagDB2Reflection:
     @staticmethod
     def get_alias_names(engine: sa.Engine, schema: str) -> list[str]:
         """Returns all aliases in a schema"""
+        return PipedagDB2Reflection._get_tabname(engine, schema, "A")
 
+    @staticmethod
+    def get_nickname_names(engine: sa.Engine, schema: str) -> list[str]:
+        """Returns all nicknames in a schema"""
+        return PipedagDB2Reflection._get_tabname(engine, schema, "N")
+
+    @staticmethod
+    def _get_tabname(engine: sa.Engine, schema: str, _type: str):
         schema = engine.dialect.denormalize_name(schema)
-
         query = f"""
         SELECT TABNAME
         FROM SYSCAT.TABLES
-        WHERE TABSCHEMA = '{schema}' AND TYPE = 'A'
+        WHERE TABSCHEMA = '{schema}' AND TYPE = '{_type}'
         """
-
         with engine.connect() as conn:
             aliases = conn.exec_driver_sql(query).scalars().all()
-
         aliases = [engine.dialect.normalize_name(name) for name in aliases]
         return list(aliases)
 

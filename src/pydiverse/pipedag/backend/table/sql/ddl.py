@@ -201,6 +201,17 @@ class DropAlias(DDLElement):
         self.if_exists = if_exists
 
 
+class DropNickname(DDLElement):
+    """
+    This is used for dialect=ibm_sa_db
+    """
+
+    def __init__(self, name, schema: Schema, if_exists=False):
+        self.name = name
+        self.schema = schema
+        self.if_exists = if_exists
+
+
 class DropProcedure(DDLElement):
     """
     Attention: For mssql, this statement must be prefixed with
@@ -571,7 +582,11 @@ def visit_drop_schema_content_ibm_db2(drop: DropSchemaContent, compiler, **kw):
     for view in inspector.get_view_names(schema=schema.get()):
         statements.append(DropView(view, schema=schema))
     for alias in PipedagDB2Reflection.get_alias_names(engine, schema=schema.get()):
-        statements.append(DropAlias(alias, schema=drop.schema))
+        statements.append(DropAlias(alias, schema=schema))
+    for nickname in PipedagDB2Reflection.get_nickname_names(
+        engine, schema=schema.get()
+    ):
+        statements.append(DropNickname(nickname, schema))
 
     return join_ddl_statements(statements, compiler, **kw)
 
@@ -831,8 +846,13 @@ def visit_drop_alias_mssql(drop: DropAlias, compiler, **kw):
 
 
 @compiles(DropAlias, "ibm_db_sa")
-def visit_drop_alias_mssql(drop: DropAlias, compiler, **kw):
+def visit_drop_alias_ibm_db_sa(drop: DropAlias, compiler, **kw):
     return _visit_drop_anything(drop, "ALIAS", compiler, **kw)
+
+
+@compiles(DropNickname, "ibm_db_sa")
+def visit_drop_nickname_ibm_db_sa(drop: DropAlias, compiler, **kw):
+    return _visit_drop_anything(drop, "NICKNAME", compiler, **kw)
 
 
 @compiles(DropProcedure)

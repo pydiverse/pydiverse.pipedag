@@ -462,7 +462,7 @@ class SQLTableStore(BaseTableStore):
 
     def execute_raw_sql(self, raw_sql: RawSql):
         """Executed raw SQL statements in the associated transaction stage"""
-        for statement in raw_sql.sql.split(";"):
+        for statement in raw_sql.sql.split(raw_sql.separator):
             if not statement.strip():
                 # Skip empty queries
                 continue

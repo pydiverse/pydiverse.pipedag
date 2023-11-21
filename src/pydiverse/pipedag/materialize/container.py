@@ -123,13 +123,15 @@ class RawSql:
         To do this, pass the current stage as an argument to your task and then
         access the current stage name using :py:class:`Stage.current_name`.
 
-    :param sql: The sql query string to execute. Depending on the database dialect,
-        the query will be split into multiple subqueries that then get
-        executed sequentially.
+    :param sql: The sql query string to execute. Depending on the database dialect
+        and the separator parameter, the query will be split into multiple subqueries
+        that then get executed sequentially.
     :param name: Optional, case-insensitive name. If no name is provided,
         an automatically generated name will be used. To prevent name collisions,
         you can append ``"%%"`` at the end of the name to enable automatic
         name mangling.
+    :param separator: The separator used when splitting the query into subqueries.
+        Default: ``";"``
 
     Example
     -------
@@ -176,12 +178,14 @@ class RawSql:
         self,
         sql: str | None = None,
         name: str | None = None,
+        separator: str = ";",
     ):
         self._name = None
         self.stage: Stage | None = None
 
         self.sql = sql
         self.name = name
+        self.separator = separator
 
         # cache_key will be overridden shortly before handing over to downstream tasks
         # that use it to compute their input_hash for cache_invalidation due to input
