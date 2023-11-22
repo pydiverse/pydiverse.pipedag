@@ -717,6 +717,7 @@ class SQLTableStore(BaseTableStore):
                 table.name,
                 self.get_schema(table.stage.transaction_name),
                 early_not_null=table.primary_key,
+                compression=table.compression,
             )
         )
         self.add_indexes(table, self.get_schema(table.stage.transaction_name))
@@ -851,6 +852,8 @@ class SQLTableStore(BaseTableStore):
         tables_in_schema = set(inspector.get_table_names(src_schema.get()))
         objects_in_schema = self._get_all_objects_in_schema(src_schema)
 
+        config = ConfigContext.get()
+
         tables_to_copy = new_objects & tables_in_schema
         objects_to_copy = {
             k: v
@@ -867,6 +870,7 @@ class SQLTableStore(BaseTableStore):
                             src_schema,
                             name,
                             dest_schema,
+                            config.compression,
                         ),
                         conn=conn,
                     )

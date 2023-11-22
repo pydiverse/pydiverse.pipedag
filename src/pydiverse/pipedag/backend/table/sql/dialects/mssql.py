@@ -235,6 +235,12 @@ class PandasTableHook(PandasTableHook):
         if table.type_map:
             dtypes.update(table.type_map)
 
+        if table.compression:
+            store.logger.warning(
+                f"Table compression is not supported for "
+                f"{type(store)} but specified for {table.name}."
+            )
+
         df.to_sql(
             table.name,
             store.engine,

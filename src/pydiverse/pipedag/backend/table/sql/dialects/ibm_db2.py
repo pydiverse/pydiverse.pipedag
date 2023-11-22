@@ -108,11 +108,44 @@ class PandasTableHook(PandasTableHook):
         if table.type_map:
             dtypes.update(table.type_map)
 
+        engine = store.engine
+        if table.compression:
+            df[:0].to_sql(
+                table.name,
+                engine,
+                schema=schema.get(),
+                index=False,
+                dtype=dtypes,
+            )
+            table_name = engine.dialect.identifier_preparer.quote(table.name)
+            schema_name = engine.dialect.identifier_preparer.format_schema(schema.get())
+            with store.engine_connect() as conn:
+                compressions = (
+                    [table.compression]
+                    if isinstance(table.compression, str)
+                    else table.compression
+                )
+                for c in compressions:
+                    if c.startswith("COMPRESS"):
+                        query = f"ALTER TABLE {schema_name}.{table_name} {c}"
+                    elif c == "VALUE COMPRESSION":
+                        query = f"ALTER TABLE {schema_name}.{table_name} ACTIVATE {c}"
+                    else:
+                        store.logger.warning(
+                            f"Unsupported compression mode for table"
+                            f" {schema_name}.{table_name} for {store}: {c})"
+                        )
+                        continue
+                    if store.print_sql:
+                        store.logger.info("Executing sql", query=query)
+                    conn.execute(sa.text(query))
+        # noinspection PyTypeChecker
         df.to_sql(
             table.name,
-            store.engine,
+            engine,
             schema=schema.get(),
             index=False,
             dtype=dtypes,
             chunksize=100_000,
+            if_exists="append" if table.compression else "fail",
         )

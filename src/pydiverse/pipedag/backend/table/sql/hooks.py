@@ -58,6 +58,16 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
             for tbl in TaskContext.get().input_tables
         ]
         schema = store.get_schema(stage_name)
+
+        if table.compression:
+            from pydiverse.pipedag.backend.table.sql.dialects import IBMDB2TableStore
+
+            if not isinstance(store, IBMDB2TableStore):
+                store.logger.warn(
+                    f"Table compression is not supported for "
+                    f"{type(store)} but specified for {table.name}."
+                )
+
         store.execute(
             CreateTableAsSelect(
                 table.name,
@@ -65,6 +75,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                 obj,
                 early_not_null=table.primary_key,
                 source_tables=source_tables,
+                compression=table.compression,
             )
         )
         store.add_indexes(table, schema, early_not_null_possible=True)
@@ -232,6 +243,12 @@ class PandasTableHook(TableHook[SQLTableStore]):
         dtypes = {name: dtype.to_sql() for name, dtype in dtypes.items()}
         if table.type_map:
             dtypes.update(table.type_map)
+
+        if table.compression:
+            store.logger.warning(
+                f"Table compression is not supported for "
+                f"{type(store)} but specified for {table.name}."
+            )
 
         df.to_sql(
             table.name,

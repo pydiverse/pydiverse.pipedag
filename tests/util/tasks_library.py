@@ -72,6 +72,34 @@ def simple_dataframe():
     return Table(df)
 
 
+@materialize(nout=2)
+def simple_dataframe_compressed_one_method():
+    return Table(
+        pd.DataFrame(dict(COMPRESSION=["R"], ROWCOMPMODE=["S"])),
+        "df_compressed_1_properties",
+    ), _simple_dataframe_compressed("df_compressed_1", "COMPRESS YES STATIC")
+
+
+@materialize(nout=2)
+def simple_dataframe_compressed_two_methods():
+    return Table(
+        pd.DataFrame(dict(COMPRESSION=["B"], ROWCOMPMODE=["A"])),
+        "df_compressed_2_properties",
+    ), _simple_dataframe_compressed(
+        "df_compressed_2", ["COMPRESS YES", "VALUE COMPRESSION"]
+    )
+
+
+def _simple_dataframe_compressed(name=None, compression=None):
+    df = pd.DataFrame(
+        {
+            "col1": [0, 1, 2, 3],
+            "col2": ["0", "1", "2", "3"],
+        }
+    )
+    return Table(df, name=name, compression=compression)
+
+
 @materialize(version="1.0")
 def simple_dataframe_debug_materialize_no_taint():
     df = pd.DataFrame(
@@ -208,6 +236,26 @@ def simple_lazy_table_with_index():
 def simple_lazy_table_with_indexes():
     query = _get_df_query()
     return Table(query, indexes=[["col2"], ["col2", "col1"]])
+
+
+@materialize(nout=2, lazy=False)
+def simple_table_compressed_one_method():
+    query = _get_df_query()
+    return Table(
+        pd.DataFrame(dict(COMPRESSION=["V"], ROWCOMPMODE=[" "])),
+        "compress_1_properties",
+    ), Table(query, name="compress_one", compression="VALUE COMPRESSION")
+
+
+@materialize(nout=2, lazy=False)
+def simple_table_compressed_two_methods():
+    query = _get_df_query()
+    return Table(
+        pd.DataFrame(dict(COMPRESSION=["B"], ROWCOMPMODE=["A"])),
+        "compress_2_properties",
+    ), Table(
+        query, name="compress_two", compression=["COMPRESS YES", "VALUE COMPRESSION"]
+    )
 
 
 @materialize(version="1.0")
