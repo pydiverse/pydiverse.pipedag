@@ -311,6 +311,8 @@ class PipeDAGStore(Disposable):
                 x.name = mangle_table_name(x.name, task.name, auto_suffix)
 
                 if isinstance(x, Table):
+                    if x.compression is None:
+                        x.compression = config.compression
                     if x.obj is None:
                         raise TypeError("Underlying table object can't be None")
                     tables.append(x)

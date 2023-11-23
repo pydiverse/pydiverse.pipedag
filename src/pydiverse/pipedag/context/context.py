@@ -159,6 +159,7 @@ class ConfigContext(BaseAttrsContext):
     network_interface: str
     kroki_url: str | None
     attrs: Box
+    compression: str | list[str] | None
 
     table_hook_args: Box
 

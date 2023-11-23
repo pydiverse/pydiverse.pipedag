@@ -26,7 +26,8 @@ def inputs():
             "x": [1, 1, 2, 2],
         }
     )
-    return Table(df_a, "dfA", primary_key=["a"]), Table(df_b, "dfB")
+    # disable compression only for dfA
+    return Table(df_a, "dfA", primary_key=["a"], compression=""), Table(df_b, "dfB")
 
 
 @materialize(input_type=pd.DataFrame, version="1.0")

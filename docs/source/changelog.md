@@ -7,6 +7,7 @@
 - Update install instructions and dependencies to enable DB2 and mssql development on OS X with an `arm64` architecture.
 - Update PR template
 - Run `RUNSTATS` on every DB2 table after creation
+- Add compression options for DB2 in with `Table(..., compression=["COMPRESS YES ADAPTIVE", "VALUE COMPRESSION"])` and an instance-level config option `compression`.
 
 ## 0.6.6 (2023-08-17)
 - Implement support for loading polars dataframes from DuckDB.

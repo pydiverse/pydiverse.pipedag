@@ -89,6 +89,7 @@ instances:
 
   ibm_db2:
     instance_id: pd_ibm_db2
+    compression: ["COMPRESS YES ADAPTIVE", "VALUE COMPRESSION"]
     stage_commit_technique: READ_VIEWS
     table_store:
       table_store_connection: ibm_db2
