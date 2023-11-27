@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
+from enum import Enum
 
 import pandas as pd
 import sqlalchemy as sa
@@ -16,6 +18,49 @@ from pydiverse.pipedag.backend.table.sql.reflection import PipedagDB2Reflection
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.materialize import Table
+from pydiverse.pipedag.materialize.details import BaseMaterializationDetails
+
+
+class IBMDB2CompressionTypes(str, Enum):
+    NO_COMPRESSION = ""
+    ROW_COMPRESSION = "COMPRESS YES"
+    STATIC_ROW_COMPRESSION = "COMPRESS YES STATIC"
+    ADAPTIVE_ROW_COMPRESSION = "COMPRESS YES ADAPTIVE"
+    VALUE_COMPRESSION = "VALUE COMPRESSION"
+
+
+@dataclass(frozen=True)
+class IBMDB2MaterializationDetails(BaseMaterializationDetails):
+    """
+    :param compression: Specify the compression methods to be applied to the table.
+        Possible values include
+        compression="COMPRESS YES STATIC"
+        compression="COMPRESS YES"
+        compression="COMPRESS YES ADAPTIVE"
+        compression="VALUE COMPRESSION"
+        A list containing combining one of the first three with the last value, e.g.
+        compression=["COMPRESS YES ADAPTIVE", "VALUE COMPRESSION"]
+
+        compression="" will result in no compression
+    :param table_space_data: The DB2 table space where the data is  stored.
+    :param table_space_index: The DB2 table space where the partitioned index is stored.
+    :param table_space_long: The DB2 table spaces where the values of any long columns
+        are stored.
+    """
+
+    def __post_init__(self):
+        object.__setattr__(
+            self,
+            "compression",
+            IBMDB2CompressionTypes(self.compression)
+            if isinstance(self.compression, str)
+            else [IBMDB2CompressionTypes(c) for c in self.compression],
+        )
+
+    compression: IBMDB2CompressionTypes | list[IBMDB2CompressionTypes] | None = None
+    table_space_data: str | None = None
+    table_space_index: str | None = None
+    table_space_long: str | list[str] | None = None
 
 
 class IBMDB2TableStore(SQLTableStore):
@@ -23,11 +68,38 @@ class IBMDB2TableStore(SQLTableStore):
     SQLTableStore that supports `IBM Db2 <https://www.ibm.com/products/db2>`_.
     Requires `ibm-db-sa <https://pypi.org/project/ibm-db-sa/>`_ to be installed.
 
-    Takes the same arguments as
-    :py:class:`SQLTableStore <pydiverse.pipedag.backend.table.SQLTableStore>`
+    In addition to the arguments of
+    :py:class:`SQLTableStore <pydiverse.pipedag.backend.table.SQLTableStore>`,
+    it also takes the following arguments:
+
+    :param materialization_details:
+        A dictionary with each entry describing a tag for materialization details of
+        the table store.
+    :param default_materialization_details:
+        The materialization_details that will be used if materialization_details
+        is not specified on table level. If not set, the ``__any__`` tag (if specified)
+        will be used.
     """
 
     _dialect_name = "ibm_db_sa"
+
+    def __init__(
+        self,
+        *args,
+        materialization_details: dict[str, dict[str | list[str]]] = None,
+        default_materialization_details: str = "__any__",
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.materialization_details = (
+            IBMDB2MaterializationDetails.create_materialization_details_dict(
+                materialization_details,
+                self.strict_materialization_details,
+                default_materialization_details,
+                self.logger,
+            )
+        )
+        self.default_materialization_details = default_materialization_details
 
     def add_primary_key(
         self,
@@ -73,6 +145,24 @@ class IBMDB2TableStore(SQLTableStore):
     def resolve_alias(self, table, schema):
         return PipedagDB2Reflection.resolve_alias(self.engine, table, schema)
 
+    def get_compression(
+        self, materialization_details_label: str | None
+    ) -> str | list[str] | None:
+        compression: IBMDB2CompressionTypes | list[
+            IBMDB2CompressionTypes
+        ] | None = IBMDB2MaterializationDetails.get_attribute_from_dict(
+            self.materialization_details,
+            materialization_details_label,
+            self.default_materialization_details,
+            "compression",
+            self.strict_materialization_details,
+            self.logger,
+        )
+        if isinstance(compression, list):
+            return [c.value for c in compression]
+        if compression is not None:
+            return compression.value
+
 
 @IBMDB2TableStore.register_table(pd)
 class PandasTableHook(PandasTableHook):
@@ -80,7 +170,7 @@ class PandasTableHook(PandasTableHook):
     def _execute_materialize(
         cls,
         df: pd.DataFrame,
-        store: SQLTableStore,
+        store: IBMDB2TableStore,
         table: Table[pd.DataFrame],
         schema: Schema,
         dtypes: dict[str, DType],
@@ -109,7 +199,8 @@ class PandasTableHook(PandasTableHook):
             dtypes.update(table.type_map)
 
         engine = store.engine
-        if table.compression:
+        compression = store.get_compression(table.materialization_details)
+        if compression:
             df[:0].to_sql(
                 table.name,
                 engine,
@@ -121,9 +212,7 @@ class PandasTableHook(PandasTableHook):
             schema_name = engine.dialect.identifier_preparer.format_schema(schema.get())
             with store.engine_connect() as conn:
                 compressions = (
-                    [table.compression]
-                    if isinstance(table.compression, str)
-                    else table.compression
+                    [compression] if isinstance(compression, str) else compression
                 )
                 for c in compressions:
                     if c.startswith("COMPRESS"):
@@ -147,5 +236,5 @@ class PandasTableHook(PandasTableHook):
             index=False,
             dtype=dtypes,
             chunksize=100_000,
-            if_exists="append" if table.compression else "fail",
+            if_exists="append" if compression else "fail",
         )

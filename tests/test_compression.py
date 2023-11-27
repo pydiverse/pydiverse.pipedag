@@ -4,7 +4,10 @@ import pytest
 import sqlalchemy as sa
 
 from pydiverse.pipedag import ConfigContext, Flow, Stage, Table, materialize
-from pydiverse.pipedag.backend.table.sql.dialects import IBMDB2TableStore
+from pydiverse.pipedag.backend.table.sql.dialects import (
+    IBMDB2TableStore,
+    MSSqlTableStore,
+)
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
@@ -14,15 +17,17 @@ pytestmark = [with_instances(DATABASE_INSTANCES)]
 
 
 @pytest.mark.parametrize(
-    "task",
+    "task, stage_materialization_details",
     [
-        m.simple_table_compressed_one_method,
-        m.simple_table_compressed_two_methods,
-        m.simple_dataframe_compressed_one_method,
-        m.simple_dataframe_compressed_two_methods,
+        (m.simple_table_compressed_one_method, "adaptive_value_compression"),
+        (m.simple_table_compressed_two_methods, "adaptive_value_compression"),
+        (m.simple_dataframe_compressed_one_method, "adaptive_value_compression"),
+        (m.simple_dataframe_compressed_two_methods, "adaptive_value_compression"),
+        (m.simple_table_default_compressed, "adaptive_value_compression"),
+        (m.simple_dataframe_uncompressed, None),
     ],
 )
-def test_materialize_table_with_indexes(task):
+def test_compression(task, stage_materialization_details):
     @materialize(input_type=sa.Table, lazy=False)
     def get_compression_attributes(table: sa.Table):
         query = f"""
@@ -33,7 +38,7 @@ def test_materialize_table_with_indexes(task):
         return Table(sa.text(query), f"compression_attributes_{table.name}")
 
     with Flow("flow") as f:
-        with Stage("stage"):
+        with Stage("stage", materialization_details=stage_materialization_details):
             comp_exp_x, x = task()
             config = ConfigContext.get()
             store = config.store.table_store
@@ -43,4 +48,14 @@ def test_materialize_table_with_indexes(task):
 
             m.assert_table_equal(x, x)
 
-    assert f.run().successful
+    if (
+        not isinstance(store, (MSSqlTableStore, IBMDB2TableStore))
+        and task != m.simple_dataframe_uncompressed
+    ):
+        with pytest.raises(
+            ValueError,
+            match="To silence this exception set strict_materialization_details=False",
+        ):
+            assert f.run().successful
+    else:
+        assert f.run().successful

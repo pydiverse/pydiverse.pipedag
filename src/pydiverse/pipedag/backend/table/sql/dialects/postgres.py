@@ -67,19 +67,15 @@ class SQLAlchemyTableHook(SQLAlchemyTableHook):
         if isinstance(table.obj, (sa.Table, sa.sql.expression.Alias)):
             obj = sa.select("*").select_from(table.obj)
 
+        store.check_materialization_details_supported(table.materialization_details)
+
         schema = store.get_schema(stage_name)
-        if table.compression:
-            store.logger.warning(
-                f"Table compression is not supported for "
-                f"{type(store)} but specified for {table.name}."
-            )
         store.execute(
             CreateTableAsSelect(
                 table.name,
                 schema,
                 obj,
                 unlogged=store.unlogged_tables,
-                compression=table.compression,
             )
         )
         store.add_indexes(table, schema, early_not_null_possible=True)
@@ -101,11 +97,7 @@ class PandasTableHook(PandasTableHook):
         if table.type_map:
             dtypes.update(table.type_map)
 
-        if table.compression:
-            store.logger.warning(
-                f"Table compression is not supported for "
-                f"{type(store)} but specified for {table.name}."
-            )
+        store.check_materialization_details_supported(table.materialization_details)
 
         # Create empty table
         df[:0].to_sql(

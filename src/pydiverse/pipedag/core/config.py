@@ -209,7 +209,6 @@ class PipedagConfig:
             network_interface=config["network_interface"],
             kroki_url=config.get("kroki_url"),
             attrs=Box(config["attrs"], frozen_box=True),
-            compression=config.get("compression"),
             table_hook_args=Box(
                 config["table_store"].get("hook_args", {}), frozen_box=True
             ),

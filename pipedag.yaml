@@ -9,12 +9,27 @@ table_store_connections:
     args:
       url: "mssql+pyodbc://sa:PydiQuant27@127.0.0.1:1433/{instance_id}?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
       create_database_if_not_exists: true
+      strict_materialization_details: false
 
   ibm_db2:
     args:
       url: "db2+ibm_db://db2inst1:password@localhost:50000/testdb"
       schema_prefix: "{instance_id}_"
       create_database_if_not_exists: false
+      strict_materialization_details: false
+      default_materialization_details: "no_compression"
+      materialization_details:
+        __any__:
+          compression: ["COMPRESS YES ADAPTIVE"]
+        no_compression:
+          compression: ""
+        value_compression:
+          compression: "VALUE COMPRESSION"
+        static_compression:
+          compression: "COMPRESS YES STATIC"
+        adaptive_value_compression:
+          compression: ["COMPRESS YES ADAPTIVE", "VALUE COMPRESSION"]
+
 
   duckdb:
     args:
@@ -89,7 +104,6 @@ instances:
 
   ibm_db2:
     instance_id: pd_ibm_db2
-    compression: ["COMPRESS YES ADAPTIVE", "VALUE COMPRESSION"]
     stage_commit_technique: READ_VIEWS
     table_store:
       table_store_connection: ibm_db2

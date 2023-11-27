@@ -44,7 +44,10 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def materialize(
-        cls, store, table: Table[sa.sql.expression.TextClause | sa.Text], stage_name
+        cls,
+        store: SQLTableStore,
+        table: Table[sa.sql.expression.TextClause | sa.Text],
+        stage_name,
     ):
         obj = table.obj
         if isinstance(table.obj, (sa.Table, sa.sql.expression.Alias)):
@@ -59,14 +62,9 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         ]
         schema = store.get_schema(stage_name)
 
-        if table.compression:
-            from pydiverse.pipedag.backend.table.sql.dialects import IBMDB2TableStore
+        store.check_materialization_details_supported(table.materialization_details)
 
-            if not isinstance(store, IBMDB2TableStore):
-                store.logger.warn(
-                    f"Table compression is not supported for "
-                    f"{type(store)} but specified for {table.name}."
-                )
+        from pydiverse.pipedag.backend.table.sql.dialects import IBMDB2TableStore
 
         store.execute(
             CreateTableAsSelect(
@@ -75,7 +73,9 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                 obj,
                 early_not_null=table.primary_key,
                 source_tables=source_tables,
-                compression=table.compression,
+                compression=store.get_compression(table.materialization_details)
+                if isinstance(store, IBMDB2TableStore)
+                else None,
             )
         )
         store.add_indexes(table, schema, early_not_null_possible=True)
@@ -244,11 +244,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         if table.type_map:
             dtypes.update(table.type_map)
 
-        if table.compression:
-            store.logger.warning(
-                f"Table compression is not supported for "
-                f"{type(store)} but specified for {table.name}."
-            )
+        store.check_materialization_details_supported(table.materialization_details)
 
         df.to_sql(
             table.name,

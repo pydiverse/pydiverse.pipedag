@@ -142,6 +142,14 @@ class SQLTableStore(BaseTableStore):
     :param no_db_locking:
         Speed up database by telling it we will not rely on it's locking mechanisms.
         Currently not implemented.
+
+    :param strict_materialization_details:
+        If ``True``: raise an exception if
+            - the argument ``materialization_details`` is given even though the
+              table store does not support it.
+            - a table references a ``materialization_details`` tag that is not defined
+              in the config.
+        If ``False``: Log an error instead of raising an exception
     """
 
     METADATA_SCHEMA = "pipedag_metadata"
@@ -177,8 +185,28 @@ class SQLTableStore(BaseTableStore):
         print_materialize: bool = False,
         print_sql: bool = False,
         no_db_locking: bool = True,
+        strict_materialization_details: bool = True,
+        **kwargs,
     ):
         super().__init__()
+
+        if kwargs:
+            optional_args = {
+                "materialization_details",
+                "default_materialization_details",
+            }
+            if not set(kwargs.keys()).issubset(optional_args):
+                raise TypeError(
+                    f"The given arguments {set(kwargs.keys()) - optional_args}"
+                    f" are not supported."
+                )
+            error_msg = f"The table store does not support {set(kwargs.keys())}."
+            if strict_materialization_details:
+                raise TypeError(
+                    f"{error_msg} To suppress this exception, "
+                    f"use strict_materialization_details=False"
+                )
+            self.logger.error(error_msg)
 
         self.create_database_if_not_exists = create_database_if_not_exists
         self.schema_prefix = schema_prefix
@@ -187,6 +215,7 @@ class SQLTableStore(BaseTableStore):
         self.print_materialize = print_materialize
         self.print_sql = print_sql
         self.no_db_locking = no_db_locking
+        self.strict_materialization_details = strict_materialization_details
 
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
         self.engine_url = sa.engine.make_url(engine_url)
@@ -376,6 +405,22 @@ class SQLTableStore(BaseTableStore):
             return
 
         return self._execute(query, conn)
+
+    def check_materialization_details_supported(self, label: str | None) -> None:
+        from pydiverse.pipedag.backend.table.sql.dialects import IBMDB2TableStore
+
+        if label is not None and not isinstance(self, IBMDB2TableStore):
+            error_msg = (
+                f"Materialization details are not supported"
+                f" for store {type(self).__name__}."
+            )
+            if self.strict_materialization_details:
+                raise ValueError(
+                    f"{error_msg} To silence this exception set"
+                    f" strict_materialization_details=False"
+                )
+            else:
+                self.logger.error(f"{error_msg}")
 
     def add_indexes(
         self, table: Table, schema: Schema, *, early_not_null_possible: bool = False
@@ -697,6 +742,8 @@ class SQLTableStore(BaseTableStore):
 
     def _copy_table(self, table: Table, from_schema: Schema, from_name: str):
         """Copies the table immediately"""
+        from pydiverse.pipedag.backend.table.sql.dialects import IBMDB2TableStore
+
         inspector = sa.inspect(self.engine)
         has_table = inspector.has_table(from_name, schema=from_schema.get())
 
@@ -710,6 +757,8 @@ class SQLTableStore(BaseTableStore):
             self.logger.error(msg)
             raise CacheError(msg)
 
+        self.check_materialization_details_supported(table.materialization_details)
+
         self.execute(
             CopyTable(
                 from_name,
@@ -717,7 +766,9 @@ class SQLTableStore(BaseTableStore):
                 table.name,
                 self.get_schema(table.stage.transaction_name),
                 early_not_null=table.primary_key,
-                compression=table.compression,
+                compression=self.get_compression(table.materialization_details)
+                if isinstance(self, IBMDB2TableStore)
+                else None,
             )
         )
         self.add_indexes(table, self.get_schema(table.stage.transaction_name))
@@ -852,7 +903,9 @@ class SQLTableStore(BaseTableStore):
         tables_in_schema = set(inspector.get_table_names(src_schema.get()))
         objects_in_schema = self._get_all_objects_in_schema(src_schema)
 
-        config = ConfigContext.get()
+        self.check_materialization_details_supported(
+            target_stage.materialization_details
+        )
 
         tables_to_copy = new_objects & tables_in_schema
         objects_to_copy = {
@@ -860,6 +913,8 @@ class SQLTableStore(BaseTableStore):
             for k, v in objects_in_schema.items()
             if k in new_objects and k not in tables_to_copy
         }
+
+        from pydiverse.pipedag.backend.table.sql.dialects import IBMDB2TableStore
 
         try:
             with self.engine_connect() as conn:
@@ -870,7 +925,9 @@ class SQLTableStore(BaseTableStore):
                             src_schema,
                             name,
                             dest_schema,
-                            config.compression,
+                            self.get_compression(target_stage.materialization_details)
+                            if isinstance(self, IBMDB2TableStore)
+                            else None,
                         ),
                         conn=conn,
                     )
