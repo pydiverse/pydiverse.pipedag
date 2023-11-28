@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pandas as pd
+import pytest
 import sqlalchemy as sa
 
-from pydiverse.pipedag import Flow, RawSql, Stage, materialize
+from pydiverse.pipedag import Flow, RawSql, Stage, Table, materialize
 from tests.fixtures.instances import with_instances
-from tests.util.tasks_library import simple_dataframe
+from tests.util.tasks_library import (
+    assert_table_equal,
+    simple_dataframe,
+    simple_lazy_table,
+)
 
 
 @with_instances("ibm_db2", "ibm_db2_avoid_schema")
@@ -24,7 +30,7 @@ def test_db2_nicknames():
 
         return RawSql(simple_nicknames, "create_nicknames", separator="|")
 
-    with Flow("nick_flow") as f:
+    with Flow("f") as f:
         with Stage("stage"):
             x = simple_dataframe()
             nicknames = create_nicknames(x)
@@ -35,3 +41,42 @@ def test_db2_nicknames():
     assert f.run().successful
     assert f.run().successful
     assert f.run().successful
+
+
+@with_instances("ibm_db2", "ibm_db2_avoid_schema")
+@pytest.mark.parametrize("task", [simple_dataframe, simple_lazy_table])
+def test_db2_table_spaces(task):
+    @materialize()
+    def create_table_spaces():
+        script_path = Path(__file__).parent / "scripts" / "simple_table_spaces.sql"
+        simple_table_spaces = Path(script_path).read_text()
+        return RawSql(simple_table_spaces, "create_table_spaces", separator="|")
+
+    @materialize(input_type=sa.Table, lazy=False)
+    def get_actual_table_space_attributes(table: sa.Table):
+        query = f"""
+            SELECT TBSPACE, INDEX_TBSPACE, LONG_TBSPACE FROM SYSCAT.TABLES
+             WHERE TABSCHEMA = '{table.original.schema.upper()}'
+             AND TABNAME = '{table.original.name.upper()}'
+        """
+        return Table(sa.text(query), f"tbspace_attributes_{table.name}")
+
+    @materialize(version="1.0")
+    def get_expected_table_space_attributes():
+        return Table(
+            pd.DataFrame(
+                {"TBSPACE": ["S1"], "INDEX_TBSPACE": ["S2"], "LONG_TBSPACE": ["S3"]}
+            ),
+            name="tbspace_attributes",
+        )
+
+    with Flow("f") as f:
+        with Stage("stage", materialization_details="table_space"):
+            create_table_spaces()
+            x = task()
+            x_attr = get_actual_table_space_attributes(x)
+            attrs = get_expected_table_space_attributes()
+            assert_table_equal(attrs, x_attr)
+
+    for _ in range(3):
+        assert f.run().successful

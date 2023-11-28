@@ -18,6 +18,7 @@ from pydiverse.pipedag.backend.table.sql.hooks import (
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.materialize import Table
+from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
 
 
 class PostgresTableStore(SQLTableStore):
@@ -67,7 +68,9 @@ class SQLAlchemyTableHook(SQLAlchemyTableHook):
         if isinstance(table.obj, (sa.Table, sa.sql.expression.Alias)):
             obj = sa.select("*").select_from(table.obj)
 
-        store.check_materialization_details_supported(table.materialization_details)
+        store.check_materialization_details_supported(
+            resolve_materialization_details_label(table)
+        )
 
         schema = store.get_schema(stage_name)
         store.execute(
@@ -97,7 +100,9 @@ class PandasTableHook(PandasTableHook):
         if table.type_map:
             dtypes.update(table.type_map)
 
-        store.check_materialization_details_supported(table.materialization_details)
+        store.check_materialization_details_supported(
+            resolve_materialization_details_label(table)
+        )
 
         # Create empty table
         df[:0].to_sql(

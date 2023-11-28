@@ -25,6 +25,7 @@ from pydiverse.pipedag.backend.table.util import (
 )
 from pydiverse.pipedag.context import TaskContext
 from pydiverse.pipedag.materialize import Table
+from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
 from pydiverse.pipedag.util.computation_tracing import ComputationTracer
 
 # region SQLALCHEMY
@@ -62,7 +63,9 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         ]
         schema = store.get_schema(stage_name)
 
-        store.check_materialization_details_supported(table.materialization_details)
+        store.check_materialization_details_supported(
+            resolve_materialization_details_label(table)
+        )
 
         from pydiverse.pipedag.backend.table.sql.dialects import IBMDB2TableStore
 
@@ -73,7 +76,9 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                 obj,
                 early_not_null=table.primary_key,
                 source_tables=source_tables,
-                compression=store.get_compression(table.materialization_details)
+                suffix=store.get_create_table_suffix(
+                    resolve_materialization_details_label(table)
+                )
                 if isinstance(store, IBMDB2TableStore)
                 else None,
             )
@@ -244,7 +249,9 @@ class PandasTableHook(TableHook[SQLTableStore]):
         if table.type_map:
             dtypes.update(table.type_map)
 
-        store.check_materialization_details_supported(table.materialization_details)
+        store.check_materialization_details_supported(
+            resolve_materialization_details_label(table)
+        )
 
         df.to_sql(
             table.name,

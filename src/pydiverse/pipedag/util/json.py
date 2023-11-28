@@ -48,6 +48,7 @@ def json_default(o):
             "primary_key": o.primary_key,
             "indexes": o.indexes,
             "cache_key": o.cache_key,
+            "materialization_details": o.materialization_details,
         }
     if isinstance(o, RawSql):
         return {
@@ -109,6 +110,7 @@ def json_object_hook(d: dict):
             name=d["name"],
             primary_key=d["primary_key"],
             indexes=d["indexes"],
+            materialization_details=d.get("materialization_details"),
         )
         tbl.stage = get_stage(d["stage"])
         tbl.cache_key = d["cache_key"]

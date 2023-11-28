@@ -18,6 +18,7 @@ __all__ = [
     "RenameSchema",
     "DropSchemaContent",
     "CreateTableAsSelect",
+    "CreateTableWithSuffix",
     "CreateViewAsSelect",
     "CreateAlias",
     "CopyTable",
@@ -35,6 +36,8 @@ __all__ = [
     "ChangeTableLogged",
     "split_ddl_statement",
 ]
+
+from sqlalchemy.sql.type_api import TypeEngine
 
 
 @frozen
@@ -104,7 +107,7 @@ class CreateTableAsSelect(DDLElement):
         early_not_null: None | str | list[str] = None,
         source_tables: None | list[dict[str, str]] = None,
         unlogged: bool = False,
-        compression: str | list[str] | None = None,
+        suffix: str = "",
     ):
         self.name = name
         self.schema = schema
@@ -117,8 +120,22 @@ class CreateTableAsSelect(DDLElement):
         # Postgres supports creating unlogged tables. Flag should get ignored by
         # other dialects
         self.unlogged = unlogged
-        # Some dialects support compression
-        self.compression = compression
+        # Suffix to be appended to the statement, e.g. from materialization details
+        self.suffix = suffix
+
+
+class CreateTableWithSuffix(DDLElement):
+    def __init__(
+        self, name: str, schema: Schema, sql_dtypes: dict[str, TypeEngine], suffix: str
+    ):
+        """
+        This is used for dialect=ibm_sa_db to create a table in a
+        table space and with compression before we let Pandas fill it with data.
+        """
+        self.name = name
+        self.schema = schema
+        self.sql_dtypes = sql_dtypes
+        self.suffix = suffix
 
 
 class CreateViewAsSelect(DDLElement):
@@ -153,7 +170,7 @@ class CopyTable(DDLElement):
         to_schema: Schema,
         if_not_exists=False,
         early_not_null: None | str | list[str] = None,
-        compression: str | list[str] | None = None,
+        suffix: str = "",
     ):
         self.from_name = from_name
         self.from_schema = from_schema
@@ -161,7 +178,7 @@ class CopyTable(DDLElement):
         self.to_schema = to_schema
         self.if_not_exists = if_not_exists
         self.early_not_null = early_not_null
-        self.compression = compression
+        self.suffix = suffix
 
 
 class RenameTable(DDLElement):
@@ -659,13 +676,7 @@ def visit_create_table_as_select_mssql(create: CreateTableAsSelect, compiler, **
 
 @compiles(CreateTableAsSelect, "ibm_db_sa")
 def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler, **kw):
-    if isinstance(create.compression, str):
-        compression = [create.compression]
-    elif create.compression is None:
-        compression = []
-    else:
-        compression = create.compression
-    suffix = ") DEFINITION ONLY " + " ".join(compression)
+    suffix = ") DEFINITION ONLY " + create.suffix
     prepare_statement = _visit_create_obj_as_select(
         create, compiler, "TABLE", kw, prefix="(", suffix=suffix
     )
@@ -710,6 +721,22 @@ def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler
         compiler,
         **kw,
     )
+
+
+@compiles(CreateTableWithSuffix, "ibm_db_sa")
+def visit_create_table_with_suffix(create: CreateTableWithSuffix, compiler, **kw):
+    _ = kw
+    name = compiler.preparer.quote(create.name)
+    schema = compiler.preparer.format_schema(create.schema.get())
+    statement = (
+        f"CREATE TABLE {schema}.{name} (\n"
+        + ",\n".join(
+            f"{compiler.preparer.quote(col_name)} {dtype.compile(compiler.dialect)}"
+            for col_name, dtype in create.sql_dtypes.items()
+        )
+        + f"\n) {create.suffix}"
+    )
+    return statement
 
 
 @compiles(CreateViewAsSelect)
@@ -797,11 +824,11 @@ def visit_copy_table(copy_table: CopyTable, compiler, **kw):
         copy_table.to_name,
         copy_table.to_schema,
         query,
-        compression=copy_table.compression,
         early_not_null=copy_table.early_not_null,
         source_tables=[
             dict(name=copy_table.from_name, schema=copy_table.from_schema.get())
         ],
+        suffix=copy_table.suffix,
     )
     return compiler.process(create, **kw)
 

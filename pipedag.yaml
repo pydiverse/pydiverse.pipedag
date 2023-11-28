@@ -29,6 +29,10 @@ table_store_connections:
           compression: "COMPRESS YES STATIC"
         adaptive_value_compression:
           compression: ["COMPRESS YES ADAPTIVE", "VALUE COMPRESSION"]
+        table_space:
+          table_space_data: "S1"
+          table_space_index: "S2"
+          table_space_long: "S3"
 
 
   duckdb:

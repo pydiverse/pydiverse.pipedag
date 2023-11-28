@@ -48,14 +48,16 @@ def test_compression(task, stage_materialization_details):
 
             m.assert_table_equal(x, x)
 
-    if (
-        not isinstance(store, (MSSqlTableStore, IBMDB2TableStore))
-        and task != m.simple_dataframe_uncompressed
-    ):
-        with pytest.raises(
-            ValueError,
-            match="To silence this exception set strict_materialization_details=False",
+    for _ in range(3):
+        if (
+            not isinstance(store, (MSSqlTableStore, IBMDB2TableStore))
+            and task != m.simple_dataframe_uncompressed
         ):
+            with pytest.raises(
+                ValueError,
+                match="To silence this exception set"
+                " strict_materialization_details=False",
+            ):
+                assert f.run().successful
+        else:
             assert f.run().successful
-    else:
-        assert f.run().successful

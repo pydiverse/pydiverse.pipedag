@@ -11,6 +11,7 @@ import sqlalchemy.exc
 from pydiverse.pipedag.backend.table.sql.ddl import (
     AddPrimaryKey,
     ChangeColumnNullable,
+    CreateTableWithSuffix,
     Schema,
 )
 from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook
@@ -18,7 +19,16 @@ from pydiverse.pipedag.backend.table.sql.reflection import PipedagDB2Reflection
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.materialize import Table
-from pydiverse.pipedag.materialize.details import BaseMaterializationDetails
+from pydiverse.pipedag.materialize.details import (
+    BaseMaterializationDetails,
+    resolve_materialization_details_label,
+)
+
+_TABLE_SPACE_KEYWORD_MAP = {
+    "table_space_data": "IN",
+    "table_space_index": "INDEX IN",
+    "table_space_long": "LONG IN",
+}
 
 
 class IBMDB2CompressionTypes(str, Enum):
@@ -145,7 +155,7 @@ class IBMDB2TableStore(SQLTableStore):
     def resolve_alias(self, table, schema):
         return PipedagDB2Reflection.resolve_alias(self.engine, table, schema)
 
-    def get_compression(
+    def _get_compression(
         self, materialization_details_label: str | None
     ) -> str | list[str] | None:
         compression: IBMDB2CompressionTypes | list[
@@ -162,6 +172,39 @@ class IBMDB2TableStore(SQLTableStore):
             return [c.value for c in compression]
         if compression is not None:
             return compression.value
+
+    def _get_table_spaces(
+        self, materialization_details_label: str | None
+    ) -> dict[str, str]:
+        return {
+            f"table_space_{st}": IBMDB2MaterializationDetails.get_attribute_from_dict(
+                self.materialization_details,
+                materialization_details_label,
+                self.default_materialization_details,
+                f"table_space_{st}",
+                self.strict_materialization_details,
+                self.logger,
+            )
+            for st in ("data", "index", "long")
+        }
+
+    def get_create_table_suffix(
+        self, materialization_details_label: str | None
+    ) -> str | None:
+        table_spaces = self._get_table_spaces(materialization_details_label)
+        table_space_suffix = " ".join(
+            f"{_TABLE_SPACE_KEYWORD_MAP[stype]} "
+            f"{self.engine.dialect.identifier_preparer.quote(sname)}"
+            for stype, sname in table_spaces.items()
+            if sname
+        )
+        compression = self._get_compression(materialization_details_label)
+        if isinstance(compression, str):
+            compression = [compression]
+        elif compression is None:
+            compression = []
+        compression_suffix = " ".join(compression)
+        return " ".join((table_space_suffix, compression_suffix))
 
 
 @IBMDB2TableStore.register_table(pd)
@@ -199,35 +242,12 @@ class PandasTableHook(PandasTableHook):
             dtypes.update(table.type_map)
 
         engine = store.engine
-        compression = store.get_compression(table.materialization_details)
-        if compression:
-            df[:0].to_sql(
-                table.name,
-                engine,
-                schema=schema.get(),
-                index=False,
-                dtype=dtypes,
-            )
-            table_name = engine.dialect.identifier_preparer.quote(table.name)
-            schema_name = engine.dialect.identifier_preparer.format_schema(schema.get())
-            with store.engine_connect() as conn:
-                compressions = (
-                    [compression] if isinstance(compression, str) else compression
-                )
-                for c in compressions:
-                    if c.startswith("COMPRESS"):
-                        query = f"ALTER TABLE {schema_name}.{table_name} {c}"
-                    elif c == "VALUE COMPRESSION":
-                        query = f"ALTER TABLE {schema_name}.{table_name} ACTIVATE {c}"
-                    else:
-                        store.logger.warning(
-                            f"Unsupported compression mode for table"
-                            f" {schema_name}.{table_name} for {store}: {c})"
-                        )
-                        continue
-                    if store.print_sql:
-                        store.logger.info("Executing sql", query=query)
-                    conn.execute(sa.text(query))
+        suffix = store.get_create_table_suffix(
+            resolve_materialization_details_label(table)
+        )
+        if suffix:
+            store.execute(CreateTableWithSuffix(table.name, schema, dtypes, suffix))
+
         # noinspection PyTypeChecker
         df.to_sql(
             table.name,
@@ -236,5 +256,5 @@ class PandasTableHook(PandasTableHook):
             index=False,
             dtype=dtypes,
             chunksize=100_000,
-            if_exists="append" if compression else "fail",
+            if_exists="append" if suffix else "fail",
         )

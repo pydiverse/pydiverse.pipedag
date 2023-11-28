@@ -35,6 +35,7 @@ from pydiverse.pipedag.context.run_context import DeferredTableStoreOp
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
 from pydiverse.pipedag.materialize.metadata import (
     LazyTableMetadata,
     RawSqlMetadata,
@@ -232,7 +233,7 @@ class SQLTableStore(BaseTableStore):
         # Store version number for metadata table schema evolution.
         # We disable caching in case of version mismatch.
         self.disable_caching = False
-        self.metadata_version = "0.3.1"  # Increase version if metadata table changes
+        self.metadata_version = "0.3.2"  # Increase version if metadata table changes
         self.version_table = sa.Table(
             "metadata_version",
             self.sql_metadata,
@@ -757,7 +758,9 @@ class SQLTableStore(BaseTableStore):
             self.logger.error(msg)
             raise CacheError(msg)
 
-        self.check_materialization_details_supported(table.materialization_details)
+        self.check_materialization_details_supported(
+            resolve_materialization_details_label(table)
+        )
 
         self.execute(
             CopyTable(
@@ -766,7 +769,9 @@ class SQLTableStore(BaseTableStore):
                 table.name,
                 self.get_schema(table.stage.transaction_name),
                 early_not_null=table.primary_key,
-                compression=self.get_compression(table.materialization_details)
+                suffix=self.get_create_table_suffix(
+                    resolve_materialization_details_label(table)
+                )
                 if isinstance(self, IBMDB2TableStore)
                 else None,
             )
@@ -925,7 +930,9 @@ class SQLTableStore(BaseTableStore):
                             src_schema,
                             name,
                             dest_schema,
-                            self.get_compression(target_stage.materialization_details)
+                            suffix=self.get_create_table_suffix(
+                                target_stage.materialization_details
+                            )
                             if isinstance(self, IBMDB2TableStore)
                             else None,
                         ),

@@ -5,6 +5,8 @@ import dataclasses
 from abc import ABC, abstractmethod
 from typing import TypeVar
 
+from pydiverse.pipedag import Table
+
 _T = TypeVar("_T", bound="BaseMaterializationDetails")
 
 
@@ -93,3 +95,11 @@ class BaseMaterializationDetails(ABC):
                 logger.error(f"{error_msg} Using __any__ instead.")
                 label = "__any__"
         return getattr(d[label], attribute)
+
+
+def resolve_materialization_details_label(table: Table) -> str | None:
+    if table.materialization_details is not None:
+        return table.materialization_details
+    if table.stage is not None:
+        return table.stage.materialization_details
+    return None
