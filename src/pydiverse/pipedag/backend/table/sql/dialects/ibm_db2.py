@@ -78,38 +78,12 @@ class IBMDB2TableStore(SQLTableStore):
     SQLTableStore that supports `IBM Db2 <https://www.ibm.com/products/db2>`_.
     Requires `ibm-db-sa <https://pypi.org/project/ibm-db-sa/>`_ to be installed.
 
-    In addition to the arguments of
-    :py:class:`SQLTableStore <pydiverse.pipedag.backend.table.SQLTableStore>`,
-    it also takes the following arguments:
-
-    :param materialization_details:
-        A dictionary with each entry describing a tag for materialization details of
-        the table store.
-    :param default_materialization_details:
-        The materialization_details that will be used if materialization_details
-        is not specified on table level. If not set, the ``__any__`` tag (if specified)
-        will be used.
+    Takes the same arguments as
+    :py:class:`SQLTableStore <pydiverse.pipedag.backend.table.SQLTableStore>`
     """
 
     _dialect_name = "ibm_db_sa"
-
-    def __init__(
-        self,
-        *args,
-        materialization_details: dict[str, dict[str | list[str]]] = None,
-        default_materialization_details: str = "__any__",
-        **kwargs,
-    ):
-        super().__init__(*args, **kwargs)
-        self.materialization_details = (
-            IBMDB2MaterializationDetails.create_materialization_details_dict(
-                materialization_details,
-                self.strict_materialization_details,
-                default_materialization_details,
-                self.logger,
-            )
-        )
-        self.default_materialization_details = default_materialization_details
+    _materialization_details_class = IBMDB2MaterializationDetails
 
     def add_primary_key(
         self,

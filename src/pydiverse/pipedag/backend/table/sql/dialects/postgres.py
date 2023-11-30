@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from dataclasses import dataclass
 from io import StringIO
 
 import pandas as pd
@@ -18,19 +19,16 @@ from pydiverse.pipedag.backend.table.sql.hooks import (
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.materialize import Table
-from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
+from pydiverse.pipedag.materialize.details import (
+    BaseMaterializationDetails,
+    resolve_materialization_details_label,
+)
 
 
-class PostgresTableStore(SQLTableStore):
+@dataclass(frozen=True)
+class PostgresMaterializationDetails(BaseMaterializationDetails):
     """
-    SQLTableStore that supports `PostgreSQL <https://postgresql.org>`_.
-
-    In addition to the arguments of
-    :py:class:`SQLTableStore <pydiverse.pipedag.backend.table.SQLTableStore>`,
-    it also takes the following arguments:
-
-    :param unlogged_tables:
-        Whether to use `unlogged`_ tables or not.
+    :param unlogged: Whether to use `unlogged`_ tables or not.
         This reduces safety in case of a crash or unclean shutdown, but can
         significantly increase write performance.
 
@@ -39,20 +37,35 @@ class PostgresTableStore(SQLTableStore):
         #SQL-CREATETABLE-UNLOGGED
     """
 
+    def __post_init__(self):
+        assert isinstance(self.unlogged, bool)
+
+    unlogged: bool = False
+
+
+class PostgresTableStore(SQLTableStore):
+    """
+    SQLTableStore that supports `PostgreSQL <https://postgresql.org>`_.
+
+    Takes the same arguments as
+    :py:class:`SQLTableStore <pydiverse.pipedag.backend.table.SQLTableStore>`
+    """
+
     _dialect_name = "postgresql"
-
-    def __init__(
-        self,
-        *args,
-        unlogged_tables: bool = False,
-        **kwargs,
-    ):
-        self.unlogged_tables = unlogged_tables
-
-        super().__init__(*args, **kwargs)
+    _materialization_details_class = PostgresMaterializationDetails
 
     def _init_database(self):
         self._init_database_with_database("postgres", {"isolation_level": "AUTOCOMMIT"})
+
+    def get_unlogged(self, materialization_details_label: str | None) -> bool:
+        return PostgresMaterializationDetails.get_attribute_from_dict(
+            self.materialization_details,
+            materialization_details_label,
+            self.default_materialization_details,
+            "unlogged",
+            self.strict_materialization_details,
+            self.logger,
+        )
 
 
 @PostgresTableStore.register_table()
@@ -78,7 +91,9 @@ class SQLAlchemyTableHook(SQLAlchemyTableHook):
                 table.name,
                 schema,
                 obj,
-                unlogged=store.unlogged_tables,
+                unlogged=store.get_unlogged(
+                    resolve_materialization_details_label(table)
+                ),
             )
         )
         store.add_indexes(table, schema, early_not_null_possible=True)
@@ -100,10 +115,6 @@ class PandasTableHook(PandasTableHook):
         if table.type_map:
             dtypes.update(table.type_map)
 
-        store.check_materialization_details_supported(
-            resolve_materialization_details_label(table)
-        )
-
         # Create empty table
         df[:0].to_sql(
             table.name,
@@ -113,7 +124,7 @@ class PandasTableHook(PandasTableHook):
             dtype=dtypes,
         )
 
-        if store.unlogged_tables:
+        if store.get_unlogged(resolve_materialization_details_label(table)):
             with engine.begin() as conn:
                 conn.execute(ChangeTableLogged(table.name, schema, False))
 

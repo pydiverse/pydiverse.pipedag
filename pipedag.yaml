@@ -20,7 +20,7 @@ table_store_connections:
       default_materialization_details: "no_compression"
       materialization_details:
         __any__:
-          compression: ["COMPRESS YES ADAPTIVE"]
+          compression: [ "COMPRESS YES ADAPTIVE" ]
         no_compression:
           compression: ""
         value_compression:
@@ -28,7 +28,7 @@ table_store_connections:
         static_compression:
           compression: "COMPRESS YES STATIC"
         adaptive_value_compression:
-          compression: ["COMPRESS YES ADAPTIVE", "VALUE COMPRESSION"]
+          compression: [ "COMPRESS YES ADAPTIVE", "VALUE COMPRESSION" ]
         table_space:
           table_space_data: "S1"
           table_space_index: "S2"
@@ -81,15 +81,15 @@ instances:
     instance_id: pd_postgres
     table_store:
       table_store_connection: postgres
-      args:
-        unlogged_tables: false
 
   postgres_unlogged:
     instance_id: pd_postgres_unlogged
     table_store:
       table_store_connection: postgres
       args:
-        unlogged_tables: true
+        materialization_details:
+          __any__:
+            unlogged: true
 
   mssql:
     instance_id: pd_mssql
