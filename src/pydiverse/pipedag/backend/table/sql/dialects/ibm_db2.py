@@ -55,6 +55,21 @@ class IBMDB2TableStore(SQLTableStore):
                     time.sleep(retry_iteration * retry_iteration * 1.1)
         self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
 
+    def add_indexes(
+        self, table: Table, schema: Schema, *, early_not_null_possible: bool = False
+    ):
+        super().add_indexes(
+            table, schema, early_not_null_possible=early_not_null_possible
+        )
+        table_name = self.engine.dialect.identifier_preparer.quote(table.name)
+        schema_name = self.engine.dialect.identifier_preparer.quote_schema(schema.get())
+        query = (
+            f"CALL SYSPROC.ADMIN_CMD('RUNSTATS ON TABLE {schema_name}.{table_name}"
+            f" ON ALL COLUMNS WITH DISTRIBUTION ON ALL COLUMNS AND UNSAMPLED"
+            f" DETAILED INDEXES ALL SET PROFILE');"
+        )
+        self.execute(query)
+
     def resolve_alias(self, table, schema):
         return PipedagDB2Reflection.resolve_alias(self.engine, table, schema)
 
