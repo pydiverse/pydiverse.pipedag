@@ -4,7 +4,7 @@
 - Make separator customizable when splitting RawSql into statements.
 - Add `DropNickname` for DB2 and drop nicknames when dropping schemas.
 - Add debug function `materialize_table`.
-- Update install instructions and dependencies to enable DB2 development on OS X with an `arm64` architecture.
+- Update install instructions and dependencies to enable DB2 and mssql development on OS X with an `arm64` architecture.
 - Update PR template
 
 ## 0.6.6 (2023-08-17)

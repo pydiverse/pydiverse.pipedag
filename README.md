@@ -318,6 +318,15 @@ its own `odbcinst` executable and that shows odbc config files are expected in `
 problem. Try `python -c 'import pyodbc;print(pyodbc.drivers())'` and see whether you get more than an empty list.
 Furthermore, make sure you use 127.0.0.1 instead of localhost. It seems that /etc/hosts is ignored.
 
+On `arm64` OS X with an `x86_64` environment it is necessary to compile `pyodbc` using
+```bash
+arch -x86_64 /usr/local/bin/brew install unixodbc
+LDFLAGS="$LDFLAGS -L/usr/local/lib"
+CPPFLAGS="$CPPFLAGS -I/usr/local/include"
+pip uninstall pyodbc
+pip install --no-cache --pre --no-binary :all: pyodbc
+```
+
 ## Packaging
 
 For publishing with poetry to pypi, see:
