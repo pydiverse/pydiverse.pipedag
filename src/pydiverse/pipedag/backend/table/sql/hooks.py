@@ -25,6 +25,7 @@ from pydiverse.pipedag.backend.table.util import (
 )
 from pydiverse.pipedag.context import TaskContext
 from pydiverse.pipedag.materialize import Table
+from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
 from pydiverse.pipedag.util.computation_tracing import ComputationTracer
 
 # region SQLALCHEMY
@@ -44,7 +45,10 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def materialize(
-        cls, store, table: Table[sa.sql.expression.TextClause | sa.Text], stage_name
+        cls,
+        store: SQLTableStore,
+        table: Table[sa.sql.expression.TextClause | sa.Text],
+        stage_name,
     ):
         obj = table.obj
         if isinstance(table.obj, (sa.Table, sa.sql.expression.Alias)):
@@ -58,6 +62,13 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
             for tbl in TaskContext.get().input_tables
         ]
         schema = store.get_schema(stage_name)
+
+        store.check_materialization_details_supported(
+            resolve_materialization_details_label(table)
+        )
+
+        from pydiverse.pipedag.backend.table.sql.dialects import IBMDB2TableStore
+
         store.execute(
             CreateTableAsSelect(
                 table.name,
@@ -65,6 +76,11 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                 obj,
                 early_not_null=table.primary_key,
                 source_tables=source_tables,
+                suffix=store.get_create_table_suffix(
+                    resolve_materialization_details_label(table)
+                )
+                if isinstance(store, IBMDB2TableStore)
+                else None,
             )
         )
         store.add_indexes(table, schema, early_not_null_possible=True)
@@ -232,6 +248,10 @@ class PandasTableHook(TableHook[SQLTableStore]):
         dtypes = {name: dtype.to_sql() for name, dtype in dtypes.items()}
         if table.type_map:
             dtypes.update(table.type_map)
+
+        store.check_materialization_details_supported(
+            resolve_materialization_details_label(table)
+        )
 
         df.to_sql(
             table.name,

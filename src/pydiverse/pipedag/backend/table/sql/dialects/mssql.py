@@ -21,6 +21,7 @@ from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.materialize import Table
 from pydiverse.pipedag.materialize.container import RawSql
+from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
 
 
 class MSSqlTableStore(SQLTableStore):
@@ -234,6 +235,10 @@ class PandasTableHook(PandasTableHook):
 
         if table.type_map:
             dtypes.update(table.type_map)
+
+        store.check_materialization_details_supported(
+            resolve_materialization_details_label(table)
+        )
 
         df.to_sql(
             table.name,

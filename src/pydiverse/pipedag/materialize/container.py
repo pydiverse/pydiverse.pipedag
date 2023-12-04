@@ -37,6 +37,8 @@ class Table(Generic[T]):
     :param type_map: Optional map of column names to types. Depending on the table
         store this will allow you to control the datatype as which the specified
         columns get materialized.
+    :param materialization_details: The label of the materialization_details to be used.
+        Overwrites the label given by the stage.
 
     .. seealso:: You can specify which types of objects should automatically get
         converted to tables using the :ref:`auto_table` config option.
@@ -50,6 +52,7 @@ class Table(Generic[T]):
         primary_key: str | list[str] | None = None,
         indexes: list[list[str]] | None = None,
         type_map: dict[str, Any] | None = None,
+        materialization_details: str | None = None,
     ):
         self._name = None
         self.stage: Stage | None = None
@@ -59,6 +62,7 @@ class Table(Generic[T]):
         self.primary_key = primary_key
         self.indexes = indexes
         self.type_map = type_map
+        self.materialization_details = materialization_details
 
         # Check that indexes is of type list[list[str]]
         indexes_type_error = TypeError(

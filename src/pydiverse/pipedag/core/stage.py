@@ -26,6 +26,8 @@ class Stage:
 
     :param name: The name of the stage. Two stages with the same name may
         not be used inside the same flow.
+    :param materialization_details: The label of the materialization_details to be used.
+        Overwrites the label given by the stage.
 
     ..
         To ensure that all tasks get executed in the correct order, each
@@ -38,7 +40,7 @@ class Stage:
         before any of its upstream stage dependencies have been committed.
     """
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, materialization_details: str | None = None):
         self._name = normalize_name(name)
         self._transaction_name = f"{self._name}__tmp"
 
@@ -48,6 +50,8 @@ class Stage:
 
         self.logger = structlog.get_logger(logger_name=type(self).__name__, stage=self)
         self.id: int = None  # type: ignore
+
+        self.materialization_details = materialization_details
 
         self._did_enter = False
 

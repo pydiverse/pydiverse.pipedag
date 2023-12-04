@@ -72,6 +72,47 @@ def simple_dataframe():
     return Table(df)
 
 
+@materialize(version="1.0", nout=2)
+def simple_dataframe_uncompressed():
+    return (
+        Table(
+            pd.DataFrame(dict(COMPRESSION=["N"], ROWCOMPMODE=[" "])),
+            "simple_df_properties",
+        ),
+        simple_dataframe(),
+    )
+
+
+@materialize(nout=2)
+def simple_dataframe_compressed_one_method():
+    return Table(
+        pd.DataFrame(dict(COMPRESSION=["R"], ROWCOMPMODE=["S"])),
+        "df_compressed_1_properties",
+    ), _simple_dataframe_materialization_details(
+        "df_compressed_1", "static_compression"
+    )
+
+
+@materialize(nout=2)
+def simple_dataframe_compressed_two_methods():
+    return Table(
+        pd.DataFrame(dict(COMPRESSION=["B"], ROWCOMPMODE=["A"])),
+        "df_compressed_2_properties",
+    ), _simple_dataframe_materialization_details(
+        "df_compressed_2", "adaptive_value_compression"
+    )
+
+
+def _simple_dataframe_materialization_details(name=None, materialization_details=None):
+    df = pd.DataFrame(
+        {
+            "col1": [0, 1, 2, 3],
+            "col2": ["0", "1", "2", "3"],
+        }
+    )
+    return Table(df, name=name, materialization_details=materialization_details)
+
+
 @materialize(version="1.0")
 def simple_dataframe_debug_materialize_no_taint():
     df = pd.DataFrame(
@@ -208,6 +249,42 @@ def simple_lazy_table_with_index():
 def simple_lazy_table_with_indexes():
     query = _get_df_query()
     return Table(query, indexes=[["col2"], ["col2", "col1"]])
+
+
+@materialize(nout=2, lazy=False)
+def simple_table_compressed_one_method():
+    query = _get_df_query()
+    return Table(
+        pd.DataFrame(dict(COMPRESSION=["V"], ROWCOMPMODE=[" "])),
+        "compress_1_properties",
+    ), Table(query, name="compress_one", materialization_details="value_compression")
+
+
+@materialize(version="1.0")
+def compression_properties_adaptive_value_compression_db2():
+    return Table(
+        pd.DataFrame(dict(COMPRESSION=["B"], ROWCOMPMODE=["A"])),
+        "compress_2_properties",
+    )
+
+
+@materialize(nout=2, lazy=False)
+def simple_table_compressed_two_methods():
+    query = _get_df_query()
+    return compression_properties_adaptive_value_compression_db2(), Table(
+        query, name="compress_two", materialization_details="adaptive_value_compression"
+    )
+
+
+@materialize(nout=2, lazy=False)
+def simple_table_default_compressed():
+    # The stage in test_compression has
+    # materialization_details="adaptive_value_compression".
+    # This justifies the use of compression_properties_adaptive_value_compression_db2().
+    query = _get_df_query()
+    return compression_properties_adaptive_value_compression_db2(), Table(
+        query, name="compress_two"
+    )
 
 
 @materialize(version="1.0")

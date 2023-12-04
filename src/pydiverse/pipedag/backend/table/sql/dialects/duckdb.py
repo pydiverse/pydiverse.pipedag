@@ -15,6 +15,7 @@ from pydiverse.pipedag.backend.table.sql.hooks import (
 )
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import DType
+from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
 
 try:
     import duckdb
@@ -72,6 +73,10 @@ class PandasTableHook(PandasTableHook):
         dtypes = {name: dtype.to_sql() for name, dtype in dtypes.items()}
         if table.type_map:
             dtypes.update(table.type_map)
+
+        store.check_materialization_details_supported(
+            resolve_materialization_details_label(table)
+        )
 
         # Create empty table with correct schema
         df[:0].to_sql(
