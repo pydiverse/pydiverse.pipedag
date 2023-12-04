@@ -41,7 +41,11 @@ def test_postgres_unlogged():
     @materialize(input_type=pd.DataFrame)
     def assert_relpersistence(df: pd.DataFrame):
         relpersistence = (
-            "u" if ConfigContext.get().store.table_store.unlogged_tables else "p"
+            "u"
+            if ConfigContext.get()
+            .store.table_store.materialization_details["__any__"]
+            .unlogged
+            else "p"
         )
         assert df["relpersistence"][0] == relpersistence
 

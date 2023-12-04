@@ -43,11 +43,16 @@ class BaseMaterializationDetails(ABC):
     @classmethod
     def create_materialization_details_dict(
         cls: type[_T],
-        materialization_details_cfg: dict[str, dict[str | list[str]]],
+        materialization_details_cfg: dict[str, dict[str | list[str]]] | None,
         strict: bool,
         default_materialization_details: str | None,
         logger,
     ) -> dict[str, _T]:
+        materialization_details_cfg = (
+            materialization_details_cfg
+            if materialization_details_cfg is not None
+            else dict()
+        )
         materialization_details: dict[str, _T] = dict()
         materialization_details["__any__"] = (
             cls.from_dict(materialization_details_cfg["__any__"], strict, logger)
@@ -77,13 +82,18 @@ class BaseMaterializationDetails(ABC):
         cls: type[_T],
         d: dict[str, _T],
         label: str,
-        default_label: str,
+        default_label: str | None,
         attribute: str,
         strict: bool,
         logger,
     ):
-        if label is None:
-            label = default_label
+        label = (
+            label
+            if label is not None
+            else default_label
+            if default_label is not None
+            else "__any__"
+        )
         if label not in d:
             error_msg = f"{label} is an unknown materialization details label."
             if strict:

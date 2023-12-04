@@ -7,7 +7,8 @@
 - Update install instructions and dependencies to enable DB2 and mssql development on OS X with an `arm64` architecture.
 - Update PR template
 - Run `RUNSTATS` on every DB2 table after creation
-- Add `materialization_details` as an option to `IBMDB2TableStore`. For now DB2 compression and table spaces are supported. 
+- Add `materialization_details` as an option to `IBMDB2TableStore`. For now DB2 compression, DB2 table spaces are supported and Postgres `unlogged` tables are supported.
+  - For Postgres `unlogged` tables this is a breaking change. The `unlogged_tables` option does not exist anymore. Instead, use `materialization_details: __any__: unlogged: true`.
 
 ## 0.6.6 (2023-08-17)
 - Implement support for loading polars dataframes from DuckDB.
