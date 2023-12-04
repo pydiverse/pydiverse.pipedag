@@ -129,6 +129,22 @@ class IBMDB2TableStore(SQLTableStore):
     def resolve_alias(self, table, schema):
         return PipedagDB2Reflection.resolve_alias(self.engine, table, schema)
 
+    def check_materialization_details_supported(self, label: str | None) -> None:
+        _ = label
+        return
+
+    def _set_materialization_details(
+        self, materialization_details: dict[str, dict[str | list[str]]] | None
+    ) -> None:
+        self.materialization_details = (
+            IBMDB2MaterializationDetails.create_materialization_details_dict(
+                materialization_details,
+                self.strict_materialization_details,
+                self.default_materialization_details,
+                self.logger,
+            )
+        )
+
     def _get_compression(
         self, materialization_details_label: str | None
     ) -> str | list[str] | None:

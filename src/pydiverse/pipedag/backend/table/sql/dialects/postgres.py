@@ -67,6 +67,22 @@ class PostgresTableStore(SQLTableStore):
             self.logger,
         )
 
+    def check_materialization_details_supported(self, label: str | None) -> None:
+        _ = label
+        return
+
+    def _set_materialization_details(
+        self, materialization_details: dict[str, dict[str | list[str]]] | None
+    ) -> None:
+        self.materialization_details = (
+            PostgresMaterializationDetails.create_materialization_details_dict(
+                materialization_details,
+                self.strict_materialization_details,
+                self.default_materialization_details,
+                self.logger,
+            )
+        )
+
 
 @PostgresTableStore.register_table()
 class SQLAlchemyTableHook(SQLAlchemyTableHook):

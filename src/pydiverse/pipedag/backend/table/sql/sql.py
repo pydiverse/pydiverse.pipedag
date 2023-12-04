@@ -5,7 +5,7 @@ import textwrap
 import warnings
 from collections.abc import Iterable
 from contextlib import contextmanager
-from typing import Any, TypeVar
+from typing import Any
 
 import sqlalchemy as sa
 import sqlalchemy.exc
@@ -35,7 +35,6 @@ from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.materialize.details import (
-    BaseMaterializationDetails,
     resolve_materialization_details_label,
 )
 from pydiverse.pipedag.materialize.metadata import (
@@ -44,10 +43,6 @@ from pydiverse.pipedag.materialize.metadata import (
     TaskMetadata,
 )
 from pydiverse.pipedag.util.hashing import stable_hash
-
-_materialization_details_subclass = TypeVar(
-    "_materialization_details_subclass", bound=BaseMaterializationDetails
-)
 
 
 class SQLTableStore(BaseTableStore):
@@ -174,7 +169,6 @@ class SQLTableStore(BaseTableStore):
 
     __registered_dialects: dict[str, type[SQLTableStore]] = {}
     _dialect_name: str
-    _materialization_details_class: _materialization_details_subclass | None = None
 
     def __new__(cls, engine_url: str, *args, **kwargs):
         if cls != SQLTableStore:
@@ -208,18 +202,6 @@ class SQLTableStore(BaseTableStore):
         default_materialization_details: str | None = None,
     ):
         super().__init__()
-
-        if (
-            materialization_details is not None
-            or default_materialization_details is not None
-        ) and self._materialization_details_class is None:
-            error_msg = "The table store does not support materialization details."
-            if strict_materialization_details:
-                raise TypeError(
-                    f"{error_msg} To suppress this exception, "
-                    f"use strict_materialization_details=False"
-                )
-            self.logger.error(error_msg)
 
         self.create_database_if_not_exists = create_database_if_not_exists
         self.schema_prefix = schema_prefix
@@ -303,16 +285,9 @@ class SQLTableStore(BaseTableStore):
             sa.Column("in_transaction_schema", sa.Boolean()),
         )
 
-        if self._materialization_details_class is not None:
-            self.materialization_details = (
-                self._materialization_details_class.create_materialization_details_dict(
-                    materialization_details,
-                    self.strict_materialization_details,
-                    default_materialization_details,
-                    self.logger,
-                )
-            )
-            self.default_materialization_details = default_materialization_details
+        self.default_materialization_details = default_materialization_details
+
+        self._set_materialization_details(materialization_details)
 
         self.logger.info(
             "Initialized SQL Table Store",
@@ -431,25 +406,36 @@ class SQLTableStore(BaseTableStore):
         return self._execute(query, conn)
 
     def check_materialization_details_supported(self, label: str | None) -> None:
-        from pydiverse.pipedag.backend.table.sql.dialects import (
-            IBMDB2TableStore,
-            PostgresTableStore,
+        if label is None:
+            return
+        error_msg = (
+            f"Materialization details are not supported"
+            f" for store {type(self).__name__}."
         )
+        if self.strict_materialization_details:
+            raise ValueError(
+                f"{error_msg} To silence this exception set"
+                f" strict_materialization_details=False"
+            )
+        else:
+            self.logger.error(f"{error_msg}")
 
-        if label is not None and not isinstance(
-            self, (IBMDB2TableStore, PostgresTableStore)
+    def _set_materialization_details(
+        self, materialization_details: dict[str, dict[str | list[str]]] | None
+    ) -> None:
+        if (
+            materialization_details is not None
+            or self.default_materialization_details is not None
         ):
             error_msg = (
-                f"Materialization details are not supported"
-                f" for store {type(self).__name__}."
+                f"{type(self).__name__} does not support materialization details."
             )
             if self.strict_materialization_details:
-                raise ValueError(
-                    f"{error_msg} To silence this exception set"
-                    f" strict_materialization_details=False"
+                raise TypeError(
+                    f"{error_msg} To suppress this exception, "
+                    f"use strict_materialization_details=False"
                 )
-            else:
-                self.logger.error(f"{error_msg}")
+            self.logger.error(error_msg)
 
     def add_indexes(
         self, table: Table, schema: Schema, *, early_not_null_possible: bool = False
