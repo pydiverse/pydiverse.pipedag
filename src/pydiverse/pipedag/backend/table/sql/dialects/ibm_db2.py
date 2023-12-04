@@ -83,7 +83,6 @@ class IBMDB2TableStore(SQLTableStore):
     """
 
     _dialect_name = "ibm_db_sa"
-    _materialization_details_class = IBMDB2MaterializationDetails
 
     def add_primary_key(
         self,

@@ -52,7 +52,6 @@ class PostgresTableStore(SQLTableStore):
     """
 
     _dialect_name = "postgresql"
-    _materialization_details_class = PostgresMaterializationDetails
 
     def _init_database(self):
         self._init_database_with_database("postgres", {"isolation_level": "AUTOCOMMIT"})
