@@ -327,7 +327,14 @@ pip uninstall pyodbc
 pip install --no-cache --pre --no-binary :all: pyodbc
 ```
 
-## Packaging
+## Packaging and publishing to Pypi using github actions
+
+- `poetry version prerelease` or `poetry version patch`
+- push increased version number to `main` branch
+- tag commit with `git tag <version>`, e.g. `git tag 0.7.0`
+- `git push --tags`
+
+## Packaging and publishing to Pypi manually
 
 For publishing with poetry to pypi, see:
 https://www.digitalocean.com/community/tutorials/how-to-publish-python-packages-to-pypi-using-poetry-on-ubuntu-22-04
@@ -346,6 +353,8 @@ Finally, they are published via:
 - `git tag `\<version>
 - `git push --tags`
 - `poetry publish`
+
+## Publishing package on conda-forge
 
 Conda-forge packages are updated via:
 
