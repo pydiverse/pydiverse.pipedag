@@ -29,7 +29,7 @@ class BaseMaterializationDetails(ABC):
         if unsupported_arguments:
             error_msg = (
                 f"The materialization arguments {unsupported_arguments} "
-                f"are not supported for DB2."
+                f"are not supported for {cls.__name__}."
             )
             if strict:
                 raise TypeError(
@@ -37,7 +37,7 @@ class BaseMaterializationDetails(ABC):
                     f" strict_materialization_details=False"
                 )
             logger.error(error_msg)
-        details = cls(**d)
+        details = cls(**{k: v for k, v in d.items() if k not in unsupported_arguments})
         return details
 
     @classmethod
