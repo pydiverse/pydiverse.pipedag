@@ -258,7 +258,14 @@ def test_blob(mocker):
 
 
 # TODO: Determine exactly why this test only works with postgres
-@skip_instances("mssql", "mssql_pytsql", "ibm_db2", "ibm_db2_avoid_schema", "duckdb")
+@skip_instances(
+    "mssql",
+    "mssql_pytsql",
+    "ibm_db2",
+    "ibm_db2_avoid_schema",
+    "ibm_db2_materialization_details",
+    "duckdb",
+)
 def test_raw_sql(mocker):
     cache_value = 0
     raw_value = 0
