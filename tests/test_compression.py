@@ -10,7 +10,11 @@ from pydiverse.pipedag.backend.table.sql.dialects import (
 )
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.fixtures.instances import (
+    DATABASE_INSTANCES,
+    skip_instances,
+    with_instances,
+)
 from tests.util import tasks_library as m
 
 pytestmark = [with_instances(DATABASE_INSTANCES)]
@@ -27,6 +31,8 @@ pytestmark = [with_instances(DATABASE_INSTANCES)]
         (m.simple_dataframe_uncompressed, None),
     ],
 )
+@with_instances(DATABASE_INSTANCES, "ibm_db2_materialization_details")
+@skip_instances("ibm_db2")
 def test_compression(task, stage_materialization_details):
     @materialize(input_type=sa.Table, lazy=False)
     def get_compression_attributes(table: sa.Table):

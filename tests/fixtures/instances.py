@@ -24,6 +24,7 @@ INSTANCE_MARKS = {
     "mssql_pytsql": pytest.mark.mssql,
     "ibm_db2": pytest.mark.ibm_db2,
     "ibm_db2_avoid_schema": pytest.mark.ibm_db2,
+    "ibm_db2_materialization_details": pytest.mark.ibm_db2,
     "duckdb": pytest.mark.duckdb,
     # Local Table Cache Instances
     "local_table_cache": pytest.mark.postgres,
@@ -55,6 +56,7 @@ ALL_INSTANCES = (
     "mssql_pytsql",
     "ibm_db2",
     "ibm_db2_avoid_schema",
+    "ibm_db2_materialization_details",
     "duckdb",
     "local_table_cache",
 )

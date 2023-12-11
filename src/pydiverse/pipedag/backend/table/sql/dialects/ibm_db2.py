@@ -64,7 +64,9 @@ class IBMDB2MaterializationDetails(BaseMaterializationDetails):
             "compression",
             IBMDB2CompressionTypes(self.compression)
             if isinstance(self.compression, str)
-            else [IBMDB2CompressionTypes(c) for c in self.compression],
+            else [IBMDB2CompressionTypes(c) for c in self.compression]
+            if self.compression is not None
+            else None,
         )
 
     compression: IBMDB2CompressionTypes | list[IBMDB2CompressionTypes] | None = None

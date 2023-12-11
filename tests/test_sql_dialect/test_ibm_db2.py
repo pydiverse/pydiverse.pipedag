@@ -15,7 +15,7 @@ from tests.util.tasks_library import (
 )
 
 
-@with_instances("ibm_db2", "ibm_db2_avoid_schema")
+@with_instances("ibm_db2", "ibm_db2_avoid_schema", "ibm_db2_materialization_details")
 def test_db2_nicknames():
     @materialize(input_type=sa.Table)
     def create_nicknames(table: sa.Table):
@@ -43,7 +43,7 @@ def test_db2_nicknames():
     assert f.run().successful
 
 
-@with_instances("ibm_db2", "ibm_db2_avoid_schema")
+@with_instances("ibm_db2_materialization_details")
 @pytest.mark.parametrize("task", [simple_dataframe, simple_lazy_table])
 def test_db2_table_spaces(task):
     @materialize()

@@ -16,24 +16,6 @@ table_store_connections:
       url: "db2+ibm_db://db2inst1:password@localhost:50000/testdb"
       schema_prefix: "{instance_id}_"
       create_database_if_not_exists: false
-      strict_materialization_details: false
-      default_materialization_details: "no_compression"
-      materialization_details:
-        __any__:
-          compression: [ "COMPRESS YES ADAPTIVE" ]
-        no_compression:
-          compression: ""
-        value_compression:
-          compression: "VALUE COMPRESSION"
-        static_compression:
-          compression: "COMPRESS YES STATIC"
-        adaptive_value_compression:
-          compression: [ "COMPRESS YES ADAPTIVE", "VALUE COMPRESSION" ]
-        table_space:
-          table_space_data: "S1"
-          table_space_index: "S2"
-          table_space_long: "S3"
-
 
   duckdb:
     args:
@@ -119,6 +101,31 @@ instances:
       table_store_connection: ibm_db2
       args:
         avoid_drop_create_schema: true
+
+  ibm_db2_materialization_details:
+    instance_id: pd_ibm_db2_materialization_details
+    stage_commit_technique: READ_VIEWS
+    table_store:
+      table_store_connection: ibm_db2
+      args:
+        strict_materialization_details: false
+        default_materialization_details: "no_compression"
+        materialization_details:
+          __any__:
+            compression: [ "COMPRESS YES ADAPTIVE" ]
+          no_compression:
+            compression: ""
+          value_compression:
+            compression: "VALUE COMPRESSION"
+          static_compression:
+            compression: "COMPRESS YES STATIC"
+          adaptive_value_compression:
+            compression: [ "COMPRESS YES ADAPTIVE", "VALUE COMPRESSION" ]
+          table_space:
+            table_space_data: "S1"
+            table_space_index: "S2"
+            table_space_long: "S3"
+
 
   duckdb:
     instance_id: pd_duckdb
