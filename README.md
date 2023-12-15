@@ -330,6 +330,7 @@ pip install --no-cache --pre --no-binary :all: pyodbc
 ## Packaging and publishing to Pypi using github actions
 
 - `poetry version prerelease` or `poetry version patch`
+- set correct release date in changelog.md
 - push increased version number to `main` branch
 - tag commit with `git tag <version>`, e.g. `git tag 0.7.0`
 - `git push --tags`
