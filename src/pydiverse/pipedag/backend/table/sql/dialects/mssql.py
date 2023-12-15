@@ -147,6 +147,9 @@ class MSSqlTableStore(SQLTableStore):
                 if last_use_statement is not None:
                     self.execute(last_use_statement, conn=conn)
                 self.execute(statement, conn=conn)
+                if last_use_statement is not None:
+                    # ensure database connection is reset to original database
+                    self.execute(f"USE {self.engine_url.database}", conn=conn)
 
     def __execute_raw_sql_pytsql(self, raw_sql: RawSql):
         """Use pytsql for executing T-SQL scripts containing many GO statements."""
@@ -160,6 +163,8 @@ class MSSqlTableStore(SQLTableStore):
             if len(print_query_string) >= max_length:
                 print_query_string = print_query_string[:max_length] + " [...]"
             self.logger.info("Executing sql", query=print_query_string)
+        # ensure database connection is reset to original database
+        sql_string += f"\nUSE {self.engine_url.database}"
 
         pytsql.executes(
             sql_string,

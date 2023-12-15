@@ -5,6 +5,7 @@
   * unspecified materialization_details was failing to load configuration 
 - Bug fixes for mssql backend:
   * SELECT-INTO was invalid for keyword suffix labels: i.e. `SELECT 1 as prefix_FROM`
+  * Raw SQL statements changing database link of connection via `USE` was causing pipedag generated commands to fail
 
 ## 0.6.7 (2023-12-05)
 - Make separator customizable when splitting RawSql into statements.
