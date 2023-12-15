@@ -1,6 +1,12 @@
 # Changelog
 
-## 0.6.7 (2023-MM-DD)
+## 0.6.8 (2023-MM-DD)
+- Bug fix ibm_db2 backend:
+  * unspecified materialization_details was failing to load configuration 
+- Bug fixes for mssql backend:
+  * SELECT-INTO was invalid for keyword suffix labels: i.e. `SELECT 1 as prefix_FROM`
+
+## 0.6.7 (2023-12-05)
 - Make separator customizable when splitting RawSql into statements.
 - Add `DropNickname` for DB2 and drop nicknames when dropping schemas.
 - Add debug function `materialize_table`.
@@ -9,6 +15,9 @@
 - Run `RUNSTATS` on every DB2 table after creation
 - Add `materialization_details` as an option to `IBMDB2TableStore`. For now DB2 compression, DB2 table spaces are supported and Postgres `unlogged` tables are supported.
   - For Postgres `unlogged` tables this is a breaking change. The `unlogged_tables` option does not exist anymore. Instead, use `materialization_details: __any__: unlogged: true`.
+
+Workaround for known Problems:
+  - add materialization_details in configuration when using ibm_db2 database connection 
 
 ## 0.6.6 (2023-08-17)
 - Implement support for loading polars dataframes from DuckDB.

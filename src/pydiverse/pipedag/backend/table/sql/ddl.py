@@ -760,7 +760,7 @@ def insert_into_in_query(select_sql, schema, table):
         "EXCEPT",
         "INTERSECT",
     ]:
-        regex = re.compile(marker, re.IGNORECASE)
+        regex = re.compile(r"\b" + marker + r"\b", re.IGNORECASE)
         for match in regex.finditer(select_sql):
             match_start = match.span()[0]
             prev = select_sql[0:match_start]
