@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.6.9 (YYYY-MM-DD)
+- Document `SQLTableStore` parameters in config.md
+
 ## 0.6.8 (2023-12-15)
 - Bug fix ibm_db2 backend:
   * unspecified materialization_details was failing to load configuration 
