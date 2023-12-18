@@ -369,7 +369,87 @@ class
 
 args
 : Any values in this subsection will be passed as arguments to the `__init__` or, if available, the `_init_conf_` method of the table store class.
-  For a list of available options, look at the `__init__` method of the table store you are using.
+  For a list of available options, look at the `__init__` method of the table store you are using. Options common to all SQL table stores are:
+
+  - `url`:
+        The SQLAlchemy engine url used to connect to the database.
+        This URL may contain placeholders like `{name}` or ``{instance_id}``
+        (additional ones can be defined in the ``url_attrs_file``) or
+        environment variables like ``{$USER}`` which get substituted with their
+        respective values.
+
+  - `url_attrs_file`:
+      Filename of a yaml file which is read shortly before rendering the final
+        engine URL and which is used to replace custom placeholders in ``url``.  
+          
+      Just like ``url``, this value may also contain placeholders and environment
+        variables which get substituted.
+
+  - `create_database_if_not_exists`:
+        If the engine url references a database name that doesn't yet exists,
+        then setting this value to ``True`` tells pipedag to create the database
+        before trying to open a connection to it.
+
+  - `schema_prefix`:
+        A prefix that gets placed in front of all schema names created by pipedag.
+
+  - `schema_suffix`:
+        A suffix that gets placed behind of all schema names created by pipedag.
+
+  - `avoid_drop_create_schema`:
+        If ``True``, no ``CREATE SCHEMA`` or ``DROP SCHEMA`` statements get issued.
+        This is mostly relevant for databases that support automatic schema
+        creation like IBM DB2.
+
+  - `print_materialize`:
+        If ``True``, all tables that get materialized get logged.
+
+  - `print_sql`:
+        If ``True``, all executed SQL statements get logged.
+
+  - `no_db_locking`:
+        Speed up database by telling it we will not rely on it's locking mechanisms.
+        Currently not implemented.
+  - `materialialization_details`: A list of tags that each define properties used for materialization by the table store. 
+     
+     If the tag `__any__` is present, the other labels will inherit properties from it if they do not override them.
+        The following properties are supported:
+    - Postgres:
+      - `unlogged`: Whether to use unlogged tables or not.
+        This reduces safety in case of a crash or unclean shutdown, but can
+        significantly increase write performance.
+    - DB2:
+      - `compression`: Specify the compression methods to be applied to the table.
+        Possible values include `COMPRESS YES STATIC`, `COMPRESS YES`, `COMPRESS YES ADAPTIVE`, `VALUE COMPRESSION` and a list containing combining one of the first three with the last value, e.g.
+        ```yaml
+         compression: ["COMPRESS YES ADAPTIVE", "VALUE COMPRESSION"]
+        ```
+        `compression: ""` will result in no compression
+      - `table_space_data`: The DB2 table space where the data is stored.
+      - `table_space_index`: The DB2 table space where the partitioned index is stored.
+      - `table_space_long`: The DB2 table spaces where the values of any long columns are stored.
+  
+      - An example config for DB2:
+      ```yaml
+      materialization_details:
+        __any__:
+          compression: ["COMPRESS YES ADAPTIVE", "VALUE COMPRESSION"]
+          table_space_data: "USERSPACE1"
+        no_compression:
+          # user-defined tag. Inherits table_space_data from __any__
+          # but overwrites compression.
+          compression: ""
+      ```
+  - `strict_materialization_details`:
+    - If ``True``: raise an exception if
+      - the argument ``materialization_details`` is given even though the
+                  table store does not support it.
+      - a table references a ``materialization_details`` tag that is not defined
+                  in the config.
+    - If ``False``: Log an error instead of raising an exception
+  - `default_materialization_details`: The `materialization_details` that will be used if `materialization_details`
+      is not specified on table level. If not set, the ``__any__`` tag (if specified)
+      will be used.
 
 hook_args
 : This subsection allows passing custom config arguments to the different table hooks to influence how tables get materialized and retrieved.
