@@ -75,7 +75,7 @@ optional = true
 # Table Hooks
 pydiverse-transform = "^0.1.3"
 ibis-framework = { version = ">=5.1.0", extras = ["mssql", "postgres"] }
-polars = ">=0.16.18"
+polars = ">=0.18.12"
 tidypolars = { version = "^0.2.19", python = "<3.11" }
 connectorx = [
     { version = ">=0.3.1", python = "<3.11" },

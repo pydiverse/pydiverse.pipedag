@@ -5344,4 +5344,4 @@ zookeeper = ["kazoo"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "51734afb8f4b15a289b8f3feb18bda238619180bc2e23fe62b44c6e0ca8ae574"
+content-hash = "46eb678684746a0fb34d845f7c38173fbd066bc8b53106876e780c0feb3e948e"
