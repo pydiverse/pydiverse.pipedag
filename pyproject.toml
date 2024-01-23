@@ -24,7 +24,7 @@ classifiers = [
 python = "^3.9"
 pandas = ">=1.4.3"
 SQLAlchemy = ">=1.4.39"
-typing-extensions = "^4.1.0"
+typing-extensions = ">=4.1.0"
 networkx = ">=2.8"
 attrs = ">=22.1.0"
 structlog = ">=22.1.0"
@@ -36,7 +36,7 @@ PyYAML = ">=6.0"
 pyarrow = ">=11.0.0"
 cryptography = ">=41.0.1"
 pydot = ">=1.4.2"
-click = "^8.1.3"
+click = ">=8.1.3"
 pyparsing = ">=3.0"
 
 filelock = { version = ">=3.7.1", optional = true }
@@ -55,18 +55,18 @@ prefect = ["prefect"]
 pytest = ">=7.2.0"
 pytest-mock = ">=3.10.0"
 pytest-timeout = ">=2.1.0"
-tox = "^4.6.4"
+tox = ">=4.6.4"
 
 black = { version = "23.3.0", extras = ["d"] }
-ruff = "^0.0.270"
+ruff = "^0.1"
 pre-commit = ">=2.20.0"
 
 kazoo = ">=2.8.0"
 dask = ">=2022.1.0"
 psycopg2 = ">=2.9.3"
 psycopg2-binary = { version = ">=2.9.3", markers = "platform_machine == 'x86_64' and platform_system == 'Darwin'" }
-duckdb = "^0.8.1"
-duckdb-engine = "^0.7.3"
+duckdb = ">=0.8.1"
+duckdb-engine = ">=0.7.3"
 
 [tool.poetry.group.tests]
 optional = true
@@ -76,7 +76,7 @@ optional = true
 pydiverse-transform = "^0.1.3"
 ibis-framework = { version = ">=5.1.0", extras = ["mssql", "postgres"] }
 polars = ">=0.18.12"
-tidypolars = { version = "^0.2.19", python = "<3.11" }
+tidypolars = { version = ">=0.2.19", python = "<3.11" }
 connectorx = [
     { version = ">=0.3.1", python = "<3.11" },
     { version = "0.3.2a5", python = "==3.11" }  # Latest full release is broken - unpin when 0.3.2 released
