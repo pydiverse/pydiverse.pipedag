@@ -3766,7 +3766,7 @@ files = [
 name = "pytzdata"
 version = "2020.1"
 description = "The Olson timezone database for Python."
-optional = false
+optional = true
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
 files = [
     {file = "pytzdata-2020.1-py2.py3-none-any.whl", hash = "sha256:e1e14750bcf95016381e4d472bad004eef710f2d6417240904070b3d6654485f"},
@@ -4646,13 +4646,13 @@ sqlalchemy = ">=1.0.0"
 
 [[package]]
 name = "sqlglot"
-version = "20.9.0"
+version = "20.10.0"
 description = "An easily customizable SQL parser and transpiler"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "sqlglot-20.9.0-py3-none-any.whl", hash = "sha256:6065487f838e5ac097ab68e510254696502024719be5e344cad6cae726620980"},
-    {file = "sqlglot-20.9.0.tar.gz", hash = "sha256:0b62ea136dcd5835d1a003e598d834ace36dfc1104d5cbabf5a1429993105de4"},
+    {file = "sqlglot-20.10.0-py3-none-any.whl", hash = "sha256:fd8fcd31e7dcf7cbb42eb969a350046c32d93b8674f55f93d79908c5f7ea1fe4"},
+    {file = "sqlglot-20.10.0.tar.gz", hash = "sha256:89e17bd4899bfcec297a26e673efeeb58ad12783dd00b9996c75c6260b1b282d"},
 ]
 
 [package.extras]
@@ -5330,4 +5330,4 @@ zookeeper = ["kazoo"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "045c477c4a559258178312f80d3e1b43b63fbbcd03c7f64ecb23d39f754d2a8d"
+content-hash = "926fc0870fcbc6af6f5d96545e4fe7d434730fa2b41d27ad6a1bdc8d19168c7e"
