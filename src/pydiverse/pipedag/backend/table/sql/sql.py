@@ -815,6 +815,9 @@ class SQLTableStore(BaseTableStore):
 
         inspector = sa.inspect(self.engine)
         has_table = inspector.has_table(from_name, schema=from_schema.get())
+        # workaround for sqlalchemy backends that fail to find views with has_table
+        if not has_table:
+            has_table = from_name in inspector.get_view_names(schema=from_schema.get())
         if not has_table:
             available_tables = inspector.get_table_names(from_schema.get())
             msg = (
