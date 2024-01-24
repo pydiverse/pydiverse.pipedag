@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.9 (2024-01-24)
+- Update dependencies and remove some upper boundaries
+- Polars dependency moved to >= 0.18.12 due to incompatible interface change
+- Workaround for duckdb issue: https://github.com/duckdb/duckdb/issues/10322
+- Workaround for prefect needing pytz dependency without declaring it on pypi
+
 ## 0.6.8 (2023-12-15)
 - Bug fix ibm_db2 backend:
   * unspecified materialization_details was failing to load configuration 
