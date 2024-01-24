@@ -759,11 +759,12 @@ class SQLTableStore(BaseTableStore):
         """Copies the table immediately"""
         from pydiverse.pipedag.backend.table.sql.dialects import IBMDB2TableStore
 
-        inspector = sa.inspect(self.engine)
-        has_table = inspector.has_table(from_name, schema=from_schema.get())
-
+        has_table = self.has_table_or_view(from_name, schema=from_schema)
         if not has_table:
-            available_tables = inspector.get_table_names(from_schema.get())
+            inspector = sa.inspect(self.engine)
+            available_tables = inspector.get_table_names(
+                from_schema.get()
+            ) + inspector.get_view_names(from_schema.get())
             msg = (
                 f"Can't copy table '{from_name}' (schema: '{from_schema}') to "
                 f"transaction because no such table exists.\n"
@@ -813,10 +814,12 @@ class SQLTableStore(BaseTableStore):
         """
         assert from_schema == self.get_schema(table.stage.name)
 
-        inspector = sa.inspect(self.engine)
-        has_table = inspector.has_table(from_name, schema=from_schema.get())
+        has_table = self.has_table_or_view(from_name, from_schema)
         if not has_table:
-            available_tables = inspector.get_table_names(from_schema.get())
+            inspector = sa.inspect(self.engine)
+            available_tables = inspector.get_table_names(
+                from_schema.get()
+            ) + inspector.get_view_names(from_schema.get())
             msg = (
                 f"Can't deferred copy table '{from_name}' (schema: '{from_schema}') to "
                 f"transaction because no such table exists.\n"
@@ -878,6 +881,14 @@ class SQLTableStore(BaseTableStore):
             )
             self.logger.exception(msg)
             raise CacheError(msg) from _e
+
+    def has_table_or_view(self, name, schema: Schema):
+        inspector = sa.inspect(self.engine)
+        has_table = inspector.has_table(name, schema=schema.get())
+        # workaround for sqlalchemy backends that fail to find views with has_table
+        if not has_table:
+            has_table = name in inspector.get_view_names(schema=schema.get())
+        return has_table
 
     def _swap_alias_with_table_copy(self, table: Table, table_copy: Table):
         assert table_copy.stage.name == table.stage.name

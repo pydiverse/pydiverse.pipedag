@@ -566,7 +566,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         # We then rename all columns to match the names of the table.
         #
         # This allows us to properly trace the origin of each column in
-        # the output `.write_json` back to the table where it originally came from.
+        # the output `.serialize` back to the table where it originally came from.
 
         schema = {}
         rename = {}
@@ -587,7 +587,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         """
         if not isinstance(obj, polars.LazyFrame):
             raise TypeError("Expected LazyFrame")
-        return obj.write_json()
+        return obj.serialize()
 
 
 try:

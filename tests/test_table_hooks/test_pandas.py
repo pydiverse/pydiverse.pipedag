@@ -16,7 +16,8 @@ from pydiverse.pipedag import *
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
 from tests.util.spy import spy_task
 
-pytestmark = [with_instances(DATABASE_INSTANCES)]
+# disable duckdb for now, since they have a bug in version 0.9.2 that needs fixing
+pytestmark = [with_instances(tuple(set(DATABASE_INSTANCES) - {"duckdb"}))]
 pd_version = Version(pd.__version__)
 
 
