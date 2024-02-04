@@ -77,7 +77,8 @@ optional = true
 # Table Hooks
 pydiverse-transform = "^0.1.3"
 ibis-framework = { version = ">=5.1.0", extras = ["mssql", "postgres"] }
-polars = ">=0.18.12"
+polars = { version = ">=0.18.12", markers = "platform_machine != 'x86_64' or platform_system != 'Darwin'" }
+polars-lts-cpu = { version = ">=0.18.12", markers = "platform_machine == 'x86_64' and platform_system == 'Darwin'" }
 tidypolars = { version = ">=0.2.19", python = "<3.11" }
 connectorx = [
     { version = ">=0.3.1", python = "<3.11" },
