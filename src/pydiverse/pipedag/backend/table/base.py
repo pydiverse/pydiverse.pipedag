@@ -341,6 +341,13 @@ class BaseTableStore(TableHookResolver, Disposable):
         except TypeError:
             # This table type doesn't provide a query string
             # -> Fallback to default implementation
+            self.logger.warning(
+                f"The output table {table.name} using given by"
+                f" {repr(table.obj)} of the lazy task {task.name} does"
+                " not provide a query string. Lazy evaluation is not"
+                " possible. Assuming that the task is not cache valid."
+            )
+            TaskContext.get().is_cache_valid = False
             return self.store_table(table, task)
 
         # Store the table
