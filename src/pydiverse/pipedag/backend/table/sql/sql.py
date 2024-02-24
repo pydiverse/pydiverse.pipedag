@@ -1346,6 +1346,12 @@ class TableReference:
     def __init__(self, external_schema: str | None = None):
         self.external_schema = external_schema
 
+    def __repr__(self):
+        return (
+            f"<TableReference: {hex(id(self))}"
+            f" (external_schema: {self.external_schema})>"
+        )
+
 
 # Load SQLTableStore Hooks
 import pydiverse.pipedag.backend.table.sql.hooks  # noqa
