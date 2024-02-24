@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Callable
 
 _nil = []
+_dict_values_class = type({}.values())
 
 
 def deep_map(x, fn: Callable, memo=None):
@@ -27,6 +28,8 @@ def deep_map(x, fn: Callable, memo=None):
         y = _deep_map_tuple(x, fn, memo)
     elif cls == dict:
         y = _deep_map_dict(x, fn, memo)
+    elif cls == _dict_values_class:
+        y = _deep_map_dict_values(x, fn, memo)
     else:
         y = fn(x)
 
@@ -43,6 +46,23 @@ def _deep_map_list(x, fn, memo):
     append = y.append
     for a in x:
         append(deep_map(a, fn, memo))
+    return fn(y)
+
+
+def _deep_map_dict_values(x, fn, memo):
+    y = [deep_map(a, fn, memo) for a in x]
+    # We're not going to put the dict_values in the memo, but it's still important we
+    # check for it, in case the tuple contains recursive mutable structures.
+    try:
+        return memo[id(x)]
+    except KeyError:
+        pass
+    for k, j in zip(x, y):
+        if k is not j:
+            y = {i: v for i, v in zip(range(len(y)), y)}.values()
+            break
+    else:
+        y = x
     return fn(y)
 
 
