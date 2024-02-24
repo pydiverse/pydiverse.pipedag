@@ -45,17 +45,18 @@ def test_table_store():
     def in_table_external_schema():
         table_store = ConfigContext.get().store.table_store
         schema = Schema("user_controlled_schema", prefix="", suffix="")
+        table_name = "external_table"
         table_store.execute(CreateSchema(schema, if_not_exists=True))
-        table_store.execute(DropTable("external_table", schema, if_exists=True))
+        table_store.execute(DropTable(table_name, schema, if_exists=True))
         query = sql_table_expr({"col": [4, 5, 6, 7]})
         table_store.execute(
             CreateTableAsSelect(
-                "external_table",
+                table_name,
                 schema,
                 query,
             )
         )
-        return Table(TableReference(external_schema=schema.get()), "external_table")
+        return Table(TableReference(external_schema=schema.get()), table_name)
 
     @materialize()
     def expected_out_table():
