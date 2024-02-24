@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.6.10 (2024-XX-XX)
+- Fix bug where a `Task` that was declared lazy but provided a `Table` without a query string would always be cache valid.
+
 ## 0.6.9 (2024-01-24)
 - Update dependencies and remove some upper boundaries
 - Polars dependency moved to >= 0.18.12 due to incompatible interface change
