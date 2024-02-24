@@ -7,7 +7,7 @@ from pydiverse.pipedag.backend.table.sql import TableReference
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateSchema,
     CreateTableAsSelect,
-    DropSchema,
+    DropTable,
     Schema,
 )
 from pydiverse.pipedag.context import TaskContext
@@ -45,8 +45,8 @@ def test_table_store():
     def in_table_external_schema():
         table_store = ConfigContext.get().store.table_store
         schema = Schema("user_controlled_schema", prefix="", suffix="")
-        table_store.execute(DropSchema(schema, if_exists=True, cascade=True))
-        table_store.execute(CreateSchema(schema))
+        table_store.execute(CreateSchema(schema, if_not_exists=True))
+        table_store.execute(DropTable("external_table", schema, if_exists=True))
         query = sql_table_expr({"col": [4, 5, 6, 7]})
         table_store.execute(
             CreateTableAsSelect(
