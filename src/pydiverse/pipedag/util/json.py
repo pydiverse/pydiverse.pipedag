@@ -49,6 +49,7 @@ def json_default(o):
             "indexes": o.indexes,
             "cache_key": o.cache_key,
             "materialization_details": o.materialization_details,
+            "external_schema": o.external_schema,
         }
     if isinstance(o, RawSql):
         return {
@@ -114,6 +115,7 @@ def json_object_hook(d: dict):
         )
         tbl.stage = get_stage(d["stage"])
         tbl.cache_key = d["cache_key"]
+        tbl.external_schema = d.get("external_schema")
         return tbl
     if type_ == Type.RAW_SQL:
         raw_sql = RawSql(name=d["name"])

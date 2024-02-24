@@ -57,11 +57,11 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         source_tables = [
             dict(
                 name=tbl.name,
-                schema=store.get_schema(tbl.stage.current_name).get(),
+                schema=store.get_schema(tbl.stage.current_name, tbl).get(),
             )
             for tbl in TaskContext.get().input_tables
         ]
-        schema = store.get_schema(stage_name)
+        schema = store.get_schema(stage_name, table)
 
         store.check_materialization_details_supported(
             resolve_materialization_details_label(table)
@@ -87,9 +87,9 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def retrieve(
-        cls, store, table, stage_name, as_type: type[sa.Table]
+        cls, store, table: Table, stage_name: str, as_type: type[sa.Table]
     ) -> sa.sql.expression.Selectable:
-        schema = store.get_schema(stage_name).get()
+        schema = store.get_schema(stage_name, table).get()
         table_name, schema = store.resolve_alias(table.name, schema)
         alias_name = TaskContext.get().name_disambiguator.get_name(table_name)
 
@@ -136,12 +136,12 @@ class TableReferenceHook(TableHook[SQLTableStore]):
         return False
 
     @classmethod
-    def materialize(cls, store: SQLTableStore, table: Table, stage_name):
+    def materialize(cls, store: SQLTableStore, table: Table, stage_name: str):
         # For a table reference, we don't need to materialize anything.
         # This is any table referenced by a table reference should already exist
         # in the schema.
         # Instead, we check that the table actually exists.
-        schema = store.get_schema(stage_name).get()
+        schema = store.get_schema(stage_name, table).get()
 
         inspector = sa.inspect(store.engine)
         has_table = inspector.has_table(table.name, schema)
@@ -193,9 +193,11 @@ class PandasTableHook(TableHook[SQLTableStore]):
         return super().auto_table(obj)
 
     @classmethod
-    def materialize(cls, store: SQLTableStore, table: Table[pd.DataFrame], stage_name):
+    def materialize(
+        cls, store: SQLTableStore, table: Table[pd.DataFrame], stage_name: str
+    ):
         df = table.obj.copy(deep=False)
-        schema = store.get_schema(stage_name)
+        schema = store.get_schema(stage_name, table)
 
         if store.print_materialize:
             store.logger.info(
@@ -303,7 +305,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         backend: PandasDTypeBackend,
     ) -> tuple[Any, dict[str, DType]]:
         engine = store.engine
-        schema = store.get_schema(stage_name).get()
+        schema = store.get_schema(stage_name, table).get()
         table_name, schema = store.resolve_alias(table.name, schema)
 
         sql_table = sa.Table(
@@ -441,13 +443,13 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         return type_ == polars.DataFrame
 
     @classmethod
-    def materialize(cls, store, table: Table[polars.DataFrame], stage_name):
+    def materialize(cls, store, table: Table[polars.DataFrame], stage_name: str):
         # Materialization for polars happens by first converting the dataframe to
         # a pyarrow backed pandas dataframe, and then calling the PandasTableHook
         # for materialization.
 
         df = table.obj
-        schema = store.get_schema(stage_name)
+        schema = store.get_schema(stage_name, table)
 
         if store.print_materialize:
             store.logger.info(
@@ -486,7 +488,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def _read_db_query(cls, store: SQLTableStore, table: Table, stage_name: str):
-        schema = store.get_schema(stage_name).get()
+        schema = store.get_schema(stage_name, table).get()
         table_name, schema = store.resolve_alias(table.name, schema)
 
         t = sa.table(table_name, schema=schema)
@@ -767,7 +769,7 @@ class IbisTableHook(TableHook[SQLTableStore]):
         as_type: type[ibis.api.Table],
     ) -> ibis.api.Table:
         conn = cls.conn(store)
-        schema = store.get_schema(stage_name).get()
+        schema = store.get_schema(stage_name, table).get()
         table_name, schema = store.resolve_alias(table.name, schema)
         for retry_iteration in range(4):
             # retry operation since it might have been terminated as a deadlock victim

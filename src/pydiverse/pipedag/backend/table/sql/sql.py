@@ -367,7 +367,9 @@ class SQLTableStore(BaseTableStore):
             yield conn
             conn.commit()
 
-    def get_schema(self, name):
+    def get_schema(self, name: str, table: Table | None = None):
+        if table is not None and table.external_schema is not None:
+            return Schema(table.external_schema, "", "")
         return Schema(name, self.schema_prefix, self.schema_suffix)
 
     def _execute(self, query, conn: sa.engine.Connection):
@@ -1278,11 +1280,12 @@ class TableReference:
     """Reference to a user-created table.
 
     By returning a `TableReference` wrapped in a :py:class:`~.Table` from a task,
-    you can tell pipedag that you yourself created a new table inside
-    the correct schema of the table store.
+    you can tell pipedag that you yourself created a new table
+    either inside the correct schema of the current stage or in an `external_schema`.
     This may be useful if you need to perform a complex load operation to create
     a table (e.g. load a table from an Oracle database into Postgres
-    using `oracle_fdw`).
+    using `oracle_fdw`) or to tell pipedag about the existence of a table in an external
+    schema.
 
     Only supported by :py:class:`~.SQLTableStore`.
 
@@ -1290,11 +1293,32 @@ class TableReference:
     -------
     Using table references is not recommended unless you know what you are doing.
     It may lead unexpected behaviour.
-    It also requires accessing non-public parts of the pipedag API which can
+    In case of creating a reference to a table in the schema of the current stage,
+    it also requires accessing non-public parts of the pipedag API which can
     change without notice.
 
     Example
     -------
+    You can use a `TableReference` to tell pipedag about a table that exists
+    in an external schema::
+
+        @materialize(version="1.0")
+        def task():
+            return Table(TableReference("external_schema"), "name_of_table")
+
+    By using a cache function, you can establish the cache (in-)validity of the
+    external table::
+
+        from datetime import date
+
+        # The external table becomes cache invalid every day at midnight
+        def my_cache_fun():
+            return date.today().strftime("%Y/%m/%d")
+
+        @materialize(cache=my_cache_fun)
+        def task():
+            return Table(TableReference("external_schema"), "name_of_table")
+
     Making sure that the table is created in the correct schema is not trivial,
     because the schema names usually are different from the stage names.
     To get the correct schema name, you must use undocumented and non-public
@@ -1319,7 +1343,8 @@ class TableReference:
             return Table(TableReference(), "name_of_table")
     """
 
-    pass
+    def __init__(self, external_schema: str | None = None):
+        self.external_schema = external_schema
 
 
 # Load SQLTableStore Hooks

@@ -56,6 +56,7 @@ class Table(Generic[T]):
     ):
         self._name = None
         self.stage: Stage | None = None
+        self.external_schema: str | None = None
 
         self.obj = obj
         self.name = name
