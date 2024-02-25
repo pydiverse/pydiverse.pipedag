@@ -597,3 +597,33 @@ def test_ignore_task_version(mocker):
             assert result.get(child)[0] == 1
             out_spy.assert_called_once()
             child_spy.assert_called_once()
+
+
+def test_lazy_task_without_query_string():
+    value = 0
+
+    @materialize(lazy=True)
+    def falsely_lazy_task():
+        return pd.DataFrame({"x": [value]})
+
+    @materialize(version="1.0", input_type=pd.DataFrame)
+    def take_first(table):
+        return table["x"][0]
+
+    def get_flow():
+        with Flow() as flow:
+            with Stage("stage_1"):
+                tbl = falsely_lazy_task()
+                res = take_first(tbl)
+        return flow, res
+
+    flow, res = get_flow()
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(res) == 0
+
+    value = 1
+    flow, res = get_flow()
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(res) == 1
