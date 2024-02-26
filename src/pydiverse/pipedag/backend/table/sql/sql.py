@@ -1280,22 +1280,17 @@ class TableReference:
     """Reference to a user-created table.
 
     By returning a `TableReference` wrapped in a :py:class:`~.Table` from a task,
-    you can tell pipedag that you yourself created a new table
-    either inside the correct schema of the current stage or in an `external_schema`.
-    This may be useful if you need to perform a complex load operation to create
-    a table (e.g. load a table from an Oracle database into Postgres
-    using `oracle_fdw`) or to tell pipedag about the existence of a table in an external
-    schema.
+    you can tell pipedag about a table in an `external_schema`.
 
     Only supported by :py:class:`~.SQLTableStore`.
 
     Warning
     -------
-    Using table references is not recommended unless you know what you are doing.
-    It may lead unexpected behaviour.
-    In case of creating a reference to a table in the schema of the current stage,
-    it also requires accessing non-public parts of the pipedag API which can
-    change without notice.
+    When using a `TableReference`, pipedag has no way of knowing the cache validity
+    of the table. Hence, the user should provide a cache function for the `Task`
+    or version the `Task`.
+    It is now allowed to specify a `TableReference` to a table in schema of the
+    current stage.
 
     Example
     -------
@@ -1318,32 +1313,9 @@ class TableReference:
         @materialize(cache=my_cache_fun)
         def task():
             return Table(TableReference("external_schema"), "name_of_table")
-
-    Making sure that the table is created in the correct schema is not trivial,
-    because the schema names usually are different from the stage names.
-    To get the correct schema name, you must use undocumented and non-public
-    parts of the pipedag API. To help you get started, we'll provide you with
-    this example, however, be warned that this might break without notice::
-
-        @materialize(version="1.0")
-        def task():
-            from pydiverse.pipedag.context import ConfigContext, TaskContext
-
-            table_store = ConfigContext.get().store.table_store
-            task = TaskContext.get().task
-
-            # Name of the schema in which you must create the table
-            schema_name = table_store.get_schema(task.stage.transaction_name).get()
-
-            # Use the table store's engine to create a table in the correct schema
-            with table_store.engine.begin() as conn:
-                conn.execute(...)
-
-            # Return a reference to the newly created table
-            return Table(TableReference(), "name_of_table")
     """
 
-    def __init__(self, external_schema: str | None = None):
+    def __init__(self, external_schema: str):
         self.external_schema = external_schema
 
     def __repr__(self):

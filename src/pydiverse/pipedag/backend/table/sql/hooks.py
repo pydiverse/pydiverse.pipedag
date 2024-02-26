@@ -142,6 +142,12 @@ class TableReferenceHook(TableHook[SQLTableStore]):
         # in the schema.
         # Instead, we check that the table actually exists.
         schema = store.get_schema(stage_name, table).get()
+        stage_schema = store.get_schema(stage_name).get()
+        if schema == stage_schema:
+            raise ValueError(
+                f"TableReference '{table.name}' is not allowed to reference tables "
+                "in the same schema as the current stage."
+            )
 
         inspector = sa.inspect(store.engine)
         has_table = inspector.has_table(table.name, schema)
