@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pandas as pd
-import polars as pl
 import pytest
 
 from pydiverse.pipedag import Blob, ConfigContext, Flow, Stage, Table
@@ -14,6 +13,8 @@ from tests.fixtures.instances import ALL_INSTANCES, with_instances
 from tests.util import compile_sql, select_as
 from tests.util import tasks_library as m
 from tests.util.spy import spy_task
+
+pl = pytest.importorskip("polars")
 
 pytestmark = [with_instances(ALL_INSTANCES)]
 
