@@ -340,10 +340,10 @@ class BaseTableStore(TableHookResolver, Disposable):
             query_str = hook.lazy_query_str(self, table.obj)
         except TypeError:
             self.logger.warning(
-                f"The output table {table.name} using given by"
-                f" {repr(table.obj)} of the lazy task {task.name} does"
+                f"The output table {table.name} given by a"
+                f" {repr(type(table.obj))} of the lazy task {task.name} does"
                 " not provide a query string. Lazy evaluation is not"
-                " possible. Assuming that the task is not cache valid."
+                " possible. Assuming that the table is not cache valid."
             )
             # Assign random query string to ensure that task is not cache valid
             query_str = uuid.uuid4().hex
