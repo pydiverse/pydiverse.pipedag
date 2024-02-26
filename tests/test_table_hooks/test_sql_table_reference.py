@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 import sqlalchemy as sa
+from sqlalchemy.exc import ProgrammingError
 
 import tests.util.tasks_library as m
 from pydiverse.pipedag import *
@@ -15,6 +16,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     DropView,
     Schema,
 )
+from pydiverse.pipedag.backend.table.sql.dialects import DuckDBTableStore
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
@@ -26,13 +28,16 @@ pytestmark = [with_instances(DATABASE_INSTANCES)]
 
 @pytest.mark.polars
 def test_table_store():
-    @materialize(version="1.0")
+    @materialize(version="1.1")
     def in_table():
         table_store = ConfigContext.get().store.table_store
         schema = Schema("user_controlled_schema", prefix="", suffix="")
         table_name = "external_table"
         table_store.execute(CreateSchema(schema, if_not_exists=True))
-        table_store.execute(DropView("external_view", schema, if_exists=True))
+        try:
+            table_store.execute(DropView("external_view", schema))
+        except ProgrammingError:
+            pass
         table_store.execute(DropTable(table_name, schema, if_exists=True))
         query = sql_table_expr({"col": [0, 1, 2, 3]})
         table_store.execute(
@@ -44,13 +49,17 @@ def test_table_store():
         )
         return Table(TableReference(external_schema=schema.get()), table_name)
 
-    @materialize(version="1.0", input_type=sa.Table)
+    @materialize(version="1.1", input_type=sa.Table)
     def in_view(tbl: sa.Table):
         table_store = ConfigContext.get().store.table_store
         schema = Schema("user_controlled_schema", prefix="", suffix="")
         view_name = "external_view"
-        table_store.execute(DropView(view_name, schema, if_exists=True))
-        query = sa.select(tbl.c.col).where(tbl.c.col > 1).order_by(tbl.c.col)
+        try:
+            # We cannot use if_exists=True here because DB2 does not support it
+            table_store.execute(DropView(view_name, schema))
+        except ProgrammingError:
+            pass
+        query = sa.select(tbl.c.col).where(tbl.c.col > 1)
         table_store.execute(
             CreateViewAsSelect(
                 view_name,
@@ -87,20 +96,25 @@ def test_table_store():
             _ = m.assert_table_equal(
                 external_table, expected_external_table, check_dtype=False
             )
-        with Stage("sql_view_reference"):
-            external_view = in_view(external_table)
-            expected_external_view = expected_out_view()
-            _ = m.assert_table_equal(
-                external_view, expected_external_view, check_dtype=False
-            )
-            external_view_polars = m.noop_polars(external_view)
-            external_view_lazy_polars = m.noop_lazy_polars(external_view)
-            _ = m.assert_table_equal(
-                external_view_polars, expected_external_view, check_dtype=False
-            )
-            _ = m.assert_table_equal(
-                external_view_lazy_polars, expected_external_view, check_dtype=False
-            )
+        config = ConfigContext.get()
+        store = config.store.table_store
+        # External views in DuckDB are not supported until the following issue is
+        # resolved: https://github.com/duckdb/duckdb/issues/10322
+        if not isinstance(store, DuckDBTableStore):
+            with Stage("sql_view_reference"):
+                external_view = in_view(external_table)
+                expected_external_view = expected_out_view()
+                _ = m.assert_table_equal(
+                    external_view, expected_external_view, check_dtype=False
+                )
+                external_view_polars = m.noop_polars(external_view)
+                external_view_lazy_polars = m.noop_lazy_polars(external_view)
+                _ = m.assert_table_equal(
+                    external_view_polars, expected_external_view, check_dtype=False
+                )
+                _ = m.assert_table_equal(
+                    external_view_lazy_polars, expected_external_view, check_dtype=False
+                )
 
     assert f.run().successful
     assert f.run().successful
