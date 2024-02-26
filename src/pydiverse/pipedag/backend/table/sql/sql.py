@@ -1280,15 +1280,15 @@ class TableReference:
     """Reference to a user-created table.
 
     By returning a `TableReference` wrapped in a :py:class:`~.Table` from a task,
-    you can tell pipedag about a table in an `external_schema`.
+    you can tell pipedag about a table or a view in an `external_schema`.
 
     Only supported by :py:class:`~.SQLTableStore`.
 
     Warning
     -------
     When using a `TableReference`, pipedag has no way of knowing the cache validity
-    of the table. Hence, the user should provide a cache function for the `Task`
-    or version the `Task`.
+    of the external object. Hence, the user should provide a cache function for the
+    `Task` or version the `Task`.
     It is now allowed to specify a `TableReference` to a table in schema of the
     current stage.
 

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import pandas as pd
+import sqlalchemy as sa
 
 from pydiverse.pipedag import *
 from pydiverse.pipedag.backend.table.sql import TableReference
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateSchema,
     CreateTableAsSelect,
+    CreateViewAsSelect,
     DropTable,
+    DropView,
     Schema,
 )
 
@@ -27,6 +30,7 @@ def test_table_store():
         schema = Schema("user_controlled_schema", prefix="", suffix="")
         table_name = "external_table"
         table_store.execute(CreateSchema(schema, if_not_exists=True))
+        table_store.execute(DropView("external_view", schema, if_exists=True))
         table_store.execute(DropTable(table_name, schema, if_exists=True))
         query = sql_table_expr({"col": [0, 1, 2, 3]})
         table_store.execute(
@@ -38,6 +42,22 @@ def test_table_store():
         )
         return Table(TableReference(external_schema=schema.get()), table_name)
 
+    @materialize(version="1.0", input_type=sa.Table)
+    def in_view(tbl: sa.Table):
+        table_store = ConfigContext.get().store.table_store
+        schema = Schema("user_controlled_schema", prefix="", suffix="")
+        view_name = "external_view"
+        table_store.execute(DropView(view_name, schema, if_exists=True))
+        query = sa.select(tbl.c.col).where(tbl.c.col > 1).order_by(tbl.c.col)
+        table_store.execute(
+            CreateViewAsSelect(
+                view_name,
+                schema,
+                query,
+            )
+        )
+        return Table(TableReference(external_schema=schema.get()), view_name)
+
     @materialize()
     def expected_out_table():
         return Table(
@@ -48,12 +68,28 @@ def test_table_store():
             )
         )
 
+    @materialize()
+    def expected_out_view():
+        return Table(
+            pd.DataFrame(
+                {
+                    "col": [2, 3],
+                }
+            )
+        )
+
     with Flow() as f:
         with Stage("sql_table_reference"):
             external_table = in_table()
             expected_external_table = expected_out_table()
             _ = assert_table_equal(
                 external_table, expected_external_table, check_dtype=False
+            )
+        with Stage("sql_view_reference"):
+            external_view = in_view(external_table)
+            expected_external_view = expected_out_view()
+            _ = assert_table_equal(
+                external_view, expected_external_view, check_dtype=False
             )
 
     assert f.run().successful
