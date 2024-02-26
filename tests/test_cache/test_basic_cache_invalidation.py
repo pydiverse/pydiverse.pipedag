@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 import polars as pl
+import pytest
 
 from pydiverse.pipedag import Blob, ConfigContext, Flow, Stage, Table
 from pydiverse.pipedag.context import StageLockContext
@@ -600,6 +601,7 @@ def test_ignore_task_version(mocker):
             child_spy.assert_called_once()
 
 
+@pytest.mark.polars
 def test_lazy_task_without_query_string(mocker):
     value = None
 
