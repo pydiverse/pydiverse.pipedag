@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 import sqlalchemy as sa
 
+import tests.util.tasks_library as m
 from pydiverse.pipedag import *
 from pydiverse.pipedag.backend.table.sql import TableReference
 from pydiverse.pipedag.backend.table.sql.ddl import (
@@ -18,11 +20,11 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
 from tests.util import swallowing_raises
 from tests.util.sql import sql_table_expr
-from tests.util.tasks_library import assert_table_equal
 
 pytestmark = [with_instances(DATABASE_INSTANCES)]
 
 
+@pytest.mark.polars
 def test_table_store():
     @materialize(version="1.0")
     def in_table():
@@ -82,14 +84,22 @@ def test_table_store():
         with Stage("sql_table_reference"):
             external_table = in_table()
             expected_external_table = expected_out_table()
-            _ = assert_table_equal(
+            _ = m.assert_table_equal(
                 external_table, expected_external_table, check_dtype=False
             )
         with Stage("sql_view_reference"):
             external_view = in_view(external_table)
             expected_external_view = expected_out_view()
-            _ = assert_table_equal(
+            _ = m.assert_table_equal(
                 external_view, expected_external_view, check_dtype=False
+            )
+            external_view_polars = m.noop_polars(external_view)
+            external_view_lazy_polars = m.noop_lazy_polars(external_view)
+            _ = m.assert_table_equal(
+                external_view_polars, expected_external_view, check_dtype=False
+            )
+            _ = m.assert_table_equal(
+                external_view_lazy_polars, expected_external_view, check_dtype=False
             )
 
     assert f.run().successful
