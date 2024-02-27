@@ -14,7 +14,10 @@ from tests.util import compile_sql, select_as
 from tests.util import tasks_library as m
 from tests.util.spy import spy_task
 
-pl = pytest.importorskip("polars")
+try:
+    import polars as pl
+except ImportError:
+    pl = None
 
 pytestmark = [with_instances(ALL_INSTANCES)]
 
@@ -603,7 +606,7 @@ def test_ignore_task_version(mocker):
 
 
 @pytest.mark.polars
-def test_lazy_task_without_query_string(mocker):
+def test_lazy_table_without_query_string(mocker):
     value = None
 
     @materialize(lazy=True, nout=5)
