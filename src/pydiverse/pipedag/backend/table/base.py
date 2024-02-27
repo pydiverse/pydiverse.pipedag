@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from enum import Enum
@@ -337,11 +338,17 @@ class BaseTableStore(TableHookResolver, Disposable):
         try:
             hook = self.get_m_table_hook(type(table.obj))
             query_str = hook.lazy_query_str(self, table.obj)
-            query_hash = stable_hash("LAZY-TABLE", query_str)
         except TypeError:
-            # This table type doesn't provide a query string
-            # -> Fallback to default implementation
-            return self.store_table(table, task)
+            self.logger.warning(
+                f"The output table {table.name} given by a"
+                f" {repr(type(table.obj))} of the lazy task {task.name} does"
+                " not provide a query string. Lazy evaluation is not"
+                " possible. Assuming that the table is not cache valid."
+            )
+            # Assign random query string to ensure that task is not cache valid
+            query_str = uuid.uuid4().hex
+
+        query_hash = stable_hash("LAZY-TABLE", query_str)
 
         # Store the table
         try:
