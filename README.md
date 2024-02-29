@@ -6,9 +6,9 @@ A pipeline orchestration library executing tasks within one python session. It t
 (de)materialization, caching and cache invalidation. Blob storage is supported as well for example
 for storing model files.
 
-This is an early stage version 0.x which lacks documentation. Please contact
-https://github.com/orgs/pydiverse/teams/code-owners if you like to become an early adopter
-or to contribute early stage usage examples.
+This is an early stage version 0.x, however, it is already used in real projects. Please contact
+https://github.com/orgs/pydiverse/teams/code-owners if you like to become an early adopter. We will 
+help you getting started and are curious about how it fits your needs.
 
 ## Preparing installation
 
