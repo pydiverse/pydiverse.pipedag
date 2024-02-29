@@ -17,6 +17,8 @@ build:
       - which pip
       - poetry run which python
       - poetry run which pip
+      - pip list
+      - pip install structlog
 
 sphinx:
   builder: html
