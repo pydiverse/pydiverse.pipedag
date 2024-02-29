@@ -1286,7 +1286,9 @@ class ExternalTableReference:
     """Reference to a user-created table.
 
     By returning a `ExternalTableReference` wrapped in a :py:class:`~.Table` from,
-    a task you can tell pipedag about a table or a view in an `schema`.
+    a task you can tell pipedag about a table, a view or DB2 nickname in an external
+    `schema`. The schema may be a multi-part identifier like "[db_name].[schema_name]"
+    if the database supports this. It is passed to SQLAlchemy as-is.
 
     Only supported by :py:class:`~.SQLTableStore`.
 
@@ -1322,6 +1324,14 @@ class ExternalTableReference:
     """
 
     def __init__(self, name: str, schema: str, db2_shared_lock_allowed: bool = True):
+        """
+        :param name: The name of the table, view, or DB2 nickname
+        :param schema: The external schema of the object
+        :param db2_shared_lock_allowed: Whether to use a shared lock when using
+            the object in a SQL query. If set to `False`, no lock is used. This is
+            useful when the user is not allowed to lock the table.
+            The default is `True`.
+        """
         self.name = name
         self.schema = schema
         self.db2_shared_lock_allowed = db2_shared_lock_allowed
