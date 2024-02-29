@@ -827,7 +827,11 @@ def visit_copy_table(copy_table: CopyTable, compiler, **kw):
         query,
         early_not_null=copy_table.early_not_null,
         source_tables=[
-            dict(name=copy_table.from_name, schema=copy_table.from_schema.get())
+            dict(
+                name=copy_table.from_name,
+                schema=copy_table.from_schema.get(),
+                db2_shared_lock_allowed=True,
+            )
         ],
         suffix=copy_table.suffix,
     )
