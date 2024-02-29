@@ -12,6 +12,9 @@ build:
       - pip install poetry
       - poetry config virtualenvs.create false
     post_install:
+      - which python
+      - source $READTHEDOCS_VIRTUALENV_PATH/bin/activate
+      - which python
       - poetry install --with docs
       - which python
       - which pip
