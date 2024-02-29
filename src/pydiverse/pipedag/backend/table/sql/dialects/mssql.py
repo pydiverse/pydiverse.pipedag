@@ -215,8 +215,9 @@ class MSSqlTableStore(SQLTableStore):
         definition = _mssql_update_definition(conn, name, src_schema, dest_schema)
         self.execute(definition, conn=conn)
 
-    def resolve_alias(self, table: str, schema: str):
-        return PipedagMSSqlReflection.resolve_alias(self.engine, table, schema)
+    def resolve_alias(self, table: Table, stage_name: str):
+        table_name, schema = super().resolve_alias(table, stage_name)
+        return PipedagMSSqlReflection.resolve_alias(self.engine, table_name, schema)
 
 
 @MSSqlTableStore.register_table(pd)

@@ -8,7 +8,6 @@ import structlog
 
 from pydiverse.pipedag import Blob, Stage, Table, backend
 from pydiverse.pipedag._typing import Materializable, T
-from pydiverse.pipedag.backend.table.sql import TableReference
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.core.config import PipedagConfig
@@ -314,9 +313,6 @@ class PipeDAGStore(Disposable):
                 if isinstance(x, Table):
                     if x.obj is None:
                         raise TypeError("Underlying table object can't be None")
-                    # TableReference can reference a table from an external schema
-                    if isinstance(x.obj, TableReference):
-                        x.external_schema = x.obj.external_schema
                     tables.append(x)
                 elif isinstance(x, RawSql):
                     if x.sql is None:

@@ -99,7 +99,7 @@ class SQLTableStore(BaseTableStore):
            | ``pdt.lazy.SQLTableImpl``
 
        * - pydiverse.pipedag
-         - | :py:class:`~.TableReference`
+         - | :py:class:`~.ExternalTableReference`
          -
 
 
@@ -367,9 +367,7 @@ class SQLTableStore(BaseTableStore):
             yield conn
             conn.commit()
 
-    def get_schema(self, name: str, table: Table | None = None):
-        if table is not None and table.external_schema is not None:
-            return Schema(table.external_schema, "", "")
+    def get_schema(self, name: str) -> Schema:
         return Schema(name, self.schema_prefix, self.schema_suffix)
 
     def _execute(self, query, conn: sa.engine.Connection):
@@ -884,12 +882,15 @@ class SQLTableStore(BaseTableStore):
             self.logger.exception(msg)
             raise CacheError(msg) from _e
 
-    def has_table_or_view(self, name, schema: Schema):
+    def has_table_or_view(self, name, schema: Schema | str):
+        if isinstance(schema, Schema):
+            schema = schema.get()
         inspector = sa.inspect(self.engine)
-        has_table = inspector.has_table(name, schema=schema.get())
+        has_table = inspector.has_table(name, schema=schema)
         # workaround for sqlalchemy backends that fail to find views with has_table
+        # in particular DuckDB https://github.com/duckdb/duckdb/issues/10322
         if not has_table:
-            has_table = name in inspector.get_view_names(schema=schema.get())
+            has_table = name in inspector.get_view_names(schema=schema)
         return has_table
 
     def _swap_alias_with_table_copy(self, table: Table, table_copy: Table):
@@ -1233,8 +1234,13 @@ class SQLTableStore(BaseTableStore):
             task_hash=result.task_hash,
         )
 
-    def resolve_alias(self, table: str, schema: str) -> tuple[str, str]:
-        return table, schema
+    def resolve_alias(self, table: Table, stage_name: str) -> tuple[str, str]:
+        schema = (
+            self.get_schema(stage_name).get()
+            if table.external_schema is None
+            else table.external_schema
+        )
+        return table.name, schema
 
     def get_objects_in_stage(self, stage: Stage):
         schema = self.get_schema(stage.transaction_name)
@@ -1276,30 +1282,30 @@ class SQLTableStore(BaseTableStore):
         return self.get_schema(self.LOCK_SCHEMA)
 
 
-class TableReference:
+class ExternalTableReference:
     """Reference to a user-created table.
 
-    By returning a `TableReference` wrapped in a :py:class:`~.Table` from a task,
-    you can tell pipedag about a table or a view in an `external_schema`.
+    By returning a `ExternalTableReference` wrapped in a :py:class:`~.Table` from,
+    a task you can tell pipedag about a table or a view in an `schema`.
 
     Only supported by :py:class:`~.SQLTableStore`.
 
     Warning
     -------
-    When using a `TableReference`, pipedag has no way of knowing the cache validity
-    of the external object. Hence, the user should provide a cache function for the
-    `Task` or version the `Task`.
-    It is now allowed to specify a `TableReference` to a table in schema of the
+    When using a `ExternalTableReference`, pipedag has no way of knowing the cache
+    validity of the external object. Hence, the user should provide a cache function
+    for the `Task` or version the `Task`.
+    It is now allowed to specify a `ExternalTableReference` to a table in schema of the
     current stage.
 
     Example
     -------
-    You can use a `TableReference` to tell pipedag about a table that exists
+    You can use a `ExternalTableReference` to tell pipedag about a table that exists
     in an external schema::
 
         @materialize(version="1.0")
         def task():
-            return Table(TableReference("external_schema"), "name_of_table")
+            return Table(ExternalTableReference("name_of_table", "schema"))
 
     By using a cache function, you can establish the cache (in-)validity of the
     external table::
@@ -1312,17 +1318,16 @@ class TableReference:
 
         @materialize(cache=my_cache_fun)
         def task():
-            return Table(TableReference("external_schema"), "name_of_table")
+            return Table(ExternalTableReference("name_of_table", "schema"))
     """
 
-    def __init__(self, external_schema: str):
-        self.external_schema = external_schema
+    def __init__(self, name: str, schema: str, db2_shared_lock_allowed: bool = True):
+        self.name = name
+        self.schema = schema
+        self.db2_shared_lock_allowed = db2_shared_lock_allowed
 
     def __repr__(self):
-        return (
-            f"<TableReference: {hex(id(self))}"
-            f" (external_schema: {self.external_schema})>"
-        )
+        return f"<ExternalTableReference: {hex(id(self))}" f" (schema: {self.schema})>"
 
 
 # Load SQLTableStore Hooks

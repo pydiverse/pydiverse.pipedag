@@ -127,8 +127,9 @@ class IBMDB2TableStore(SQLTableStore):
         )
         self.execute(query)
 
-    def resolve_alias(self, table, schema):
-        return PipedagDB2Reflection.resolve_alias(self.engine, table, schema)
+    def resolve_alias(self, table: Table, stage_name: str) -> tuple[str, str]:
+        table_name, schema = super().resolve_alias(table, stage_name)
+        return PipedagDB2Reflection.resolve_alias(self.engine, table_name, schema)
 
     def check_materialization_details_supported(self, label: str | None) -> None:
         _ = label

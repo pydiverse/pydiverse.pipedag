@@ -7,7 +7,7 @@ from sqlalchemy.exc import ProgrammingError
 
 import tests.util.tasks_library as m
 from pydiverse.pipedag import *
-from pydiverse.pipedag.backend.table.sql import TableReference
+from pydiverse.pipedag.backend.table.sql import ExternalTableReference
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateSchema,
     CreateTableAsSelect,
@@ -28,7 +28,7 @@ pytestmark = [with_instances(DATABASE_INSTANCES)]
 
 @pytest.mark.polars
 def test_table_store():
-    @materialize(version="1.1")
+    @materialize(version="1.0")
     def in_table():
         table_store = ConfigContext.get().store.table_store
         schema = Schema("user_controlled_schema", prefix="", suffix="")
@@ -47,9 +47,9 @@ def test_table_store():
                 query,
             )
         )
-        return Table(TableReference(external_schema=schema.get()), table_name)
+        return Table(ExternalTableReference(table_name, schema=schema.get()))
 
-    @materialize(version="1.1", input_type=sa.Table)
+    @materialize(version="1.0", input_type=sa.Table)
     def in_view(tbl: sa.Table):
         table_store = ConfigContext.get().store.table_store
         schema = Schema("user_controlled_schema", prefix="", suffix="")
@@ -67,7 +67,7 @@ def test_table_store():
                 query,
             )
         )
-        return Table(TableReference(external_schema=schema.get()), view_name)
+        return Table(ExternalTableReference(view_name, schema=schema.get()))
 
     @materialize()
     def expected_out_table():
@@ -124,7 +124,9 @@ def test_bad_table_reference():
     @materialize()
     def bad_table_reference():
         return Table(
-            TableReference(external_schema="ext_schema"), "this_table_does_not_exist"
+            ExternalTableReference(
+                name="this_table_does_not_exist", schema="ext_schema"
+            ),
         )
 
     with Flow() as f:

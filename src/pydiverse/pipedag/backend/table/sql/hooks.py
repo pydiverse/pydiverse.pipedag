@@ -18,7 +18,10 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateTableAsSelect,
     Schema,
 )
-from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore, TableReference
+from pydiverse.pipedag.backend.table.sql.sql import (
+    ExternalTableReference,
+    SQLTableStore,
+)
 from pydiverse.pipedag.backend.table.util import (
     DType,
     PandasDTypeBackend,
@@ -57,11 +60,14 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         source_tables = [
             dict(
                 name=tbl.name,
-                schema=store.get_schema(tbl.stage.current_name, tbl).get(),
+                schema=store.get_schema(tbl.stage.current_name).get()
+                if tbl.external_schema is None
+                else tbl.external_schema,
+                db2_shared_lock_allowed=tbl.db2_shared_lock_allowed,
             )
             for tbl in TaskContext.get().input_tables
         ]
-        schema = store.get_schema(stage_name, table)
+        schema = store.get_schema(stage_name)
 
         store.check_materialization_details_supported(
             resolve_materialization_details_label(table)
@@ -89,8 +95,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     def retrieve(
         cls, store, table: Table, stage_name: str, as_type: type[sa.Table]
     ) -> sa.sql.expression.Selectable:
-        schema = store.get_schema(stage_name, table).get()
-        table_name, schema = store.resolve_alias(table.name, schema)
+        table_name, schema = store.resolve_alias(table, stage_name)
         alias_name = TaskContext.get().name_disambiguator.get_name(table_name)
 
         for retry_iteration in range(4):
@@ -126,10 +131,10 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
 
 @SQLTableStore.register_table()
-class TableReferenceHook(TableHook[SQLTableStore]):
+class ExternalTableReferenceHook(TableHook[SQLTableStore]):
     @classmethod
     def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, TableReference)
+        return issubclass(type_, ExternalTableReference)
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -137,25 +142,29 @@ class TableReferenceHook(TableHook[SQLTableStore]):
 
     @classmethod
     def materialize(cls, store: SQLTableStore, table: Table, stage_name: str):
-        # For a table reference, we don't need to materialize anything.
+        # For an external table reference, we don't need to materialize anything.
         # This is any table referenced by a table reference should already exist
         # in the schema.
         # Instead, we check that the table actually exists.
-        schema = store.get_schema(stage_name, table).get()
         stage_schema = store.get_schema(stage_name).get()
-        if schema == stage_schema:
+        if table.external_schema.upper() == stage_schema.upper():
             raise ValueError(
-                f"TableReference '{table.name}' is not allowed to reference tables "
-                "in the same schema as the current stage."
+                f"ExternalTableReference '{table.name}' is not allowed to reference "
+                f"tables in the transaction schema '{stage_schema}' of the current "
+                "stage."
+            )
+        if stage_schema.upper().startswith(table.external_schema.upper() + "__"):
+            raise ValueError(
+                f"ExternalTableReference '{table.name}' is not allowed to reference "
+                f"tables in the schema '{table.external_schema}' of the current stage."
             )
 
-        inspector = sa.inspect(store.engine)
-        has_table = inspector.has_table(table.name, schema)
+        has_table = store.has_table_or_view(table.name, table.external_schema)
 
         if not has_table:
             raise ValueError(
-                f"Not table with name '{table.name}' found in schema '{schema}' "
-                "(reference by TableReference)."
+                f"Not table with name '{table.name}' found in schema "
+                f"'{table.external_schema}' (reference by ExternalTableReference)."
             )
 
         return
@@ -203,7 +212,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         cls, store: SQLTableStore, table: Table[pd.DataFrame], stage_name: str
     ):
         df = table.obj.copy(deep=False)
-        schema = store.get_schema(stage_name, table)
+        schema = store.get_schema(stage_name)
 
         if store.print_materialize:
             store.logger.info(
@@ -311,8 +320,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         backend: PandasDTypeBackend,
     ) -> tuple[Any, dict[str, DType]]:
         engine = store.engine
-        schema = store.get_schema(stage_name, table).get()
-        table_name, schema = store.resolve_alias(table.name, schema)
+        table_name, schema = store.resolve_alias(table, stage_name)
 
         sql_table = sa.Table(
             table_name,
@@ -455,7 +463,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         # for materialization.
 
         df = table.obj
-        schema = store.get_schema(stage_name, table)
+        schema = store.get_schema(stage_name)
 
         if store.print_materialize:
             store.logger.info(
@@ -494,8 +502,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def _read_db_query(cls, store: SQLTableStore, table: Table, stage_name: str):
-        schema = store.get_schema(stage_name, table).get()
-        table_name, schema = store.resolve_alias(table.name, schema)
+        table_name, schema = store.resolve_alias(table, stage_name)
 
         t = sa.table(table_name, schema=schema)
         q = sa.select("*").select_from(t)
@@ -775,8 +782,7 @@ class IbisTableHook(TableHook[SQLTableStore]):
         as_type: type[ibis.api.Table],
     ) -> ibis.api.Table:
         conn = cls.conn(store)
-        schema = store.get_schema(stage_name, table).get()
-        table_name, schema = store.resolve_alias(table.name, schema)
+        table_name, schema = store.resolve_alias(table, stage_name)
         for retry_iteration in range(4):
             # retry operation since it might have been terminated as a deadlock victim
             try:

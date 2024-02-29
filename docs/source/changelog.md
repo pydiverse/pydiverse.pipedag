@@ -2,8 +2,9 @@
 
 ## 0.7.0 (2024-XX-XX)
 - Rework `TableReference` support:
-  * Add support for `TableReference` to point to tables in external (i.e. not managed by `pipedag`) schemas. 
-  * Remove support for `TableReference` that points to table in schema of current stage. I.e. `TableReference` can only point to tables in external schemas.
+  * Rename `TableReference` to `ExternalTableReference`
+  * Add support for `ExternalTableReference` to point to tables in external (i.e. not managed by `pipedag`) schemas. 
+  * Remove support for `ExternalTableReference` that points to table in schema of current stage. I.e. `ExternalTableReference` can only point to tables in external schemas.
 
 ## 0.6.9 (2024-01-24)
 - Update dependencies and remove some upper boundaries

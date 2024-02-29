@@ -706,6 +706,7 @@ def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler
         src_tables = [
             f"{preparer.format_schema(tbl['schema'])}.{preparer.quote(tbl['name'])}"
             for tbl in create.source_tables
+            if tbl["db2_shared_lock_allowed"]
         ]
         lock_statements += [f"LOCK TABLE {ref} IN SHARE MODE" for ref in src_tables]
 
