@@ -327,7 +327,7 @@ pip uninstall pyodbc
 pip install --no-cache --pre --no-binary :all: pyodbc
 ```
 
-## Packaging and publishing to Pypi using github actions
+## Packaging and publishing to pypi and conda-forge using github actions
 
 - `poetry version prerelease` or `poetry version patch`
 - set correct release date in changelog.md

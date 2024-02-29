@@ -1,7 +1,8 @@
 # Changelog
 
-## 0.6.10 (2024-XX-XX)
+## 0.6.10 (2024-02-29)
 - Fix bug where a `Task` that was declared lazy but provided a `Table` without a query string would always be cache valid.
+- Improved documentation
 
 ## 0.6.9 (2024-01-24)
 - Update dependencies and remove some upper boundaries
