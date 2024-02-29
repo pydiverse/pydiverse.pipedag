@@ -13,6 +13,7 @@ build:
       - poetry config virtualenvs.create false
     post_install:
       - which python
+      - echo $READTHEDOCS_VIRTUALENV_PATH
       - . $READTHEDOCS_VIRTUALENV_PATH/bin/activate
       - which python
       - poetry install --with docs
