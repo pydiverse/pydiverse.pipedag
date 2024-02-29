@@ -81,7 +81,7 @@ def materialize(
     :param input_type:
         The data type as which to retrieve table objects from the store.
         All tables passed to this task get loaded from the table store and converted
-        to this type.
+        to this type. See :ref:`Table Backends` for more information.
     :param version:
         The version of this task.
         Unless the task is lazy, you always need to manually change this
