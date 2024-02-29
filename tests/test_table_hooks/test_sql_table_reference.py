@@ -16,7 +16,6 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     DropView,
     Schema,
 )
-from pydiverse.pipedag.backend.table.sql.dialects import DuckDBTableStore
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
@@ -96,25 +95,21 @@ def test_table_store():
             _ = m.assert_table_equal(
                 external_table, expected_external_table, check_dtype=False
             )
-        config = ConfigContext.get()
-        store = config.store.table_store
-        # External views in DuckDB are not supported until the following issue is
-        # resolved: https://github.com/duckdb/duckdb/issues/10322
-        if not isinstance(store, DuckDBTableStore):
-            with Stage("sql_view_reference"):
-                external_view = in_view(external_table)
-                expected_external_view = expected_out_view()
-                _ = m.assert_table_equal(
-                    external_view, expected_external_view, check_dtype=False
-                )
-                external_view_polars = m.noop_polars(external_view)
-                external_view_lazy_polars = m.noop_lazy_polars(external_view)
-                _ = m.assert_table_equal(
-                    external_view_polars, expected_external_view, check_dtype=False
-                )
-                _ = m.assert_table_equal(
-                    external_view_lazy_polars, expected_external_view, check_dtype=False
-                )
+
+        with Stage("sql_view_reference"):
+            external_view = in_view(external_table)
+            expected_external_view = expected_out_view()
+            _ = m.assert_table_equal(
+                external_view, expected_external_view, check_dtype=False
+            )
+            external_view_polars = m.noop_polars(external_view)
+            external_view_lazy_polars = m.noop_lazy_polars(external_view)
+            _ = m.assert_table_equal(
+                external_view_polars, expected_external_view, check_dtype=False
+            )
+            _ = m.assert_table_equal(
+                external_view_lazy_polars, expected_external_view, check_dtype=False
+            )
 
     assert f.run().successful
     assert f.run().successful
