@@ -11,20 +11,12 @@ build:
     post_create_environment:
       - pip install poetry
     post_install:
-      - which python
-      - echo $READTHEDOCS_VIRTUALENV_PATH
-      - . $READTHEDOCS_VIRTUALENV_PATH/bin/activate
-      - which python
+      # Install dependencies with 'docs' dependency group
+      # https://python-poetry.org/docs/managing-dependencies/#dependency-groups
+      # VIRTUAL_ENV needs to be set manually for now.
+      # See https://github.com/readthedocs/readthedocs.org/pull/11152/
       - VIRTUAL_ENV=$READTHEDOCS_VIRTUALENV_PATH poetry install --with docs
-      - which python
-      - which pip
-      - poetry run which python
-      - poetry run which pip
-      - pip list
-      - pip install structlog
-      - poetry install --all-extras --with docs
-      - pip list
-      - poetry run pip list
+
 
 sphinx:
   builder: html
