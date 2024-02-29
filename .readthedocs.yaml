@@ -13,6 +13,10 @@ build:
       - poetry config virtualenvs.create false
     post_install:
       - poetry install --with docs
+      - which python
+      - which pip
+      - poetry run which python
+      - poetry run which pip
 
 sphinx:
   builder: html
