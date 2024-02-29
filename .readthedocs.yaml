@@ -10,13 +10,12 @@ build:
   jobs:
     post_create_environment:
       - pip install poetry
-      - poetry config virtualenvs.create false
     post_install:
       - which python
       - echo $READTHEDOCS_VIRTUALENV_PATH
       - . $READTHEDOCS_VIRTUALENV_PATH/bin/activate
       - which python
-      - poetry install --with docs
+      - VIRTUAL_ENV=$READTHEDOCS_VIRTUALENV_PATH poetry install --with docs
       - which python
       - which pip
       - poetry run which python
