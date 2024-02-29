@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0 (2024-XX-XX)
+- Bug fix ibm_db2 backend:
+  * input tables for SQL queries were not locked
+
 ## 0.6.10 (2024-02-29)
 - Fix bug where a `Task` that was declared lazy but provided a `Table` without a query string would always be cache valid.
 - Improved documentation
