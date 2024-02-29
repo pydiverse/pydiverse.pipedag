@@ -75,6 +75,11 @@ def assert_blob_equal(x, y):
     assert x == y
 
 
+@materialize(version="1.0", input_type=pd.DataFrame)
+def take_first(table):
+    return table["x"][0]
+
+
 @materialize(version="1.0")
 def simple_dataframe():
     df = pd.DataFrame(
