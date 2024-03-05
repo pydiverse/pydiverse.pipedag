@@ -92,6 +92,9 @@ def _run_and_check(flow, prep_stage):
         assert set(inspector.get_table_names(schema=schema)) == {
             "raw01A",
             "table01",
+            "special_chars",
+            "special_chars2",
+            "special_chars_join",
         }
 
         pk = inspector.get_pk_constraint("raw01A", schema=schema)
@@ -108,3 +111,8 @@ def _run_and_check(flow, prep_stage):
         assert indexes[0]["column_names"] == ["start_date"]
         assert indexes[1]["name"] == "raw_start_date_end_date"
         assert indexes[1]["column_names"] == ["end_date", "start_date"]
+
+        with config_ctx.store.table_store.engine.connect() as conn:
+            sql = f"SELECT string_col FROM [{schema}].[special_chars_join]"
+            str_val = conn.execute(sa.text(sql)).fetchone()[0]
+            assert str_val == "äöüßéç"
