@@ -37,7 +37,7 @@ def test_unicode():
         assert result.get(x3, as_type=pd.DataFrame)["a"][0] == "äöüßéç"
 
 
-@skip_instances("mssql")
+@skip_instances("mssql", "mssql_pytsql")
 def test_unicode_beyond_mssql():
     @materialize(lazy=True)
     def unicode():
