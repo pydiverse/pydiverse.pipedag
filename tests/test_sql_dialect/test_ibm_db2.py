@@ -64,11 +64,11 @@ def test_db2_nicknames():
 
         return Table(
             ExternalTableReference(
-                "nick1", schema=schema.get(), db2_shared_lock_allowed=False
+                "nick1", schema=schema.get(), shared_lock_allowed=False
             )
         ), Table(
             ExternalTableReference(
-                "nick2", schema=schema.get(), db2_shared_lock_allowed=True
+                "nick2", schema=schema.get(), shared_lock_allowed=True
             )
         )
 

@@ -1323,18 +1323,21 @@ class ExternalTableReference:
             return Table(ExternalTableReference("name_of_table", "schema"))
     """
 
-    def __init__(self, name: str, schema: str, db2_shared_lock_allowed: bool = True):
+    def __init__(self, name: str, schema: str, shared_lock_allowed: bool = False):
         """
-        :param name: The name of the table, view, or DB2 nickname
-        :param schema: The external schema of the object
-        :param db2_shared_lock_allowed: Whether to use a shared lock when using
-            the object in a SQL query. If set to `False`, no lock is used. This is
-            useful when the user is not allowed to lock the table.
-            The default is `True`.
+        :param name: The name of the table, view, or nickname/alias
+        :param schema: The external schema of the object. A multi-part schema
+            is allowed with '.' separator as also supported by SQLAlchemy Table
+            schema argument.
+        :param shared_lock_allowed: Whether to disable acquiring a shared lock
+            when using the object in a SQL query. If set to `False`, no lock is
+            used. This is useful when the user is not allowed to lock the table.
+            If pipedag does not lock source tables for this dialect, this argument
+            has no effect. The default is `False`.
         """
         self.name = name
         self.schema = schema
-        self.db2_shared_lock_allowed = db2_shared_lock_allowed
+        self.shared_lock_allowed = shared_lock_allowed
 
     def __repr__(self):
         return f"<ExternalTableReference: {hex(id(self))}" f" (schema: {self.schema})>"

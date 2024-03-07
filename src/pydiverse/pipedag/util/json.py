@@ -50,7 +50,7 @@ def json_default(o):
             "cache_key": o.cache_key,
             "materialization_details": o.materialization_details,
             "external_schema": o.external_schema,
-            "db2_shared_lock_allowed": o.db2_shared_lock_allowed,
+            "shared_lock_allowed": o.shared_lock_allowed,
         }
     if isinstance(o, RawSql):
         return {
@@ -117,7 +117,7 @@ def json_object_hook(d: dict):
         tbl.stage = get_stage(d["stage"])
         tbl.cache_key = d["cache_key"]
         tbl.external_schema = d.get("external_schema")
-        tbl.db2_shared_lock_allowed = d.get("db2_shared_lock_allowed", True)
+        tbl.shared_lock_allowed = d.get("shared_lock_allowed", True)
         return tbl
     if type_ == Type.RAW_SQL:
         raw_sql = RawSql(name=d["name"])

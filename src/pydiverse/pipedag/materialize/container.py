@@ -57,7 +57,7 @@ class Table(Generic[T]):
         self._name = None
         self.stage: Stage | None = None
         self.external_schema: str | None = None
-        self.db2_shared_lock_allowed: bool = True
+        self.shared_lock_allowed: bool = True
 
         self.obj = obj
         self.name = name
@@ -92,7 +92,7 @@ class Table(Generic[T]):
                     "be set via the ExternalTableReference."
                 )
             self.name = self.obj.name
-            self.db2_shared_lock_allowed = self.obj.db2_shared_lock_allowed
+            self.shared_lock_allowed = self.obj.shared_lock_allowed
 
         # cache_key will be overridden shortly before handing over to downstream tasks
         # that use it to compute their input_hash for cache_invalidation due to input

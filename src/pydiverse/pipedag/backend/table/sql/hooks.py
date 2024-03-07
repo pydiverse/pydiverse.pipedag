@@ -63,7 +63,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                 schema=store.get_schema(tbl.stage.current_name).get()
                 if tbl.external_schema is None
                 else tbl.external_schema,
-                db2_shared_lock_allowed=tbl.db2_shared_lock_allowed,
+                shared_lock_allowed=tbl.shared_lock_allowed,
             )
             for tbl in TaskContext.get().input_tables
         ]
