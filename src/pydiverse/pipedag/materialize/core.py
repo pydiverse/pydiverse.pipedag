@@ -588,7 +588,7 @@ class MaterializationWrapper:
                     input_tables.append(x)
                 return x
 
-            deep_map(bound.arguments.values(), _input_tables_visitor)
+            deep_map(bound.arguments, _input_tables_visitor)
             task_context.input_tables = input_tables
 
             # Not found in cache / lazy -> Evaluate Function

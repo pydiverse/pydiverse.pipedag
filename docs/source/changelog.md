@@ -7,6 +7,8 @@
   * Add support for `ExternalTableReference` to point to tables in external (i.e. not managed by `pipedag`) schemas. 
   * Remove support for `ExternalTableReference` that points to table in schema of current stage. I.e. `ExternalTableReference` can only point to tables in external schemas.
 - Fix polars import in `pyproject.toml` when using OS X with rosetta2
+- Bug fix ibm_db2 backend:
+  * input tables for SQL queries were not locked
 
 ## 0.6.10 (2024-02-29)
 - Fix bug where a `Task` that was declared lazy but provided a `Table` without a query string would always be cache valid.
