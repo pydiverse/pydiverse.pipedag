@@ -163,7 +163,7 @@ class ExternalTableReferenceHook(TableHook[SQLTableStore]):
 
         if not has_table:
             raise ValueError(
-                f"Not table with name '{table.name}' found in schema "
+                f"No table with name '{table.name}' found in schema "
                 f"'{table.external_schema}' (reference by ExternalTableReference)."
             )
 
