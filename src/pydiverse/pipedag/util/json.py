@@ -117,7 +117,7 @@ def json_object_hook(d: dict):
         tbl.stage = get_stage(d["stage"])
         tbl.cache_key = d["cache_key"]
         tbl.external_schema = d.get("external_schema")
-        tbl.shared_lock_allowed = d.get("shared_lock_allowed", False)
+        tbl.shared_lock_allowed = d.get("shared_lock_allowed", True)
         return tbl
     if type_ == Type.RAW_SQL:
         raw_sql = RawSql(name=d["name"])
