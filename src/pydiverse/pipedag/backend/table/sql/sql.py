@@ -1235,6 +1235,20 @@ class SQLTableStore(BaseTableStore):
         )
 
     def resolve_alias(self, table: Table, stage_name: str) -> tuple[str, str]:
+        """
+        Convert Table objects to string table name and schema.
+
+        Take care of ExternalTableReference objects that turn into Table objects
+        with external_schema not None. For normal Table objects, the stage
+        schema name is needed. It will be prefixed/postfixed based on config.
+        Dialect specific implementations will also try to resolve table aliases
+        or synonyms since they may cause trouble with SQLAlchemy.
+
+        :param table: Table object
+        :param stage_name: Stage name component to schema (will be different
+            naming pattern for currently processed transaction stage)
+        :return: string table name and schema
+        """
         schema = (
             self.get_schema(stage_name).get()
             if table.external_schema is None

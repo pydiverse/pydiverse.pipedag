@@ -128,6 +128,9 @@ class IBMDB2TableStore(SQLTableStore):
         self.execute(query)
 
     def resolve_alias(self, table: Table, stage_name: str) -> tuple[str, str]:
+        # The base implementation already takes care of converting Table objects
+        # based on ExternalTableReference objects to string table name and schema.
+        # For normal Table objects, it needs the stage schema name.
         table_name, schema = super().resolve_alias(table, stage_name)
         return PipedagDB2Reflection.resolve_alias(self.engine, table_name, schema)
 
