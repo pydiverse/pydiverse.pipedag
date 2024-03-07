@@ -33,7 +33,8 @@ class PipedagConfig:
     """
     This class represents a :doc:`pipedag config file </reference/config>`.
 
-    :param path: Path to the config file to load.
+    :param path: Path to the config yaml file to load or a dictionary containing the
+        raw config as it would be loaded from yaml file.
 
     Attributes
     ----------
@@ -51,10 +52,16 @@ class PipedagConfig:
 
     default: PipedagConfig
 
-    def __init__(self, path: str):
-        self.path = path
-        with open(path) as f:
-            self.raw_config = yaml.safe_load(f)
+    def __init__(self, path: str | Path | dict[str, Any]):
+        self.path = None
+        if isinstance(path, dict):
+            self.raw_config = path
+        else:
+            if isinstance(path, str):
+                path = Path(path)
+            self.path = path
+            with open(path) as f:
+                self.raw_config = yaml.safe_load(f)
 
         self.config_dict = self.__parse_config(self.raw_config)
 
