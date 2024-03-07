@@ -706,6 +706,7 @@ def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler
         src_tables = [
             f"{preparer.format_schema(tbl['schema'])}.{preparer.quote(tbl['name'])}"
             for tbl in create.source_tables
+            if tbl["shared_lock_allowed"]
         ]
         lock_statements += [f"LOCK TABLE {ref} IN SHARE MODE" for ref in src_tables]
 
@@ -826,7 +827,11 @@ def visit_copy_table(copy_table: CopyTable, compiler, **kw):
         query,
         early_not_null=copy_table.early_not_null,
         source_tables=[
-            dict(name=copy_table.from_name, schema=copy_table.from_schema.get())
+            dict(
+                name=copy_table.from_name,
+                schema=copy_table.from_schema.get(),
+                shared_lock_allowed=True,
+            )
         ],
         suffix=copy_table.suffix,
     )

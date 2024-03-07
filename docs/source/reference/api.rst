@@ -96,4 +96,4 @@ Orchestration Engine
 Special Table Types
 -------------------
 
-.. autoclass:: pydiverse.pipedag.backend.table.sql.TableReference
+.. autoclass:: pydiverse.pipedag.backend.table.sql.ExternalTableReference
