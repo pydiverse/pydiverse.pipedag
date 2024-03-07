@@ -1310,7 +1310,7 @@ class ExternalTableReference:
     -------
     When using a `ExternalTableReference`, pipedag has no way of knowing the cache
     validity of the external object. Hence, the user should provide a cache function
-    for the `Task` or version the `Task`.
+    for the `Task`.
     It is now allowed to specify a `ExternalTableReference` to a table in schema of the
     current stage.
 
