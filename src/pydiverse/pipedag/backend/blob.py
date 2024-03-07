@@ -75,6 +75,43 @@ class BaseBlobStore(Disposable, ABC):
         """
 
 
+class NoBlobStore(BaseBlobStore):
+    """No blob store
+
+    The ``NoBlobStore`` can be used for pipelines where no task outputs any blob.
+    """
+
+    def init_stage(self, stage: Stage):
+        pass
+
+    def commit_stage(self, stage: Stage):
+        pass
+
+    def store_blob(self, blob: Blob):
+        raise AttributeError(
+            f"Using NoBlobStore is only allowed for pipelines where no task outputs "
+            f"any blob. See {blob.stage.name}.{blob.name} ({type(blob.obj)})"
+        )
+
+    def copy_blob_to_transaction(self, blob: Blob):
+        raise AttributeError(
+            f"Using NoBlobStore is only allowed for pipelines where no task outputs "
+            f"any blob. See {blob.stage.name}.{blob.name} ({type(blob.obj)})"
+        )
+
+    def delete_blob_from_transaction(self, blob: Blob):
+        raise AttributeError(
+            f"Using NoBlobStore is only allowed for pipelines where no task outputs "
+            f"any blob. See {blob.stage.name}.{blob.name} ({type(blob.obj)})"
+        )
+
+    def retrieve_blob(self, blob: Blob):
+        raise AttributeError(
+            f"Using NoBlobStore is only allowed for pipelines where no task outputs "
+            f"any blob. See {blob.stage.name}.{blob.name} ({type(blob.obj)})"
+        )
+
+
 class FileBlobStore(BaseBlobStore):
     """File based blob store
 

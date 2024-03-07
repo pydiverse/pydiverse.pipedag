@@ -51,7 +51,7 @@ def blob_task(x, y):
     return Blob(x), Blob(y)
 
 
-def test_simple_flow():
+def test_simple_flow(with_blob=True):
     with Flow() as flow:
         with Stage("simple_flow_stage1"):
             inp = inputs()
@@ -67,11 +67,12 @@ def test_simple_flow():
             joined = join_on_a(a2, b4)
             joined_times_2 = double_values(joined)
 
-            v = blob_task(x, x)
-            v = blob_task(v, v)
-            v = blob_task(v, v)
+            if with_blob:
+                v = blob_task(x, x)
+                v = blob_task(v, v)
+                v = blob_task(v, v)
 
-            blob_tuple = blob_task(1, 2)
+                blob_tuple = blob_task(1, 2)
 
     with StageLockContext():
         result = flow.run()  # this will use the default configuration instance=__any__
@@ -91,8 +92,9 @@ def test_simple_flow():
         assert_frame_equal(res_joined * 2, res_joined_times_2)
 
         result.get(x)
-        result.get(v)
-        assert tuple(result.get(blob_tuple)) == (1, 2)
+        if with_blob:
+            result.get(v)
+            assert tuple(result.get(blob_tuple)) == (1, 2)
 
 
 if __name__ == "__main__":

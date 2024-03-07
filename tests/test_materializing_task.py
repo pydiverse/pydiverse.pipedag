@@ -42,6 +42,7 @@ def test_get_output_from_store():
         )
 
 
+@with_instances("postgres")
 def test_call_task_outside_flow():
     # Literal Values
     assert m.one() == 1

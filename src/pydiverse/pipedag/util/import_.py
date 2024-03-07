@@ -114,7 +114,7 @@ def load_object(config_dict: dict, move_keys_into_args: Collection[str] | None =
         )
     cls = import_object(config_dict["class"])
 
-    args = config_dict.get("args", {})
+    args = config_dict.get("args", {}) or {}
     if not isinstance(args, dict):
         raise TypeError(
             f"Invalid type for args section: {type(args)}\n"

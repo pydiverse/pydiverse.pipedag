@@ -142,6 +142,7 @@ def test_change_cache_fn_table(mocker):
         child_spy.assert_called_once()
 
 
+@with_instances("postgres")
 def test_change_cache_fn_blob(mocker):
     cache_value = 0
 
@@ -241,6 +242,7 @@ def test_change_task_version_table(mocker):
     child_lazy_spy.assert_called_once()
 
 
+@with_instances("postgres")
 def test_change_task_version_blob(mocker):
     with Flow() as flow:
         with Stage("stage_1"):
@@ -425,6 +427,7 @@ def test_change_task_stage_table(mocker):
     child_spy.assert_called_once()
 
 
+@with_instances("postgres")
 def test_change_task_stage_blob(mocker):
     with Flow() as flow:
         with Stage("stage_1"):

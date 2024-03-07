@@ -22,6 +22,16 @@ table_store_connections:
       url: "duckdb:////tmp/pipedag/{instance_id}/db.duckdb"
       create_database_if_not_exists: true
 
+blob_store_connections:
+  file:
+    class: "pydiverse.pipedag.backend.blob.FileBlobStore"
+    args:
+      base_path: "/tmp/pipedag/blobs"
+
+  no_blob:
+    class: "pydiverse.pipedag.backend.blob.NoBlobStore"
+    args:
+
 instances:
   __any__:
     network_interface: "127.0.0.1"
@@ -43,9 +53,7 @@ instances:
           dtype_backend: "arrow"
 
     blob_store:
-      class: "pydiverse.pipedag.backend.blob.FileBlobStore"
-      args:
-        base_path: "/tmp/pipedag/blobs"
+      blob_store_connection: file
 
     lock_manager:
       class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
@@ -72,6 +80,8 @@ instances:
         materialization_details:
           __any__:
             unlogged: true
+    blob_store:
+      blob_store_connection: no_blob
 
   mssql:
     instance_id: pd_mssql
@@ -79,6 +89,8 @@ instances:
       table_store_connection: mssql
       args:
         disable_pytsql: true
+    blob_store:
+      blob_store_connection: no_blob
 
   mssql_pytsql:
     instance_id: pd_mssql_pytsql
@@ -87,12 +99,16 @@ instances:
       args:
         disable_pytsql: false
         pytsql_isolate_top_level_statements: true
+    blob_store:
+      blob_store_connection: no_blob
 
   ibm_db2:
     instance_id: pd_ibm_db2
     stage_commit_technique: READ_VIEWS
     table_store:
       table_store_connection: ibm_db2
+    blob_store:
+      blob_store_connection: no_blob
 
   ibm_db2_avoid_schema:
     instance_id: pd_ibm_db2_avoid_schema
@@ -101,6 +117,8 @@ instances:
       table_store_connection: ibm_db2
       args:
         avoid_drop_create_schema: true
+    blob_store:
+      blob_store_connection: no_blob
 
   ibm_db2_materialization_details:
     instance_id: pd_ibm_db2_materialization_details
@@ -125,6 +143,8 @@ instances:
             table_space_data: "S1"
             table_space_index: "S2"
             table_space_long: "S3"
+    blob_store:
+      blob_store_connection: no_blob
 
 
   duckdb:
