@@ -71,7 +71,7 @@ class ParquetTableCache(BaseTableCache):
             return False
 
         try:
-            metadata = json.loads(metadata_path.read_text())
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
             return metadata["cache_key"] == table.cache_key
         except (OSError, json.decoder.JSONDecodeError):
             return False
