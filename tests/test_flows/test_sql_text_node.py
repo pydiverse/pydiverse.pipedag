@@ -11,7 +11,7 @@ from tests.fixtures.instances import with_instances
 
 @materialize(input_type=sa.Table, lazy=True)
 def table_1(script_path: str):
-    sql = Path(script_path).read_text()
+    sql = Path(script_path).read_text(encoding="utf-8")
     return Table(sa.text(sql), name="table_1")
 
 
@@ -19,7 +19,7 @@ def table_1(script_path: str):
 def table_2(script_path: str, dependent_table: Table):
     sql = (
         Path(script_path)
-        .read_text()
+        .read_text(encoding="utf-8")
         .replace("{{dependent}}", str(dependent_table.original))
     )
     return Table(sa.text(sql), name="test_table2")
