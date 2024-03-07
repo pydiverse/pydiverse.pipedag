@@ -29,7 +29,7 @@ def tsql(
 ):
     _ = depend  # only relevant for adding additional task dependency
     script_path = script_directory / name
-    sql = Path(script_path).read_text()
+    sql = Path(script_path).read_text(encoding="utf-8")
     sql = raw_sql_bind_schema(sql, "out_", out_stage, transaction=True)
     sql = raw_sql_bind_schema(sql, "in_", in_sql)
     sql = raw_sql_bind_schema(sql, "helper_", helper_sql)

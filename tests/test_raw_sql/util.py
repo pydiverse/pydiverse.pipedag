@@ -21,7 +21,7 @@ def sql_script(
     stage = TaskContext.get().task.stage
 
     script_path = script_directory / name
-    sql = Path(script_path).read_text()
+    sql = Path(script_path).read_text(encoding="utf-8")
     sql = raw_sql_bind_schema(sql, "out_", stage, transaction=True)
     sql = raw_sql_bind_schema(sql, "in_", input_stage)
     return RawSql(sql)

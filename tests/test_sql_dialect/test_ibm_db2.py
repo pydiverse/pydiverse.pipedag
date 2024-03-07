@@ -20,7 +20,7 @@ def test_db2_nicknames():
     @materialize(input_type=sa.Table)
     def create_nicknames(table: sa.Table):
         script_path = Path(__file__).parent / "scripts" / "simple_nicknames.sql"
-        simple_nicknames = Path(script_path).read_text()
+        simple_nicknames = Path(script_path).read_text(encoding="utf-8")
         simple_nicknames = simple_nicknames.replace(
             "{{out_schema}}", str(table.original.schema)
         )
@@ -49,7 +49,7 @@ def test_db2_table_spaces(task):
     @materialize()
     def create_table_spaces():
         script_path = Path(__file__).parent / "scripts" / "simple_table_spaces.sql"
-        simple_table_spaces = Path(script_path).read_text()
+        simple_table_spaces = Path(script_path).read_text(encoding="utf-8")
         return RawSql(simple_table_spaces, "create_table_spaces", separator="|")
 
     @materialize(input_type=sa.Table, lazy=False)
