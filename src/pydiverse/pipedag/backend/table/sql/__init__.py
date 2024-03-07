@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from .sql import SQLTableStore, TableReference
+from .sql import ExternalTableReference, SQLTableStore
 
 __all__ = [
     "SQLTableStore",
-    "TableReference",
+    "ExternalTableReference",
 ]

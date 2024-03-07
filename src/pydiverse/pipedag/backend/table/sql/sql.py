@@ -99,7 +99,7 @@ class SQLTableStore(BaseTableStore):
            | ``pdt.lazy.SQLTableImpl``
 
        * - pydiverse.pipedag
-         - | :py:class:`~.TableReference`
+         - | :py:class:`~.ExternalTableReference`
          -
 
 
@@ -367,7 +367,7 @@ class SQLTableStore(BaseTableStore):
             yield conn
             conn.commit()
 
-    def get_schema(self, name):
+    def get_schema(self, name: str) -> Schema:
         return Schema(name, self.schema_prefix, self.schema_suffix)
 
     def _execute(self, query, conn: sa.engine.Connection):
@@ -882,12 +882,15 @@ class SQLTableStore(BaseTableStore):
             self.logger.exception(msg)
             raise CacheError(msg) from _e
 
-    def has_table_or_view(self, name, schema: Schema):
+    def has_table_or_view(self, name, schema: Schema | str):
+        if isinstance(schema, Schema):
+            schema = schema.get()
         inspector = sa.inspect(self.engine)
-        has_table = inspector.has_table(name, schema=schema.get())
+        has_table = inspector.has_table(name, schema=schema)
         # workaround for sqlalchemy backends that fail to find views with has_table
+        # in particular DuckDB https://github.com/duckdb/duckdb/issues/10322
         if not has_table:
-            has_table = name in inspector.get_view_names(schema=schema.get())
+            has_table = name in inspector.get_view_names(schema=schema)
         return has_table
 
     def _swap_alias_with_table_copy(self, table: Table, table_copy: Table):
@@ -1231,8 +1234,27 @@ class SQLTableStore(BaseTableStore):
             task_hash=result.task_hash,
         )
 
-    def resolve_alias(self, table: str, schema: str) -> tuple[str, str]:
-        return table, schema
+    def resolve_alias(self, table: Table, stage_name: str) -> tuple[str, str]:
+        """
+        Convert Table objects to string table name and schema.
+
+        Take care of ExternalTableReference objects that turn into Table objects
+        with external_schema not None. For normal Table objects, the stage
+        schema name is needed. It will be prefixed/postfixed based on config.
+        Dialect specific implementations will also try to resolve table aliases
+        or synonyms since they may cause trouble with SQLAlchemy.
+
+        :param table: Table object
+        :param stage_name: Stage name component to schema (will be different
+            naming pattern for currently processed transaction stage)
+        :return: string table name and schema
+        """
+        schema = (
+            self.get_schema(stage_name).get()
+            if table.external_schema is None
+            else table.external_schema
+        )
+        return table.name, schema
 
     def get_objects_in_stage(self, stage: Stage):
         schema = self.get_schema(stage.transaction_name)
@@ -1274,52 +1296,65 @@ class SQLTableStore(BaseTableStore):
         return self.get_schema(self.LOCK_SCHEMA)
 
 
-class TableReference:
+class ExternalTableReference:
     """Reference to a user-created table.
 
-    By returning a `TableReference` wrapped in a :py:class:`~.Table` from a task,
-    you can tell pipedag that you yourself created a new table inside
-    the correct schema of the table store.
-    This may be useful if you need to perform a complex load operation to create
-    a table (e.g. load a table from an Oracle database into Postgres
-    using `oracle_fdw`).
+    By returning a `ExternalTableReference` wrapped in a :py:class:`~.Table` from,
+    a task you can tell pipedag about a table, a view or DB2 nickname in an external
+    `schema`. The schema may be a multi-part identifier like "[db_name].[schema_name]"
+    if the database supports this. It is passed to SQLAlchemy as-is.
 
     Only supported by :py:class:`~.SQLTableStore`.
 
     Warning
     -------
-    Using table references is not recommended unless you know what you are doing.
-    It may lead unexpected behaviour.
-    It also requires accessing non-public parts of the pipedag API which can
-    change without notice.
+    When using a `ExternalTableReference`, pipedag has no way of knowing the cache
+    validity of the external object. Hence, the user should provide a cache function
+    for the `Task`.
+    It is now allowed to specify a `ExternalTableReference` to a table in schema of the
+    current stage.
 
     Example
     -------
-    Making sure that the table is created in the correct schema is not trivial,
-    because the schema names usually are different from the stage names.
-    To get the correct schema name, you must use undocumented and non-public
-    parts of the pipedag API. To help you get started, we'll provide you with
-    this example, however, be warned that this might break without notice::
+    You can use a `ExternalTableReference` to tell pipedag about a table that exists
+    in an external schema::
 
         @materialize(version="1.0")
         def task():
-            from pydiverse.pipedag.context import ConfigContext, TaskContext
+            return Table(ExternalTableReference("name_of_table", "schema"))
 
-            table_store = ConfigContext.get().store.table_store
-            task = TaskContext.get().task
+    By using a cache function, you can establish the cache (in-)validity of the
+    external table::
 
-            # Name of the schema in which you must create the table
-            schema_name = table_store.get_schema(task.stage.transaction_name).get()
+        from datetime import date
 
-            # Use the table store's engine to create a table in the correct schema
-            with table_store.engine.begin() as conn:
-                conn.execute(...)
+        # The external table becomes cache invalid every day at midnight
+        def my_cache_fun():
+            return date.today().strftime("%Y/%m/%d")
 
-            # Return a reference to the newly created table
-            return Table(TableReference(), "name_of_table")
+        @materialize(cache=my_cache_fun)
+        def task():
+            return Table(ExternalTableReference("name_of_table", "schema"))
     """
 
-    pass
+    def __init__(self, name: str, schema: str, shared_lock_allowed: bool = False):
+        """
+        :param name: The name of the table, view, or nickname/alias
+        :param schema: The external schema of the object. A multi-part schema
+            is allowed with '.' separator as also supported by SQLAlchemy Table
+            schema argument.
+        :param shared_lock_allowed: Whether to disable acquiring a shared lock
+            when using the object in a SQL query. If set to `False`, no lock is
+            used. This is useful when the user is not allowed to lock the table.
+            If pipedag does not lock source tables for this dialect, this argument
+            has no effect. The default is `False`.
+        """
+        self.name = name
+        self.schema = schema
+        self.shared_lock_allowed = shared_lock_allowed
+
+    def __repr__(self):
+        return f"<ExternalTableReference: {hex(id(self))}" f" (schema: {self.schema})>"
 
 
 # Load SQLTableStore Hooks

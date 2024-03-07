@@ -56,6 +56,8 @@ class Table(Generic[T]):
     ):
         self._name = None
         self.stage: Stage | None = None
+        self.external_schema: str | None = None
+        self.shared_lock_allowed: bool = True
 
         self.obj = obj
         self.name = name
@@ -78,6 +80,19 @@ class Table(Generic[T]):
                 for col in index:
                     if not isinstance(col, str):
                         raise indexes_type_error
+
+        from pydiverse.pipedag.backend.table.sql import ExternalTableReference
+
+        # ExternalTableReference can reference a table from an external schema
+        if isinstance(self.obj, ExternalTableReference):
+            self.external_schema = self.obj.schema
+            if self.name is not None:
+                raise ValueError(
+                    "When using an ExternalTableReference, the name of the Table must "
+                    "be set via the ExternalTableReference."
+                )
+            self.name = self.obj.name
+            self.shared_lock_allowed = self.obj.shared_lock_allowed
 
         # cache_key will be overridden shortly before handing over to downstream tasks
         # that use it to compute their input_hash for cache_invalidation due to input

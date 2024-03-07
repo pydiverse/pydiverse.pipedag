@@ -1,6 +1,7 @@
 # pydiverse.pipedag
 
 [![Tests](https://github.com/pydiverse/pydiverse.pipedag/actions/workflows/tests.yml/badge.svg)](https://github.com/pydiverse/pydiverse.pipedag/actions/workflows/tests.yml)
+[![Docs](https://readthedocs.org/projects/pydiversepipedag/badge/?version=latest&style=flat)](https://readthedocs.org/projects/pydiversepipedag/builds/)
 
 A pipeline orchestration library executing tasks within one python session. It takes care of SQL table
 (de)materialization, caching and cache invalidation. Blob storage is supported as well for example

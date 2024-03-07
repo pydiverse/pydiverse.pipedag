@@ -459,7 +459,9 @@ class PipeDAGStore(Disposable):
 
         def visitor(x):
             if isinstance(x, Table):
-                tables.append(x)
+                # Tables in external schemas should not get copied
+                if x.external_schema is None:
+                    tables.append(x)
             elif isinstance(x, RawSql):
                 raw_sqls.append(x)
             elif isinstance(x, Blob):

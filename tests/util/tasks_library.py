@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import pandas as pd
 import sqlalchemy as sa
-import sqlalchemy.dialects
 
 from pydiverse.pipedag import Blob, RawSql, Table, materialize
 from pydiverse.pipedag.debug import materialize_table
+
+try:
+    import polars as pl
+except ImportError:
+    pl = None
 
 
 @materialize(input_type=pd.DataFrame, version="1.0")
@@ -26,6 +30,16 @@ def noop_sql(x):
 @materialize(input_type=sa.Table, lazy=True)
 def noop_lazy(x):
     return x
+
+
+@materialize(input_type=pl.DataFrame if pl else 0)
+def noop_polars(x):
+    return Table(x)
+
+
+@materialize(input_type=pl.LazyFrame if pl else 0)
+def noop_lazy_polars(x):
+    return Table(x)
 
 
 @materialize(nout=2, version="1.0", input_type=pd.DataFrame)
