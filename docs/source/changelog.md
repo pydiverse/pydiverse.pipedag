@@ -1,7 +1,7 @@
 # Changelog
 
 
-## 0.7.0 (2024-XX-XX)
+## 0.7.0 (2024-03-08)
 - Rework `TableReference` support:
   * Rename `TableReference` to `ExternalTableReference`
   * Add support for `ExternalTableReference` to point to tables in external (i.e. not managed by `pipedag`) schemas. 
