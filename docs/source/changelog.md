@@ -6,6 +6,7 @@
   * Rename `TableReference` to `ExternalTableReference`
   * Add support for `ExternalTableReference` to point to tables in external (i.e. not managed by `pipedag`) schemas. 
   * Remove support for `ExternalTableReference` that points to table in schema of current stage. I.e. `ExternalTableReference` can only point to tables in external schemas.
+- Support code based configuration (see simplified README.md example without config file and without docker-compose)
 - Fix polars import in `pyproject.toml` when using OS X with rosetta2
 
 ## 0.6.10 (2024-02-29)
