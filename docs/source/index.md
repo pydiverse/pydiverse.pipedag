@@ -272,6 +272,7 @@ instances.
 
 quickstart
 table_backends
+database_testing
 reference/config
 reference/api
 reference/cli
