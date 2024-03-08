@@ -127,7 +127,7 @@ Afterwards you can run `pytest --ibm_db2`.
 
 ## Example
 
-A flow can look like this (see `example/run_pipeline.py`):
+A flow can look like this (see [`example/run_pipeline.py`](`example/run_pipeline.py`)):
 
 ```python
 import pandas as pd
