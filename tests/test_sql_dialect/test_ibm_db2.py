@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -58,9 +59,16 @@ def test_db2_nicknames():
         simple_nicknames = Path(script_path).read_text()
         simple_nicknames = simple_nicknames.replace("{{out_schema}}", schema.get())
         simple_nicknames = simple_nicknames.replace("{{out_table}}", table_name)
+
+        time.sleep(
+            1
+        )  # try to prevent erratic behavior in unrealisticly fast unit tests
         table_store.execute_raw_sql(
             RawSql(simple_nicknames, "create_external_nicknames", separator="|")
         )
+        time.sleep(
+            1
+        )  # try to prevent erratic behavior in unrealisticly fast unit tests
 
         return Table(
             ExternalTableReference(
