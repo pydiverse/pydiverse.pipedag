@@ -40,11 +40,29 @@ def test_db2_nicknames():
 
         return RawSql(simple_nicknames, "create_nicknames", separator="|")
 
+    with Flow("f") as f:
+        with Stage("stage"):
+            x = simple_dataframe()
+            nicknames = create_nicknames(x)
+            _ = nicknames
+
+    # We run three times to ensure that the nicknames created in the first run
+    # have to be dropped, since the same schema is reused.
+    assert f.run().successful
+    assert f.run().successful
+    assert f.run().successful
+
+
+@with_instances("ibm_db2", "ibm_db2_avoid_schema", "ibm_db2_materialization_details")
+def test_db2_table_reference_nicknames():
     @materialize(nout=2)
     def create_external_nicknames():
         table_store = ConfigContext.get().store.table_store
         schema = Schema("user_controlled_schema", prefix="", suffix="")
         table_name = "external_table_for_nickname"
+        time.sleep(
+            0.2
+        )  # try to prevent erratic behavior in unrealisticly fast unit tests
         table_store.execute(CreateSchema(schema, if_not_exists=True))
         table_store.execute(DropTable(table_name, schema, if_exists=True))
         query = sql_table_expr({"col": [0, 1, 2, 3]})
@@ -61,13 +79,13 @@ def test_db2_nicknames():
         simple_nicknames = simple_nicknames.replace("{{out_table}}", table_name)
 
         time.sleep(
-            1
+            0.2
         )  # try to prevent erratic behavior in unrealisticly fast unit tests
         table_store.execute_raw_sql(
             RawSql(simple_nicknames, "create_external_nicknames", separator="|")
         )
         time.sleep(
-            1
+            0.2
         )  # try to prevent erratic behavior in unrealisticly fast unit tests
 
         return Table(
@@ -82,9 +100,6 @@ def test_db2_nicknames():
 
     with Flow("f") as f:
         with Stage("stage"):
-            x = simple_dataframe()
-            nicknames = create_nicknames(x)
-            _ = nicknames
             nick_1_ref, nick_2_ref = create_external_nicknames()
             nick_1_ref_noop = noop_sql(nick_1_ref)
             nick_2_ref_noop = noop_sql(nick_2_ref)
