@@ -25,12 +25,14 @@ from tests.util.tasks_library import (
 )
 
 
-@with_instances("ibm_db2", "ibm_db2_avoid_schema", "ibm_db2_materialization_details")
+@with_instances("ibm_db2")
 def test_db2_nicknames():
     @materialize(input_type=sa.Table)
     def create_nicknames(table: sa.Table):
+        instance_id = ConfigContext.get().instance_id
         script_path = Path(__file__).parent / "scripts" / "simple_nicknames.sql"
         simple_nicknames = Path(script_path).read_text(encoding="utf-8")
+        simple_nicknames = simple_nicknames.replace("{{instance_id}}", instance_id)
         simple_nicknames = simple_nicknames.replace(
             "{{out_schema}}", str(table.original.schema)
         )
@@ -53,12 +55,13 @@ def test_db2_nicknames():
     assert f.run().successful
 
 
-@with_instances("ibm_db2", "ibm_db2_avoid_schema", "ibm_db2_materialization_details")
+@with_instances("ibm_db2")  # only one instance to avoid parallel DRDA WRAPPER creation
 def test_db2_table_reference_nicknames():
     @materialize(nout=2)
     def create_external_nicknames():
+        instance_id = ConfigContext.get().instance_id
         table_store = ConfigContext.get().store.table_store
-        schema = Schema("user_controlled_schema", prefix="", suffix="")
+        schema = Schema(f"user_controlled_schema_{instance_id}", prefix="", suffix="")
         table_name = "external_table_for_nickname"
         time.sleep(
             0.2
@@ -75,6 +78,7 @@ def test_db2_table_reference_nicknames():
         )
         script_path = Path(__file__).parent / "scripts" / "simple_nicknames.sql"
         simple_nicknames = Path(script_path).read_text()
+        simple_nicknames = simple_nicknames.replace("{{instance_id}}", instance_id)
         simple_nicknames = simple_nicknames.replace("{{out_schema}}", schema.get())
         simple_nicknames = simple_nicknames.replace("{{out_table}}", table_name)
 
