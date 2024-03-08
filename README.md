@@ -241,9 +241,10 @@ def main():
 
 ## Example with separate database server and configuration file (i.e. Postgres in docker container)
 
-A more realistic example can be found in [`example_postgres/run_pipeline.py`](`example_postgres/run_pipeline.py`).
+A more realistic example can be found in [`example_postgres/run_pipeline.py`](example_postgres/run_pipeline.py).
 Please note that there are `pipedag.yaml` and `docker-compose.yaml` files in the example directory.
-This is also described [here](https://pydiversepipedag.readthedocs.io/en/latest/database_testing.html).
+This is also described on 
+[pydiversepipedag.readthedocs.io](https://pydiversepipedag.readthedocs.io/en/latest/database_testing.html).
 
 You can run this example with `bash` as follows:
 

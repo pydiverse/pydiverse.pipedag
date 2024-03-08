@@ -3,6 +3,7 @@
 In practice, most data pipelines will use a relational database server that cannot be launched together with a small test
 script in a one-liner (Relational databases are still nice in the 1-100 Mio row range and do scale if you don't care 
 about concurrent read-/writes on a single table. They work beyond 1 Bio rows, but you need to be careful what you do then). 
+See [Table Backends](table_backends.md) for a list of currently supported databases.
 
 The following example shows how to launch a postgres database in a container with docker-compose and how to work with it
 using pipedag.
