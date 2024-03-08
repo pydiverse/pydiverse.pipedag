@@ -109,6 +109,9 @@ instances:
       table_store_connection: ibm_db2
     blob_store:
       blob_store_connection: no_blob
+    lock_manager:
+      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
+      args:
 
   ibm_db2_avoid_schema:
     instance_id: pd_ibm_db2_avoid_schema
@@ -119,6 +122,9 @@ instances:
         avoid_drop_create_schema: true
     blob_store:
       blob_store_connection: no_blob
+    lock_manager:
+      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
+      args:
 
   ibm_db2_materialization_details:
     instance_id: pd_ibm_db2_materialization_details
@@ -145,6 +151,9 @@ instances:
             table_space_long: "S3"
     blob_store:
       blob_store_connection: no_blob
+    lock_manager:
+      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
+      args:
 
 
   duckdb:
