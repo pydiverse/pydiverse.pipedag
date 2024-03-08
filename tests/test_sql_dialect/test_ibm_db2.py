@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import time
 from pathlib import Path
 
+import filelock
 import pandas as pd
 import pytest
 import sqlalchemy as sa
@@ -27,12 +27,12 @@ from tests.util.tasks_library import (
 
 @with_instances("ibm_db2")
 def test_db2_nicknames():
+    lock_path = Path(__file__).parent / "scripts" / "lock"
+
     @materialize(input_type=sa.Table)
     def create_nicknames(table: sa.Table):
-        instance_id = ConfigContext.get().instance_id
         script_path = Path(__file__).parent / "scripts" / "simple_nicknames.sql"
         simple_nicknames = Path(script_path).read_text(encoding="utf-8")
-        simple_nicknames = simple_nicknames.replace("{{instance_id}}", instance_id)
         simple_nicknames = simple_nicknames.replace(
             "{{out_schema}}", str(table.original.schema)
         )
@@ -48,24 +48,23 @@ def test_db2_nicknames():
             nicknames = create_nicknames(x)
             _ = nicknames
 
-    # We run three times to ensure that the nicknames created in the first run
-    # have to be dropped, since the same schema is reused.
-    assert f.run().successful
-    assert f.run().successful
-    assert f.run().successful
+    with filelock.FileLock(lock_path):
+        # We run three times to ensure that the nicknames created in the first run
+        # have to be dropped, since the same schema is reused.
+        assert f.run().successful
+        assert f.run().successful
+        assert f.run().successful
 
 
 @with_instances("ibm_db2")  # only one instance to avoid parallel DRDA WRAPPER creation
 def test_db2_table_reference_nicknames():
+    lock_path = Path(__file__).parent / "scripts" / "lock"
+
     @materialize(nout=2)
     def create_external_nicknames():
-        instance_id = ConfigContext.get().instance_id
         table_store = ConfigContext.get().store.table_store
-        schema = Schema(f"user_controlled_schema_{instance_id}", prefix="", suffix="")
+        schema = Schema("user_controlled_schema", prefix="", suffix="")
         table_name = "external_table_for_nickname"
-        time.sleep(
-            0.2
-        )  # try to prevent erratic behavior in unrealisticly fast unit tests
         table_store.execute(CreateSchema(schema, if_not_exists=True))
         table_store.execute(DropTable(table_name, schema, if_exists=True))
         query = sql_table_expr({"col": [0, 1, 2, 3]})
@@ -78,19 +77,12 @@ def test_db2_table_reference_nicknames():
         )
         script_path = Path(__file__).parent / "scripts" / "simple_nicknames.sql"
         simple_nicknames = Path(script_path).read_text()
-        simple_nicknames = simple_nicknames.replace("{{instance_id}}", instance_id)
         simple_nicknames = simple_nicknames.replace("{{out_schema}}", schema.get())
         simple_nicknames = simple_nicknames.replace("{{out_table}}", table_name)
 
-        time.sleep(
-            0.2
-        )  # try to prevent erratic behavior in unrealisticly fast unit tests
         table_store.execute_raw_sql(
             RawSql(simple_nicknames, "create_external_nicknames", separator="|")
         )
-        time.sleep(
-            0.2
-        )  # try to prevent erratic behavior in unrealisticly fast unit tests
 
         return Table(
             ExternalTableReference(
@@ -110,11 +102,12 @@ def test_db2_table_reference_nicknames():
             assert_table_equal(nick_1_ref, nick_1_ref_noop)
             assert_table_equal(nick_2_ref, nick_2_ref_noop)
 
-    # We run three times to ensure that the nicknames created in the first run
-    # have to be dropped, since the same schema is reused.
-    assert f.run().successful
-    assert f.run().successful
-    assert f.run().successful
+    with filelock.FileLock(lock_path):
+        # We run three times to ensure that the nicknames created in the first run
+        # have to be dropped, since the same schema is reused.
+        assert f.run().successful
+        assert f.run().successful
+        assert f.run().successful
 
 
 @with_instances("ibm_db2_materialization_details")

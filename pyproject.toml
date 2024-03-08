@@ -90,6 +90,8 @@ pytsql = ">=1.1.4"
 # IBM DB2
 ibm-db = { version = ">=3.1.4", markers="platform_machine == 'x86_64'" }
 ibm-db-sa = { version = ">=0.3.8", markers="platform_machine == 'x86_64'" }
+# locking
+filelock = ">=3.7.1"
 
 
 [tool.poetry.group.docs]
