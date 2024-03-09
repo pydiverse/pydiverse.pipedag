@@ -12,8 +12,9 @@ help you getting started and are curious about how it fits your needs.
 
 ## Usage
 
-pydiverse.pipedag can either be installed via pypi with `pip install pydiverse-pipedag` or via conda-forge
-with `conda install pydiverse-pipedag -c conda-forge`.
+pydiverse.pipedag can either be installed via pypi with `pip install pydiverse-pipedag duckdb` or via conda-forge
+with `conda install pydiverse-pipedag duckdb -c conda-forge`. If you don't use duckdb for testing, you can obmit 
+it here. However, it is needed to run the following example.
 
 ## Example
 
