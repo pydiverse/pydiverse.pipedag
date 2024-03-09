@@ -21,10 +21,6 @@ table_store_connections:
     args:
       url: "duckdb:////tmp/pipedag/{instance_id}/db.duckdb"
       create_database_if_not_exists: true
-    lock_manager:
-      class: "pydiverse.pipedag.backend.lock.FileLockManager"
-      args:
-        base_path: "/tmp/pipedag/locks"
 
 blob_store_connections:
   file:
@@ -154,6 +150,10 @@ instances:
     stage_commit_technique: READ_VIEWS
     table_store:
       table_store_connection: duckdb
+    lock_manager:
+      class: "pydiverse.pipedag.backend.lock.FileLockManager"
+      args:
+        base_path: "/tmp/pipedag/locks"
 
   ## Table Cache Instances
 
