@@ -27,7 +27,7 @@ import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import StageLockContext
-from pydiverse.pipedag.core.config import get_basic_pipedag_config
+from pydiverse.pipedag.core.config import create_basic_pipedag_config
 from pydiverse.pipedag.util.structlog import setup_logging
 
 
@@ -83,7 +83,7 @@ def eager_task(tbl1: pd.DataFrame, tbl2: pd.DataFrame):
 
 def main():
     with tempfile.TemporaryDirectory() as temp_dir:
-        cfg = get_basic_pipedag_config(
+        cfg = create_basic_pipedag_config(
             f"duckdb:///{temp_dir}/db.duckdb",
             disable_stage_locking=True,  # This is special for duckdb
         ).get("default")
@@ -122,7 +122,7 @@ You can also get rid of it like this:
 
 ```python
 def main():
-    cfg = get_basic_pipedag_config(
+    cfg = create_basic_pipedag_config(
         "duckdb:////tmp/pipedag/{instance_id}/db.duckdb",
         disable_stage_locking=True,  # This is special for duckdb
     ).get("default")

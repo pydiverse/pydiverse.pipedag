@@ -86,27 +86,29 @@ def main():
     with Flow("flow") as flow:
         with Stage("inputs"):
             names, ages = input_tables()
-    
+
         with Stage("features"):
             joined_table = join_tables(names, ages)
             print_dataframe(joined_table)
-    
+
     # # In case you provide a pipedag.yaml, you can run the flow as simple as:
     # flow.run()
-    
+
     # run flow with a duckdb configuration in a random temporary directory (this is easier to get started)
     import tempfile
-    from pydiverse.pipedag.core.config import get_basic_pipedag_config
+    from pydiverse.pipedag.core.config import create_basic_pipedag_config
     with tempfile.TemporaryDirectory() as temp_dir:
-        cfg = get_basic_pipedag_config(
+        cfg = create_basic_pipedag_config(
             f"duckdb:///{temp_dir}/db.duckdb",
             disable_stage_locking=True,  # This is special for duckdb
         ).get("default")
         # Execute the flow
         flow.run(config=cfg)
 
+
 if __name__ == "__main__":
     from pydiverse.pipedag.util.structlog import setup_logging
+
     setup_logging()  # you can setup the logging and/or structlog libraries as you wish
     main()
 ```

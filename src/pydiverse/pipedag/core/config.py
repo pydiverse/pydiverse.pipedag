@@ -324,7 +324,7 @@ class PipedagConfig:
         return out_config
 
 
-def get_basic_pipedag_config(
+def create_basic_pipedag_config(
     engine_url: str,
     blob_directory: str | Path | None = None,
     name: str = "pipeline",
@@ -344,7 +344,7 @@ def get_basic_pipedag_config(
 
     This is an alternative to ``pipedag.yaml`` files which are typically loaded with
     ``PipedagConfig.default`` or ``PipedagConfig("path/pipedag.yaml")``.
-    Feel free to extract ``get_basic_pipedag_config(url).raw_config``, modify it
+    Feel free to extract ``create_basic_pipedag_config(url).raw_config``, modify it
     and to create a new ``PipedagConfig(raw_config)``.
 
     For more mature projects that configure multiple pipeline instances, it is
@@ -352,7 +352,7 @@ def get_basic_pipedag_config(
 
     Example::
 
-        cfg = get_basic_pipedag_config(
+        cfg = create_basic_pipedag_config(
             "duckdb:////tmp/pipedag/{instance_id}/db.duckdb",
             disable_stage_locking=True
         ).get("default")
@@ -419,7 +419,7 @@ def get_basic_pipedag_config(
 
     if dialect not in ["mssql", "postgresql", "ibm_db_sa", "duckdb"]:
         logger = structlog.get_logger(
-            logger_name=__name__, function="get_basic_pipedag_config"
+            logger_name=__name__, function="create_basic_pipedag_config"
         )
         logger.info("")
 
