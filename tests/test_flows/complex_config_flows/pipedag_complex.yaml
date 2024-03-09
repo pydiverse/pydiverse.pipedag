@@ -57,9 +57,7 @@ technical_setups:
       blob_store_connection: file
 
     lock_manager:
-      class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
-      args:
-        hosts: "localhost:2181"
+      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
 
     orchestration:
       class: "pydiverse.pipedag.engine.SequentialEngine"
@@ -119,6 +117,27 @@ instances:
     # Full dataset is using default database connection and schemas
     table_store:
       table_store_connection: mssql
+
+  ## Test different lock managers on real flows
+
+  lock_zookeeper:
+    instance_id: pd_zookeeper
+    table_store:
+      table_store_connection: postgres
+    lock_manager:
+      class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
+      args:
+        hosts: "localhost:2181"
+
+  lock_file:
+    instance_id: pd_filelock
+    table_store:
+      table_store_connection: postgres
+    lock_manager:
+      class: "pydiverse.pipedag.backend.lock.FileLockManager"
+      args:
+        base_path: "/tmp/pipedag/locks"
+
 
 flows:
 #  __any__:
