@@ -151,9 +151,9 @@ instances:
     table_store:
       table_store_connection: duckdb
     lock_manager:
-      class: "pydiverse.pipedag.backend.lock.FileLockManager"
+      class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
       args:
-        base_path: "/tmp/pipedag/locks"
+        hosts: "localhost:2181"
 
   ## Table Cache Instances
 
