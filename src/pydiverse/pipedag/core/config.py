@@ -356,10 +356,11 @@ def create_basic_pipedag_config(
             "duckdb:////tmp/pipedag/{instance_id}/db.duckdb",
             disable_stage_locking=True
         ).get("default")
-        with Flow() as flow:
-            with Stage("step00"):
-                x = some_task()
-        flow.run(cfg)
+        with cfg:
+            with Flow() as flow:
+                with Stage("step00"):
+                    x = some_task()
+            flow.run()
 
     Examples for engine_urls::
 

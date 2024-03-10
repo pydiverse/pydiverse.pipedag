@@ -12,9 +12,9 @@ help you getting started and are curious about how it fits your needs.
 
 ## Usage
 
-pydiverse.pipedag can either be installed via pypi with `pip install pydiverse-pipedag duckdb` or via conda-forge
-with `conda install pydiverse-pipedag duckdb -c conda-forge`. If you don't use duckdb for testing, you can obmit 
-it here. However, it is needed to run the following example.
+pydiverse.pipedag can either be installed via pypi with `pip install pydiverse-pipedag duckdb duckdb-engine` or via 
+conda-forge with `conda install pydiverse-pipedag duckdb duckdb-engine -c conda-forge`. If you don't use duckdb for 
+testing, you can obmit it here. However, it is needed to run the following example.
 
 ## Example
 
@@ -88,29 +88,30 @@ def main():
             f"duckdb:///{temp_dir}/db.duckdb",
             disable_stage_locking=True,  # This is special for duckdb
         ).get("default")
-        with Flow() as f:
-            with Stage("stage_1"):
-                lazy_1 = lazy_task_1()
-                a, b = eager_inputs()
-
-            with Stage("stage_2"):
-                lazy_2 = lazy_task_2(lazy_1, b)
-                lazy_3 = lazy_task_3(lazy_2)
-                eager = eager_task(lazy_1, b)
-
-            with Stage("stage_3"):
-                lazy_4 = lazy_task_4(lazy_2)
-            _ = lazy_3, lazy_4, eager  # unused terminal output tables
-
-        # Run flow
-        result = f.run(config=cfg)
-        assert result.successful
-
-        # Run in a different way for testing
-        with StageLockContext():
+        with cfg:
+            with Flow() as f:
+                with Stage("stage_1"):
+                    lazy_1 = lazy_task_1()
+                    a, b = eager_inputs()
+    
+                with Stage("stage_2"):
+                    lazy_2 = lazy_task_2(lazy_1, b)
+                    lazy_3 = lazy_task_3(lazy_2)
+                    eager = eager_task(lazy_1, b)
+    
+                with Stage("stage_3"):
+                    lazy_4 = lazy_task_4(lazy_2)
+                _ = lazy_3, lazy_4, eager  # unused terminal output tables
+    
+            # Run flow
             result = f.run()
             assert result.successful
-            assert result.get(lazy_1, as_type=pd.DataFrame)["x"][0] == 1
+    
+            # Run in a different way for testing
+            with StageLockContext():
+                result = f.run()
+                assert result.successful
+                assert result.get(lazy_1, as_type=pd.DataFrame)["x"][0] == 1
 
 
 if __name__ == "__main__":
