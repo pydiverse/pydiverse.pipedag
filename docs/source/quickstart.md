@@ -4,14 +4,14 @@
 
 pydiverse.pipedag is distributed on [PyPi](https://pypi.org/project/pydiverse-pipedag/)
 and [Conda-Forge](https://anaconda.org/conda-forge/pydiverse-pipedag).
-To use it, just install it with pip or conda:
+To use it, just install it with pip or conda. We recommend also installing duckdb since it is used in example code:
 
 ```shell
-pip install pydiverse-pipedag
+pip install pydiverse-pipedag duckdb
 ```
 
 ```shell
-conda install pydiverse-pipedag
+conda install pydiverse-pipedag duckdb
 ```
 
 ## What is a Flow, a Task, and a Stage?
@@ -81,57 +81,36 @@ def print_dataframe(df):
     print(df)
 
 
-# Define how the different tasks should be wired
-with Flow("flow") as flow:
-    with Stage("inputs"):
-        names, ages = input_tables()
+def main():
+    # Define how the different tasks should be wired
+    with Flow("flow") as flow:
+        with Stage("inputs"):
+            names, ages = input_tables()
 
-    with Stage("features"):
-        joined_table = join_tables(names, ages)
-        print_dataframe(joined_table)
+        with Stage("features"):
+            joined_table = join_tables(names, ages)
+            print_dataframe(joined_table)
 
-# Execute the flow
-flow.run()
-```
+    # # In case you provide a pipedag.yaml, you can run the flow as simple as:
+    # flow.run()
 
-Next, we need to tell how exactly this flow should get executed.
-This is done using the [](/reference/config).
-Create a new file called `pipedag.yaml` in the same folder as the python file and put the following text into it:
+    # run flow with a duckdb configuration in a random temporary directory (this is easier to get started)
+    import tempfile
+    from pydiverse.pipedag.core.config import create_basic_pipedag_config
+    with tempfile.TemporaryDirectory() as temp_dir:
+        cfg = create_basic_pipedag_config(
+            f"duckdb:///{temp_dir}/db.duckdb",
+            disable_stage_locking=True,  # This is special for duckdb
+        ).get("default")
+        # Execute the flow
+        flow.run(config=cfg)
 
-```yaml
-instances:
-  __any__:
-    instance_id: quickstart
-    auto_table:
-      - pandas.DataFrame
-      - sqlalchemy.sql.expression.TextClause
-      - sqlalchemy.sql.expression.Selectable
 
-    table_store:
-      class: "pydiverse.pipedag.backend.table.SQLTableStore"
-      args:
-        url: "postgresql://user:password@127.0.0.1:5432/{instance_id}"
-        create_database_if_not_exists: true
+if __name__ == "__main__":
+    from pydiverse.pipedag.util.structlog import setup_logging
 
-    blob_store:
-      class: "pydiverse.pipedag.backend.blob.FileBlobStore"
-      args:
-        base_path: "/tmp/pipedag/blobs"
-
-    lock_manager:
-      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
-
-    orchestration:
-      class: "pydiverse.pipedag.engine.SequentialEngine"
-```
-
-Now you're almost ready to run the flow.
-The only thing that's left to do is to start a database.
-In this example we use a local postgres database.
-You can spin one up on your computer using docker with the following command:
-
-```shell
-docker run --rm --name pipedag-quickstart -p 5432:5432 -e POSTGRES_PASSWORD=password -e POSTGRES_USER=user postgres
+    setup_logging()  # you can setup the logging and/or structlog libraries as you wish
+    main()
 ```
 
 If you now run the flow by running `python quickstart.py`, you should see a bunch of logging output.
@@ -146,6 +125,8 @@ Somewhere within all the log lines you should see the following lines getting pr
 ```
 
 This means that everything went as expected.
+
+If you like to connect to a running database, you can find another way of configuring pipedag [here](database_testing.md).
 
 ### What is going on here?
 

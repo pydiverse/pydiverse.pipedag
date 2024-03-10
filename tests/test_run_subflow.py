@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pydiverse.pipedag import Flow, Stage
+from tests.fixtures.instances import with_instances
 from tests.util import tasks_library as m
 from tests.util.spy import spy_task
 
@@ -183,6 +184,7 @@ def test_run_specific_stage_ambiguous_input(mocker):
     s2_spy.assert_called_once()
 
 
+@with_instances("postgres")
 def test_run_specific_task_with_table_blob():
     with Flow() as f:
         with Stage("subflow_t1"):
@@ -208,6 +210,7 @@ def test_run_specific_task_with_table_blob():
     f.run(z2)
 
 
+@with_instances("postgres")
 def test_run_specific_stage_with_table_blob():
     with Flow() as f:
         with Stage("subflow_t1") as s1:

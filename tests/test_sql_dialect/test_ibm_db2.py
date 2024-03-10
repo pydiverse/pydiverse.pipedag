@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import filelock
 import pandas as pd
 import pytest
 import sqlalchemy as sa
@@ -24,8 +25,10 @@ from tests.util.tasks_library import (
 )
 
 
-@with_instances("ibm_db2", "ibm_db2_avoid_schema", "ibm_db2_materialization_details")
+@with_instances("ibm_db2")
 def test_db2_nicknames():
+    lock_path = Path(__file__).parent / "scripts" / "lock"
+
     @materialize(input_type=sa.Table)
     def create_nicknames(table: sa.Table):
         script_path = Path(__file__).parent / "scripts" / "simple_nicknames.sql"
@@ -38,6 +41,24 @@ def test_db2_nicknames():
         )
 
         return RawSql(simple_nicknames, "create_nicknames", separator="|")
+
+    with Flow("f") as f:
+        with Stage("stage"):
+            x = simple_dataframe()
+            nicknames = create_nicknames(x)
+            _ = nicknames
+
+    with filelock.FileLock(lock_path):
+        # We run three times to ensure that the nicknames created in the first run
+        # have to be dropped, since the same schema is reused.
+        assert f.run().successful
+        assert f.run().successful
+        assert f.run().successful
+
+
+@with_instances("ibm_db2")  # only one instance to avoid parallel DRDA WRAPPER creation
+def test_db2_table_reference_nicknames():
+    lock_path = Path(__file__).parent / "scripts" / "lock"
 
     @materialize(nout=2)
     def create_external_nicknames():
@@ -58,6 +79,7 @@ def test_db2_nicknames():
         simple_nicknames = Path(script_path).read_text()
         simple_nicknames = simple_nicknames.replace("{{out_schema}}", schema.get())
         simple_nicknames = simple_nicknames.replace("{{out_table}}", table_name)
+
         table_store.execute_raw_sql(
             RawSql(simple_nicknames, "create_external_nicknames", separator="|")
         )
@@ -74,20 +96,18 @@ def test_db2_nicknames():
 
     with Flow("f") as f:
         with Stage("stage"):
-            x = simple_dataframe()
-            nicknames = create_nicknames(x)
-            _ = nicknames
             nick_1_ref, nick_2_ref = create_external_nicknames()
             nick_1_ref_noop = noop_sql(nick_1_ref)
             nick_2_ref_noop = noop_sql(nick_2_ref)
             assert_table_equal(nick_1_ref, nick_1_ref_noop)
             assert_table_equal(nick_2_ref, nick_2_ref_noop)
 
-    # We run three times to ensure that the nicknames created in the first run
-    # have to be dropped, since the same schema is reused.
-    assert f.run().successful
-    assert f.run().successful
-    assert f.run().successful
+    with filelock.FileLock(lock_path):
+        # We run three times to ensure that the nicknames created in the first run
+        # have to be dropped, since the same schema is reused.
+        assert f.run().successful
+        assert f.run().successful
+        assert f.run().successful
 
 
 @with_instances("ibm_db2_materialization_details")

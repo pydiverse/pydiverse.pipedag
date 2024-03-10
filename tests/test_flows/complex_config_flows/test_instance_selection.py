@@ -138,7 +138,7 @@ def test_instance_selection(cfg_file_path):
 
     with StageLockContext():
         result = flow.run(config=cfg)
-        _check_result(result, out1, out2)
+        check_result(result, out1, out2)
 
     cfg = pipedag_config.get(instance="midi")
 
@@ -146,7 +146,7 @@ def test_instance_selection(cfg_file_path):
 
     with StageLockContext():
         result = flow.run(config=cfg)
-        _check_result(result, out1, out2, head=2)
+        check_result(result, out1, out2, head=2)
 
     cfg = pipedag_config.get(instance="mini")
 
@@ -154,10 +154,10 @@ def test_instance_selection(cfg_file_path):
 
     with StageLockContext():
         result = flow.run(config=cfg)
-        _check_result(result, out1, out2, head=1)
+        check_result(result, out1, out2, head=1)
 
 
-def _check_result(result, out1, out2, *, head=999):
+def check_result(result, out1, out2, *, head=999):
     assert result.successful
     v_out1, v_out2 = result.get(out1), result.get(out2)
     pd.testing.assert_frame_equal(dfA_source.head(head) * 2, v_out1, check_dtype=False)

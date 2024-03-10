@@ -13,7 +13,7 @@ from collections.abc import Iterable, Mapping
 def deep_merge(x, y, check_enum=False):
     if type(x) != type(y):
         raise TypeError(
-            f"deep_merge failed doe to type mismatch '{x}' (type: {type(x)}) vs. '{y}'"
+            f"deep_merge failed due to type mismatch '{x}' (type: {type(x)}) vs. '{y}'"
             f" (type: {type(y)})"
         )
 
@@ -39,6 +39,11 @@ def _deep_merge_dict(x: Mapping, y: Mapping):
     z = dict(x)
     for key in x:
         if key in y:
-            z[key] = deep_merge(x[key], y[key])
+            if y[key] is None:
+                # this is a special case but we have no other way in yaml to express
+                # the deletion of fields from a dictionary in an override config
+                del z[key]
+            else:
+                z[key] = deep_merge(x[key], y[key])
     z.update({key: value for key, value in y.items() if key not in z})
     return z

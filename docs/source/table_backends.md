@@ -30,8 +30,11 @@ The SQLTableStore currently supports the following SQL databases/dialects:
 - Microsoft SQL Server/TSQL
 - IBM DB2 (LUW)
 - DuckDB (rather used for testing so far)
+- Every dialect unknown to pipedag will be treated like a postgres database (issues are likely)
 
-It supports the following `input_type` arguments to the {py:func}`@materialize <pydiverse.pipedag.materialize>`
+See [Database Testing](database_testing.md) for an example how to spin up a database for testing.
+
+SQLTableStore supports the following `input_type` arguments to the {py:func}`@materialize <pydiverse.pipedag.materialize>`
 decorator out-of-the-box:
 
 - `sqlalchemy.Table` (see [https://www.sqlalchemy.org/](https://www.sqlalchemy.org/); recommended with `lazy=True`;

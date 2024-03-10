@@ -9,6 +9,7 @@ from typing import Any
 import pandas as pd
 import sqlalchemy as sa
 import sqlalchemy.exc
+import structlog
 from packaging.version import Version
 
 from pydiverse.pipedag import ConfigContext
@@ -493,7 +494,18 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         query = cls._read_db_query(store, table, stage_name)
         query = cls._compile_query(store, query)
         connection_uri = store.engine_url.render_as_string(hide_password=False)
-        return cls._execute_query(query, connection_uri)
+        try:
+            return cls._execute_query(query, connection_uri)
+        except RuntimeError as e:
+            logger = structlog.get_logger(logger_name=cls.__name__)
+            logger.error(
+                "Fallback via Pandas since Polars failed to execute query on "
+                "database %s: %s",
+                store.engine_url.render_as_string(hide_password=True),
+                e,
+            )
+            pd_df = pd.read_sql(query, con=store.engine)
+            return polars.from_pandas(pd_df)
 
     @classmethod
     def auto_table(cls, obj: polars.DataFrame):
@@ -515,8 +527,21 @@ class PolarsTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def _execute_query(cls, query: str, connection_uri: str):
-        df = polars.read_database(query, connection_uri)
-        return df
+        try:
+            df = polars.read_database(query, connection_uri)
+            return df
+        except RuntimeError as e:
+            logger = structlog.get_logger(logger_name=cls.__name__)
+            engine = sa.create_engine(connection_uri)
+            logger.error(
+                "Fallback via Pandas since Polars failed to execute query on "
+                "database %s: %s",
+                engine.url.render_as_string(hide_password=True),
+                e,
+            )
+            pd_df = pd.read_sql(query, con=engine)
+            engine.dispose()
+            return polars.from_pandas(pd_df)
 
 
 @SQLTableStore.register_table(polars)

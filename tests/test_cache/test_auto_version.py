@@ -31,6 +31,7 @@ def test_missing_input_type_auto_version():
             ...
 
 
+@with_instances("postgres")
 def test_auto_version_illegal_return_types():
     @materialize(input_type=pd.DataFrame, version=AUTO_VERSION)
     def blob():

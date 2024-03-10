@@ -114,6 +114,7 @@ def test_debug_materialize_table_twice():
         assert f.run().successful
 
 
+@with_instances("postgres")
 def test_materialize_blob():
     with Flow("flow") as f:
         with Stage("stage_0"):

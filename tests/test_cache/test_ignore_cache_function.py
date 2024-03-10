@@ -206,6 +206,7 @@ def test_lazy_table(mocker):
             cache_spy.assert_not_called()
 
 
+@with_instances("postgres")
 def test_blob(mocker):
     cache_value = 0
 

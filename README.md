@@ -127,14 +127,18 @@ Afterwards you can run `pytest --ibm_db2`.
 
 ## Example
 
-A flow can look like this (see `example/run_pipeline.py`):
+A flow can look like this (see [`example/run_pipeline.py`](`example/run_pipeline.py`)):
 
 ```python
+import tempfile
+
 import pandas as pd
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import StageLockContext
+from pydiverse.pipedag.core.config import create_basic_pipedag_config
+from pydiverse.pipedag.util.structlog import setup_logging
 
 
 @materialize(lazy=True)
@@ -188,102 +192,71 @@ def eager_task(tbl1: pd.DataFrame, tbl2: pd.DataFrame):
 
 
 def main():
-    with Flow() as f:
-        with Stage("stage_1"):
-            lazy_1 = lazy_task_1()
-            a, b = eager_inputs()
+    with tempfile.TemporaryDirectory() as temp_dir:
+        cfg = create_basic_pipedag_config(
+            f"duckdb:///{temp_dir}/db.duckdb",
+            disable_stage_locking=True,  # This is special for duckdb
+        ).get("default")
+        with Flow() as f:
+            with Stage("stage_1"):
+                lazy_1 = lazy_task_1()
+                a, b = eager_inputs()
 
-        with Stage("stage_2"):
-            lazy_2 = lazy_task_2(lazy_1, b)
-            lazy_3 = lazy_task_3(lazy_2)
-            eager = eager_task(lazy_1, b)
+            with Stage("stage_2"):
+                lazy_2 = lazy_task_2(lazy_1, b)
+                lazy_3 = lazy_task_3(lazy_2)
+                eager = eager_task(lazy_1, b)
 
-        with Stage("stage_3"):
-            lazy_4 = lazy_task_4(lazy_2)
-        _ = lazy_3, lazy_4, eager  # unused terminal output tables
+            with Stage("stage_3"):
+                lazy_4 = lazy_task_4(lazy_2)
+            _ = lazy_3, lazy_4, eager  # unused terminal output tables
 
-    # Run flow
-    result = f.run()
-    assert result.successful
-
-    # Run in a different way for testing
-    with StageLockContext():
-        result = f.run()
+        # Run flow
+        result = f.run(config=cfg)
         assert result.successful
-        assert result.get(lazy_1, as_type=pd.DataFrame)["x"][0] == 1
+
+        # Run in a different way for testing
+        with StageLockContext():
+            result = f.run()
+            assert result.successful
+            assert result.get(lazy_1, as_type=pd.DataFrame)["x"][0] == 1
 
 
 if __name__ == "__main__":
+    setup_logging()  # you can setup the logging and/or structlog libraries as you wish
     main()
 ```
 
-You also need a file called `pipedag.yaml` in the same directory (see `example/pipedag.yaml`):
+The `with tempfile.TemporaryDirectory()` is only needed to have an OS independent temporary directory available.
+You can also get rid of it like this:
 
-```yaml
-instances:
-  __any__:
-    network_interface: "127.0.0.1"
-    auto_table:
-      - "pandas.DataFrame"
-      - "sqlalchemy.sql.expression.TextClause"
-      - "sqlalchemy.sql.expression.Selectable"
-
-    fail_fast: true
-    instance_id: pipedag_default
-    table_store:
-      class: "pydiverse.pipedag.backend.table.SQLTableStore"
-      args:
-        url: "postgresql://sa:Pydiverse23@127.0.0.1:6543/{instance_id}"
-        create_database_if_not_exists: True
-
-        print_materialize: true
-        print_sql: true
-
-      local_table_cache:
-        store_input: true
-        store_output: true
-        use_stored_input_as_cache: true
-        class: "pydiverse.pipedag.backend.table.cache.ParquetTableCache"
-        args:
-          base_path: "/tmp/pipedag/table_cache"
-
-    blob_store:
-      class: "pydiverse.pipedag.backend.blob.FileBlobStore"
-      args:
-        base_path: "/tmp/pipedag/blobs"
-
-    lock_manager:
-      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
-
-    orchestration:
-      class: "pydiverse.pipedag.engine.SequentialEngine"
+```python
+def main():
+    cfg = create_basic_pipedag_config(
+        "duckdb:////tmp/pipedag/{instance_id}/db.duckdb",
+        disable_stage_locking=True,  # This is special for duckdb
+    ).get("default")
+    ...
 ```
 
-If you don't have a postgres database at hand, you can start a postgres database, you can use a file like `example/docker-compose.yaml`:
+## Example with separate database server and configuration file (i.e. Postgres in docker container)
 
-```yaml
-version: "3.9"
-services:
-  postgres:
-    image: postgres
-    environment:
-      POSTGRES_USER: sa
-      POSTGRES_PASSWORD: Pydiverse23
-    ports:
-      - "6543:5432"
-```
+A more realistic example can be found in [`example_postgres/run_pipeline.py`](example_postgres/run_pipeline.py).
+Please note that there are `pipedag.yaml` and `docker-compose.yaml` files in the example directory.
+This is also described on 
+[pydiversepipedag.readthedocs.io](https://pydiversepipedag.readthedocs.io/en/latest/database_testing.html).
 
-You can run the example with `bash` as follows:
+You can run this example with `bash` as follows:
 
 ```bash
-cd example
+cd example_postgres
 docker-compose up
 ```
 
 and in another terminal
 
 ```bash
-cd example
+cd example_postgres
 poetry run python run_pipeline.py
 ```
 
@@ -356,7 +329,7 @@ Finally, they are published via:
 - `git push --tags`
 - `poetry publish`
 
-## Publishing package on conda-forge
+## Publishing package on conda-forge manually
 
 Conda-forge packages are updated via:
 

@@ -1,11 +1,13 @@
 # Changelog
 
 
-## 0.7.0 (2024-XX-XX)
+## 0.7.0 (2024-03-10)
 - Rework `TableReference` support:
   * Rename `TableReference` to `ExternalTableReference`
   * Add support for `ExternalTableReference` to point to tables in external (i.e. not managed by `pipedag`) schemas. 
   * Remove support for `ExternalTableReference` that points to table in schema of current stage. I.e. `ExternalTableReference` can only point to tables in external schemas.
+- Support code based configuration (see create_basic_pipedag_config() in README.md example without config file and without docker-compose)
+- Added NoBlobStore in case you don't want to provide a directory that is created or needs to exist
 - Fix polars import in `pyproject.toml` when using OS X with rosetta2
 - Bug fix ibm_db2 backend:
   * input tables for SQL queries were not locked

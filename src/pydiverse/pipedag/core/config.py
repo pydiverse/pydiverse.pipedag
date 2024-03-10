@@ -9,6 +9,8 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import sqlalchemy as sa
+import structlog
 import yaml
 from box import Box
 
@@ -33,7 +35,8 @@ class PipedagConfig:
     """
     This class represents a :doc:`pipedag config file </reference/config>`.
 
-    :param path: Path to the config file to load.
+    :param path: Path to the config yaml file to load or a dictionary containing the
+        raw config as it would be loaded from yaml file.
 
     Attributes
     ----------
@@ -51,10 +54,16 @@ class PipedagConfig:
 
     default: PipedagConfig
 
-    def __init__(self, path: str):
-        self.path = path
-        with open(path) as f:
-            self.raw_config = yaml.safe_load(f)
+    def __init__(self, path: str | Path | dict[str, Any]):
+        self.path = None
+        if isinstance(path, dict):
+            self.raw_config = path
+        else:
+            if isinstance(path, str):
+                path = Path(path)
+            self.path = path
+            with open(path) as f:
+                self.raw_config = yaml.safe_load(f)
 
         self.config_dict = self.__parse_config(self.raw_config)
 
@@ -315,6 +324,161 @@ class PipedagConfig:
         return out_config
 
 
+def create_basic_pipedag_config(
+    engine_url: str,
+    blob_directory: str | Path | None = None,
+    name: str = "pipeline",
+    instance_id: str = "pipeline",
+    network_interface="127.0.0.1",
+    auto_table=(
+        "pandas.DataFrame",
+        "sqlalchemy.sql.expression.TextClause",
+        "sqlalchemy.sql.expression.Selectable",
+    ),
+    fail_fast=True,
+    disable_stage_locking=False,
+    file_locking_directory: str | Path | None = None,
+) -> PipedagConfig:
+    """
+    Get code-based pipedag config as easy as providing a SQLAlchemy URL.
+
+    This is an alternative to ``pipedag.yaml`` files which are typically loaded with
+    ``PipedagConfig.default`` or ``PipedagConfig("path/pipedag.yaml")``.
+    Feel free to extract ``create_basic_pipedag_config(url).raw_config``, modify it
+    and to create a new ``PipedagConfig(raw_config)``.
+
+    For more mature projects that configure multiple pipeline instances, it is
+    recommended to stay with ``pipedag.yaml`` files though.
+
+    Example::
+
+        cfg = create_basic_pipedag_config(
+            "duckdb:////tmp/pipedag/{instance_id}/db.duckdb",
+            disable_stage_locking=True
+        ).get("default")
+        with Flow() as flow:
+            with Stage("step00"):
+                x = some_task()
+        flow.run(cfg)
+
+    Examples for engine_urls::
+
+      "postgresql://{$DB_USER}:{$DB_PASSWORD}@{$DB_HOST}:{$DB_PORT}/{instance_id}"
+      "postgresql://sa:Pydiverse23@127.0.0.1:6543/{instance_id}"
+      "mssql+pyodbc://sa:PydiQuant27@127.0.0.1:1433/{instance_id}?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
+      "db2+ibm_db://db2inst1:password@localhost:50000/testdb"
+      "duckdb:////tmp/pipedag/{instance_id}/db.duckdb"
+
+    :param engine_url:
+        SQLAlchemy engine url. It may include references to ENVIRONMENT VARIABLES
+        like ``{$DB_PASSWORD}``. Furthermore, ``{name}`` is replaced with pipeline
+        name and ``{instance_id}`` is replaced with the instance_id (see below).
+    :param blob_directory:
+        Default None;
+        Directory where blobs are stored. In case of None, no task in the pipeline
+        is allowed to return a ``Blob()`` object.
+    :param name: pipeline name
+    :param instance_id: ``instance_id`` used as placeholder in parameters ``engine_url``
+        and ``blob_directory``. It is more relevant for non-basic configuration with
+        multiple pipeline instances.
+    :param network_interface:
+        Used for shared state communication while executing flow. It is possible
+        to perform multi-node parallel execution with the DaskEngine. You probably
+        don't need to worry and just leave it at ``127.0.0.1`` for localhost
+    :param auto_table:
+        You might be just happy with the default to convert pandas DataFrames
+        and SQLAlchemy clauses to Tables when returning them in tasks. If you use
+        pipedag.Table() objects for manually choosing table names, this is not
+        relevant.
+    :param fail_fast:
+        Default True;
+        Aborts execution of pipeline on first error. This is often easier to
+        read stacktraces. If you want to see all errors a more complex DAG, please
+        set to False.
+    :param disable_stage_locking:
+        Default False;
+        When True, choose NoLockManager as opposed to DatabaseLockManager. In this
+        case, two parallel runs of the pipeline can easily corrupt schema swapping.
+        Unfortunately, we don't support database locking for duckdb engine_urls.
+        So you must either use ``disable_stage_locking=True`` or set
+        ``file_locking_directory``.
+    :param file_locking_directory:
+        Default None;
+        If string or Path is provided, chose file based locking in the given directory.
+        We use database locking by default (``file_locking_directory=None`` and
+        ``disable_stage_locking=False``).
+        However, we only support this for MSSQL, Postgres, and DB2 dialects so far.
+    :return:
+        PipedagConfig object
+    """
+
+    # test engine:
+    engine = sa.create_engine(engine_url)
+    dialect = engine.dialect.name
+    engine.dispose()
+
+    if dialect not in ["mssql", "postgresql", "ibm_db_sa", "duckdb"]:
+        logger = structlog.get_logger(
+            logger_name=__name__, function="create_basic_pipedag_config"
+        )
+        logger.info("")
+
+    if (
+        dialect not in ["mssql", "postgresql", "ibm_db_sa"]
+        and not disable_stage_locking
+        and file_locking_directory is None
+    ):
+        raise AttributeError(
+            f"We don't support Database Locking for database dialect {dialect}. "
+            "Please consider setting disable_stage_locking=True (i.e. for local DuckDB)"
+            " or file_locking_directory for team shared database."
+        )
+
+    if dialect in ["duckdb", "ibm_db_sa"]:
+        stage_commit_technique = "read_views"
+    else:
+        stage_commit_technique = "schema_swap"
+    table_store = {
+        "class": "pydiverse.pipedag.backend.table.SQLTableStore",
+        "args": dict(url=engine_url, print_materialize=True, print_sql=True),
+    }
+    if blob_directory is None:
+        blob_store = {"class": "pydiverse.pipedag.backend.blob.NoBlobStore"}
+    else:
+        blob_store = {
+            "class": "pydiverse.pipedag.backend.blob.FileBlobStore",
+            "args": dict(base_path=str(blob_directory)),
+        }
+    if disable_stage_locking:
+        lock_manager = {"class": "pydiverse.pipedag.backend.lock.NoLockManager"}
+    elif file_locking_directory is not None:
+        lock_manager = {
+            "class": "pydiverse.pipedag.backend.lock.FileLockManager",
+            "args": dict(base_path=str(file_locking_directory)),
+        }
+    else:
+        lock_manager = {"class": "pydiverse.pipedag.backend.lock.DatabaseLockManager"}
+    orchestration = {"class": "pydiverse.pipedag.engine.SequentialEngine"}
+    raw_config = dict(
+        name=name,
+        strict_instance_lookup=False,
+        instances=dict(
+            __any__=dict(
+                network_interface=network_interface,
+                auto_table=list(auto_table),
+                fail_fast=fail_fast,
+                instance_id=instance_id,
+                stage_commit_technique=stage_commit_technique,
+                table_store=table_store,
+                blob_store=blob_store,
+                lock_manager=lock_manager,
+                orchestration=orchestration,
+            )
+        ),
+    )
+    return PipedagConfig(raw_config)
+
+
 def find_config(
     name: str = "pipedag",
     search_paths: Iterable[str | Path] = None,
@@ -371,8 +535,8 @@ def find_config(
 
 def expand_environment_variables(string: str) -> str:
     """
-    Expands all occurrences of the form `{$ENV_VAR}` with the environment variable
-    named `ENV_VAR`.
+    Expands all occurrences of the form ``{$ENV_VAR}`` with the environment variable
+    named ``ENV_VAR``.
     """
 
     def env_var_sub(match: re.Match):
@@ -392,7 +556,7 @@ def expand_variables(
 ) -> str:
     """
     Expands all occurrences of the form {var_name} with the variable
-    named `var_name`.
+    named ``var_name``.
     """
 
     def var_sub(match: re.Match):
