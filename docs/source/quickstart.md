@@ -7,11 +7,11 @@ and [Conda-Forge](https://anaconda.org/conda-forge/pydiverse-pipedag).
 To use it, just install it with pip or conda. We recommend also installing duckdb since it is used in example code:
 
 ```shell
-pip install pydiverse-pipedag duckdb
+pip install pydiverse-pipedag duckdb duckdb-engine
 ```
 
 ```shell
-conda install pydiverse-pipedag duckdb
+conda install pydiverse-pipedag duckdb duckdb-engine
 ```
 
 ## What is a Flow, a Task, and a Stage?
