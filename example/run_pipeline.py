@@ -83,7 +83,7 @@ def main():
                 _ = lazy_3, lazy_4, eager  # unused terminal output tables
 
             # Run flow
-            result = f.run(config=cfg)
+            result = f.run()
             assert result.successful
 
             # Run in a different way for testing
