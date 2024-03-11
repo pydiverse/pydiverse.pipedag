@@ -12,7 +12,7 @@ from tests.fixtures.instances import with_instances
 """
 Attention:
 Wrapping Raw SQL statements should always be just the first step of pipedag adoption.
-Ideally the next step is to extract individual transformations (SELECT statements) so
+Ideally, the next step is to extract individual transformations (SELECT statements) so
 they can be gradually converted from text SQL to programmatically created SQL (python).
 """
 

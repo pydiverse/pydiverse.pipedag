@@ -148,13 +148,14 @@ also just be recorded and lazily evaluated with consuming tasks.
 Please note the `input_type` parameter of the {py:func}`@materialize <pydiverse.pipedag.materialize>` decorator. It is 
 used to specify the type in which the task likes to process tabular inputs. Pipedag takes care of reading the table from
 the configured table store and to present it to the task in the requested form. The typical table store is a SQL 
-database. Any tabular outputs of the task are written to the table store independent of its form. 
+database. Any tabular outputs of the task are written to the table store independent of its form. You can find a list
+of supported input_type choices [here](/backend_types). 
 
 ## Automatic cache invalidation with `lazy=True`
 
 For SQL tasks, a common input_type is `sqlalchemy.Table`. This would provide SQLAlchemy table references to input tables
 which are already auto-loaded, so they would know about columns and column types of the respective table in the 
-database. Ideally this is combined with `lazy=True`. In this case, the task must produce a SQLAlchemy expression for
+database. Ideally, this is combined with `lazy=True`. In this case, the task must produce a SQLAlchemy expression for
 any tabular outputs without executing them. Pipedag can render the query and will only produce a table based on this
 query expression if the query changed or one of the inputs to the task changed.
 
