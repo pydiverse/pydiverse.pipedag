@@ -14,6 +14,10 @@ def test_dtype_from_sqlalchemy():
     assert_conversion(sa.SmallInteger(), DType.INT16)
 
     assert_conversion(sa.Numeric(), DType.FLOAT64)
+    assert_conversion(sa.Numeric(13, 2), DType.FLOAT64)
+    assert_conversion(sa.Numeric(1, 0), DType.FLOAT64)
+    assert_conversion(sa.DECIMAL(13, 2), DType.FLOAT64)
+    assert_conversion(sa.DECIMAL(1, 0), DType.FLOAT64)
     assert_conversion(sa.Float(), DType.FLOAT64)
     assert_conversion(sa.Float(24), DType.FLOAT32)
     assert_conversion(sa.Float(53), DType.FLOAT64)

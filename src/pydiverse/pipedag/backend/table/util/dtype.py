@@ -57,10 +57,15 @@ class DType(Enum):
             return DType.INT64
         if isinstance(type_, sa.Integer):
             return DType.INT32
-        if isinstance(type_, sa.Numeric):
+        if isinstance(type_, sa.Float):
             precision = type_.precision or 53
             if precision <= 24:
                 return DType.FLOAT32
+            return DType.FLOAT64
+        if isinstance(type_, sa.Numeric):
+            # Just to be safe, we always use FLOAT64 for fixpoint numbers.
+            # Databases are obsessed about fixpoint. However, in dataframes, it
+            # is more common to just work with double precision floating point.
             return DType.FLOAT64
         if isinstance(type_, sa.String):
             return DType.STRING
