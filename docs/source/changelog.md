@@ -1,6 +1,10 @@
 # Changelog
 
 
+## 0.7.1 (2024-03-11)
+- Fix bug when Reading DECIMAL(precision, scale) columns to pandas task (precision was interpreted like for Float where 
+precision <= 24 leads to float32). Beware that ``isinstance(sa.Float(), sa.Numeric) == True``.
+
 ## 0.7.0 (2024-03-10)
 - Rework `TableReference` support:
   * Rename `TableReference` to `ExternalTableReference`
