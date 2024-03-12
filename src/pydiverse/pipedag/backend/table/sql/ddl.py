@@ -910,9 +910,11 @@ def visit_drop_alias_mssql(drop: DropAlias, compiler, **kw):
 @compiles(DropAlias, "ibm_db_sa")
 def visit_drop_alias_ibm_db_sa(drop: DropAlias, compiler, **kw):
     if drop.if_exists:
-        from pydiverse.pipedag.backend.table.sql.reflection import \
-            PipedagDB2Reflection
-        if drop.name not in PipedagDB2Reflection.get_alias_names(drop.engine, schema=drop.schema.get()):
+        from pydiverse.pipedag.backend.table.sql.reflection import PipedagDB2Reflection
+
+        if drop.name not in PipedagDB2Reflection.get_alias_names(
+            drop.engine, schema=drop.schema.get()
+        ):
             return ""
         drop = DropAlias(drop.name, drop.schema, if_exists=False)
     return _visit_drop_anything(drop, "ALIAS", compiler, **kw)
