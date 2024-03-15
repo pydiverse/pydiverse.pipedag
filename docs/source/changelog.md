@@ -1,5 +1,7 @@
 # Changelog
 
+## 0.7.2 (2024-XX-XX)
+- Fix bug when creating a table with the same name as a `Table` given by `ExternalTableReference` in the same stage  
 
 ## 0.7.1 (2024-03-11)
 - Fix bug when Reading DECIMAL(precision, scale) columns to pandas task (precision was interpreted like for Float where 
