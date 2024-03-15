@@ -51,6 +51,10 @@ class MSSqlTableStore(SQLTableStore):
         reach across, but it is not guaranteed to be identical to scripts executed
         by a SQL UI.
 
+    :param max_query_print_length:
+        Maximum number of characters in a SQL query that are printed when
+        logging the query before the log is truncated. Defaults to 5000 characters.
+
     .. _Microsoft SQL Server:
         https://www.microsoft.com/en/sql-server/
     .. _pytsql.executes:
@@ -64,10 +68,12 @@ class MSSqlTableStore(SQLTableStore):
         *args,
         disable_pytsql: bool = False,
         pytsql_isolate_top_level_statements: bool = True,
+        max_query_print_length: int = 500000,
         **kwargs,
     ):
         self.disable_pytsql = disable_pytsql
         self.pytsql_isolate_top_level_statements = pytsql_isolate_top_level_statements
+        self.max_query_print_length = max_query_print_length
 
         super().__init__(*args, **kwargs)
 
@@ -159,9 +165,10 @@ class MSSqlTableStore(SQLTableStore):
         sql_string = raw_sql.sql
         if self.print_sql:
             print_query_string = self.format_sql_string(sql_string)
-            max_length = 5000
-            if len(print_query_string) >= max_length:
-                print_query_string = print_query_string[:max_length] + " [...]"
+            if len(print_query_string) >= self.max_query_print_length:
+                print_query_string = (
+                    print_query_string[: self.max_query_print_length] + " [...]"
+                )
             self.logger.info("Executing sql", query=print_query_string)
         # ensure database connection is reset to original database
         sql_string += f"\nUSE {self.engine_url.database}"
