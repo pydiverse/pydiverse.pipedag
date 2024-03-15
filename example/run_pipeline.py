@@ -66,8 +66,8 @@ def main():
         cfg = create_basic_pipedag_config(
             f"duckdb:///{temp_dir}/db.duckdb",
             disable_stage_locking=True,  # This is special for duckdb
-            # Attention: If uncommented, stage and task names might be sent to the following URL.
-            #   You can self-host kroki if you like:
+            # Attention: If uncommented, stage and task names might be sent to the
+            #   following URL. You can self-host kroki if you like:
             #   https://docs.kroki.io/kroki/setup/install/
             # kroki_url="https://kroki.io",
         ).get("default")
