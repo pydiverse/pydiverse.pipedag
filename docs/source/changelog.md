@@ -1,7 +1,10 @@
 # Changelog
 
 ## 0.7.2 (2024-03-DD)
-- Disable Kroki links by default
+- Disable Kroki links by default. New setting disable_kroki=True allows to still default kroki_url to https://kroki.io.
+    Function create_basic_pipedag_config() just has a kroki_url parameter which defaults to None.
+- Added max_query_print_length parameter to MSSqlTableStore to limit the length of the printed SQL queries.
+    Default is max_query_print_length=500000 characters.
 
 ## 0.7.1 (2024-03-11)
 - Fix bug when Reading DECIMAL(precision, scale) columns to pandas task (precision was interpreted like for Float where 
