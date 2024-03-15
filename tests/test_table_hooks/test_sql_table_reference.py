@@ -68,7 +68,7 @@ def test_table_store():
         )
         return Table(ExternalTableReference(view_name, schema=schema.get()))
 
-    @materialize()
+    @materialize
     def expected_out_table():
         return Table(
             pd.DataFrame(
@@ -78,7 +78,7 @@ def test_table_store():
             )
         )
 
-    @materialize()
+    @materialize
     def expected_out_view():
         return Table(
             pd.DataFrame(
@@ -88,10 +88,17 @@ def test_table_store():
             )
         )
 
+    @materialize(input_type=sa.Table)
+    def copy_table(tbl: sa.Table):
+        query = sa.select(tbl)
+        return Table(query, name=tbl.original.name)
+
     with Flow() as f:
         with Stage("sql_table_reference"):
             external_table = in_table()
             expected_external_table = expected_out_table()
+            _ = copy_table(external_table)
+
             _ = m.assert_table_equal(
                 external_table, expected_external_table, check_dtype=False
             )
