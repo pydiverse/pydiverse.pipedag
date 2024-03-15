@@ -637,7 +637,7 @@ class RunContext(BaseContext):
         response = self._request(
             "add_names",
             stage.id,
-            [t.name for t in tables],
+            [t.get_run_context_name() for t in tables],
             [b.name for b in blobs],
         )
 
@@ -650,7 +650,7 @@ class RunContext(BaseContext):
         self._request(
             "remove_names",
             stage.id,
-            [t.name for t in tables],
+            [t.get_run_context_name() for t in tables],
             [b.name for b in blobs],
         )
 

@@ -127,6 +127,11 @@ class Table(Generic[T]):
         state["obj"] = None
         return state
 
+    def get_run_context_name(self):
+        if self.external_schema is not None:
+            return f"[{self.external_schema}].[{self.name}]"
+        return self.name
+
 
 class RawSql:
     """Container for raw sql strings.
