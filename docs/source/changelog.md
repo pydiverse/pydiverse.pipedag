@@ -1,5 +1,7 @@
 # Changelog
 
+## 0.7.2 (2024-03-DD)
+- Disable Kroki links by default
 
 ## 0.7.1 (2024-03-11)
 - Fix bug when Reading DECIMAL(precision, scale) columns to pandas task (precision was interpreted like for Float where 
