@@ -598,8 +598,8 @@ def _pydot_url(dot: pydot.Dot) -> str:
         config = PipedagConfig.default.get()
 
     kroki_url = config.kroki_url
-    if kroki_url is None:
-        kroki_url = "https://kroki.io"
+    if config.disable_kroki or kroki_url is None:
+        kroki_url = "<disable_kroki=True>"
 
     query_data = zlib.compress(str(dot).encode("utf-8"), 9)
     query = base64.urlsafe_b64encode(query_data).decode("ascii")

@@ -276,7 +276,7 @@ def test_pandas_table_hook_postgres_null_string():
         df = result.get(t, as_type=pd.DataFrame)
 
     assert df["strNA"][0] == ""
-    assert df["strNA"][1] is pd.NA
+    assert pd.isna(df["strNA"][1])
     assert df["strNA"][2] == "\\N"
 
 

@@ -142,6 +142,8 @@ class PipedagConfig:
             default={
                 "fail_fast": False,
                 "network_interface": "127.0.0.1",
+                "disable_kroki": True,
+                "kroki_url": "https://kroki.io",
                 "per_user_template": "{id}_{username}",
                 "strict_result_get_locking": True,
                 "ignore_task_version": False,
@@ -216,6 +218,7 @@ class PipedagConfig:
             stage_commit_technique=stage_commit_technique,
             fail_fast=config["fail_fast"],
             network_interface=config["network_interface"],
+            disable_kroki=config.get("disable_kroki"),
             kroki_url=config.get("kroki_url"),
             attrs=Box(config["attrs"], frozen_box=True),
             table_hook_args=Box(
@@ -330,6 +333,7 @@ def create_basic_pipedag_config(
     name: str = "pipeline",
     instance_id: str = "pipeline",
     network_interface="127.0.0.1",
+    kroki_url=None,
     auto_table=(
         "pandas.DataFrame",
         "sqlalchemy.sql.expression.TextClause",
@@ -386,6 +390,10 @@ def create_basic_pipedag_config(
         Used for shared state communication while executing flow. It is possible
         to perform multi-node parallel execution with the DaskEngine. You probably
         don't need to worry and just leave it at ``127.0.0.1`` for localhost
+    :param kroki_url:
+        Default None; Sets the URL used for creating links after each flow execution
+        which allow you to visualize the pipeline run. When setting the URL here,
+        it will automatically set disable_kroki to False.
     :param auto_table:
         You might be just happy with the default to convert pandas DataFrames
         and SQLAlchemy clauses to Tables when returning them in tasks. If you use
@@ -468,6 +476,8 @@ def create_basic_pipedag_config(
                 network_interface=network_interface,
                 auto_table=list(auto_table),
                 fail_fast=fail_fast,
+                disable_kroki=kroki_url is None,
+                kroki_url=kroki_url,
                 instance_id=instance_id,
                 stage_commit_technique=stage_commit_technique,
                 table_store=table_store,

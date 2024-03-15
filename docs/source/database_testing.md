@@ -111,6 +111,12 @@ instances:
       - "sqlalchemy.sql.expression.TextClause"
       - "sqlalchemy.sql.expression.Selectable"
 
+    # Attention: For disable_kroki: false, task names might be sent to the kroki_url.
+    #   You can self-host kroki if you like:
+    #   https://docs.kroki.io/kroki/setup/install/
+    disable_kroki: true
+    kroki_url: "https://kroki.io"
+
     fail_fast: true
     instance_id: pipedag_default
     table_store:
