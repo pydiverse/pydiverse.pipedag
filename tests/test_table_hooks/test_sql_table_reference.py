@@ -27,7 +27,7 @@ pytestmark = [with_instances(DATABASE_INSTANCES)]
 
 @pytest.mark.polars
 def test_table_store():
-    @materialize(version="1.0")
+    @materialize
     def in_table():
         table_store = ConfigContext.get().store.table_store
         schema = Schema("user_controlled_schema", prefix="", suffix="")
@@ -47,6 +47,12 @@ def test_table_store():
             )
         )
         return Table(ExternalTableReference(table_name, schema=schema.get()))
+
+    @materialize(lazy=True, input_type=sa.Table)
+    def second_external_table_reference(tbl: sa.Table):
+        return Table(
+            ExternalTableReference(tbl.original.name, schema=tbl.original.schema)
+        )
 
     @materialize(version="1.0", input_type=sa.Table)
     def in_view(tbl: sa.Table):
@@ -96,6 +102,7 @@ def test_table_store():
     with Flow() as f:
         with Stage("sql_table_reference"):
             external_table = in_table()
+            _ = second_external_table_reference(external_table)
             expected_external_table = expected_out_table()
             _ = copy_table(external_table)
 
