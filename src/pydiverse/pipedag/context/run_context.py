@@ -637,7 +637,8 @@ class RunContext(BaseContext):
         response = self._request(
             "add_names",
             stage.id,
-            [t.get_run_context_name() for t in tables],
+            # ExternalTableReferences don't create a table in schema of stage
+            [t.name for t in tables if t.external_schema is None],
             [b.name for b in blobs],
         )
 
@@ -650,7 +651,8 @@ class RunContext(BaseContext):
         self._request(
             "remove_names",
             stage.id,
-            [t.get_run_context_name() for t in tables],
+            # ExternalTableReferences don't create a table in schema of stage
+            [t.name for t in tables if t.external_schema is None],
             [b.name for b in blobs],
         )
 
