@@ -74,8 +74,6 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
             resolve_materialization_details_label(table)
         )
 
-        from pydiverse.pipedag.backend.table.sql.dialects import IBMDB2TableStore
-
         store.execute(
             CreateTableAsSelect(
                 table.name,
@@ -85,9 +83,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                 source_tables=source_tables,
                 suffix=store.get_create_table_suffix(
                     resolve_materialization_details_label(table)
-                )
-                if isinstance(store, IBMDB2TableStore)
-                else None,
+                ),
             )
         )
         store.add_indexes(table, schema, early_not_null_possible=True)

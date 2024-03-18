@@ -437,6 +437,18 @@ class SQLTableStore(BaseTableStore):
                 )
             self.logger.error(error_msg)
 
+    def get_create_table_suffix(self, table: Table) -> str:
+        """
+        This method can be used to append materialization tables to CREATE TABLE
+        statements by dialects that support it.
+
+        :param table:
+            The table to be materialized
+        :return:
+            Suffix that is appended to CREATE TABLE statement as string
+        """
+        return ""
+
     def add_indexes(
         self, table: Table, schema: Schema, *, early_not_null_possible: bool = False
     ):
@@ -757,8 +769,6 @@ class SQLTableStore(BaseTableStore):
 
     def _copy_table(self, table: Table, from_schema: Schema, from_name: str):
         """Copies the table immediately"""
-        from pydiverse.pipedag.backend.table.sql.dialects import IBMDB2TableStore
-
         has_table = self.has_table_or_view(from_name, schema=from_schema)
         if not has_table:
             inspector = sa.inspect(self.engine)
@@ -786,9 +796,7 @@ class SQLTableStore(BaseTableStore):
                 early_not_null=table.primary_key,
                 suffix=self.get_create_table_suffix(
                     resolve_materialization_details_label(table)
-                )
-                if isinstance(self, IBMDB2TableStore)
-                else None,
+                ),
             )
         )
         self.add_indexes(table, self.get_schema(table.stage.transaction_name))
@@ -947,8 +955,6 @@ class SQLTableStore(BaseTableStore):
             if k in new_objects and k not in tables_to_copy
         }
 
-        from pydiverse.pipedag.backend.table.sql.dialects import IBMDB2TableStore
-
         try:
             with self.engine_connect() as conn:
                 for name in tables_to_copy:
@@ -960,9 +966,7 @@ class SQLTableStore(BaseTableStore):
                             dest_schema,
                             suffix=self.get_create_table_suffix(
                                 target_stage.materialization_details
-                            )
-                            if isinstance(self, IBMDB2TableStore)
-                            else None,
+                            ),
                         ),
                         conn=conn,
                     )
