@@ -221,7 +221,7 @@ disable_kroki
 : If set to `True`, [Kroki](https://kroki.io) URL will not be displayed at end of executing flow. Kroki URLs are a really nice way 
 of visualizing the flow execution without the need to install graphviz and to worry about how to display the result. 
 The graph is sent to the kroki_url only once you click the link. The whole graph is encoded in the URL. However, since
-there is the risk to expose sensitive information by sending task names to a public server, it is disabled by default.
+there is the risk to expose sensitive information by sending stage and task names to a public server, it is disabled by default.
 You can also [self-host](https://docs.kroki.io/kroki/setup/install/) a kroki service and set the kroki_url to your own 
 service.
 
