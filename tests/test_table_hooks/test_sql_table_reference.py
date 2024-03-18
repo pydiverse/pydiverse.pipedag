@@ -49,7 +49,7 @@ def test_table_store():
         return Table(ExternalTableReference(table_name, schema=schema.get()))
 
     @materialize(lazy=True, input_type=sa.Table)
-    def second_external_table_reference(tbl: sa.Table):
+    def duplicate_table_reference(tbl: sa.Table):
         return Table(
             ExternalTableReference(tbl.original.name, schema=tbl.original.schema)
         )
@@ -102,7 +102,7 @@ def test_table_store():
     with Flow() as f:
         with Stage("sql_table_reference"):
             external_table = in_table()
-            _ = second_external_table_reference(external_table)
+            _ = duplicate_table_reference(external_table)
             expected_external_table = expected_out_table()
             _ = copy_table(external_table)
 
