@@ -194,10 +194,11 @@ class RenameTable(DDLElement):
 
 
 class DropTable(DDLElement):
-    def __init__(self, name, schema: Schema, if_exists=False):
+    def __init__(self, name, schema: Schema, if_exists=False, cascade=False):
         self.name = name
         self.schema = schema
         self.if_exists = if_exists
+        self.cascade = cascade  # True: remove dependent views in postgres
 
 
 class DropView(DDLElement):
@@ -217,10 +218,14 @@ class DropAlias(DDLElement):
     This is used for dialect=ibm_sa_db
     """
 
-    def __init__(self, name, schema: Schema, if_exists=False):
+    def __init__(self, name, schema: Schema, if_exists=False, *, engine=None):
+        """
+        :param engine: Used if if_exists=True but the database doesn't support it.
+        """
         self.name = name
         self.schema = schema
         self.if_exists = if_exists
+        self.engine = engine
 
 
 class DropNickname(DDLElement):
@@ -872,6 +877,18 @@ def visit_drop_table(drop: DropTable, compiler, **kw):
     return _visit_drop_anything(drop, "TABLE", compiler, **kw)
 
 
+@compiles(DropTable, "mssql")
+def visit_drop_table(drop: DropTable, compiler, **kw):
+    drop.cascade = False  # not supported by dialect
+    return _visit_drop_anything(drop, "TABLE", compiler, **kw)
+
+
+@compiles(DropTable, "ibm_db_sa")
+def visit_drop_table(drop: DropTable, compiler, **kw):
+    drop.cascade = False  # not supported by dialect
+    return _visit_drop_anything(drop, "TABLE", compiler, **kw)
+
+
 @compiles(DropView)
 def visit_drop_view(drop: DropView, compiler, **kw):
     return _visit_drop_anything(drop, "VIEW", compiler, **kw)
@@ -892,6 +909,14 @@ def visit_drop_alias_mssql(drop: DropAlias, compiler, **kw):
 
 @compiles(DropAlias, "ibm_db_sa")
 def visit_drop_alias_ibm_db_sa(drop: DropAlias, compiler, **kw):
+    if drop.if_exists:
+        from pydiverse.pipedag.backend.table.sql.reflection import PipedagDB2Reflection
+
+        if drop.name not in PipedagDB2Reflection.get_alias_names(
+            drop.engine, schema=drop.schema.get()
+        ):
+            return ""
+        drop = DropAlias(drop.name, drop.schema, if_exists=False)
     return _visit_drop_anything(drop, "ALIAS", compiler, **kw)
 
 
@@ -923,6 +948,8 @@ def _visit_drop_anything(
     if drop.if_exists:
         text.append("IF EXISTS")
     text.append(f"{schema}.{table}")
+    if hasattr(drop, "cascade") and drop.cascade:
+        text.append("CASCADE")
     return " ".join(text)
 
 

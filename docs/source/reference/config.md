@@ -217,6 +217,16 @@ network_interface
 
   (default: `127.0.0.1`)
 
+disable_kroki
+: If set to `True`, [Kroki](https://kroki.io) URL will not be displayed at end of executing flow. Kroki URLs are a really nice way 
+of visualizing the flow execution without the need to install graphviz and to worry about how to display the result. 
+The graph is sent to the kroki_url only once you click the link. The whole graph is encoded in the URL. However, since
+there is the risk to expose sensitive information by sending stage and task names to a public server, it is disabled by default.
+You can also [self-host](https://docs.kroki.io/kroki/setup/install/) a kroki service and set the kroki_url to your own 
+service.
+
+  (default: `True`)
+
 (kroki_url)=
 kroki_url
 : A url that points to a [Kroki](https://kroki.io) instance. *Optional*
@@ -483,6 +493,12 @@ technical_setups:
     auto_table: ["pandas.DataFrame", "sqlalchemy.sql.expression.TextClause", "sqlalchemy.sql.expression.Selectable"]
     # abort as fast a possible on task failure and print most readable stack trace
     fail_fast: true
+
+    # Attention: For disable_kroki: false, stage and task names might be sent to the kroki_url.
+    #   You can self-host kroki if you like:
+    #   https://docs.kroki.io/kroki/setup/install/
+    disable_kroki: true
+    kroki_url: "https://kroki.io"
 
     instance_id: pipedag_default
     table_store:

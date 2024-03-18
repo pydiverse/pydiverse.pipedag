@@ -105,8 +105,8 @@ def double_values(df: pd.DataFrame):
 
 @materialize(nout=2, input_type=sa.Table, lazy=True)
 def extract_a_b(tbls: list[sa.Table]):
-    a = [tbl for tbl in tbls if tbl.name == "dfa"][0]
-    b = [tbl for tbl in tbls if tbl.name == "dfb"][0]
+    a = [tbl for tbl in tbls if tbl.original.name == "dfa"][0]
+    b = [tbl for tbl in tbls if tbl.original.name == "dfb"][0]
     return a, b
 
 
