@@ -157,6 +157,7 @@ class ConfigContext(BaseAttrsContext):
     instance_id: str  # may be used as database name or locking ID
     stage_commit_technique: StageCommitTechnique
     network_interface: str
+    disable_kroki: bool
     kroki_url: str | None
     attrs: Box
 
