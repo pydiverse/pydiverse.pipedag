@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
@@ -11,8 +10,6 @@ import sqlalchemy as sa
 import sqlalchemy.exc
 
 from pydiverse.pipedag.backend.table.sql.ddl import (
-    AddPrimaryKey,
-    ChangeColumnNullable,
     CreateTableWithSuffix,
     LockSourceTable,
     LockTable,
@@ -90,32 +87,6 @@ class IBMDB2TableStore(SQLTableStore):
 
     _dialect_name = "ibm_db_sa"
 
-    def add_primary_key(
-        self,
-        table_name: str,
-        schema: Schema,
-        key_columns: list[str],
-        *,
-        name: str | None = None,
-        early_not_null_possible: bool = False,
-    ):
-        if not early_not_null_possible:
-            for retry_iteration in range(4):
-                # retry operation since it might have been terminated as a
-                # deadlock victim
-                try:
-                    self.execute(
-                        ChangeColumnNullable(
-                            table_name, schema, key_columns, nullable=False
-                        )
-                    )
-                    break
-                except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
-                    if retry_iteration == 3:
-                        raise
-                    time.sleep(retry_iteration * retry_iteration * 1.1)
-        self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
-
     def lock_table(
         self, table: Table | str, schema: Schema | str, conn: Any = None
     ) -> list:
@@ -156,11 +127,23 @@ class IBMDB2TableStore(SQLTableStore):
     def get_non_nullable_cols(
         self, table: Table, table_cols: Iterable[str], report_nullable_cols=False
     ) -> tuple[list[str], list[str]]:
-        # mssql dialect has literals as non-nullable types by default, so we also need
+        # ibm_db2 dialect has literals as non-nullable types by default, so we also need
         # the list of nullable columns to fix
-        return super().get_non_nullable_cols(
+        nullable_cols, non_nullable_cols = super().get_non_nullable_cols(
             table, table_cols, report_nullable_cols=True
         )
+        # add primery key columns to non_nullable_cols
+        if table.primary_key:
+            primary_key = (
+                table.primary_key
+                if isinstance(table.primary_key, list)
+                else [table.primary_key]
+            )
+            non_nullable_cols += primary_key
+            nullable_cols = [
+                col for col in nullable_cols if col not in table.primary_key
+            ]
+        return non_nullable_cols, nullable_cols
 
     def add_indexes_and_set_nullable(
         self,

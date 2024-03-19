@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 import textwrap
 import warnings
 from collections.abc import Iterable
@@ -503,40 +502,13 @@ class SQLTableStore(BaseTableStore):
             # sqlalchemy to put the limit/top clause in the correct position.
             # Furthermore, we search for a LIMIT n or TOP n clause to replace it.
             query_str = str(query)
-            # remove comments
-            query_str = re.sub(r"/\*.*?\*/", "", query_str, flags=re.RegexFlag.DOTALL)
-            query_str = re.sub(r"--.*", "", query_str)
-            # replace existing LIMIT / TOP
-            pattern = r"(.*\bLIMIT\s+)(\d+)(.*)|(.*\bTOP\s+)(\d+)(.*)"
-            match = re.match(
-                pattern, query_str, re.RegexFlag.IGNORECASE | re.RegexFlag.DOTALL
-            )
-            if match:
-                groups = match.groups()
-                if groups[0] is not None:
-                    return sa.text(groups[0] + str(rows) + groups[2])
-                if groups[3] is not None:
-                    return sa.text(groups[3] + str(rows) + groups[5])
-            # insert LIMIT / TOP since it does not exist in query, yet
-            pattern = r"(\s*)SELECT\s(.*)"
-            match = re.match(
-                pattern, query_str, re.RegexFlag.IGNORECASE | re.RegexFlag.DOTALL
-            )
-            if not match:
-                raise ValueError(
-                    f"Tried materializing query that does not start with SELECT: "
-                    f"{str(query)}"
-                )
-            groups = match.groups()
-            limit_query = sa.text(
-                groups[0]
-                + sa.select(sa.text(groups[1]))
+            return (
+                sa.select(sa.text("*"))
                 .limit(rows)
-                .compile(self.engine, compile_kwargs={"literal_binds": True})
+                .select_from(sa.text("(" + query_str + ") AS A"))
             )
         else:
-            limit_query = query.limit(rows)
-        return limit_query
+            return sa.select(sa.text("*")).limit(rows).select_from(query.alias("A"))
 
     def lock_table(
         self, table: Table | str, schema: Schema | str, conn: Any = None

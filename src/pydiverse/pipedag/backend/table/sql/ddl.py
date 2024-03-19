@@ -185,7 +185,6 @@ class CopyTable(DDLElement):
         to_name,
         to_schema: Schema,
         if_not_exists=False,
-        early_not_null: None | str | list[str] = None,
         suffix: str = "",
     ):
         self.from_name = from_name
@@ -193,7 +192,6 @@ class CopyTable(DDLElement):
         self.to_name = to_name
         self.to_schema = to_schema
         self.if_not_exists = if_not_exists
-        self.early_not_null = early_not_null
         self.suffix = suffix
 
 
@@ -840,14 +838,6 @@ def visit_copy_table(copy_table: CopyTable, compiler, **kw):
         copy_table.to_name,
         copy_table.to_schema,
         query,
-        early_not_null=copy_table.early_not_null,
-        source_tables=[
-            dict(
-                name=copy_table.from_name,
-                schema=copy_table.from_schema.get(),
-                shared_lock_allowed=True,
-            )
-        ],
         suffix=copy_table.suffix,
     )
     return compiler.process(create, **kw)
