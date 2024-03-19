@@ -88,6 +88,18 @@ class Table(Generic[T]):
                 for col in index:
                     if not isinstance(col, str):
                         raise indexes_type_error
+        for arg, name in [
+            (self.nullable, "nullable"),
+            (self.non_nullable, "non_nullable"),
+        ]:
+            type_error = TypeError(
+                f"Table argument '{name}' must be of type list[str]."
+            )
+            if arg is not None:
+                if not isinstance(arg, Iterable) or isinstance(arg, str):
+                    raise type_error
+                if not all(isinstance(x, str) for x in arg):
+                    raise type_error
 
         from pydiverse.pipedag.backend.table.sql import ExternalTableReference
 

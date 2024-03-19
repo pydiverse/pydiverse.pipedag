@@ -523,6 +523,47 @@ def test_nullable_output(_get_flow):
         assert get_nullable(8) == [False, False, False]
 
 
+@pytest.mark.parametrize(
+    "nullable, non_nullable, error",
+    [
+        (["a"], None, ValueError),
+        (None, ["a"], ValueError),
+        (["a", "x", "y", "z"], None, ValueError),
+        (None, ["a", "x", "y", "z"], ValueError),
+        (["x", "y", "z"], ["a"], ValueError),
+        (["a"], ["x", "y", "z"], ValueError),
+        (["x"], ["x"], ValueError),
+        (["x"], ["y"], ValueError),
+        (["x", "y"], ["y"], ValueError),
+        ("x", None, TypeError),
+        (None, "x", TypeError),
+        (1, None, TypeError),
+        (None, 2, TypeError),
+    ],
+)
+def test_nullable_raises(nullable, non_nullable, error):
+    cols = sa.literal(1).label("x"), sa.literal(2).label("y"), sa.literal(3).label("z")
+
+    @materialize(lazy=True)
+    def lazy_task_1():
+        q = sa.select(*cols)
+        df = pd.DataFrame({"x": [1], "y": [2], "z": [3]})
+        tables = [
+            Table(q, nullable=nullable, non_nullable=non_nullable),
+            Table(df, nullable=nullable, non_nullable=non_nullable),
+            Table(q, primary_key=["x"], nullable=nullable, non_nullable=non_nullable),
+            Table(df, primary_key=["x"], nullable=nullable, non_nullable=non_nullable),
+        ]
+        return tables
+
+    with Flow() as f:
+        with Stage("stage_1"):
+            lazy_task_1()
+
+    with pytest.raises(error):
+        f.run()
+
+
 @materialize(lazy=True)
 def _lazy_task_1():
     return Table(select_as(1, "x"), name="t1", primary_key="x")
