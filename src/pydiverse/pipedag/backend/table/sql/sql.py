@@ -366,27 +366,6 @@ class SQLTableStore(BaseTableStore):
             yield conn
             conn.commit()
 
-    @contextmanager
-    def lock_connect(self) -> sa.Connection:
-        """
-        Open connection that is used for locking and filling tables.
-
-        Some dialects don't support locking and thus might prefer connect().
-        In fact mssql hangs if we use begin() here.
-        """
-        with self.engine.begin() as conn:
-            yield conn
-
-    @contextmanager
-    def begin_nested(self, conn: sa.Connection) -> sa.engine.Connection:
-        """
-        Open a nested transaction.
-
-        Some dialects might have trouble with nested transactions (mssql).
-        """
-        with conn.begin_nested() as nested:
-            yield nested
-
     def get_schema(self, name: str) -> Schema:
         return Schema(name, self.schema_prefix, self.schema_suffix)
 
@@ -409,7 +388,20 @@ class SQLTableStore(BaseTableStore):
             return conn.execute(query)
 
     def execute(
-        self, query, *, conn: sa.engine.Connection = None, heavy_shorten_print=False
+        self,
+        query: str
+        | sqlalchemy.sql.expression.Selectable
+        | sqlalchemy.sql.expression.TextClause
+        | sqlalchemy.sql.ddl.DDLElement
+        | list[
+            str
+            | sqlalchemy.sql.expression.Selectable
+            | sqlalchemy.sql.expression.TextClause
+            | sqlalchemy.sql.ddl.DDLElement
+        ],
+        *,
+        conn: sa.engine.Connection = None,
+        heavy_shorten_print=False,
     ):
         if conn is None:
             with self.engine_connect() as conn:
@@ -417,16 +409,25 @@ class SQLTableStore(BaseTableStore):
                     query, conn=conn, heavy_shorten_print=heavy_shorten_print
                 )
 
-        if isinstance(query, sa.schema.DDLElement):
-            # Some custom DDL statements contain multiple statements.
-            # They are all seperated using a special seperator.
-            query_str = str(
-                query.compile(self.engine, compile_kwargs={"literal_binds": True})
-            )
+        if isinstance(query, sa.schema.DDLElement) or isinstance(query, list):
+            if not isinstance(query, list):
+                query = [query]
+            with conn.begin():
+                # execute multiple statements in one transaction
+                for cur_query in query:
+                    if isinstance(cur_query, sa.schema.DDLElement):
+                        # Some custom DDL statements contain multiple statements.
+                        # They are all seperated using a special seperator.
+                        query_str = str(
+                            cur_query.compile(
+                                self.engine, compile_kwargs={"literal_binds": True}
+                            )
+                        )
 
-            with self.begin_nested(conn):
-                for part in split_ddl_statement(query_str):
-                    self._execute(part, conn, heavy_shorten_print)
+                        for part in split_ddl_statement(query_str):
+                            self._execute(part, conn, heavy_shorten_print)
+                    else:
+                        self._execute(cur_query, conn, heavy_shorten_print)
             return
 
         return self._execute(query, conn, heavy_shorten_print)
@@ -524,32 +525,51 @@ class SQLTableStore(BaseTableStore):
             limit_query = query.limit(rows)
         return limit_query
 
-    def lock_table(self, table: Table | str, schema: Schema | str, conn: Any):
+    def lock_table(
+        self, table: Table | str, schema: Schema | str, conn: Any = None
+    ) -> list:
         """
         For some dialects, it might be beneficial to lock a table before writing to it.
+
+        :returns
+            A list of SQLAlchemy statements that should be executed if conn=None
         """
         _ = table, schema, conn
+        return []
 
-    def lock_source_table(self, table: Table | str, schema: Schema | str, conn: Any):
+    def lock_source_table(
+        self, table: Table | str, schema: Schema | str, conn: Any = None
+    ) -> list:
         """
         For some dialects, it might be beneficial to lock source tables before reading.
+
+        :returns
+            A list of SQLAlchemy statements that should be executed if conn=None
         """
         _ = table, schema, conn
+        return []
 
-    def lock_source_tables(self, tables: list[dict[str, str]], conn: Any):
+    def lock_source_tables(
+        self, tables: list[dict[str, str]], conn: Any = None
+    ) -> list:
         """
         For some dialects, it might be beneficial to lock source tables before reading.
+
+        :returns
+            A list of SQLAlchemy statements that should be executed if conn=None
         """
+        stmts = []
         for table in tables:
             if table["shared_lock_allowed"]:
-                self.lock_source_table(table["name"], table["schema"], conn)
+                stmts += self.lock_source_table(table["name"], table["schema"], conn)
+        return stmts
 
     def get_non_nullable_cols(
-        self, table: Table, table_cols: Iterable[str] | None = None
-    ):
-        cols = []
+        self, table: Table, table_cols: Iterable[str], report_nullable_cols=False
+    ) -> tuple[list[str], list[str]]:
         other_cols = []
         non_nullable_cols = []
+        nullable_cols = []
         all_cols = list(table_cols)
         for new_cols, is_nullable in zip(
             [table.nullable, table.non_nullable], [True, False]
@@ -560,9 +580,10 @@ class SQLTableStore(BaseTableStore):
                         f"{'non_' if not is_nullable else ''}nullable column does not "
                         f"exist in dataframe={set(new_cols) - set(all_cols)}"
                     )
-                if len(cols) == 0:
-                    other_cols = [col for col in all_cols if col not in cols]
+                if len(non_nullable_cols) == 0:
+                    other_cols = [col for col in all_cols if col not in new_cols]
                     non_nullable_cols = new_cols if not is_nullable else other_cols
+                    nullable_cols = new_cols if is_nullable else other_cols
                 else:
                     if set(other_cols) != set(new_cols):
                         raise ValueError(
@@ -570,7 +591,9 @@ class SQLTableStore(BaseTableStore):
                             f"match dataframe columns. "
                             f"Missing={set(other_cols) - set(new_cols)}"
                         )
-        return non_nullable_cols
+        if not report_nullable_cols:
+            nullable_cols = []  # in most dialects columns are nullable by default
+        return nullable_cols, non_nullable_cols
 
     def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
         _ = is_sql
@@ -591,7 +614,16 @@ class SQLTableStore(BaseTableStore):
                 inspector = sa.inspect(self.engine)
                 columns = inspector.get_columns(table.name, schema=schema.get())
                 table_cols = [col["name"] for col in columns]
-            non_nullable_cols = self.get_non_nullable_cols(table, table_cols)
+            nullable_cols, non_nullable_cols = self.get_non_nullable_cols(
+                table, table_cols
+            )
+            if len(nullable_cols) > 0:
+                # some dialects represent literals as non-nullable types
+                self.execute(
+                    ChangeColumnNullable(
+                        table.name, schema, nullable_cols, nullable=True
+                    )
+                )
             if len(non_nullable_cols) > 0:
                 self.execute(
                     ChangeColumnNullable(
@@ -680,7 +712,10 @@ class SQLTableStore(BaseTableStore):
         return sql_types
 
     @staticmethod
-    def format_sql_string(query_str: str, query, heavy_shorten_print=False) -> str:
+    def format_sql_string(query_str: str, query=None, heavy_shorten_print=False) -> str:
+        _ = query
+        if heavy_shorten_print and "SELECT" in query_str:
+            query_str = query_str.split("SELECT")[0] + "SELECT ..."
         return textwrap.dedent(query_str).strip()
 
     def execute_raw_sql(self, raw_sql: RawSql):

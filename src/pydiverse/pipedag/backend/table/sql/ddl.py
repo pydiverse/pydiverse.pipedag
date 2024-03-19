@@ -1133,6 +1133,16 @@ def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
 def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
     _ = kw
     statements = _get_nullable_change_statements(change, compiler)
+    table = compiler.preparer.quote(change.table_name)
+    schema = compiler.preparer.format_schema(change.schema.get())
+    statements.append(f"call sysproc.admin_cmd('REORG TABLE {schema}.{table}')")
+    return join_ddl_statements(statements, compiler, **kw)
+
+
+@compiles(ChangeColumnNullable, "duckdb")
+def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
+    _ = kw
+    statements = _get_nullable_change_statements(change, compiler)
     return join_ddl_statements(statements, compiler, **kw)
 
 
@@ -1198,7 +1208,6 @@ def _get_nullable_change_statements(change, compiler):
         f" {'SET' if not nullable else 'DROP'} NOT NULL"
         for col, nullable in zip(change.column_names, change.nullable)
     ]
-    statements.append(f"call sysproc.admin_cmd('REORG TABLE {schema}.{table}')")
     return statements
 
 

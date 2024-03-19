@@ -57,6 +57,10 @@ class DuckDBTableStore(SQLTableStore):
         database_path = Path(database)
         database_path.parent.mkdir(parents=True, exist_ok=True)
 
+    def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
+        _ = table, is_sql
+        return False  # DuckDB is not good with stable type arithmetic
+
 
 @DuckDBTableStore.register_table(pd)
 class PandasTableHook(PandasTableHook):

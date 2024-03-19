@@ -116,23 +116,29 @@ class IBMDB2TableStore(SQLTableStore):
                     time.sleep(retry_iteration * retry_iteration * 1.1)
         self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
 
-    def lock_table(self, table: Table | str, schema: Schema | str, conn: Any):
+    def lock_table(
+        self, table: Table | str, schema: Schema | str, conn: Any = None
+    ) -> list:
         """
         For some dialects, it might be beneficial to lock a table before writing to it.
         """
-        self.execute(
-            LockTable(table.name if isinstance(table, Table) else table, schema),
-            conn=conn,
-        )
+        stmt = LockTable(table.name if isinstance(table, Table) else table, schema)
+        if conn is not None:
+            self.execute(stmt, conn=conn)
+        return [stmt]
 
-    def lock_source_table(self, table: Table | str, schema: Schema | str, conn: Any):
+    def lock_source_table(
+        self, table: Table | str, schema: Schema | str, conn: Any = None
+    ) -> list:
         """
         For some dialects, it might be beneficial to lock source tables before reading.
         """
-        self.execute(
-            LockSourceTable(table.name if isinstance(table, Table) else table, schema),
-            conn=conn,
+        stmt = LockSourceTable(
+            table.name if isinstance(table, Table) else table, schema
         )
+        if conn is not None:
+            self.execute(stmt, conn=conn)
+        return [stmt]
 
     def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
         if is_sql:
@@ -144,6 +150,15 @@ class IBMDB2TableStore(SQLTableStore):
                 or table.non_nullable is not None
                 or (table.primary_key is not None and len(table.primary_key) > 0)
             )
+
+    def get_non_nullable_cols(
+        self, table: Table, table_cols: Iterable[str], report_nullable_cols=False
+    ) -> tuple[list[str], list[str]]:
+        # mssql dialect has literals as non-nullable types by default, so we also need
+        # the list of nullable columns to fix
+        return super().get_non_nullable_cols(
+            table, table_cols, report_nullable_cols=True
+        )
 
     def add_indexes_and_set_nullable(
         self,

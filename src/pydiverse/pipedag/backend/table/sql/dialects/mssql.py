@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
-from contextlib import contextmanager
 from typing import Any
 
 import pandas as pd
@@ -82,28 +81,6 @@ class MSSqlTableStore(SQLTableStore):
     def _init_database(self):
         self._init_database_with_database("master", {"isolation_level": "AUTOCOMMIT"})
 
-    @contextmanager
-    def lock_connect(self) -> sa.Connection:
-        """
-        Open connection that is used for locking and filling tables.
-
-        Some dialects don't support locking and thus might prefer connect().
-        In fact mssql hangs if we use begin() here.
-        """
-        with self.engine.connect() as conn:
-            yield conn
-            conn.commit()
-
-    @contextmanager
-    def begin_nested(self, conn: sa.Connection) -> sa.engine.Connection:
-        """
-        Open a nested transaction.
-
-        Some dialects might have trouble with nested transactions (mssql).
-        """
-        with conn.begin() as nested:
-            yield nested
-
     def add_primary_key(
         self,
         table_name: str,
@@ -144,6 +121,15 @@ class MSSqlTableStore(SQLTableStore):
             or (table.primary_key is not None and len(table.primary_key) > 0)
         )
 
+    def get_non_nullable_cols(
+        self, table: Table, table_cols: Iterable[str], report_nullable_cols=False
+    ) -> tuple[list[str], list[str]]:
+        # mssql dialect has literals as non-nullable types by default, so we also need
+        # the list of nullable columns to fix
+        return super().get_non_nullable_cols(
+            table, table_cols, report_nullable_cols=True
+        )
+
     def add_indexes_and_set_nullable(
         self,
         table: Table,
@@ -166,10 +152,23 @@ class MSSqlTableStore(SQLTableStore):
             columns = inspector.get_columns(table.name, schema=schema.get())
             table_cols = [d["name"] for d in columns]
             types = {d["name"]: d["type"] for d in columns}
-            non_nullable_cols = self.get_non_nullable_cols(table, table_cols)
+            nullable_cols, non_nullable_cols = self.get_non_nullable_cols(
+                table, table_cols
+            )
             non_nullable_cols = [
                 col for col in non_nullable_cols if col not in key_columns
             ]
+            sql_types = [types[col] for col in nullable_cols]
+            if len(nullable_cols) > 0:
+                self.execute(
+                    ChangeColumnTypes(
+                        table.name,
+                        schema,
+                        nullable_cols,
+                        sql_types,
+                        nullable=True,
+                    )
+                )
             sql_types = [types[col] for col in non_nullable_cols]
             if len(non_nullable_cols) > 0:
                 self.execute(

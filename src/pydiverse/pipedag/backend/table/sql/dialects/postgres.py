@@ -67,23 +67,29 @@ class PostgresTableStore(SQLTableStore):
             self.logger,
         )
 
-    def lock_table(self, table: Table | str, schema: Schema | str, conn: Any):
+    def lock_table(
+        self, table: Table | str, schema: Schema | str, conn: Any = None
+    ) -> list:
         """
         For some dialects, it might be beneficial to lock a table before writing to it.
         """
-        self.execute(
-            LockTable(table.name if isinstance(table, Table) else table, schema),
-            conn=conn,
-        )
+        stmt = LockTable(table.name if isinstance(table, Table) else table, schema)
+        if conn is not None:
+            self.execute(stmt, conn=conn)
+        return [stmt]
 
-    def lock_source_table(self, table: Table | str, schema: Schema | str, conn: Any):
+    def lock_source_table(
+        self, table: Table | str, schema: Schema | str, conn: Any = None
+    ) -> list:
         """
         For some dialects, it might be beneficial to lock source tables before reading.
         """
-        self.execute(
-            LockSourceTable(table.name if isinstance(table, Table) else table, schema),
-            conn=conn,
+        stmt = LockSourceTable(
+            table.name if isinstance(table, Table) else table, schema
         )
+        if conn is not None:
+            self.execute(stmt, conn=conn)
+        return [stmt]
 
     def check_materialization_details_supported(self, label: str | None) -> None:
         _ = label

@@ -91,32 +91,32 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                 )
             )
             store.add_indexes_and_set_nullable(table, schema, on_empty_table=True)
-            with store.lock_connect() as conn:
-                store.lock_table(table, schema, conn)
-                store.lock_source_tables(source_tables, conn)
-                store.execute(
-                    InsertIntoSelect(
-                        table.name,
-                        schema,
-                        obj,
-                    ),
-                    conn=conn,
-                    heavy_shorten_print=True,
+            statements = store.lock_table(table, schema)
+            statements += store.lock_source_tables(source_tables)
+            statements += [
+                InsertIntoSelect(
+                    table.name,
+                    schema,
+                    obj,
                 )
+            ]
+            store.execute(
+                statements,
+                heavy_shorten_print=True,
+            )
             store.add_indexes_and_set_nullable(table, schema, on_empty_table=False)
         else:
-            with store.lock_connect() as conn:
-                store.lock_source_tables(source_tables, conn)
-                store.execute(
-                    CreateTableAsSelect(
-                        table.name,
-                        schema,
-                        obj,
-                        unlogged=unlogged,
-                        suffix=suffix,
-                    ),
-                    conn=conn,
+            statements = store.lock_source_tables(source_tables)
+            statements += [
+                CreateTableAsSelect(
+                    table.name,
+                    schema,
+                    obj,
+                    unlogged=unlogged,
+                    suffix=suffix,
                 )
+            ]
+            store.execute(statements)
             store.add_indexes_and_set_nullable(table, schema)
 
     @classmethod
