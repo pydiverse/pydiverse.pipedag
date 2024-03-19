@@ -27,7 +27,7 @@ pytestmark = [with_instances(DATABASE_INSTANCES)]
 
 @pytest.mark.polars
 def test_table_store():
-    @materialize
+    @materialize(version="1.0")
     def in_table():
         table_store = ConfigContext.get().store.table_store
         schema = Schema("user_controlled_schema", prefix="", suffix="")
@@ -48,7 +48,7 @@ def test_table_store():
         )
         return Table(ExternalTableReference(table_name, schema=schema.get()))
 
-    @materialize(lazy=True, input_type=sa.Table)
+    @materialize(input_type=sa.Table)
     def duplicate_table_reference(tbl: sa.Table):
         return Table(
             ExternalTableReference(tbl.original.name, schema=tbl.original.schema)
