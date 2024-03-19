@@ -130,12 +130,9 @@ class PandasTableHook(PandasTableHook):
             dtypes.update(table.type_map)
 
         # Create empty table
-        df[:0].to_sql(
-            table.name,
-            engine,
-            schema=schema.get(),
-            index=False,
-            dtype=dtypes,
+        cls._dialect_create_empty_table(store, df, table, schema, dtypes)
+        store.add_indexes_and_set_nullable(
+            table, schema, on_empty_table=True, table_cols=df.columns
         )
 
         if store.get_unlogged(resolve_materialization_details_label(table)):

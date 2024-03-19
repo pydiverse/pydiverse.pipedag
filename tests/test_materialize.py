@@ -389,86 +389,104 @@ def test_run_flow_with_empty_stage():
     assert f.run().successful
 
 
+@materialize(lazy=True, input_type=sa.Table)
+def _check_nullable_task(tables):
+    assert len(tables) == 18
+    # This is dialect specific:
+    # assert [c.nullable for c in tables[0].c] == [True, True, True]
+    assert [c.nullable for c in tables[1].c] == [False, True, False]
+    assert [c.nullable for c in tables[2].c] == [True, False, True]
+    assert [c.nullable for c in tables[3].c] == [True, False, True]
+    assert [c.nullable for c in tables[4].c] == [False, True, False]
+    assert [c.nullable for c in tables[5].c] == [True, True, True]
+    assert [c.nullable for c in tables[6].c] == [True, False, True]
+    assert [c.nullable for c in tables[7].c] == [False, True, False]
+    assert [c.nullable for c in tables[8].c] == [False, False, False]
+    # assert [c.nullable for c in tables[9].c] == [True, True, True]
+    assert [c.nullable for c in tables[10].c][1:] == [True, False]
+    assert [c.nullable for c in tables[11].c][1:] == [False, True]
+    assert [c.nullable for c in tables[12].c][1:] == [False, True]
+    assert [c.nullable for c in tables[13].c][1:] == [True, False]
+    assert [c.nullable for c in tables[14].c][1:] == [True, True]
+    assert [c.nullable for c in tables[15].c][1:] == [False, True]
+    assert [c.nullable for c in tables[16].c][1:] == [True, False]
+    assert [c.nullable for c in tables[17].c][1:] == [False, False]
+    return tables
+
+
 def _test_nullable_lazy_get_flow():
     cols = sa.literal(1).label("x"), sa.literal(2).label("y"), sa.literal(3).label("z")
 
     @materialize(lazy=True)
     def lazy_task_1():
+        q = sa.select(*cols)
         tables = [
-            Table(sa.select(*cols)),
-            Table(sa.select(*cols), nullable=["y"]),
-            Table(sa.select(*cols), nullable=["x", "z"]),
-            Table(sa.select(*cols), non_nullable=["y"]),
-            Table(sa.select(*cols), non_nullable=["x", "z"]),
-            Table(sa.select(*cols), nullable=["x", "y", "z"], non_nullable=[]),
-            Table(sa.select(*cols), nullable=["x", "z"], non_nullable=["y"]),
-            Table(sa.select(*cols), nullable=["y"], non_nullable=["x", "z"]),
-            Table(sa.select(*cols), nullable=[], non_nullable=["x", "y", "z"]),
-            Table(sa.select(*cols), primary_key=["x"]),
-            Table(sa.select(*cols), primary_key=["x"], nullable=["y"]),
-            Table(sa.select(*cols), primary_key=["x"], nullable=["x", "z"]),
-            Table(sa.select(*cols), primary_key=["x"], non_nullable=["y"]),
-            Table(sa.select(*cols), primary_key=["x"], non_nullable=["x", "z"]),
-            Table(
-                sa.select(*cols),
-                primary_key=["x"],
-                nullable=["x", "y", "z"],
-                non_nullable=[],
-            ),
-            Table(
-                sa.select(*cols),
-                primary_key=["x"],
-                nullable=["x", "z"],
-                non_nullable=["y"],
-            ),
-            Table(
-                sa.select(*cols),
-                primary_key=["x"],
-                nullable=["y"],
-                non_nullable=["x", "z"],
-            ),
-            Table(
-                sa.select(*cols),
-                primary_key=["x"],
-                nullable=[],
-                non_nullable=["x", "y", "z"],
-            ),
+            Table(q),
+            Table(q, nullable=["y"]),
+            Table(q, nullable=["x", "z"]),
+            Table(q, non_nullable=["y"]),
+            Table(q, non_nullable=["x", "z"]),
+            Table(q, nullable=["x", "y", "z"], non_nullable=[]),
+            Table(q, nullable=["x", "z"], non_nullable=["y"]),
+            Table(q, nullable=["y"], non_nullable=["x", "z"]),
+            Table(q, nullable=[], non_nullable=["x", "y", "z"]),
+            Table(q, primary_key=["x"]),
+            Table(q, primary_key=["x"], nullable=["y"]),
+            Table(q, primary_key=["x"], nullable=["x", "z"]),
+            Table(q, primary_key=["x"], non_nullable=["y"]),
+            Table(q, primary_key=["x"], non_nullable=["x", "z"]),
+            Table(q, primary_key=["x"], nullable=["x", "y", "z"], non_nullable=[]),
+            Table(q, primary_key=["x"], nullable=["x", "z"], non_nullable=["y"]),
+            Table(q, primary_key=["x"], nullable=["y"], non_nullable=["x", "z"]),
+            Table(q, primary_key=["x"], nullable=[], non_nullable=["x", "y", "z"]),
         ]
-        return tables
-
-    @materialize(lazy=True, input_type=sa.Table)
-    def lazy_task_2(tables):
-        assert len(tables) == 18
-        # This is dialect specific:
-        # assert [c.nullable for c in tables[0].c] == [True, True, True]
-        assert [c.nullable for c in tables[1].c] == [False, True, False]
-        assert [c.nullable for c in tables[2].c] == [True, False, True]
-        assert [c.nullable for c in tables[3].c] == [True, False, True]
-        assert [c.nullable for c in tables[4].c] == [False, True, False]
-        assert [c.nullable for c in tables[5].c] == [True, True, True]
-        assert [c.nullable for c in tables[6].c] == [True, False, True]
-        assert [c.nullable for c in tables[7].c] == [False, True, False]
-        assert [c.nullable for c in tables[8].c] == [False, False, False]
-        # assert [c.nullable for c in tables[9].c] == [True, True, True]
-        assert [c.nullable for c in tables[10].c][1:] == [True, False]
-        assert [c.nullable for c in tables[11].c][1:] == [False, True]
-        assert [c.nullable for c in tables[12].c][1:] == [False, True]
-        assert [c.nullable for c in tables[13].c][1:] == [True, False]
-        assert [c.nullable for c in tables[14].c][1:] == [True, True]
-        assert [c.nullable for c in tables[15].c][1:] == [False, True]
-        assert [c.nullable for c in tables[16].c][1:] == [True, False]
-        assert [c.nullable for c in tables[17].c][1:] == [False, False]
         return tables
 
     with Flow() as f:
         with Stage("stage_1"):
             lazy_tables = lazy_task_1()
-            lazy_task_2(lazy_tables)
+            _check_nullable_task(lazy_tables)
     return f, lazy_tables
 
 
-def test_nullable_lazy():
-    f, lazy_tables = _test_nullable_lazy_get_flow()
+def _test_nullable_get_flow():
+    @materialize
+    def task_1():
+        df = pd.DataFrame({"x": [1], "y": [2], "z": [3]})
+        tables = [
+            Table(df),
+            Table(df, nullable=["y"]),
+            Table(df, nullable=["x", "z"]),
+            Table(df, non_nullable=["y"]),
+            Table(df, non_nullable=["x", "z"]),
+            Table(df, nullable=["x", "y", "z"], non_nullable=[]),
+            Table(df, nullable=["x", "z"], non_nullable=["y"]),
+            Table(df, nullable=["y"], non_nullable=["x", "z"]),
+            Table(df, nullable=[], non_nullable=["x", "y", "z"]),
+            Table(df, primary_key=["x"]),
+            Table(df, primary_key=["x"], nullable=["y"]),
+            Table(df, primary_key=["x"], nullable=["x", "z"]),
+            Table(df, primary_key=["x"], non_nullable=["y"]),
+            Table(df, primary_key=["x"], non_nullable=["x", "z"]),
+            Table(df, primary_key=["x"], nullable=["x", "y", "z"], non_nullable=[]),
+            Table(df, primary_key=["x"], nullable=["x", "z"], non_nullable=["y"]),
+            Table(df, primary_key=["x"], nullable=["y"], non_nullable=["x", "z"]),
+            Table(df, primary_key=["x"], nullable=[], non_nullable=["x", "y", "z"]),
+        ]
+        return tables
+
+    with Flow() as f:
+        with Stage("stage_1"):
+            lazy_tables = task_1()
+            _check_nullable_task(lazy_tables)
+    return f, lazy_tables
+
+
+@pytest.mark.parametrize(
+    "_get_flow", [_test_nullable_get_flow, _test_nullable_lazy_get_flow]
+)
+def test_nullable(_get_flow):
+    f, lazy_tables = _get_flow()
 
     with StageLockContext():
         result = f.run()
@@ -481,8 +499,11 @@ def test_nullable_lazy():
 
 
 @skip_instances("duckdb")  # duckdb does not persist nullable flags over connections
-def test_nullable_lazy_output():
-    f, lazy_tables = _test_nullable_lazy_get_flow()
+@pytest.mark.parametrize(
+    "_get_flow", [_test_nullable_get_flow, _test_nullable_lazy_get_flow]
+)
+def test_nullable_output(_get_flow):
+    f, lazy_tables = _get_flow()
 
     def get_nullable(idx):
         return [c.nullable for c in result.get(lazy_tables[idx], as_type=sa.Table).c]

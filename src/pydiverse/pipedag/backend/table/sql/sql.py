@@ -402,17 +402,30 @@ class SQLTableStore(BaseTableStore):
         *,
         conn: sa.engine.Connection = None,
         heavy_shorten_print=False,
+        transaction_already_open=False,
     ):
         if conn is None:
             with self.engine_connect() as conn:
                 return self.execute(
-                    query, conn=conn, heavy_shorten_print=heavy_shorten_print
+                    query,
+                    conn=conn,
+                    heavy_shorten_print=heavy_shorten_print,
+                    transaction_already_open=transaction_already_open,
                 )
 
         if isinstance(query, sa.schema.DDLElement) or isinstance(query, list):
             if not isinstance(query, list):
                 query = [query]
-            with conn.begin():
+
+            @contextmanager
+            def begin():
+                if not transaction_already_open:
+                    with conn.begin():
+                        yield
+                else:
+                    yield
+
+            with begin():
                 # execute multiple statements in one transaction
                 for cur_query in query:
                     if isinstance(cur_query, sa.schema.DDLElement):

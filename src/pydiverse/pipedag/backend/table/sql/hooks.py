@@ -281,7 +281,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         )
 
     @classmethod
-    def _get_dialect_dtypes(dtypes: dict[str, DType], table: Table[pd.DataFrame]):
+    def _get_dialect_dtypes(cls, dtypes: dict[str, DType], table: Table[pd.DataFrame]):
         _ = table
         return {name: dtype.to_sql() for name, dtype in dtypes.items()}
 
@@ -325,19 +325,24 @@ class PandasTableHook(TableHook[SQLTableStore]):
                 table, schema, on_empty_table=True, table_cols=df.columns
             )
 
-        with store.engine.begin() as conn:
-            store.lock_table(table, schema, conn)
-            df.to_sql(
-                table.name,
-                conn,
-                schema=schema.get(),
-                index=False,
-                dtype=dtypes,
-                chunksize=100_000,
-                if_exists="append" if early else "fail",
-            )
+        with store.engine_connect() as conn:
+            with conn.begin():
+                if early:
+                    store.lock_table(table, schema, conn)
+                df.to_sql(
+                    table.name,
+                    conn,
+                    schema=schema.get(),
+                    index=False,
+                    dtype=dtypes,
+                    chunksize=100_000,
+                    if_exists="append" if early else "fail",
+                )
         store.add_indexes_and_set_nullable(
-            table, schema, on_empty_table=False, table_cols=df.columns
+            table,
+            schema,
+            on_empty_table=False if early else None,
+            table_cols=df.columns,
         )
 
     @classmethod

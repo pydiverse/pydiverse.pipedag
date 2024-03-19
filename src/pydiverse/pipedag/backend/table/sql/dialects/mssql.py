@@ -22,7 +22,6 @@ from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.materialize import Table
 from pydiverse.pipedag.materialize.container import RawSql
-from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
 
 
 class MSSqlTableStore(SQLTableStore):
@@ -304,36 +303,14 @@ class MSSqlTableStore(SQLTableStore):
 @MSSqlTableStore.register_table(pd)
 class PandasTableHook(PandasTableHook):
     @classmethod
-    def _execute_materialize(
-        cls,
-        df: pd.DataFrame,
-        store: MSSqlTableStore,
-        table: Table[pd.DataFrame],
-        schema: Schema,
-        dtypes: dict[str, DType],
-    ):
-        dtypes = ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
+    def _get_dialect_dtypes(cls, dtypes: dict[str, DType], table: Table[pd.DataFrame]):
+        _ = table
+        return ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
             {
                 name: sa.dialects.mssql.DATETIME2()
                 for name, dtype in dtypes.items()
                 if dtype == DType.DATETIME
             }
-        )
-
-        if table.type_map:
-            dtypes.update(table.type_map)
-
-        store.check_materialization_details_supported(
-            resolve_materialization_details_label(table)
-        )
-
-        df.to_sql(
-            table.name,
-            store.engine,
-            schema=schema.get(),
-            index=False,
-            dtype=dtypes,
-            chunksize=100_000,
         )
 
 

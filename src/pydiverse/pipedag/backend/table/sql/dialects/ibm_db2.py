@@ -124,7 +124,7 @@ class IBMDB2TableStore(SQLTableStore):
         """
         stmt = LockTable(table.name if isinstance(table, Table) else table, schema)
         if conn is not None:
-            self.execute(stmt, conn=conn)
+            self.execute(stmt, conn=conn, transaction_already_open=True)
         return [stmt]
 
     def lock_source_table(
@@ -137,7 +137,7 @@ class IBMDB2TableStore(SQLTableStore):
             table.name if isinstance(table, Table) else table, schema
         )
         if conn is not None:
-            self.execute(stmt, conn=conn)
+            self.execute(stmt, conn=conn, transaction_already_open=True)
         return [stmt]
 
     def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
@@ -145,8 +145,10 @@ class IBMDB2TableStore(SQLTableStore):
             # IBM DB2 does not support CREATE TABLE AS SELECT without INSERT INTO
             return True
         else:
+            label = resolve_materialization_details_label(table)
             return (
-                table.nullable is not None
+                (label is not None and len(label.strip()) > 0)
+                or table.nullable is not None
                 or table.non_nullable is not None
                 or (table.primary_key is not None and len(table.primary_key) > 0)
             )
@@ -258,14 +260,7 @@ class IBMDB2TableStore(SQLTableStore):
 @IBMDB2TableStore.register_table(pd)
 class PandasTableHook(PandasTableHook):
     @classmethod
-    def _execute_materialize(
-        cls,
-        df: pd.DataFrame,
-        store: IBMDB2TableStore,
-        table: Table[pd.DataFrame],
-        schema: Schema,
-        dtypes: dict[str, DType],
-    ):
+    def _get_dialect_dtypes(cls, dtypes: dict[str, DType], table: Table[pd.DataFrame]):
         # Default string target is CLOB which can't be used for indexing.
         # -> Convert indexed string columns to VARCHAR(256)
         index_columns = set()
@@ -274,7 +269,7 @@ class PandasTableHook(PandasTableHook):
         if primary_key := table.primary_key:
             index_columns |= set(primary_key)
 
-        dtypes = ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
+        return ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
             {
                 name: (
                     sa.String(length=256)
@@ -286,32 +281,25 @@ class PandasTableHook(PandasTableHook):
             }
         )
 
-        if table.type_map:
-            dtypes.update(table.type_map)
-
-        engine = store.engine
+    @classmethod
+    def _dialect_create_empty_table(
+        cls,
+        store: SQLTableStore,
+        df: pd.DataFrame,
+        table: Table[pd.DataFrame],
+        schema: Schema,
+        dtypes: dict[str, DType],
+    ):
         suffix = store.get_create_table_suffix(
             resolve_materialization_details_label(table)
         )
-        if suffix:
-            store.execute(
-                CreateTableWithSuffix(
-                    table.name,
-                    schema,
-                    dtypes,
-                    table.nullable,
-                    table.non_nullable,
-                    suffix,
-                )
+        store.execute(
+            CreateTableWithSuffix(
+                table.name,
+                schema,
+                dtypes,
+                table.nullable,
+                table.non_nullable,
+                suffix,
             )
-
-        # noinspection PyTypeChecker
-        df.to_sql(
-            table.name,
-            engine,
-            schema=schema.get(),
-            index=False,
-            dtype=dtypes,
-            chunksize=100_000,
-            if_exists="append" if suffix else "fail",
         )
