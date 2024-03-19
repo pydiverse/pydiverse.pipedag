@@ -58,17 +58,26 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         obj = table.obj
         if isinstance(table.obj, (sa.Table, sa.sql.expression.Alias)):
             obj = sa.select("*").select_from(table.obj)
+            tbl = table.obj if isinstance(table.obj, sa.Table) else table.obj.original
+            source_tables = [
+                dict(
+                    name=tbl.name,
+                    schema=tbl.schema,
+                    shared_lock_allowed=table.shared_lock_allowed,
+                )
+            ]
+        else:
+            source_tables = [
+                dict(
+                    name=tbl.name,
+                    schema=store.get_schema(tbl.stage.current_name).get()
+                    if tbl.external_schema is None
+                    else tbl.external_schema,
+                    shared_lock_allowed=tbl.shared_lock_allowed,
+                )
+                for tbl in TaskContext.get().input_tables
+            ]
 
-        source_tables = [
-            dict(
-                name=tbl.name,
-                schema=store.get_schema(tbl.stage.current_name).get()
-                if tbl.external_schema is None
-                else tbl.external_schema,
-                shared_lock_allowed=tbl.shared_lock_allowed,
-            )
-            for tbl in TaskContext.get().input_tables
-        ]
         schema = store.get_schema(stage_name)
 
         store.check_materialization_details_supported(

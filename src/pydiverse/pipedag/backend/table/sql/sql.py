@@ -983,9 +983,9 @@ class SQLTableStore(BaseTableStore):
             raise CacheError(msg)
 
         from_tbl = sa.Table(from_name, sa.MetaData(), schema=from_schema.get())
-        query = sa.select("*").select_from(from_tbl)
         dest_tbl = table.copy_without_obj()
-        dest_tbl.obj = query
+        dest_tbl.obj = from_tbl
+        dest_tbl.shared_lock_allowed = True
 
         # Copy table via executing a select statement with respective hook
         hook = self.get_m_table_hook(type(dest_tbl.obj))
