@@ -17,6 +17,7 @@ from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.table.base import AutoVersionSupport, TableHook
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateTableAsSelect,
+    InsertIntoSelect,
     Schema,
 )
 from pydiverse.pipedag.backend.table.sql.sql import (
@@ -51,7 +52,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     def materialize(
         cls,
         store: SQLTableStore,
-        table: Table[sa.sql.expression.TextClause | sa.Text],
+        table: Table[sa.sql.expression.TextClause | sa.sql.expression.Selectable],
         stage_name,
     ):
         obj = table.obj
@@ -74,23 +75,49 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
             resolve_materialization_details_label(table)
         )
 
-        from pydiverse.pipedag.backend.table.sql.dialects import IBMDB2TableStore
-
-        store.execute(
-            CreateTableAsSelect(
-                table.name,
-                schema,
-                obj,
-                early_not_null=table.primary_key,
-                source_tables=source_tables,
-                suffix=store.get_create_table_suffix(
-                    resolve_materialization_details_label(table)
-                )
-                if isinstance(store, IBMDB2TableStore)
-                else None,
-            )
+        suffix = store.get_create_table_suffix(
+            resolve_materialization_details_label(table)
         )
-        store.add_indexes(table, schema, early_not_null_possible=True)
+        unlogged = store.get_unlogged(resolve_materialization_details_label(table))
+        if store.dialect_requests_empty_creation(table, is_sql=True):
+            limit_query = store.get_limit_query(obj, rows=0)
+            store.execute(
+                CreateTableAsSelect(
+                    table.name,
+                    schema,
+                    limit_query,
+                    unlogged=unlogged,
+                    suffix=suffix,
+                )
+            )
+            store.add_indexes_and_set_nullable(table, schema, on_empty_table=True)
+            with store.lock_connect() as conn:
+                store.lock_table(table, schema, conn)
+                store.lock_source_tables(source_tables, conn)
+                store.execute(
+                    InsertIntoSelect(
+                        table.name,
+                        schema,
+                        obj,
+                    ),
+                    conn=conn,
+                    heavy_shorten_print=True,
+                )
+            store.add_indexes_and_set_nullable(table, schema, on_empty_table=False)
+        else:
+            with store.lock_connect() as conn:
+                store.lock_source_tables(source_tables, conn)
+                store.execute(
+                    CreateTableAsSelect(
+                        table.name,
+                        schema,
+                        obj,
+                        unlogged=unlogged,
+                        suffix=suffix,
+                    ),
+                    conn=conn,
+                )
+            store.add_indexes_and_set_nullable(table, schema)
 
     @classmethod
     def retrieve(
@@ -252,7 +279,28 @@ class PandasTableHook(TableHook[SQLTableStore]):
             schema=schema,
             dtypes=dtypes,
         )
-        store.add_indexes(table, schema)
+
+    @classmethod
+    def _get_dialect_dtypes(dtypes: dict[str, DType], table: Table[pd.DataFrame]):
+        _ = table
+        return {name: dtype.to_sql() for name, dtype in dtypes.items()}
+
+    @classmethod
+    def _dialect_create_empty_table(
+        cls,
+        store: SQLTableStore,
+        df: pd.DataFrame,
+        table: Table[pd.DataFrame],
+        schema: Schema,
+        dtypes: dict[str, DType],
+    ):
+        df[:0].to_sql(
+            table.name,
+            store.engine,
+            schema=schema.get(),
+            index=False,
+            dtype=dtypes,
+        )
 
     @classmethod
     def _execute_materialize(
@@ -263,7 +311,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         schema: Schema,
         dtypes: dict[str, DType],
     ):
-        dtypes = {name: dtype.to_sql() for name, dtype in dtypes.items()}
+        dtypes = cls._get_dialect_dtypes(dtypes, table)
         if table.type_map:
             dtypes.update(table.type_map)
 
@@ -271,13 +319,25 @@ class PandasTableHook(TableHook[SQLTableStore]):
             resolve_materialization_details_label(table)
         )
 
-        df.to_sql(
-            table.name,
-            store.engine,
-            schema=schema.get(),
-            index=False,
-            dtype=dtypes,
-            chunksize=100_000,
+        if early := store.dialect_requests_empty_creation(table, is_sql=False):
+            cls._dialect_create_empty_table(store, df, table, schema, dtypes)
+            store.add_indexes_and_set_nullable(
+                table, schema, on_empty_table=True, table_cols=df.columns
+            )
+
+        with store.engine.begin() as conn:
+            store.lock_table(table, schema, conn)
+            df.to_sql(
+                table.name,
+                conn,
+                schema=schema.get(),
+                index=False,
+                dtype=dtypes,
+                chunksize=100_000,
+                if_exists="append" if early else "fail",
+            )
+        store.add_indexes_and_set_nullable(
+            table, schema, on_empty_table=False, table_cols=df.columns
         )
 
     @classmethod

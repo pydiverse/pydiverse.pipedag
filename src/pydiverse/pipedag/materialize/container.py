@@ -37,6 +37,10 @@ class Table(Generic[T]):
     :param type_map: Optional map of column names to types. Depending on the table
         store this will allow you to control the datatype as which the specified
         columns get materialized.
+    :param nullable: List of columns that should be nullable. If nullable is not None,
+        all other columns will be non-nullable.
+    :param non_nullable: List of columns that should be non-nullable. If non_nullable
+        is not None, all other columns will be nullable.
     :param materialization_details: The label of the materialization_details to be used.
         Overwrites the label given by the stage.
 
@@ -52,6 +56,8 @@ class Table(Generic[T]):
         primary_key: str | list[str] | None = None,
         indexes: list[list[str]] | None = None,
         type_map: dict[str, Any] | None = None,
+        nullable: list[str] | None = None,
+        non_nullable: list[str] | None = None,
         materialization_details: str | None = None,
     ):
         self._name = None
@@ -64,6 +70,8 @@ class Table(Generic[T]):
         self.primary_key = primary_key
         self.indexes = indexes
         self.type_map = type_map
+        self.nullable = nullable
+        self.non_nullable = non_nullable
         self.materialization_details = materialization_details
 
         # Check that indexes is of type list[list[str]]

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 import pandas as pd
 import sqlalchemy as sa
@@ -12,6 +14,8 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     AddPrimaryKey,
     ChangeColumnNullable,
     CreateTableWithSuffix,
+    LockSourceTable,
+    LockTable,
     Schema,
 )
 from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook
@@ -112,11 +116,45 @@ class IBMDB2TableStore(SQLTableStore):
                     time.sleep(retry_iteration * retry_iteration * 1.1)
         self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
 
-    def add_indexes(
-        self, table: Table, schema: Schema, *, early_not_null_possible: bool = False
+    def lock_table(self, table: Table | str, schema: Schema | str, conn: Any):
+        """
+        For some dialects, it might be beneficial to lock a table before writing to it.
+        """
+        self.execute(
+            LockTable(table.name if isinstance(table, Table) else table, schema),
+            conn=conn,
+        )
+
+    def lock_source_table(self, table: Table | str, schema: Schema | str, conn: Any):
+        """
+        For some dialects, it might be beneficial to lock source tables before reading.
+        """
+        self.execute(
+            LockSourceTable(table.name if isinstance(table, Table) else table, schema),
+            conn=conn,
+        )
+
+    def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
+        if is_sql:
+            # IBM DB2 does not support CREATE TABLE AS SELECT without INSERT INTO
+            return True
+        else:
+            return (
+                table.nullable is not None
+                or table.non_nullable is not None
+                or (table.primary_key is not None and len(table.primary_key) > 0)
+            )
+
+    def add_indexes_and_set_nullable(
+        self,
+        table: Table,
+        schema: Schema,
+        *,
+        on_empty_table: bool | None = None,
+        table_cols: Iterable[str] | None = None,
     ):
-        super().add_indexes(
-            table, schema, early_not_null_possible=early_not_null_possible
+        super().add_indexes_and_set_nullable(
+            table, schema, on_empty_table=on_empty_table, table_cols=table_cols
         )
         table_name = self.engine.dialect.identifier_preparer.quote(table.name)
         schema_name = self.engine.dialect.identifier_preparer.quote_schema(schema.get())
@@ -241,7 +279,16 @@ class PandasTableHook(PandasTableHook):
             resolve_materialization_details_label(table)
         )
         if suffix:
-            store.execute(CreateTableWithSuffix(table.name, schema, dtypes, suffix))
+            store.execute(
+                CreateTableWithSuffix(
+                    table.name,
+                    schema,
+                    dtypes,
+                    table.nullable,
+                    table.non_nullable,
+                    suffix,
+                )
+            )
 
         # noinspection PyTypeChecker
         df.to_sql(

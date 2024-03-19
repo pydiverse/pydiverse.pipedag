@@ -18,6 +18,7 @@ __all__ = [
     "RenameSchema",
     "DropSchemaContent",
     "CreateTableAsSelect",
+    "InsertIntoSelect",
     "CreateTableWithSuffix",
     "CreateViewAsSelect",
     "CreateAlias",
@@ -34,6 +35,8 @@ __all__ = [
     "ChangeColumnNullable",
     "ChangeColumnTypes",
     "ChangeTableLogged",
+    "LockTable",
+    "LockSourceTable",
     "split_ddl_statement",
 ]
 
@@ -97,6 +100,18 @@ class DropDatabase(DDLElement):
         self.cascade = cascade
 
 
+class InsertIntoSelect(DDLElement):
+    def __init__(
+        self,
+        name: str,
+        schema: Schema,
+        query: Select | TextClause | sa.Text,
+    ):
+        self.name = name
+        self.schema = schema
+        self.query = query
+
+
 class CreateTableAsSelect(DDLElement):
     def __init__(
         self,
@@ -104,19 +119,12 @@ class CreateTableAsSelect(DDLElement):
         schema: Schema,
         query: Select | TextClause | sa.Text,
         *,
-        early_not_null: None | str | list[str] = None,
-        source_tables: None | list[dict[str, str]] = None,
         unlogged: bool = False,
         suffix: str = "",
     ):
         self.name = name
         self.schema = schema
         self.query = query
-        # some dialects may choose to set NOT-NULL constraint in the middle of
-        # create table as select
-        self.early_not_null = early_not_null
-        # some dialects may lock source and destination tables
-        self.source_tables = source_tables
         # Postgres supports creating unlogged tables. Flag should get ignored by
         # other dialects
         self.unlogged = unlogged
@@ -126,7 +134,13 @@ class CreateTableAsSelect(DDLElement):
 
 class CreateTableWithSuffix(DDLElement):
     def __init__(
-        self, name: str, schema: Schema, sql_dtypes: dict[str, TypeEngine], suffix: str
+        self,
+        name: str,
+        schema: Schema,
+        sql_dtypes: dict[str, TypeEngine],
+        nullable: list[str] | None,
+        non_nullable: list[str] | None,
+        suffix: str,
     ):
         """
         This is used for dialect=ibm_sa_db to create a table in a
@@ -135,6 +149,8 @@ class CreateTableWithSuffix(DDLElement):
         self.name = name
         self.schema = schema
         self.sql_dtypes = sql_dtypes
+        self.nullable = nullable
+        self.non_nullable = non_nullable
         self.suffix = suffix
 
 
@@ -359,6 +375,24 @@ class ChangeTableLogged(DDLElement):
         self.table_name = table_name
         self.schema = schema
         self.logged = logged
+
+
+class LockTable(DDLElement):
+    def __init__(self, name: str, schema: Schema | str):
+        """
+        Lock Table in exclusive mode for writing
+        """
+        self.name = name
+        self.schema = schema.get() if isinstance(schema, Schema) else schema
+
+
+class LockSourceTable(DDLElement):
+    def __init__(self, name: str, schema: Schema):
+        """
+        Lock Table in shared mode for reading.
+        """
+        self.name = name
+        self.schema = schema.get() if isinstance(schema, Schema) else schema
 
 
 @compiles(CreateSchema)
@@ -645,17 +679,33 @@ def visit_drop_database(drop: DropDatabase, compiler, **kw):
     )
 
 
-def _visit_create_obj_as_select(create, compiler, _type, kw, *, prefix="", suffix=""):
+def _visit_fill_obj_as_select(
+    create, compiler, _type, kw, *, cmd="CREATE ", sep=" AS", prefix="", suffix=""
+):
     name = compiler.preparer.quote(create.name)
     schema = compiler.preparer.format_schema(create.schema.get())
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(create.query, **kw)
-    return f"CREATE {_type} {schema}.{name} AS\n{prefix}{select}{suffix}"
+    return f"{cmd}{_type} {schema}.{name}{sep}\n{prefix}{select}{suffix}"
+
+
+@compiles(InsertIntoSelect)
+def visit_insert_into_select(insert: InsertIntoSelect, compiler, **kw):
+    return _visit_fill_obj_as_select(
+        insert, compiler, "", kw, cmd="INSERT INTO", sep=""
+    )
+
+
+@compiles(InsertIntoSelect, "mssql")
+def visit_insert_into_select_mssql(insert: InsertIntoSelect, compiler, **kw):
+    return _visit_fill_obj_as_select(
+        insert, compiler, "", kw, cmd="INSERT INTO", sep=" WITH(TABLOCKX)"
+    )
 
 
 @compiles(CreateTableAsSelect)
 def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
-    return _visit_create_obj_as_select(create, compiler, "TABLE", kw)
+    return _visit_fill_obj_as_select(create, compiler, "TABLE", kw)
 
 
 @compiles(CreateTableAsSelect, "postgresql")
@@ -663,9 +713,9 @@ def visit_create_table_as_select_postgresql(
     create: CreateTableAsSelect, compiler, **kw
 ):
     if create.unlogged:
-        return _visit_create_obj_as_select(create, compiler, "UNLOGGED TABLE", kw)
+        return _visit_fill_obj_as_select(create, compiler, "UNLOGGED TABLE", kw)
     else:
-        return _visit_create_obj_as_select(create, compiler, "TABLE", kw)
+        return _visit_fill_obj_as_select(create, compiler, "TABLE", kw)
 
 
 @compiles(CreateTableAsSelect, "mssql")
@@ -681,51 +731,11 @@ def visit_create_table_as_select_mssql(create: CreateTableAsSelect, compiler, **
 
 @compiles(CreateTableAsSelect, "ibm_db_sa")
 def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler, **kw):
+    # Attention: for DB2, a CreateTableAsSelect must be followed by an InsertIntoSelect
+    # to actually fill data
     suffix = ") DEFINITION ONLY " + create.suffix
-    prepare_statement = _visit_create_obj_as_select(
+    return _visit_fill_obj_as_select(
         create, compiler, "TABLE", kw, prefix="(", suffix=suffix
-    )
-
-    if create.early_not_null is not None:
-        not_null_cols = create.early_not_null
-        if isinstance(not_null_cols, str):
-            not_null_cols = [not_null_cols]
-        not_null_statements = _get_nullable_change_statements(
-            ChangeColumnNullable(
-                create.name,
-                create.schema,
-                column_names=not_null_cols,
-                nullable=False,
-            ),
-            compiler,
-        )
-    else:
-        not_null_statements = []
-
-    preparer = compiler.preparer
-    name = preparer.quote(create.name)
-    schema = preparer.format_schema(create.schema.get())
-
-    lock_statements = [f"LOCK TABLE {schema}.{name} IN EXCLUSIVE MODE"]
-    if create.source_tables is not None:
-        src_tables = [
-            f"{preparer.format_schema(tbl['schema'])}.{preparer.quote(tbl['name'])}"
-            for tbl in create.source_tables
-            if tbl["shared_lock_allowed"]
-        ]
-        lock_statements += [f"LOCK TABLE {ref} IN SHARE MODE" for ref in src_tables]
-
-    kw["literal_binds"] = True
-    select = compiler.sql_compiler.process(create.query, **kw)
-    create_statement = f"INSERT INTO {schema}.{name}\n{select}"
-
-    return join_ddl_statements(
-        [prepare_statement]
-        + not_null_statements
-        + lock_statements
-        + [create_statement],
-        compiler,
-        **kw,
     )
 
 
@@ -747,7 +757,7 @@ def visit_create_table_with_suffix(create: CreateTableWithSuffix, compiler, **kw
 
 @compiles(CreateViewAsSelect)
 def visit_create_view_as_select(create: CreateViewAsSelect, compiler, **kw):
-    return _visit_create_obj_as_select(create, compiler, "VIEW", kw)
+    return _visit_fill_obj_as_select(create, compiler, "VIEW", kw)
 
 
 def insert_into_in_query(select_sql, schema, table):
@@ -1133,6 +1143,50 @@ def visit_change_table_logged(change: ChangeTableLogged, compiler, **kw):
     schema = compiler.preparer.format_schema(change.schema.get())
     logged = "LOGGED" if change.logged else "UNLOGGED"
     return f"ALTER TABLE {schema}.{table_name} SET {logged}"
+
+
+@compiles(LockTable)
+def visit_lock_table_postgres(lock_table: LockTable, compiler, **kw):
+    _ = kw
+    preparer = compiler.preparer
+    name = preparer.quote(lock_table.name)
+    schema = preparer.format_schema(lock_table.schema)
+
+    return f"LOCK TABLE {schema}.{name} IN ACCESS EXCLUSIVE MODE"
+
+
+@compiles(LockTable, "ibm_db_sa")
+def visit_lock_table_ibm_db_sa(lock_table: LockTable, compiler, **kw):
+    _ = kw
+    preparer = compiler.preparer
+    name = preparer.quote(lock_table.name)
+    schema = preparer.format_schema(lock_table.schema)
+
+    return f"LOCK TABLE {schema}.{name} IN EXCLUSIVE MODE"
+
+
+@compiles(LockSourceTable)
+def visit_lock_source_table_postgres(
+    lock_source_table: LockSourceTable, compiler, **kw
+):
+    _ = kw
+    preparer = compiler.preparer
+    name = preparer.quote(lock_source_table.name)
+    schema = preparer.format_schema(lock_source_table.schema)
+
+    return f"LOCK TABLE {schema}.{name} IN SHARE MODE"
+
+
+@compiles(LockSourceTable, "ibm_db_sa")
+def visit_lock_source_table_ibm_db_sa(
+    lock_source_table: LockSourceTable, compiler, **kw
+):
+    _ = kw
+    preparer = compiler.preparer
+    name = preparer.quote(lock_source_table.name)
+    schema = preparer.format_schema(lock_source_table.schema)
+
+    return f"LOCK TABLE {schema}.{name} IN SHARE MODE"
 
 
 def _get_nullable_change_statements(change, compiler):

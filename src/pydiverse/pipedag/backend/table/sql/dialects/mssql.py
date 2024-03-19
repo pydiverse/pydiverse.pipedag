@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
+from contextlib import contextmanager
 from typing import Any
 
 import pandas as pd
@@ -80,6 +82,28 @@ class MSSqlTableStore(SQLTableStore):
     def _init_database(self):
         self._init_database_with_database("master", {"isolation_level": "AUTOCOMMIT"})
 
+    @contextmanager
+    def lock_connect(self) -> sa.Connection:
+        """
+        Open connection that is used for locking and filling tables.
+
+        Some dialects don't support locking and thus might prefer connect().
+        In fact mssql hangs if we use begin() here.
+        """
+        with self.engine.connect() as conn:
+            yield conn
+            conn.commit()
+
+    @contextmanager
+    def begin_nested(self, conn: sa.Connection) -> sa.engine.Connection:
+        """
+        Open a nested transaction.
+
+        Some dialects might have trouble with nested transactions (mssql).
+        """
+        with conn.begin() as nested:
+            yield nested
+
     def add_primary_key(
         self,
         table_name: str,
@@ -87,22 +111,7 @@ class MSSqlTableStore(SQLTableStore):
         key_columns: list[str],
         *,
         name: str | None = None,
-        early_not_null_possible: bool = False,
     ):
-        _ = early_not_null_possible  # not needed for this dialect
-        sql_types = self.reflect_sql_types(key_columns, table_name, schema)
-        # impose some varchar(max) limit to allow use in primary key / index
-        # TODO: consider making cap_varchar_max a config option
-        self.execute(
-            ChangeColumnTypes(
-                table_name,
-                schema,
-                key_columns,
-                sql_types,
-                nullable=False,
-                cap_varchar_max=1024,
-            )
-        )
         self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
 
     def add_index(
@@ -126,6 +135,69 @@ class MSSqlTableStore(SQLTableStore):
                 )
             )
         self.execute(AddIndex(table_name, schema, index_columns, name))
+
+    def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
+        _ = is_sql
+        return (
+            table.nullable is not None
+            or table.non_nullable is not None
+            or (table.primary_key is not None and len(table.primary_key) > 0)
+        )
+
+    def add_indexes_and_set_nullable(
+        self,
+        table: Table,
+        schema: Schema,
+        *,
+        on_empty_table: bool | None = None,
+        table_cols: Iterable[str] | None = None,
+    ):
+        if on_empty_table is None or on_empty_table:
+            # Set non-nullable and primary key on empty table
+            key_columns = (
+                [table.primary_key]
+                if isinstance(table.primary_key, str)
+                else table.primary_key
+                if table.primary_key is not None
+                else []
+            )
+            # reflect sql types because mssql cannot just change nullable flag
+            inspector = sa.inspect(self.engine)
+            columns = inspector.get_columns(table.name, schema=schema.get())
+            table_cols = [d["name"] for d in columns]
+            types = {d["name"]: d["type"] for d in columns}
+            non_nullable_cols = self.get_non_nullable_cols(table, table_cols)
+            non_nullable_cols = [
+                col for col in non_nullable_cols if col not in key_columns
+            ]
+            sql_types = [types[col] for col in non_nullable_cols]
+            if len(non_nullable_cols) > 0:
+                self.execute(
+                    ChangeColumnTypes(
+                        table.name,
+                        schema,
+                        non_nullable_cols,
+                        sql_types,
+                        nullable=False,
+                    )
+                )
+            if len(key_columns) > 0:
+                sql_types = [types[col] for col in key_columns]
+                # impose some varchar(max) limit to allow use in primary key / index
+                # TODO: consider making cap_varchar_max a config option
+                self.execute(
+                    ChangeColumnTypes(
+                        table.name,
+                        schema,
+                        key_columns,
+                        sql_types,
+                        nullable=False,
+                        cap_varchar_max=1024,
+                    )
+                )
+            self.add_table_primary_key(table, schema)
+        if on_empty_table is None or not on_empty_table:
+            self.add_table_indexes(table, schema)
 
     def execute_raw_sql(self, raw_sql: RawSql):
         if self.disable_pytsql:

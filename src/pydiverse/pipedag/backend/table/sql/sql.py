@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import textwrap
 import warnings
 from collections.abc import Iterable
@@ -15,6 +16,7 @@ from pydiverse.pipedag.backend.table.base import BaseTableStore
 from pydiverse.pipedag.backend.table.sql.ddl import (
     AddIndex,
     AddPrimaryKey,
+    ChangeColumnNullable,
     CopyTable,
     CreateAlias,
     CreateDatabase,
@@ -34,9 +36,6 @@ from pydiverse.pipedag.context.run_context import DeferredTableStoreOp
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import MaterializingTask
-from pydiverse.pipedag.materialize.details import (
-    resolve_materialization_details_label,
-)
 from pydiverse.pipedag.materialize.metadata import (
     LazyTableMetadata,
     RawSqlMetadata,
@@ -367,10 +366,31 @@ class SQLTableStore(BaseTableStore):
             yield conn
             conn.commit()
 
+    @contextmanager
+    def lock_connect(self) -> sa.Connection:
+        """
+        Open connection that is used for locking and filling tables.
+
+        Some dialects don't support locking and thus might prefer connect().
+        In fact mssql hangs if we use begin() here.
+        """
+        with self.engine.begin() as conn:
+            yield conn
+
+    @contextmanager
+    def begin_nested(self, conn: sa.Connection) -> sa.engine.Connection:
+        """
+        Open a nested transaction.
+
+        Some dialects might have trouble with nested transactions (mssql).
+        """
+        with conn.begin_nested() as nested:
+            yield nested
+
     def get_schema(self, name: str) -> Schema:
         return Schema(name, self.schema_prefix, self.schema_suffix)
 
-    def _execute(self, query, conn: sa.engine.Connection):
+    def _execute(self, query, conn: sa.engine.Connection, heavy_shorten_print=False):
         if self.print_sql:
             if isinstance(query, str):
                 query_str = query
@@ -378,7 +398,9 @@ class SQLTableStore(BaseTableStore):
                 query_str = str(
                     query.compile(self.engine, compile_kwargs={"literal_binds": True})
                 )
-            pretty_query_str = self.format_sql_string(query_str)
+            pretty_query_str = self.format_sql_string(
+                query_str, query, heavy_shorten_print
+            )
             self.logger.info("Executing sql", query=pretty_query_str)
 
         if isinstance(query, str):
@@ -386,10 +408,14 @@ class SQLTableStore(BaseTableStore):
         else:
             return conn.execute(query)
 
-    def execute(self, query, *, conn: sa.engine.Connection = None):
+    def execute(
+        self, query, *, conn: sa.engine.Connection = None, heavy_shorten_print=False
+    ):
         if conn is None:
             with self.engine_connect() as conn:
-                return self.execute(query, conn=conn)
+                return self.execute(
+                    query, conn=conn, heavy_shorten_print=heavy_shorten_print
+                )
 
         if isinstance(query, sa.schema.DDLElement):
             # Some custom DDL statements contain multiple statements.
@@ -398,12 +424,12 @@ class SQLTableStore(BaseTableStore):
                 query.compile(self.engine, compile_kwargs={"literal_binds": True})
             )
 
-            with conn.begin():
+            with self.begin_nested(conn):
                 for part in split_ddl_statement(query_str):
-                    self._execute(part, conn)
+                    self._execute(part, conn, heavy_shorten_print)
             return
 
-        return self._execute(query, conn)
+        return self._execute(query, conn, heavy_shorten_print)
 
     def check_materialization_details_supported(self, label: str | None) -> None:
         if label is None:
@@ -437,19 +463,158 @@ class SQLTableStore(BaseTableStore):
                 )
             self.logger.error(error_msg)
 
-    def add_indexes(
-        self, table: Table, schema: Schema, *, early_not_null_possible: bool = False
+    def get_unlogged(self, materialization_details_label: str | None):
+        _ = materialization_details_label
+        return False  # only available for some dialects
+
+    def get_create_table_suffix(self, table: Table) -> str:
+        """
+        This method can be used to append materialization tables to CREATE TABLE
+        statements by dialects that support it.
+
+        :param table:
+            The table to be materialized
+        :return:
+            Suffix that is appended to CREATE TABLE statement as string
+        """
+        return ""
+
+    def get_limit_query(
+        self,
+        query: sa.sql.expression.Selectable | sa.sql.expression.TextClause,
+        rows: int,
+    ) -> sa.sql.expression.Select:
+        if isinstance(query, sa.sql.expression.TextClause):
+            # This is quite a hack. We look for the first SELECT and then use
+            # sqlalchemy to put the limit/top clause in the correct position.
+            # Furthermore, we search for a LIMIT n or TOP n clause to replace it.
+            query_str = str(query)
+            # remove comments
+            query_str = re.sub(r"/\*.*?\*/", "", query_str, flags=re.RegexFlag.DOTALL)
+            query_str = re.sub(r"--.*", "", query_str)
+            # replace existing LIMIT / TOP
+            pattern = r"(.*\bLIMIT\s+)(\d+)(.*)|(.*\bTOP\s+)(\d+)(.*)"
+            match = re.match(
+                pattern, query_str, re.RegexFlag.IGNORECASE | re.RegexFlag.DOTALL
+            )
+            if match:
+                groups = match.groups()
+                if groups[0] is not None:
+                    return sa.text(groups[0] + str(rows) + groups[2])
+                if groups[3] is not None:
+                    return sa.text(groups[3] + str(rows) + groups[5])
+            # insert LIMIT / TOP since it does not exist in query, yet
+            pattern = r"(\s*)SELECT\s(.*)"
+            match = re.match(
+                pattern, query_str, re.RegexFlag.IGNORECASE | re.RegexFlag.DOTALL
+            )
+            if not match:
+                raise ValueError(
+                    f"Tried materializing query that does not start with SELECT: "
+                    f"{str(query)}"
+                )
+            groups = match.groups()
+            limit_query = sa.text(
+                groups[0]
+                + sa.select(sa.text(groups[1]))
+                .limit(rows)
+                .compile(self.engine, compile_kwargs={"literal_binds": True})
+            )
+        else:
+            limit_query = query.limit(rows)
+        return limit_query
+
+    def lock_table(self, table: Table | str, schema: Schema | str, conn: Any):
+        """
+        For some dialects, it might be beneficial to lock a table before writing to it.
+        """
+        _ = table, schema, conn
+
+    def lock_source_table(self, table: Table | str, schema: Schema | str, conn: Any):
+        """
+        For some dialects, it might be beneficial to lock source tables before reading.
+        """
+        _ = table, schema, conn
+
+    def lock_source_tables(self, tables: list[dict[str, str]], conn: Any):
+        """
+        For some dialects, it might be beneficial to lock source tables before reading.
+        """
+        for table in tables:
+            if table["shared_lock_allowed"]:
+                self.lock_source_table(table["name"], table["schema"], conn)
+
+    def get_non_nullable_cols(
+        self, table: Table, table_cols: Iterable[str] | None = None
     ):
+        cols = []
+        other_cols = []
+        non_nullable_cols = []
+        all_cols = list(table_cols)
+        for new_cols, is_nullable in zip(
+            [table.nullable, table.non_nullable], [True, False]
+        ):
+            if new_cols is not None:
+                if len(set(new_cols) - set(all_cols)) > 0:
+                    raise ValueError(
+                        f"{'non_' if not is_nullable else ''}nullable column does not "
+                        f"exist in dataframe={set(new_cols) - set(all_cols)}"
+                    )
+                if len(cols) == 0:
+                    other_cols = [col for col in all_cols if col not in cols]
+                    non_nullable_cols = new_cols if not is_nullable else other_cols
+                else:
+                    if set(other_cols) != set(new_cols):
+                        raise ValueError(
+                            f"When setting both nullable and non_nullable, they must "
+                            f"match dataframe columns. "
+                            f"Missing={set(other_cols) - set(new_cols)}"
+                        )
+        return non_nullable_cols
+
+    def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
+        _ = is_sql
+        return table.nullable is not None or table.non_nullable is not None
+
+    def add_indexes_and_set_nullable(
+        self,
+        table: Table,
+        schema: Schema,
+        *,
+        on_empty_table: bool | None = None,
+        table_cols: Iterable[str] | None = None,
+    ):
+        if on_empty_table is None or on_empty_table:
+            # By default, we set non-nullable on empty table
+            if table_cols is None:
+                # reflect table:
+                inspector = sa.inspect(self.engine)
+                columns = inspector.get_columns(table.name, schema=schema.get())
+                table_cols = [col["name"] for col in columns]
+            non_nullable_cols = self.get_non_nullable_cols(table, table_cols)
+            if len(non_nullable_cols) > 0:
+                self.execute(
+                    ChangeColumnNullable(
+                        table.name, schema, non_nullable_cols, nullable=False
+                    )
+                )
+        if on_empty_table is None or not on_empty_table:
+            # By default, we set indexes after loading full table. This can be
+            # overridden by dialect
+            self.add_table_primary_key(table, schema)
+            self.add_table_indexes(table, schema)
+
+    def add_table_indexes(self, table: Table, schema: Schema):
+        if table.indexes is not None:
+            for index in table.indexes:
+                self.add_index(table.name, schema, index)
+
+    def add_table_primary_key(self, table: Table, schema: Schema):
         if table.primary_key is not None:
             key = table.primary_key
             if isinstance(key, str):
                 key = [key]
-            self.add_primary_key(
-                table.name, schema, key, early_not_null_possible=early_not_null_possible
-            )
-        if table.indexes is not None:
-            for index in table.indexes:
-                self.add_index(table.name, schema, index)
+            self.add_primary_key(table.name, schema, key)
 
     def add_primary_key(
         self,
@@ -458,9 +623,7 @@ class SQLTableStore(BaseTableStore):
         key_columns: list[str],
         *,
         name: str | None = None,
-        early_not_null_possible: bool = False,
     ):
-        _ = early_not_null_possible  # only used for some dialects
         self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
 
     def add_index(
@@ -517,7 +680,7 @@ class SQLTableStore(BaseTableStore):
         return sql_types
 
     @staticmethod
-    def format_sql_string(query_str: str) -> str:
+    def format_sql_string(query_str: str, query, heavy_shorten_print=False) -> str:
         return textwrap.dedent(query_str).strip()
 
     def execute_raw_sql(self, raw_sql: RawSql):
@@ -757,8 +920,6 @@ class SQLTableStore(BaseTableStore):
 
     def _copy_table(self, table: Table, from_schema: Schema, from_name: str):
         """Copies the table immediately"""
-        from pydiverse.pipedag.backend.table.sql.dialects import IBMDB2TableStore
-
         has_table = self.has_table_or_view(from_name, schema=from_schema)
         if not has_table:
             inspector = sa.inspect(self.engine)
@@ -773,25 +934,14 @@ class SQLTableStore(BaseTableStore):
             self.logger.error(msg)
             raise CacheError(msg)
 
-        self.check_materialization_details_supported(
-            resolve_materialization_details_label(table)
-        )
+        from_tbl = sa.Table(from_name, sa.MetaData(), schema=from_schema.get())
+        query = sa.select("*").select_from(from_tbl)
+        dest_tbl = table.copy_without_obj()
+        dest_tbl.obj = query
 
-        self.execute(
-            CopyTable(
-                from_name,
-                from_schema,
-                table.name,
-                self.get_schema(table.stage.transaction_name),
-                early_not_null=table.primary_key,
-                suffix=self.get_create_table_suffix(
-                    resolve_materialization_details_label(table)
-                )
-                if isinstance(self, IBMDB2TableStore)
-                else None,
-            )
-        )
-        self.add_indexes(table, self.get_schema(table.stage.transaction_name))
+        # Copy table via executing a select statement with respective hook
+        hook = self.get_m_table_hook(type(dest_tbl.obj))
+        hook.materialize(self, dest_tbl, dest_tbl.stage.transaction_name)
 
     def _deferred_copy_table(
         self,
@@ -947,8 +1097,6 @@ class SQLTableStore(BaseTableStore):
             if k in new_objects and k not in tables_to_copy
         }
 
-        from pydiverse.pipedag.backend.table.sql.dialects import IBMDB2TableStore
-
         try:
             with self.engine_connect() as conn:
                 for name in tables_to_copy:
@@ -960,9 +1108,7 @@ class SQLTableStore(BaseTableStore):
                             dest_schema,
                             suffix=self.get_create_table_suffix(
                                 target_stage.materialization_details
-                            )
-                            if isinstance(self, IBMDB2TableStore)
-                            else None,
+                            ),
                         ),
                         conn=conn,
                     )
