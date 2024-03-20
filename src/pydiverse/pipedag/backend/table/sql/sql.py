@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import textwrap
+import time
 import warnings
 from collections.abc import Iterable
 from contextlib import contextmanager
@@ -443,6 +444,26 @@ class SQLTableStore(BaseTableStore):
             return
 
         return self._execute(query, conn, heavy_shorten_print)
+
+    def reflect_table(self, table_name: str, schema: str | Schema) -> sa.Table:
+        if isinstance(schema, Schema):
+            schema = schema.get()
+        tbl = None
+        for retry_iteration in range(4):
+            # retry operation since it might have been terminated as a deadlock victim
+            try:
+                tbl = sa.Table(
+                    table_name,
+                    sa.MetaData(),
+                    schema=schema,
+                    autoload_with=self.engine,
+                )
+                break
+            except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
+                if retry_iteration == 3:
+                    raise
+                time.sleep(retry_iteration * retry_iteration * 1.2)
+        return tbl
 
     def check_materialization_details_supported(self, label: str | None) -> None:
         if label is None:

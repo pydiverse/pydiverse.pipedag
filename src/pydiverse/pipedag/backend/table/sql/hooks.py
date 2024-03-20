@@ -130,24 +130,17 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def retrieve(
-        cls, store, table: Table, stage_name: str, as_type: type[sa.Table]
+        cls,
+        store: SQLTableStore,
+        table: Table,
+        stage_name: str,
+        as_type: type[sa.Table],
     ) -> sa.sql.expression.Selectable:
         table_name, schema = store.resolve_alias(table, stage_name)
         alias_name = TaskContext.get().name_disambiguator.get_name(table_name)
 
-        for retry_iteration in range(4):
-            # retry operation since it might have been terminated as a deadlock victim
-            try:
-                return sa.Table(
-                    table_name,
-                    sa.MetaData(),
-                    schema=schema,
-                    autoload_with=store.engine,
-                ).alias(alias_name)
-            except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
-                if retry_iteration == 3:
-                    raise
-                time.sleep(retry_iteration * retry_iteration * 1.2)
+        tbl = store.reflect_table(table_name, schema)
+        return tbl.alias(alias_name)
 
     @classmethod
     def lazy_query_str(cls, store, obj) -> str:
@@ -394,15 +387,9 @@ class PandasTableHook(TableHook[SQLTableStore]):
         stage_name: str,
         backend: PandasDTypeBackend,
     ) -> tuple[Any, dict[str, DType]]:
-        engine = store.engine
         table_name, schema = store.resolve_alias(table, stage_name)
 
-        sql_table = sa.Table(
-            table_name,
-            sa.MetaData(),
-            schema=schema,
-            autoload_with=engine,
-        ).alias("tbl")
+        sql_table = store.reflect_table(table_name, schema).alias("tbl")
 
         cols = {col.name: col for col in sql_table.columns}
         dtypes = {name: DType.from_sql(col.type) for name, col in cols.items()}
