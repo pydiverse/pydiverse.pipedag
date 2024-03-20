@@ -369,7 +369,9 @@ class SQLTableStore(BaseTableStore):
     def get_schema(self, name: str) -> Schema:
         return Schema(name, self.schema_prefix, self.schema_suffix)
 
-    def _execute(self, query, conn: sa.engine.Connection, heavy_shorten_print=False):
+    def _execute(
+        self, query, conn: sa.engine.Connection, truncate_printed_select=False
+    ):
         if self.print_sql:
             if isinstance(query, str):
                 query_str = query
@@ -378,7 +380,7 @@ class SQLTableStore(BaseTableStore):
                     query.compile(self.engine, compile_kwargs={"literal_binds": True})
                 )
             pretty_query_str = self.format_sql_string(
-                query_str, query, heavy_shorten_print
+                query_str, truncate_printed_select
             )
             self.logger.info("Executing sql", query=pretty_query_str)
 
@@ -401,16 +403,14 @@ class SQLTableStore(BaseTableStore):
         ],
         *,
         conn: sa.engine.Connection = None,
-        heavy_shorten_print=False,
-        transaction_already_open=False,
+        truncate_printed_select=False,
     ):
         if conn is None:
             with self.engine_connect() as conn:
                 return self.execute(
                     query,
                     conn=conn,
-                    heavy_shorten_print=heavy_shorten_print,
-                    transaction_already_open=transaction_already_open,
+                    truncate_printed_select=truncate_printed_select,
                 )
 
         if isinstance(query, sa.schema.DDLElement) or isinstance(query, list):
@@ -418,14 +418,14 @@ class SQLTableStore(BaseTableStore):
                 query = [query]
 
             @contextmanager
-            def begin():
-                if not transaction_already_open:
+            def transactional():
+                if conn.in_transaction():
+                    yield
+                else:
                     with conn.begin():
                         yield
-                else:
-                    yield
 
-            with begin():
+            with transactional():
                 # execute multiple statements in one transaction
                 for cur_query in query:
                     if isinstance(cur_query, sa.schema.DDLElement):
@@ -438,12 +438,12 @@ class SQLTableStore(BaseTableStore):
                         )
 
                         for part in split_ddl_statement(query_str):
-                            self._execute(part, conn, heavy_shorten_print)
+                            self._execute(part, conn, truncate_printed_select)
                     else:
-                        self._execute(cur_query, conn, heavy_shorten_print)
+                        self._execute(cur_query, conn, truncate_printed_select)
             return
 
-        return self._execute(query, conn, heavy_shorten_print)
+        return self._execute(query, conn, truncate_printed_select)
 
     def reflect_table(self, table_name: str, schema: str | Schema) -> sa.Table:
         if isinstance(schema, Schema):
@@ -567,36 +567,86 @@ class SQLTableStore(BaseTableStore):
                 stmts += self.lock_source_table(table["name"], table["schema"], conn)
         return stmts
 
-    def get_non_nullable_cols(
-        self, table: Table, table_cols: Iterable[str], report_nullable_cols=False
+    def get_forced_nullability_columns(
+        self, table: Table, table_cols: Iterable[str]
     ) -> tuple[list[str], list[str]]:
-        other_cols = []
-        non_nullable_cols = []
-        nullable_cols = []
-        all_cols = list(table_cols)
-        for new_cols, is_nullable in zip(
-            [table.nullable, table.non_nullable], [True, False]
-        ):
-            if new_cols is not None:
-                if len(set(new_cols) - set(all_cols)) > 0:
-                    raise ValueError(
-                        f"{'non_' if not is_nullable else ''}nullable column does not "
-                        f"exist in dataframe={set(new_cols) - set(all_cols)}"
-                    )
-                if len(non_nullable_cols) == 0:
-                    other_cols = [col for col in all_cols if col not in new_cols]
-                    non_nullable_cols = new_cols if not is_nullable else other_cols
-                    nullable_cols = new_cols if is_nullable else other_cols
-                else:
-                    if set(other_cols) != set(new_cols):
-                        raise ValueError(
-                            f"When setting both nullable and non_nullable, they must "
-                            f"match dataframe columns. "
-                            f"Missing={set(other_cols) - set(new_cols)}"
-                        )
-        if not report_nullable_cols:
-            nullable_cols = []  # in most dialects columns are nullable by default
-        return nullable_cols, non_nullable_cols
+        """
+        Get the columns that should be forced to be nullable or non-nullable.
+
+        This is typically applied on the materialized empty table, but may also
+        be applied after filling the table by some dialects. Some dialects may
+        choose to add primary key columns to non_nullable_cols if they need it
+        to set the primary key. However, some dialects do this separately because
+        they also need to change the type of primary key columns. Some dialects
+        only return non-nullable columns because all columns will be nullable
+        after initial materialization.
+
+        :param table:
+            Table to be materialized. It includes attributes like nullable,
+            non_nullable, and primary_key which may influence the return value.
+        :param table_cols:
+            The list of all columns in the table. If nullable and non_nullable is
+            specified, all columns must be mentioned. If only one of them is set,
+            the other one is calculated as the remaining set.
+        :return:
+            A tuple of two lists. The first list contains the columns that should
+            be forced to be nullable, the second list contains the columns that
+            should be forced to be non-nullable. Most dialects will not need to
+            force nullable columns because very column is nullable by default.
+        """
+        _, non_nullable_cols = self._process_table_nullable_parameters(
+            table, table_cols
+        )
+
+        # in most dialects columns are nullable by default
+        return [], non_nullable_cols
+
+    @staticmethod
+    def _process_table_nullable_parameters(table: Table, table_cols: Iterable[str]):
+        name = f'"{table.name}"'
+        nullable_set = set(table.nullable or [])
+        non_nullable_set = set(table.non_nullable or [])
+        table_cols_set = set(table_cols)
+
+        for prefix, col_set, cols in [
+            ("", nullable_set, table.nullable),
+            ("non_", non_nullable_set, table.non_nullable),
+        ]:
+            if invalid_cols := col_set - table_cols_set:
+                raise ValueError(
+                    f"The columns {invalid_cols} in Table({name},"
+                    f" {prefix}nullable={cols}) aren't contained in the table"
+                    f" columns: {table_cols}"
+                )
+
+        if table.nullable is not None and table.non_nullable is not None:
+            # If both are specified, they aren't allowed to intersect and
+            # their union must be the set of all columns.
+            if intersection := nullable_set & non_nullable_set:
+                raise ValueError(
+                    f"The columns {intersection} are both set to be nullable and non"
+                    f" nullable in Table({name}, nullable={table.nullable},"
+                    f" non_nullable={table.non_nullable})"
+                )
+            if missing_cols := table_cols_set - nullable_set - non_nullable_set:
+                raise ValueError(
+                    f"When setting Table({name}, nullable={table.nullable},"
+                    f" non_nullable={table.non_nullable}), all columns of the"
+                    f" table must be mentioned. Missing columns: {missing_cols}"
+                )
+            nullable = table.nullable
+            non_nullable = table.non_nullable
+        elif table.nullable is not None:
+            non_nullable = [c for c in table_cols if c not in nullable_set]
+            nullable = table.nullable
+        elif table.non_nullable is not None:
+            nullable = [c for c in table_cols if c not in non_nullable_set]
+            non_nullable = table.non_nullable
+        else:
+            nullable = []
+            non_nullable = []
+
+        return nullable, non_nullable
 
     def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
         _ = is_sql
@@ -617,7 +667,7 @@ class SQLTableStore(BaseTableStore):
                 inspector = sa.inspect(self.engine)
                 columns = inspector.get_columns(table.name, schema=schema.get())
                 table_cols = [col["name"] for col in columns]
-            nullable_cols, non_nullable_cols = self.get_non_nullable_cols(
+            nullable_cols, non_nullable_cols = self.get_forced_nullability_columns(
                 table, table_cols
             )
             if len(nullable_cols) > 0:
@@ -715,10 +765,9 @@ class SQLTableStore(BaseTableStore):
         return sql_types
 
     @staticmethod
-    def format_sql_string(query_str: str, query=None, heavy_shorten_print=False) -> str:
-        _ = query
-        if heavy_shorten_print and "SELECT" in query_str:
-            query_str = query_str.split("SELECT")[0] + "SELECT ..."
+    def format_sql_string(query_str: str, truncate_select=False) -> str:
+        if truncate_select and "SELECT" in query_str:
+            query_str = query_str.split("SELECT")[0] + "SELECT ...\n"
         return textwrap.dedent(query_str).strip()
 
     def execute_raw_sql(self, raw_sql: RawSql):

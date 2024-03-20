@@ -120,14 +120,12 @@ class MSSqlTableStore(SQLTableStore):
             or (table.primary_key is not None and len(table.primary_key) > 0)
         )
 
-    def get_non_nullable_cols(
+    def get_forced_nullability_columns(
         self, table: Table, table_cols: Iterable[str], report_nullable_cols=False
     ) -> tuple[list[str], list[str]]:
         # mssql dialect has literals as non-nullable types by default, so we also need
-        # the list of nullable columns to fix
-        return super().get_non_nullable_cols(
-            table, table_cols, report_nullable_cols=True
-        )
+        # the list of nullable columns as well
+        return self._process_table_nullable_parameters(table, table_cols)
 
     def add_indexes_and_set_nullable(
         self,
@@ -151,7 +149,7 @@ class MSSqlTableStore(SQLTableStore):
             columns = inspector.get_columns(table.name, schema=schema.get())
             table_cols = [d["name"] for d in columns]
             types = {d["name"]: d["type"] for d in columns}
-            nullable_cols, non_nullable_cols = self.get_non_nullable_cols(
+            nullable_cols, non_nullable_cols = self.get_forced_nullability_columns(
                 table, table_cols
             )
             non_nullable_cols = [
@@ -237,7 +235,7 @@ class MSSqlTableStore(SQLTableStore):
             print_query_string = self.format_sql_string(sql_string)
             if len(print_query_string) >= self.max_query_print_length:
                 print_query_string = (
-                    print_query_string[: self.max_query_print_length] + " [...]\n"
+                    print_query_string[: self.max_query_print_length] + " [...]"
                 )
             self.logger.info("Executing sql", query=print_query_string)
         # ensure database connection is reset to original database
