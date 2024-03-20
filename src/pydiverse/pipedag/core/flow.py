@@ -210,6 +210,7 @@ class Flow:
         orchestration_engine: OrchestrationEngine = None,
         fail_fast: bool | None = None,
         ignore_cache_function: bool = False,
+        force_task_execution: bool = False,
         **kwargs,
     ) -> Result:
         """Execute the flow.
@@ -238,6 +239,9 @@ class Flow:
         :param ignore_cache_function:
             When set to True, the task's cache function gets ignored when determining
             the cache validity of a task.
+        :param force_task_execution:
+            Force the execution of all tasks in the executed (sub-)flow,
+            even if they are cache valid.
         :param kwargs:
             Other keyword arguments that get passed on directly to the
             ``run()`` method of the orchestration engine. Consequently, these
@@ -287,6 +291,7 @@ class Flow:
                 # then we want to skip cache validity checking to ensure the tasks
                 # always get executed.
                 subflow.is_tasks_subflow
+                or force_task_execution
             ),
         )
 

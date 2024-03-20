@@ -5,6 +5,7 @@ import sqlalchemy as sa
 
 from pydiverse.pipedag import Blob, RawSql, Table, materialize
 from pydiverse.pipedag.debug import materialize_table
+from tests.util import select_as
 
 try:
     import polars as pl
@@ -50,6 +51,11 @@ def create_tuple(x, y):
 @materialize(version="1.0")
 def one():
     return 1
+
+
+@materialize(lazy=True)
+def one_sql_lazy():
+    return select_as(1, "x")
 
 
 @materialize(version="1.0")

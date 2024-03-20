@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Generic
 import structlog
 from typing_extensions import Self
 
+from pydiverse.pipedag import ConfigContext
 from pydiverse.pipedag._typing import T, TableHookResolverT
 from pydiverse.pipedag.context import RunContext, TaskContext
 from pydiverse.pipedag.errors import CacheError
@@ -334,7 +335,7 @@ class BaseTableStore(TableHookResolver, Disposable):
 
         Used when `lazy = True` is set for a materializing task.
         """
-
+        config_context = ConfigContext.get()
         try:
             hook = self.get_m_table_hook(type(table.obj))
             query_str = hook.lazy_query_str(self, table.obj)
@@ -357,6 +358,9 @@ class BaseTableStore(TableHookResolver, Disposable):
             metadata = self.retrieve_lazy_table_metadata(
                 query_hash, task_cache_info.cache_key, table.stage
             )
+            if config_context._force_task_execution:
+                self.logger.info("Forced task execution")
+                raise CacheError("Forced task execution")
             self.copy_lazy_table_to_transaction(metadata, table)
             self.logger.info(f"Lazy cache of table '{table.name}' found")
         except CacheError as e:
