@@ -184,14 +184,15 @@ class CopyTable(DDLElement):
         from_schema: Schema,
         to_name,
         to_schema: Schema,
-        if_not_exists=False,
+        *,
+        unlogged: bool = False,
         suffix: str = "",
     ):
         self.from_name = from_name
         self.from_schema = from_schema
         self.to_name = to_name
         self.to_schema = to_schema
-        self.if_not_exists = if_not_exists
+        self.unlogged = unlogged
         self.suffix = suffix
 
 
@@ -838,6 +839,7 @@ def visit_copy_table(copy_table: CopyTable, compiler, **kw):
         copy_table.to_name,
         copy_table.to_schema,
         query,
+        unlogged=copy_table.unlogged,
         suffix=copy_table.suffix,
     )
     return compiler.process(create, **kw)
