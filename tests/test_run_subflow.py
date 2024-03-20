@@ -84,6 +84,20 @@ def test_run_specific_task(mocker):
     s2_spy.assert_not_called()
     assert_task_state(res.task_states, l1.name, FinalTaskState.COMPLETED)
 
+    res = f.run(force_task_execution=True)
+    x1_spy.assert_called_once()
+    x2_spy.assert_called_once()
+    l1_spy.assert_called_once()
+    s1_spy.assert_called_once()
+    y1_spy.assert_called_once()
+    y2_spy.assert_called_once()
+    s2_spy.assert_called_once()
+    assert_task_state(res.task_states, x1.name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, x2.name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, l1.name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, y1.name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, y2.name, FinalTaskState.COMPLETED)
+
 
 def test_run_specific_task_ambiguous_input(mocker):
     with Flow() as f:
