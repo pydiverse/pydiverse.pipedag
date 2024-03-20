@@ -237,7 +237,7 @@ class MSSqlTableStore(SQLTableStore):
             print_query_string = self.format_sql_string(sql_string)
             if len(print_query_string) >= self.max_query_print_length:
                 print_query_string = (
-                    print_query_string[: self.max_query_print_length] + " [...]"
+                    print_query_string[: self.max_query_print_length] + " [...]\n"
                 )
             self.logger.info("Executing sql", query=print_query_string)
         # ensure database connection is reset to original database
