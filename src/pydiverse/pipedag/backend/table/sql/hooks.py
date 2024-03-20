@@ -111,7 +111,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
             ]
             store.execute(
                 statements,
-                heavy_shorten_print=True,
+                truncate_printed_select=True,
             )
             store.add_indexes_and_set_nullable(table, schema, on_empty_table=False)
         else:

@@ -95,7 +95,7 @@ class IBMDB2TableStore(SQLTableStore):
         """
         stmt = LockTable(table.name if isinstance(table, Table) else table, schema)
         if conn is not None:
-            self.execute(stmt, conn=conn, transaction_already_open=True)
+            self.execute(stmt, conn=conn)
         return [stmt]
 
     def lock_source_table(
@@ -108,7 +108,7 @@ class IBMDB2TableStore(SQLTableStore):
             table.name if isinstance(table, Table) else table, schema
         )
         if conn is not None:
-            self.execute(stmt, conn=conn, transaction_already_open=True)
+            self.execute(stmt, conn=conn)
         return [stmt]
 
     def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
@@ -124,13 +124,13 @@ class IBMDB2TableStore(SQLTableStore):
                 or (table.primary_key is not None and len(table.primary_key) > 0)
             )
 
-    def get_non_nullable_cols(
+    def get_forced_nullability_columns(
         self, table: Table, table_cols: Iterable[str], report_nullable_cols=False
     ) -> tuple[list[str], list[str]]:
         # ibm_db2 dialect has literals as non-nullable types by default, so we also need
         # the list of nullable columns to fix
-        nullable_cols, non_nullable_cols = super().get_non_nullable_cols(
-            table, table_cols, report_nullable_cols=True
+        nullable_cols, non_nullable_cols = self._process_table_nullable_parameters(
+            table, table_cols
         )
         # add primery key columns to non_nullable_cols
         if table.primary_key:
