@@ -15,6 +15,8 @@
     Function create_basic_pipedag_config() just has a kroki_url parameter which defaults to None.
 - Added max_query_print_length parameter to MSSqlTableStore to limit the length of the printed SQL queries.
     Default is max_query_print_length=500000 characters.
+- Fix bug when creating a table with the same name as a `Table` given by `ExternalTableReference` in the same stage  
+
 
 ## 0.7.1 (2024-03-11)
 - Fix bug when Reading DECIMAL(precision, scale) columns to pandas task (precision was interpreted like for Float where 
