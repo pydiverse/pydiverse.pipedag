@@ -143,7 +143,7 @@ class IBMDB2TableStore(SQLTableStore):
             nullable_cols = [
                 col for col in nullable_cols if col not in table.primary_key
             ]
-        return non_nullable_cols, nullable_cols
+        return nullable_cols, non_nullable_cols
 
     def add_indexes_and_set_nullable(
         self,
