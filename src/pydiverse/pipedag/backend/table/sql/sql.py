@@ -437,13 +437,14 @@ class SQLTableStore(BaseTableStore):
                 )
             self.logger.error(error_msg)
 
-    def get_create_table_suffix(self, table: Table) -> str:
+    def get_create_table_suffix(self, materialization_details_label: str | None) -> str:
         """
         This method can be used to append materialization tables to CREATE TABLE
         statements by dialects that support it.
 
-        :param table:
-            The table to be materialized
+        :param materialization_details_label:
+            A label that can be controlled on table or stage level to reference
+            options layed out in detail in configuration
         :return:
             Suffix that is appended to CREATE TABLE statement as string
         """
