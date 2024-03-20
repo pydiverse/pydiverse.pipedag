@@ -498,14 +498,10 @@ class SQLTableStore(BaseTableStore):
         rows: int,
     ) -> sa.sql.expression.Select:
         if isinstance(query, sa.sql.expression.TextClause):
-            # This is quite a hack. We look for the first SELECT and then use
-            # sqlalchemy to put the limit/top clause in the correct position.
-            # Furthermore, we search for a LIMIT n or TOP n clause to replace it.
-            query_str = str(query)
             return (
                 sa.select(sa.text("*"))
                 .limit(rows)
-                .select_from(sa.text("(" + query_str + ") AS A"))
+                .select_from(sa.text("(" + str(query) + ") AS A"))
             )
         else:
             return sa.select(sa.text("*")).limit(rows).select_from(query.alias("A"))
