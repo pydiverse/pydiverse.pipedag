@@ -124,7 +124,6 @@ class PandasTableHook(PandasTableHook):
         schema: Schema,
         dtypes: dict[str, DType],
     ):
-        engine = store.engine
         dtypes = {name: dtype.to_sql() for name, dtype in dtypes.items()}
         if table.type_map:
             dtypes.update(table.type_map)
@@ -136,8 +135,7 @@ class PandasTableHook(PandasTableHook):
         )
 
         if store.get_unlogged(resolve_materialization_details_label(table)):
-            with engine.begin() as conn:
-                conn.execute(ChangeTableLogged(table.name, schema, False))
+            store.execute(ChangeTableLogged(table.name, schema, False))
 
         # COPY data
         # TODO: For python 3.12, there is csv.QUOTE_STRINGS
@@ -153,6 +151,7 @@ class PandasTableHook(PandasTableHook):
         )
         s_buf.seek(0)
 
+        engine = store.engine
         table_name = engine.dialect.identifier_preparer.quote(table.name)
         schema_name = engine.dialect.identifier_preparer.format_schema(schema.get())
 
@@ -163,6 +162,7 @@ class PandasTableHook(PandasTableHook):
                     f"COPY {schema_name}.{table_name} FROM STDIN"
                     " WITH (FORMAT CSV, NULL '\\N')"
                 )
+                store.logger.info("Executing bulk load", query=sql)
                 cur.copy_expert(sql=sql, file=s_buf)
             dbapi_conn.commit()
         finally:
