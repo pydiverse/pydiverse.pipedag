@@ -221,9 +221,7 @@ class IBMDB2TableStore(SQLTableStore):
             for st in ("data", "index", "long")
         }
 
-    def get_create_table_suffix(
-        self, materialization_details_label: str | None
-    ) -> str | None:
+    def get_create_table_suffix(self, materialization_details_label: str | None) -> str:
         table_spaces = self._get_table_spaces(materialization_details_label)
         table_space_suffix = " ".join(
             f"{_TABLE_SPACE_KEYWORD_MAP[stype]} "
