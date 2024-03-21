@@ -6,7 +6,9 @@
 - Added max_query_print_length parameter to MSSqlTableStore to limit the length of the printed SQL queries.
     Default is max_query_print_length=500000 characters.
 - Fix bug when creating a table with the same name as a `Table` given by `ExternalTableReference` in the same stage.
-- Add support for `force_task_execution` in `Flow.run` to force execution of tasks even if they are cache valid.
+- Add support for `force_task_execution` in `Flow.run` to force execution of tasks even if they are cache valid. This implies `ignore_cache_function=True`.
+- Make `ignore_cache_function=True` prevent cache function calls.
+- Materialize lazy tasks, when they are executed without stage context.
 
 ## 0.7.1 (2024-03-11)
 - Fix bug when Reading DECIMAL(precision, scale) columns to pandas task (precision was interpreted like for Float where 
