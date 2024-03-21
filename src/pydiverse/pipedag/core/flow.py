@@ -241,7 +241,8 @@ class Flow:
             the cache validity of a task.
         :param force_task_execution:
             Force the execution of all tasks in the executed (sub-)flow,
-            even if they are cache valid.
+            even if they are cache valid. `force_task_execution=True` implies
+            `ignore_cache_function=True`.
         :param kwargs:
             Other keyword arguments that get passed on directly to the
             ``run()`` method of the orchestration engine. Consequently, these
@@ -285,7 +286,7 @@ class Flow:
         # Evolve config using the arguments passed to flow.run
         config = config.evolve(
             fail_fast=(fail_fast if fail_fast is not None else config.fail_fast),
-            ignore_cache_function=ignore_cache_function,
+            ignore_cache_function=ignore_cache_function or force_task_execution,
             force_task_execution=(
                 # If subflow consists of a subset of tasks (-> not a subset of stages)
                 # then we want to skip cache validity checking to ensure the tasks

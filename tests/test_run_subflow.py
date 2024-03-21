@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from pydiverse.pipedag import Flow, Stage, Task
+from pydiverse.pipedag import Flow, Stage, Task, materialize
 from pydiverse.pipedag.context import FinalTaskState
 from tests.fixtures.instances import with_instances
+from tests.util import select_as
 from tests.util import tasks_library as m
 from tests.util.spy import spy_task
 
 
 def test_run_specific_task(mocker):
+    cache_function_call_allowed = True
+
     def assert_task_state(
         task_states: dict[Task, FinalTaskState],
         task_name: str,
@@ -17,6 +20,16 @@ def test_run_specific_task(mocker):
         assert len(tasks) > 0
         assert all(task_states[t] == expected_state for t in tasks)
 
+    def cache():
+        assert (
+            cache_function_call_allowed
+        ), "Cache function call not allowed with force_task_execution=True"
+        return 0
+
+    @materialize(lazy=True, cache=cache)
+    def task_with_cache_fun():
+        return select_as(0, "x")
+
     # We need to assign unique names to these stages, because we can't reuse the
     # same stage lock context between different runs.
     with Flow() as f:
@@ -24,6 +37,7 @@ def test_run_specific_task(mocker):
             x1 = m.one()
             x2 = m.two()
             l1 = m.one_sql_lazy()
+            task_with_cache_fun()
 
         with Stage("subflow_t2") as s2:
             y1 = m.create_tuple(x1, x2)
@@ -83,6 +97,8 @@ def test_run_specific_task(mocker):
     y2_spy.assert_not_called()
     s2_spy.assert_not_called()
     assert_task_state(res.task_states, l1.name, FinalTaskState.COMPLETED)
+
+    cache_function_call_allowed = False
 
     res = f.run(force_task_execution=True)
     x1_spy.assert_called_once()
