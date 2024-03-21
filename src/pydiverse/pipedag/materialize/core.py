@@ -500,7 +500,7 @@ class MaterializationWrapper:
         input_hash = stable_hash("INPUT", input_json)
 
         cache_fn_hash = ""
-        if task.cache is not None:
+        if task.cache is not None and not config_context.ignore_cache_function:
             cache_fn_output = store.json_encode(task.cache(*args, **kwargs))
             cache_fn_hash = stable_hash("CACHE_FN", cache_fn_output)
 
@@ -559,7 +559,7 @@ class MaterializationWrapper:
 
                     try:
                         _, cache_metadata = store.retrieve_cached_output(
-                            task, input_hash, cache_fn_hash
+                            task, input_hash, ""
                         )
                         cache_fn_hash = cache_metadata.cache_fn_hash
                     except CacheError as e:
