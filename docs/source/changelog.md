@@ -41,6 +41,7 @@ precision <= 24 leads to float32). Beware that ``isinstance(sa.Float(), sa.Numer
   * Raw SQL statements changing database link of connection via `USE` was causing pipedag generated commands to fail
 
 ## 0.6.7 (2023-12-05)
+- increased metadata_version to 0.3.2 => please delete metadata with pipedag-manage when upgrading from <= 0.6.6 to >= 0.6.7
 - Make separator customizable when splitting RawSql into statements.
 - Add `DropNickname` for DB2 and drop nicknames when dropping schemas.
 - Add debug function `materialize_table`.
