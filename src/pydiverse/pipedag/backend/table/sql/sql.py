@@ -1218,6 +1218,9 @@ class SQLTableStore(BaseTableStore):
                             src_schema,
                             name,
                             dest_schema,
+                            unlogged=self.get_unlogged(
+                                target_stage.materialization_details
+                            ),
                             suffix=self.get_create_table_suffix(
                                 target_stage.materialization_details
                             ),
