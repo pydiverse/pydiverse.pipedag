@@ -582,6 +582,72 @@ def test_change_version_table(mocker):
             cpy_spy.assert_called_once()
 
 
+@pytest.mark.parametrize("n", [1, 2, 100])
+def test_partial_stage_cache_valid(mocker, n):
+    cache_value = 0
+
+    def cache():
+        return cache_value
+
+    @materialize(lazy=True, cache=cache)
+    def return_cache_table():
+        return Table(select_as(cache_value, "x"))
+
+    @materialize(version="1.0")
+    def n_tables(n):
+        return [pd.DataFrame(dict(x=[i])) for i in range(n)]
+
+    @materialize(lazy=True)
+    def n_lazy_tables(n):
+        return [Table(select_as(i, "x")) for i in range(n)]
+
+    def get_flow(version):
+        @materialize(version=version, input_type=pd.DataFrame)
+        def named_copy(table: pd.DataFrame):
+            return Table(table, "_table_copy")
+
+        with Flow() as flow:
+            with Stage("stage_1"):
+                # these tasks are cache valid in all but the first call:
+                tbls = n_tables(n)
+                lazy_tbls = n_lazy_tables(n)
+                # these tables may be cache invalidated by cache_value
+                out = return_cache_table()
+                cpy = named_copy(out)
+        return flow, out, cpy, tbls, lazy_tbls
+
+    flow, out, cpy, tbls, lazy_tbls = get_flow(version="1.0")
+    # Initial Call
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(cpy)["x"].iloc[0] == 0
+
+    # Calling flow.run again shouldn't call the task
+    out_spy = spy_task(mocker, out)
+    cpy_spy = spy_task(mocker, cpy)
+    tbls_spy = spy_task(mocker, tbls)
+    lazy_tbls_spy = spy_task(mocker, lazy_tbls)
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(cpy)["x"].iloc[0] == 0
+        out_spy.assert_called_once()  # lazy task is always called
+        cpy_spy.assert_not_called()
+        tbls_spy.assert_not_called()
+        lazy_tbls_spy.assert_called_once()  # lazy task is always called
+
+    # Changing the cache value should cause it to get called again
+    # In this case tbls and lazy_tbls are still cache valid and thus need to be
+    # copied over to transaction schema
+    cache_value = 1
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(cpy)["x"].iloc[0] == 1
+        out_spy.assert_called_once()
+        cpy_spy.assert_called_once()
+        tbls_spy.assert_not_called()
+        lazy_tbls_spy.assert_called_once()  # lazy task is always called
+
+
 def test_ignore_task_version(mocker):
     cfg = ConfigContext.get().evolve(ignore_task_version=True)
 
