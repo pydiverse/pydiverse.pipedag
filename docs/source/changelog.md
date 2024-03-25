@@ -1,12 +1,16 @@
 # Changelog
 
-## 0.7.2 (2024-03-DD)
+## 0.7.2 (2024-03-25)
 - Disable Kroki links by default. New setting disable_kroki=True allows to still default kroki_url to https://kroki.io.
     Function create_basic_pipedag_config() just has a kroki_url parameter which defaults to None.
 - Added max_query_print_length parameter to MSSqlTableStore to limit the length of the printed SQL queries.
     Default is max_query_print_length=500000 characters.
 - Fix bug when creating a table with the same name as a `Table` given by `ExternalTableReference` in the same stage  
-
+- New config options for `SQLTableStore`:
+  * `max_concurrent_copy_operations` to limit the number of concurrent copy operations when copying tables between schemas.
+  * `sqlalchemy_pool_size` and `sqlalchemy_pool_timeout` to configure the pool size and timeout for the SQLAlchemy connection pool.
+  * The defaults fix a bug by setting sqlalchemy options to not time out when the first cache invalid task in a stage triggers
+    copying of cache valid tables between schemas and copying takes longer than 30s.
 
 ## 0.7.1 (2024-03-11)
 - Fix bug when Reading DECIMAL(precision, scale) columns to pandas task (precision was interpreted like for Float where 
