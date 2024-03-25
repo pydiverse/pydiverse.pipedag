@@ -82,8 +82,10 @@ class SQLTableStore(BaseTableStore):
          - :py:class:`pd.DataFrame <pandas.DataFrame>`
 
        * - Polars
-         - :external+pl:doc:`pl.DataFrame <reference/dataframe/index>`
-         - :external+pl:doc:`pl.DataFrame <reference/dataframe/index>`
+         - | :external+pl:doc:`pl.DataFrame <reference/dataframe/index>`
+           | :external+pl:doc:`pl.LazyFrame <reference/lazyframe/index>`
+         - | :external+pl:doc:`pl.DataFrame <reference/dataframe/index>`
+           | :external+pl:doc:`pl.LazyFrame <reference/lazyframe/index>`
 
        * - tidypolars
          - :py:class:`tp.Tibble <tidypolars.tibble.Tibble>`
@@ -98,9 +100,9 @@ class SQLTableStore(BaseTableStore):
          - | ``pdt.eager.PandasTableImpl``
            | ``pdt.lazy.SQLTableImpl``
 
-       * - pydiverse.pipedag
-         - | :py:class:`~.ExternalTableReference`
-         -
+       * - pydiverse.pipedag table reference
+         - | :py:class:`~.ExternalTableReference` (no materialization)
+         - Can be read with all dematerialization methods above
 
 
     :param url:
@@ -162,6 +164,18 @@ class SQLTableStore(BaseTableStore):
         The materialization_details that will be used if materialization_details
         is not specified on table level. If not set, the ``__any__`` tag (if specified)
         will be used.
+    :param max_concurrent_copy_operations:
+        In case of a partially cache-valid stage, we need to copy tables from the
+        cache schema to the new transaction schema. This parameter specifies the
+        maximum number of workers we use for concurrently copying tables.
+    :param sqlalchemy_pool_size:
+        The number of connections to keep open inside the connection pool.
+        It is recommended to choose a larger number than
+        ``max_concurrent_copy_operations`` to avoid running into pool_timeout.
+    :param sqlalchemy_pool_timeout:
+        The number of seconds to wait before giving up on getting a connection from
+        the pool. This may be relevant in case the connection pool is saturated
+        with concurrent operations each working with one or more database connections.
     """
 
     METADATA_SCHEMA = "pipedag_metadata"
@@ -200,6 +214,9 @@ class SQLTableStore(BaseTableStore):
         strict_materialization_details: bool = True,
         materialization_details: dict[str, dict[str | list[str]]] | None = None,
         default_materialization_details: str | None = None,
+        max_concurrent_copy_operations: int = 5,
+        sqlalchemy_pool_size: int = 12,
+        sqlalchemy_pool_timeout: int = 300,
     ):
         super().__init__()
 
@@ -211,6 +228,9 @@ class SQLTableStore(BaseTableStore):
         self.print_sql = print_sql
         self.no_db_locking = no_db_locking
         self.strict_materialization_details = strict_materialization_details
+        self.max_concurrent_copy_operations = max_concurrent_copy_operations
+        self.sqlalchemy_pool_size = sqlalchemy_pool_size
+        self.squalchemy_pool_timeout = sqlalchemy_pool_timeout
 
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
         self.engine_url = sa.engine.make_url(engine_url)
@@ -359,7 +379,12 @@ class SQLTableStore(BaseTableStore):
 
     def _create_engine(self):
         # future=True enables SQLAlchemy 2.0 behaviour with version 1.4
-        return sa.create_engine(self.engine_url, future=True)
+        return sa.create_engine(
+            self.engine_url,
+            future=True,
+            pool_size=self.sqlalchemy_pool_size,
+            pool_timeout=self.squalchemy_pool_timeout,
+        )
 
     @contextmanager
     def engine_connect(self) -> sa.Connection:
