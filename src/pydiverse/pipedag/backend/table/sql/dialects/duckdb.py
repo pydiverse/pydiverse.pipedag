@@ -57,6 +57,10 @@ class DuckDBTableStore(SQLTableStore):
         database_path = Path(database)
         database_path.parent.mkdir(parents=True, exist_ok=True)
 
+    def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
+        _ = table, is_sql
+        return False  # DuckDB is not good with stable type arithmetic
+
 
 @DuckDBTableStore.register_table(pd)
 class PandasTableHook(PandasTableHook):
@@ -70,7 +74,7 @@ class PandasTableHook(PandasTableHook):
         dtypes: dict[str, DType],
     ):
         engine = store.engine
-        dtypes = {name: dtype.to_sql() for name, dtype in dtypes.items()}
+        dtypes = cls._get_dialect_dtypes(dtypes, table)
         if table.type_map:
             dtypes.update(table.type_map)
 
@@ -79,12 +83,9 @@ class PandasTableHook(PandasTableHook):
         )
 
         # Create empty table with correct schema
-        df[:0].to_sql(
-            table.name,
-            engine,
-            schema=schema.get(),
-            index=False,
-            dtype=dtypes,
+        cls._dialect_create_empty_table(store, df, table, schema, dtypes)
+        store.add_indexes_and_set_nullable(
+            table, schema, on_empty_table=True, table_cols=df.columns
         )
 
         # Copy dataframe directly to duckdb
@@ -96,6 +97,13 @@ class PandasTableHook(PandasTableHook):
         connection_uri = connection_uri.replace("duckdb:///", "", 1)
         with duckdb.connect(connection_uri) as conn:
             conn.execute(f"INSERT INTO {schema_name}.{table_name} SELECT * FROM df")
+
+        store.add_indexes_and_set_nullable(
+            table,
+            schema,
+            on_empty_table=False,
+            table_cols=df.columns,
+        )
 
 
 try:

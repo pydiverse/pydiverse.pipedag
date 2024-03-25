@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0 (2024-MM-DD)
+- Significant refactoring of materialization is included. It splits creation of table from filling a table in many cases.
+    This may lead to unexpected changes in log output. For now, the `INSERT INTO SELECT` statement is only printed in 
+    shortened version, because the creation of the table already includes the same statement in full. In the future, this
+    might be made configurable, so your feedback is highly welcome.
+- pipedag.Table() now supports new parameters `nullable` and `non_nullable`. This allows specifying which columns are 
+    nullable both as a positive and negative list. If both are specified, they must mention each column in the table and
+    have no overlap. For most dialects, non-nullable statements are issued after creating the empty table. For dialects 
+    `mssql` and `ibm_db2`, both nullable and non-nullable column alterations are issued because constant literals create
+    non-nullable columns by default. If neither nullable nor non_nullable are specified, the default `CREATE TABLE as SELECT`
+    is kept unmodified except for primary key columns where some dialects require explicit `NOT NULL` statements.
+
 ## 0.7.2 (2024-03-25)
 - Disable Kroki links by default. New setting disable_kroki=True allows to still default kroki_url to https://kroki.io.
     Function create_basic_pipedag_config() just has a kroki_url parameter which defaults to None.

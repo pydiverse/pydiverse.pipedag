@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 import pandas as pd
 import sqlalchemy as sa
 import sqlalchemy.exc
 
 from pydiverse.pipedag.backend.table.sql.ddl import (
-    AddPrimaryKey,
-    ChangeColumnNullable,
     CreateTableWithSuffix,
+    LockSourceTable,
+    LockTable,
     Schema,
 )
 from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook
@@ -86,37 +87,74 @@ class IBMDB2TableStore(SQLTableStore):
 
     _dialect_name = "ibm_db_sa"
 
-    def add_primary_key(
-        self,
-        table_name: str,
-        schema: Schema,
-        key_columns: list[str],
-        *,
-        name: str | None = None,
-        early_not_null_possible: bool = False,
-    ):
-        if not early_not_null_possible:
-            for retry_iteration in range(4):
-                # retry operation since it might have been terminated as a
-                # deadlock victim
-                try:
-                    self.execute(
-                        ChangeColumnNullable(
-                            table_name, schema, key_columns, nullable=False
-                        )
-                    )
-                    break
-                except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
-                    if retry_iteration == 3:
-                        raise
-                    time.sleep(retry_iteration * retry_iteration * 1.1)
-        self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
+    def lock_table(
+        self, table: Table | str, schema: Schema | str, conn: Any = None
+    ) -> list:
+        """
+        For some dialects, it might be beneficial to lock a table before writing to it.
+        """
+        stmt = LockTable(table.name if isinstance(table, Table) else table, schema)
+        if conn is not None:
+            self.execute(stmt, conn=conn)
+        return [stmt]
 
-    def add_indexes(
-        self, table: Table, schema: Schema, *, early_not_null_possible: bool = False
+    def lock_source_table(
+        self, table: Table | str, schema: Schema | str, conn: Any = None
+    ) -> list:
+        """
+        For some dialects, it might be beneficial to lock source tables before reading.
+        """
+        stmt = LockSourceTable(
+            table.name if isinstance(table, Table) else table, schema
+        )
+        if conn is not None:
+            self.execute(stmt, conn=conn)
+        return [stmt]
+
+    def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
+        if is_sql:
+            # IBM DB2 does not support CREATE TABLE AS SELECT without INSERT INTO
+            return True
+        else:
+            label = resolve_materialization_details_label(table)
+            return (
+                (label is not None and len(label.strip()) > 0)
+                or table.nullable is not None
+                or table.non_nullable is not None
+                or (table.primary_key is not None and len(table.primary_key) > 0)
+            )
+
+    def get_forced_nullability_columns(
+        self, table: Table, table_cols: Iterable[str], report_nullable_cols=False
+    ) -> tuple[list[str], list[str]]:
+        # ibm_db2 dialect has literals as non-nullable types by default, so we also need
+        # the list of nullable columns to fix
+        nullable_cols, non_nullable_cols = self._process_table_nullable_parameters(
+            table, table_cols
+        )
+        # add primery key columns to non_nullable_cols
+        if table.primary_key:
+            primary_key = (
+                table.primary_key
+                if isinstance(table.primary_key, list)
+                else [table.primary_key]
+            )
+            non_nullable_cols += primary_key
+            nullable_cols = [
+                col for col in nullable_cols if col not in table.primary_key
+            ]
+        return nullable_cols, non_nullable_cols
+
+    def add_indexes_and_set_nullable(
+        self,
+        table: Table,
+        schema: Schema,
+        *,
+        on_empty_table: bool | None = None,
+        table_cols: Iterable[str] | None = None,
     ):
-        super().add_indexes(
-            table, schema, early_not_null_possible=early_not_null_possible
+        super().add_indexes_and_set_nullable(
+            table, schema, on_empty_table=on_empty_table, table_cols=table_cols
         )
         table_name = self.engine.dialect.identifier_preparer.quote(table.name)
         schema_name = self.engine.dialect.identifier_preparer.quote_schema(schema.get())
@@ -203,14 +241,7 @@ class IBMDB2TableStore(SQLTableStore):
 @IBMDB2TableStore.register_table(pd)
 class PandasTableHook(PandasTableHook):
     @classmethod
-    def _execute_materialize(
-        cls,
-        df: pd.DataFrame,
-        store: IBMDB2TableStore,
-        table: Table[pd.DataFrame],
-        schema: Schema,
-        dtypes: dict[str, DType],
-    ):
+    def _get_dialect_dtypes(cls, dtypes: dict[str, DType], table: Table[pd.DataFrame]):
         # Default string target is CLOB which can't be used for indexing.
         # -> Convert indexed string columns to VARCHAR(256)
         index_columns = set()
@@ -219,7 +250,7 @@ class PandasTableHook(PandasTableHook):
         if primary_key := table.primary_key:
             index_columns |= set(primary_key)
 
-        dtypes = ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
+        return ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
             {
                 name: (
                     sa.String(length=256)
@@ -231,23 +262,25 @@ class PandasTableHook(PandasTableHook):
             }
         )
 
-        if table.type_map:
-            dtypes.update(table.type_map)
-
-        engine = store.engine
+    @classmethod
+    def _dialect_create_empty_table(
+        cls,
+        store: SQLTableStore,
+        df: pd.DataFrame,
+        table: Table[pd.DataFrame],
+        schema: Schema,
+        dtypes: dict[str, DType],
+    ):
         suffix = store.get_create_table_suffix(
             resolve_materialization_details_label(table)
         )
-        if suffix:
-            store.execute(CreateTableWithSuffix(table.name, schema, dtypes, suffix))
-
-        # noinspection PyTypeChecker
-        df.to_sql(
-            table.name,
-            engine,
-            schema=schema.get(),
-            index=False,
-            dtype=dtypes,
-            chunksize=100_000,
-            if_exists="append" if suffix else "fail",
+        store.execute(
+            CreateTableWithSuffix(
+                table.name,
+                schema,
+                dtypes,
+                table.nullable,
+                table.non_nullable,
+                suffix,
+            )
         )

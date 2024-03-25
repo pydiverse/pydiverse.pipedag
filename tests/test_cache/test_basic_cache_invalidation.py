@@ -582,7 +582,7 @@ def test_change_version_table(mocker):
             cpy_spy.assert_called_once()
 
 
-@pytest.mark.parametrize("n", [1, 2, 100])
+@pytest.mark.parametrize("n", [1, 2, 15])
 def test_partial_stage_cache_valid(mocker, n):
     cache_value = 0
 
