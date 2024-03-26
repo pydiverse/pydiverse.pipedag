@@ -501,12 +501,14 @@ class MaterializationWrapper:
         input_hash = stable_hash("INPUT", input_json)
 
         cache_fn_hash = ""
-        if (
-            task.cache is not None
-            and not config_context.cache_validation.disable_cache_function
-        ):
-            cache_fn_output = store.json_encode(task.cache(*args, **kwargs))
-            cache_fn_hash = stable_hash("CACHE_FN", cache_fn_output)
+        if task.cache is not None:
+            if config_context.cache_validation.disable_cache_function:
+                # choose random cache_fn_hash to ensure downstream tasks are
+                # invalidated for FORCE_FRESH_INPUT
+                cache_fn_hash = stable_hash("CACHE_FN", uuid.uuid4().hex)
+            else:
+                cache_fn_output = store.json_encode(task.cache(*args, **kwargs))
+                cache_fn_hash = stable_hash("CACHE_FN", cache_fn_output)
 
         memo_cache_key = task_cache_key(task, input_hash, cache_fn_hash)
 
@@ -533,8 +535,8 @@ class MaterializationWrapper:
             )
             skip_cache_lookup = (
                 config_context.cache_validation.ignore_task_version
-                or task.version is None
-            )
+                and task.version != AUTO_VERSION
+            ) or task.version is None
             assert_no_fresh_input = (
                 config_context.cache_validation.mode
                 == CacheValidationMode.ASSERT_NO_FRESH_INPUT

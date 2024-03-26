@@ -5,8 +5,9 @@ import pytest
 
 from pydiverse.pipedag import Blob, ConfigContext, Flow, Stage, Table
 from pydiverse.pipedag.context import StageLockContext
+from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.materialize.container import RawSql
-from pydiverse.pipedag.materialize.core import materialize
+from pydiverse.pipedag.materialize.core import AUTO_VERSION, materialize
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import ALL_INSTANCES, with_instances
@@ -580,6 +581,262 @@ def test_change_version_table(mocker):
             assert result.get(cpy)["x"].iloc[0] == 1
             out_spy.assert_called_once()  # lazy task is always called
             cpy_spy.assert_called_once()
+
+
+@pytest.mark.parametrize("ignore_task_version", [True, False])
+@pytest.mark.parametrize("disable_cache_function", [True, False])
+@pytest.mark.parametrize("mode", ["ASSERT_NO_FRESH_INPUT", "NORMAL"])
+def test_cache_validation_mode_assert(
+    ignore_task_version, disable_cache_function, mode
+):
+    # mode = getattr(CacheValidationMode, mode.upper())
+    # kwargs = dict(
+    #     ignore_task_version=ignore_task_version,
+    #     disable_cache_function=disable_cache_function,
+    #     cache_validation_mode=mode
+    # )
+    # if not disable_cache_function and mode == CacheValidationMode.NORMAL:
+    #     pytest.skip("Combination does not provoke exception")
+    #     return
+    #
+    # cache_value = 0
+    # return_value = 0
+    #
+    # def cache():
+    #     return cache_value
+    #
+    # def get_flow(version):
+    #     @materialize(version=version, cache=cache)
+    #     def source():
+    #         return pd.DataFrame(dict(x=[return_value]))
+    #
+    #     @materialize(lazy=True, cache=cache)
+    #     def lazy_source():
+    #         return Table(select_as(return_value, "x"))
+    #
+    #     with Flow() as flow:
+    #         with Stage("stage_1"):
+    #             s1 = source()
+    #             s2 = lazy_source()
+    #     return flow, s1, s2
+    #
+    # flow, s1, s2 = get_flow(version="1.0")
+    # # Initial Call
+    # with StageLockContext():
+    #     result = flow.run(
+    #         cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID,
+    #         disable_cache_function=False,
+    #         ignore_task_version=False,
+    #     )
+    #     assert result.successful
+    #     assert result.get(s1, as_type=pd.DataFrame)["x"].iloc[0] == return_value
+    #     assert result.get(s2, as_type=pd.DataFrame)["x"].iloc[0] == return_value
+    #
+    # if disable_cache_function or ignore_task_version:
+    #     with pytest.raises(AssertionError):
+    #         result = flow.run(**kwargs)
+    #         assert result.successful
+    #
+    # cache_value = 1  # IGNORE_FRESH_INPUT should be implied
+    # if not disable_cache_function and not ignore_task_version:
+    #     result = flow.run(**kwargs)
+    #     assert result.successful
+    #
+    # return_value = 1
+    # with pytest.raises(AssertionError):
+    #     flow.run(**kwargs)
+    #
+    # return_value = 0
+    # flow, _, _ = get_flow(version="1.1")
+    # with pytest.raises(AssertionError):
+    #     flow.run(**kwargs)
+    pass
+
+
+@pytest.mark.parametrize("ignore_task_version", [True, False])
+@pytest.mark.parametrize("disable_cache_function", [True, False])
+@pytest.mark.parametrize(
+    "mode", ["NORMAL", "IGNORE_FRESH_INPUT", "FORCE_FRESH_INPUT", "FORCE_CACHE_INVALID"]
+)
+def test_cache_validation_mode(
+    ignore_task_version, disable_cache_function, mode, mocker
+):
+    mode = getattr(CacheValidationMode, mode.upper())
+    if disable_cache_function and mode == CacheValidationMode.NORMAL:
+        pytest.skip("Cannot disable cache function in mode NORMAL")
+        return
+
+    kwargs = dict(
+        ignore_task_version=ignore_task_version,
+        disable_cache_function=disable_cache_function,
+        cache_validation_mode=mode,
+    )
+    cache_calls = [0]  # consider using mocker also for this
+    cache_value = 0
+
+    def cache():
+        cache_calls[0] += 1
+        return cache_value
+
+    def cache2(df):
+        cache_calls[0] += 1
+        return cache_value
+
+    @materialize(lazy=True, cache=cache)
+    def return_cache_table_lazy():
+        return Table(select_as(cache_value, "x"))
+
+    @materialize(version=None, cache=cache)
+    def return_cache_table_always():
+        return pd.DataFrame(dict(x=[cache_value]))
+
+    @materialize(version=AUTO_VERSION, cache=cache2, input_type=pd.DataFrame)
+    def return_cache_table_auto(df: pd.DataFrame):
+        return df
+
+    @materialize(version="1.0", cache=cache)
+    def return_cache_table():
+        return pd.DataFrame(dict(x=[cache_value]))
+
+    def get_flow():
+        with Flow() as flow:
+            with Stage("stage_1"):
+                out_lazy = return_cache_table_lazy()
+                out_always = return_cache_table_always()
+                out_auto = return_cache_table_auto(out_lazy)
+                out = return_cache_table()
+                outs = [out_lazy, out_always, out_auto, out]
+                cpy = [m.noop(o) for o in outs]
+                ind1 = m.simple_dataframe()
+                ind2 = m.simple_lazy_table()
+        return flow, outs, cpy, [ind1, ind2]
+
+    flow, outs, cpy, ind = get_flow()
+    # Initial Call
+    with StageLockContext():
+        result = flow.run(
+            cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID,
+            disable_cache_function=False,
+            ignore_task_version=False,
+        )
+        assert all(result.get(c, as_type=pd.DataFrame)["x"].iloc[0] == 0 for c in cpy)
+    assert cache_calls[0] == 4
+    cache_calls[0] = 0
+
+    # Calling flow.run again
+    out_spy = [spy_task(mocker, o) for o in outs]
+    cpy_spy = [spy_task(mocker, c) for c in cpy]
+    ind_spy = [spy_task(mocker, i) for i in ind]
+    with StageLockContext():
+        result = flow.run(**kwargs)
+        assert all(result.get(c, as_type=pd.DataFrame)["x"].iloc[0] == 0 for c in cpy)
+        out_spy[0].assert_called_once()  # lazy task is always called
+        out_spy[1].assert_called_once()  # version=None task is always called
+        if (
+            mode
+            in [
+                CacheValidationMode.FORCE_FRESH_INPUT,
+                CacheValidationMode.FORCE_CACHE_INVALID,
+            ]
+            and not disable_cache_function
+        ):
+            out_spy[2].assert_called(2)
+        else:
+            out_spy[2].assert_called_once()  # version=AUTO_VERSION task is called once
+        if (
+            mode
+            not in [
+                CacheValidationMode.FORCE_FRESH_INPUT,
+                CacheValidationMode.FORCE_CACHE_INVALID,
+            ]
+            and not ignore_task_version
+        ):
+            out_spy[3].assert_not_called()
+        else:
+            out_spy[3].assert_called_once()
+        if mode not in [CacheValidationMode.FORCE_CACHE_INVALID]:
+            if ignore_task_version:
+                all(spy.assert_called_once() for spy in cpy_spy)
+            elif disable_cache_function:
+                if mode == CacheValidationMode.IGNORE_FRESH_INPUT:
+                    cpy_spy[0].assert_not_called()  # lazy cache_fn_hash is loaded
+                    cpy_spy[1].assert_called_once()  # version=None is always called
+                    cpy_spy[2].assert_not_called()  # cache_key is loaded
+                    cpy_spy[3].assert_not_called()  # cache_key is loaded
+                else:
+                    all(spy.assert_called_once() for spy in cpy_spy)
+            else:
+                cpy_spy[0].assert_not_called()
+                cpy_spy[1].assert_called_once()  # version=None is always called
+                cpy_spy[2].assert_not_called()  # cache_fn_hash is stable
+                cpy_spy[3].assert_not_called()
+            if ignore_task_version:
+                ind_spy[0].assert_called_once()
+            else:
+                ind_spy[0].assert_not_called()
+            ind_spy[1].assert_called_once()  # lazy is always called
+        else:
+            all(spy.assert_called_once() for spy in cpy_spy)
+            all(spy.assert_called_once() for spy in ind_spy)
+    if disable_cache_function:
+        assert cache_calls[0] == 0
+    else:
+        assert cache_calls[0] == 4
+
+    # Changing the cache value should cause it to get called again
+    cache_value = 1
+    with StageLockContext():
+        result = flow.run(**kwargs)
+        if mode == CacheValidationMode.IGNORE_FRESH_INPUT and not ignore_task_version:
+            assert all(
+                result.get(c, as_type=pd.DataFrame)["x"].iloc[0] == res
+                for c, res in zip(cpy, [cache_value, cache_value, cache_value, 0])
+            )
+        else:
+            assert all(
+                result.get(c, as_type=pd.DataFrame)["x"].iloc[0] == cache_value
+                for c in cpy
+            )
+        out_spy[0].assert_called_once()  # lazy task is always called
+        out_spy[1].assert_called_once()  # version=None task is always called
+        if disable_cache_function and mode in [
+            CacheValidationMode.FORCE_FRESH_INPUT,
+            CacheValidationMode.FORCE_CACHE_INVALID,
+        ]:
+            out_spy[2].assert_called_once()
+        else:
+            out_spy[2].assert_called(2)  # version=AUTO_VERSION task is called twice
+        if mode == CacheValidationMode.IGNORE_FRESH_INPUT and not ignore_task_version:
+            out_spy[3].assert_not_called()
+        else:
+            out_spy[3].assert_called_once()
+        if mode not in [CacheValidationMode.FORCE_CACHE_INVALID]:
+            all(spy.assert_called_once() for spy in cpy_spy)
+            if ignore_task_version:
+                ind_spy[0].assert_called_once()
+            else:
+                ind_spy[0].assert_not_called()
+            ind_spy[1].assert_called_once()  # lazy is always called
+        else:
+            all(spy.assert_called_once() for spy in cpy_spy)
+            all(spy.assert_called_once() for spy in ind_spy)
+
+    for _ in range(3):
+        with StageLockContext():
+            result = flow.run(**kwargs)
+            if (
+                mode == CacheValidationMode.IGNORE_FRESH_INPUT
+                and not ignore_task_version
+            ):
+                assert all(
+                    result.get(c, as_type=pd.DataFrame)["x"].iloc[0] == res
+                    for c, res in zip(cpy, [cache_value, cache_value, cache_value, 0])
+                )
+            else:
+                assert all(
+                    result.get(c, as_type=pd.DataFrame)["x"].iloc[0] == cache_value
+                    for c in cpy
+                )
 
 
 @pytest.mark.parametrize("n", [1, 2, 15])
