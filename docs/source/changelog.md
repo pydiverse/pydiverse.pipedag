@@ -13,7 +13,8 @@
     is kept unmodified except for primary key columns where some dialects require explicit `NOT NULL` statements.
 - Refactored configuration for cache validation options. Now, there is a separate section called cache_validation configurable
     per instance which includes the following options:
-  * mode: NORMAL, IGNORE_FRESH_INPUT (same as ignore_cache_function=True before), 
+  * mode: NORMAL, ASSERT_NO_FRESH_INPUT (protect a stable pipeline / fail if tasks with cache function are executed), 
+        IGNORE_FRESH_INPUT (same as ignore_cache_function=True before), 
         FORCE_FRESH_INPUT (invalidates all tasks with cache function), FORCE_CACHE_INVALID (rerun all tasks)
   * disable_cache_function: True disables the call of cache functions. Downside: next mode=NORMAL run will be cache invalid.
   * ignore_task_version: Option existed before but a level higher

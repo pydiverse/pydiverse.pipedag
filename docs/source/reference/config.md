@@ -297,6 +297,8 @@ mode
 
   Supported values:
   - `normal`: Normal cache invalidation.
+  - `assert_no_fresh_input`: Same as `ignore_fresh_input` and additionally fail if tasks having
+      a cache function would still be executed (change in version or lazy query).
   - `ignore_fresh_input`: Ignore the output of cache functions that help determine the availability of fresh input.
         With `disable_cache_function=False`, it still calls cache functions, so cache invalidation works interchangeably 
         between `ignore_fresh_input` and `normal`.

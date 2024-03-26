@@ -15,6 +15,7 @@ class TaskCacheInfo:
     input_hash: str
     cache_fn_hash: str
     cache_key: str
+    assert_no_materialization: bool
     force_task_execution: bool
 
 

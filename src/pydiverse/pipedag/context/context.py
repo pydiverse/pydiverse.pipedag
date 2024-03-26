@@ -116,6 +116,9 @@ class StageCommitTechnique(Enum):
 class CacheValidationMode(Enum):
     """
     - NORMAL: Normal cache invalidation.
+    - ASSERT_NO_FRESH_INPUT: Same as IGNORE_FRESH_INPUT and additionally fail if tasks
+      having a cache function would still be executed (change in version or lazy query
+      ).
     - IGNORE_FRESH_INPUT: Ignore the output of cache functions that help determine
       the availability of fresh input. With `disable_cache_function=False`, it still
       calls cache functions, so cache invalidation works interchangeably between
@@ -127,9 +130,10 @@ class CacheValidationMode(Enum):
     """
 
     NORMAL = 0
-    IGNORE_FRESH_INPUT = 1
-    FORCE_FRESH_INPUT = 2
-    FORCE_CACHE_INVALID = 3
+    ASSERT_NO_FRESH_INPUT = 1
+    IGNORE_FRESH_INPUT = 2
+    FORCE_FRESH_INPUT = 3
+    FORCE_CACHE_INVALID = 4
 
 
 @frozen(slots=False)

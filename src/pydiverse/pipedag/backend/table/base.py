@@ -372,8 +372,15 @@ class BaseTableStore(TableHookResolver, Disposable):
             self.logger.warning(
                 "Cache miss", table=table.name, stage=table.stage.name, cause=str(e)
             )
-
             TaskContext.get().is_cache_valid = False
+            if task_cache_info.assert_no_materialization:
+                raise AssertionError(
+                    "cache_validation.mode=ASSERT_NO_FRESH_INPUT is a "
+                    "protection mechanism to prevent execution of "
+                    "source tasks to keep pipeline input stable. However,"
+                    "this table was still about to be materialized: "
+                    f"{table.stage.name}.{table.name}"
+                ) from None
             self.store_table(table, task)
 
         # Store table metadata
@@ -415,6 +422,13 @@ class BaseTableStore(TableHookResolver, Disposable):
 
         # Store raw sql
         try:
+            if task_cache_info.force_task_execution:
+                config_context = ConfigContext.get()
+                self.logger.info(
+                    "Forced task execution due to config",
+                    cache_validation=config_context.cache_validation,
+                )
+                raise CacheError("Forced task execution")
             # Try retrieving the table from the cache and then copying it
             # to the transaction stage
             metadata = self.retrieve_raw_sql_metadata(
@@ -432,6 +446,14 @@ class BaseTableStore(TableHookResolver, Disposable):
 
             TaskContext.get().is_cache_valid = False
             RunContext.get().set_stage_has_changed(task.stage)
+
+            if task_cache_info.assert_no_materialization:
+                raise AssertionError(
+                    "cache_validation.mode=ASSERT_NO_FRESH_INPUT is a "
+                    "protection mechanism to prevent execution of "
+                    "source tasks to keep pipeline input stable. However,"
+                    f"this raw SQL script was still about to be executed: {raw_sql}"
+                ) from None
 
             prev_objects = self.get_objects_in_stage(raw_sql.stage)
             self.execute_raw_sql(raw_sql)

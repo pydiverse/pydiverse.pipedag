@@ -535,6 +535,10 @@ class MaterializationWrapper:
                 config_context.cache_validation.ignore_task_version
                 or task.version is None
             )
+            assert_no_fresh_input = (
+                config_context.cache_validation.mode
+                == CacheValidationMode.ASSERT_NO_FRESH_INPUT
+            )
 
             if task.version is AUTO_VERSION:
                 if (
@@ -571,6 +575,13 @@ class MaterializationWrapper:
                 except CacheError as e:
                     task.logger.info("Failed to retrieve task from cache", cause=str(e))
                     TaskContext.get().is_cache_valid = False
+                    if assert_no_fresh_input and task.cache is not None:
+                        raise AssertionError(
+                            "cache_validation.mode=ASSERT_NO_FRESH_INPUT is a "
+                            "protection mechanism to prevent execution of "
+                            "source tasks to keep pipeline input stable. However,"
+                            "this task was still triggered."
+                        ) from None
 
             if task.lazy:
                 # For lazy tasks, is_cache_valid gets set to false during the
@@ -607,6 +618,7 @@ class MaterializationWrapper:
                 input_hash=input_hash,
                 cache_fn_hash=cache_fn_hash,
                 cache_key=task_cache_key(task, input_hash, cache_fn_hash),
+                assert_no_materialization=assert_no_fresh_input,
                 force_task_execution=force_task_execution,
             )
 
@@ -778,6 +790,7 @@ class MaterializationWrapper:
             input_hash="AUTO_VERSION",
             cache_fn_hash="AUTO_VERSION",
             cache_key="AUTO_VERSION",
+            assert_no_materialization=False,
             force_task_execution=False,
         )
 
