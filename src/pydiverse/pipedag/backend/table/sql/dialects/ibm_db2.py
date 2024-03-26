@@ -87,6 +87,9 @@ class IBMDB2TableStore(SQLTableStore):
 
     _dialect_name = "ibm_db_sa"
 
+    def _default_isolation_level(self):
+        return "UNCOMMITTED READ"
+
     def lock_table(
         self, table: Table | str, schema: Schema | str, conn: Any = None
     ) -> list:

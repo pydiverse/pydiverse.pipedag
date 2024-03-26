@@ -17,6 +17,7 @@
         FORCE_FRESH_INPUT (invalidates all tasks with cache function), FORCE_CACHE_INVALID (rerun all tasks)
   * disable_cache_function: True disables the call of cache functions. Downside: next mode=NORMAL run will be cache invalid.
   * ignore_task_version: Option existed before but a level higher
+- Set transaction isolation level to READ UNCOMMITTED via SQLAlchemy functionality
 - Fix that unlogged tables were created as logged tables when they were copied as cache valid
 - Materialize lazy tasks, when they are executed without stage context.
 
