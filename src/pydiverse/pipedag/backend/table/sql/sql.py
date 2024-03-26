@@ -376,6 +376,9 @@ class SQLTableStore(BaseTableStore):
                 # Verify database actually exists
                 conn.exec_driver_sql("SELECT 1")
 
+    def _default_isolation_level(self):
+        return "READ UNCOMMITTED"
+
     def _create_engine(self):
         # future=True enables SQLAlchemy 2.0 behaviour with version 1.4
         return sa.create_engine(
@@ -383,6 +386,8 @@ class SQLTableStore(BaseTableStore):
             future=True,
             pool_size=self.sqlalchemy_pool_size,
             pool_timeout=self.squalchemy_pool_timeout,
+            # we never want database transactional behavior (concurrent read+write)
+            isolation_level=self._default_isolation_level(),
         )
 
     @contextmanager

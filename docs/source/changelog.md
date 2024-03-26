@@ -11,6 +11,7 @@
     `mssql` and `ibm_db2`, both nullable and non-nullable column alterations are issued because constant literals create
     non-nullable columns by default. If neither nullable nor non_nullable are specified, the default `CREATE TABLE as SELECT`
     is kept unmodified except for primary key columns where some dialects require explicit `NOT NULL` statements.
+- Set transaction isolation level to READ UNCOMMITTED via SQLAlchemy functionality
 - Fix that unlogged tables were created as logged tables when they were copied as cache valid
 
 ## 0.7.2 (2024-03-25)
