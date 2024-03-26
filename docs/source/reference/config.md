@@ -298,9 +298,9 @@ mode
   Supported values:
   - `normal`: Normal cache invalidation.
   - `ignore_fresh_input`: Ignore the output of cache functions that help determine the availability of fresh input.
-        It still calls cache functions, so cache invalidation works interchangibly between ignore_fresh_input True and False.
+        With `disable_cache_function=False`, it still calls cache functions, so cache invalidation works interchangeably 
+        between ignore_fresh_input True and False.
   - `force_fresh_input`: Consider all cache function outputs as different and thus make source tasks cache invalid.
-        This option implies `skip_cache_function`.
   - `disable_caching`: Disable caching and thus force all tasks as cache invalid.
         This option implies `force_fresh_input`.
 
