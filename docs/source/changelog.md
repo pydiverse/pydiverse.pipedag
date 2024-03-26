@@ -12,6 +12,7 @@
     non-nullable columns by default. If neither nullable nor non_nullable are specified, the default `CREATE TABLE as SELECT`
     is kept unmodified except for primary key columns where some dialects require explicit `NOT NULL` statements.
 - Fix that unlogged tables were created as logged tables when they were copied as cache valid
+- Added MaterializationDetails class for MSSQL Table Stores. Currently only one option is supported: identity_insert. If set to true the autoincrement attributes of all columns in a table are set to true
 
 ## 0.7.2 (2024-03-25)
 - Disable Kroki links by default. New setting disable_kroki=True allows to still default kroki_url to https://kroki.io.
