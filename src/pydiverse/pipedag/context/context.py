@@ -100,8 +100,34 @@ class TaskContext(BaseContext):
 
 
 class StageCommitTechnique(Enum):
+    """
+    - SCHEMA_SWAP: We prepare output in a `<stage>__tmp` schema and then swap
+      schemas for `<stage>` and `<stage>__tmp` with three rename operations.
+    - READ_VIEWS: We use two schemas, `<stage>__odd` and `<stage>__even`, and
+      fill schema `<stage>` just with views to one of those schemas.
+    """
+
     SCHEMA_SWAP = 0
     READ_VIEWS = 1
+
+
+class CacheValidationMode(Enum):
+    """
+    - NORMAL: Normal cache invalidation.
+    - IGNORE_FRESH_INPUT: Ignore the output of cache functions that help determine
+      the availability of fresh input. With `disable_cache_function=False`, it still
+      calls cache functions, so cache invalidation works interchangeably between
+      IGNORE_FRESH_INPUT and NORMAL.
+    - FORCE_FRESH_INPUT: Consider all cache function outputs as different and thus make
+      source tasks cache invalid.
+    - FORCE_CACHE_INVALID: Disable caching and thus force all tasks as cache invalid.
+      This option implies FORCE_FRESH_INPUT.
+    """
+
+    NORMAL = 0
+    IGNORE_FRESH_INPUT = 1
+    FORCE_FRESH_INPUT = 2
+    FORCE_CACHE_INVALID = 3
 
 
 @frozen(slots=False)
