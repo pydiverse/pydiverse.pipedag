@@ -297,6 +297,16 @@ class MSSqlTableStore(SQLTableStore):
         table_name, schema = super().resolve_alias(table, stage_name)
         return PipedagMSSqlReflection.resolve_alias(self.engine, table_name, schema)
 
+    def _create_engine(self):
+        # future=True enables SQLAlchemy 2.0 behaviour with version 1.4
+        return sa.create_engine(
+            self.engine_url,
+            future=True,
+            pool_size=self.sqlalchemy_pool_size,
+            pool_timeout=self.squalchemy_pool_timeout,
+            isolation_level="READ UNCOMMITED",
+        )
+
 
 @MSSqlTableStore.register_table(pd)
 class PandasTableHook(PandasTableHook):
