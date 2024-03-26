@@ -44,6 +44,9 @@ class DuckDBTableStore(SQLTableStore):
             primary_key=True,
         )
 
+    def _default_isolation_level(self) -> str | None:
+        return None  # "READ UNCOMMITTED" does not exist in DuckDB
+
     def _init_database(self):
         if not self.create_database_if_not_exists:
             return
