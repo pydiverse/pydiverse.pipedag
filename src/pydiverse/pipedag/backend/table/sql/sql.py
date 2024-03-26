@@ -686,13 +686,14 @@ class SQLTableStore(BaseTableStore):
         _ = is_sql
         return table.nullable is not None or table.non_nullable is not None
 
-    def add_indexes_and_set_nullable(
+    def add_indexes_and_set_nullable_and_set_autoincrement(
         self,
         table: Table,
         schema: Schema,
         *,
         on_empty_table: bool | None = None,
         table_cols: Iterable[str] | None = None,
+        enable_identity_insert: bool | None = None,
     ):
         if on_empty_table is None or on_empty_table:
             # By default, we set non-nullable on empty table

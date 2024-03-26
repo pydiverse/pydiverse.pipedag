@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Any
 
 import pandas as pd
@@ -22,6 +23,26 @@ from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.materialize import Table
 from pydiverse.pipedag.materialize.container import RawSql
+from pydiverse.pipedag.materialize.details import (
+    BaseMaterializationDetails,
+    resolve_materialization_details_label,
+)
+
+
+@dataclass(frozen=True)
+class MSSQLMaterializationDetails(BaseMaterializationDetails):
+    """
+    :param identity_insert: Allows explicit values to be inserted
+    into the identity column of a table.
+
+    .. _identity_insert:
+        https://learn.microsoft.com/en-us/sql/t-sql/statements/set-identity-insert-transact-sql?view=sql-server-ver16
+    """
+
+    def __post_init__(self):
+        assert isinstance(self.identity_insert, bool)
+
+    identity_insert: bool = False
 
 
 class MSSqlTableStore(SQLTableStore):
@@ -127,13 +148,14 @@ class MSSqlTableStore(SQLTableStore):
         # the list of nullable columns as well
         return self._process_table_nullable_parameters(table, table_cols)
 
-    def add_indexes_and_set_nullable(
+    def add_indexes_and_set_nullable_and_set_autoincrement(
         self,
         table: Table,
         schema: Schema,
         *,
         on_empty_table: bool | None = None,
         table_cols: Iterable[str] | None = None,
+        enable_identity_insert: bool | None = None,
     ):
         if on_empty_table is None or on_empty_table:
             # Set non-nullable and primary key on empty table
@@ -164,6 +186,7 @@ class MSSqlTableStore(SQLTableStore):
                         nullable_cols,
                         sql_types,
                         nullable=True,
+                        autoincrement=enable_identity_insert,
                     )
                 )
             sql_types = [types[col] for col in non_nullable_cols]
@@ -175,6 +198,7 @@ class MSSqlTableStore(SQLTableStore):
                         non_nullable_cols,
                         sql_types,
                         nullable=False,
+                        autoincrement=enable_identity_insert,
                     )
                 )
             if len(key_columns) > 0:
@@ -189,8 +213,10 @@ class MSSqlTableStore(SQLTableStore):
                         sql_types,
                         nullable=False,
                         cap_varchar_max=1024,
+                        autoincrement=enable_identity_insert,
                     )
                 )
+
             self.add_table_primary_key(table, schema)
         if on_empty_table is None or not on_empty_table:
             self.add_table_indexes(table, schema)
@@ -297,6 +323,28 @@ class MSSqlTableStore(SQLTableStore):
         table_name, schema = super().resolve_alias(table, stage_name)
         return PipedagMSSqlReflection.resolve_alias(self.engine, table_name, schema)
 
+    def _set_materialization_details(
+        self, materialization_details: dict[str, dict[str | list[str]]] | None
+    ) -> None:
+        self.materialization_details = (
+            MSSQLMaterializationDetails.create_materialization_details_dict(
+                materialization_details,
+                self.strict_materialization_details,
+                self.default_materialization_details,
+                self.logger,
+            )
+        )
+
+    def get_identity_insert(self, materialization_details_label: str | None) -> bool:
+        return MSSQLMaterializationDetails.get_attribute_from_dict(
+            self.materialization_details,
+            materialization_details_label,
+            self.default_materialization_details,
+            "identity_insert",
+            self.strict_materialization_details,
+            self.logger,
+        )
+
 
 @MSSqlTableStore.register_table(pd)
 class PandasTableHook(PandasTableHook):
@@ -309,6 +357,58 @@ class PandasTableHook(PandasTableHook):
                 for name, dtype in dtypes.items()
                 if dtype == DType.DATETIME
             }
+        )
+
+    @classmethod
+    def _execute_materialize(
+        cls,
+        df: pd.DataFrame,
+        store: MSSqlTableStore,
+        table: Table[pd.DataFrame],
+        schema: Schema,
+        dtypes: dict[str, DType],
+    ):
+        dtypes = cls._get_dialect_dtypes(dtypes, table)
+        if table.type_map:
+            dtypes.update(table.type_map)
+
+        store.check_materialization_details_supported(
+            resolve_materialization_details_label(table)
+        )
+
+        enable_identity_insert = store.get_identity_insert(
+            resolve_materialization_details_label(table)
+        )
+
+        if early := store.dialect_requests_empty_creation(table, is_sql=False):
+            cls._dialect_create_empty_table(store, df, table, schema, dtypes)
+            store.add_indexes_and_set_nullable_and_set_autoincrement(
+                table,
+                schema,
+                on_empty_table=True,
+                table_cols=df.columns,
+                enable_identity_insert=enable_identity_insert,
+            )
+
+        with store.engine_connect() as conn:
+            with conn.begin():
+                if early:
+                    store.lock_table(table, schema, conn)
+                df.to_sql(
+                    table.name,
+                    conn,
+                    schema=schema.get(),
+                    index=False,
+                    dtype=dtypes,
+                    chunksize=100_000,
+                    if_exists="append" if early else "fail",
+                )
+        store.add_indexes_and_set_nullable_and_set_autoincrement(
+            table,
+            schema,
+            on_empty_table=False if early else None,
+            table_cols=df.columns,
+            enable_identity_insert=enable_identity_insert,
         )
 
 
