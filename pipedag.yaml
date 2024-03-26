@@ -106,6 +106,20 @@ instances:
     blob_store:
       blob_store_connection: no_blob
 
+  mssql_materialization_details:
+    instance_id: mssql_materialization_details
+    table_store:
+      table_store_connection: mssql
+      args:
+        strict_materialization_details: false
+        materialization_details:
+          __any__:
+            identity_insert: false
+          with_identity_insert:
+            identity_insert: true
+    blob_store:
+      blob_store_connection: no_blob
+
   ibm_db2:
     instance_id: pd_ibm_db2
     stage_commit_technique: READ_VIEWS

@@ -306,6 +306,19 @@ def simple_table_default_compressed():
     )
 
 
+@materialize(lazy=True, version="1.0.0")
+def simple_identity_insert():
+    df = pd.DataFrame(
+        {
+            "col1": [0, 1, 2, 3],
+            "col2": ["0", "1", "2", "3"],
+        }
+    )
+    return Table(
+        df, name="identity_insert_on", materialization_details="with_identity_insert"
+    )
+
+
 @materialize(version="1.0")
 def pd_dataframe(data: dict[str, list]):
     return pd.DataFrame(data)
