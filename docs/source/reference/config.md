@@ -268,12 +268,9 @@ strict_result_get_locking
   For interactive debugging it might be handy to disable this check.
 
   (default: `True`)
-  
-ignore_task_version
-: When set to `True`, tasks that specify an explicit version for cache invalidation will always be considered cache invalid. 
-  This might be useful for instances with short execution time during rapid development cycles when manually bumping version numbers becomes cumbersome.
 
-  (default: `False`)
+cache_validation
+: See [](#section-cache_validation). *Optional*
   
 table_store
 : See [](#section-table_store). *Required*
@@ -291,6 +288,39 @@ orchestration
 attrs
 : A place to put an arbitrary, user specific yaml mapping.
   During flow execution you will be able to access these `attrs` using [`ConfigContext.get().attrs`](#ConfigContext.attrs)
+
+(section-cache_validation)=
+### Cache Validation options
+
+mode
+: Choose a mode of cache invalidation. 
+
+  Supported values:
+  - `normal`: Normal cache invalidation.
+  - `ignore_fresh_input`: Ignore the output of cache functions that help determine the availability of fresh input.
+        It still calls cache functions, so cache invalidation works interchangibly between ignore_fresh_input True and False.
+  - `force_fresh_input`: Consider all cache function outputs as different and thus make source tasks cache invalid.
+        This option implies `skip_cache_function`.
+  - `disable_caching`: Disable caching and thus force all tasks as cache invalid.
+        This option implies `force_fresh_input`.
+
+  (default: `normal`) 
+
+disable_cache_function
+: When set to `True`, cache functions are not called. This is not compatible with `mode=normal`. The difference to 
+`ignore_fresh_input` is that in case mode is set back to `normal`, the cache becomes invalid if disable_cache_function 
+was set to `True` during last run.
+
+  (default: `False`)
+
+ignore_task_version
+: When set to `True`, tasks that specify an explicit version for cache invalidation will always be considered cache invalid. 
+  This might be useful for instances with short execution time during rapid development cycles when manually bumping version numbers becomes cumbersome.
+
+  (default: `False`)
+
+
+
 
 (section-table_store)=
 ### Table Store Config
