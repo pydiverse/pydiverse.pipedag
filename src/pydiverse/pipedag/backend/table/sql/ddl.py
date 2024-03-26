@@ -329,6 +329,7 @@ class ChangeColumnTypes(DDLElement):
         column_types: list[str],
         nullable: bool | list[bool] | None = None,
         cap_varchar_max: int | None = None,
+        autoincrement: bool | None = None,
     ):
         if not isinstance(nullable, list):
             nullable = [nullable for _ in column_names]
@@ -338,6 +339,7 @@ class ChangeColumnTypes(DDLElement):
         self.column_types = column_types
         self.nullable = nullable
         self.cap_varchar_max = cap_varchar_max
+        self.autoincrement = False if autoincrement is None else autoincrement
 
 
 class ChangeColumnNullable(DDLElement):

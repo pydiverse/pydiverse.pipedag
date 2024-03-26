@@ -130,7 +130,7 @@ class PandasTableHook(PandasTableHook):
 
         # Create empty table
         cls._dialect_create_empty_table(store, df, table, schema, dtypes)
-        store.add_indexes_and_set_nullable(
+        store.add_indexes_and_set_nullable_and_set_autoincrement(
             table, schema, on_empty_table=True, table_cols=df.columns
         )
 

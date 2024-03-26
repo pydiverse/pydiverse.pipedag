@@ -84,7 +84,7 @@ class PandasTableHook(PandasTableHook):
 
         # Create empty table with correct schema
         cls._dialect_create_empty_table(store, df, table, schema, dtypes)
-        store.add_indexes_and_set_nullable(
+        store.add_indexes_and_set_nullable_and_set_autoincrement(
             table, schema, on_empty_table=True, table_cols=df.columns
         )
 
@@ -98,11 +98,8 @@ class PandasTableHook(PandasTableHook):
         with duckdb.connect(connection_uri) as conn:
             conn.execute(f"INSERT INTO {schema_name}.{table_name} SELECT * FROM df")
 
-        store.add_indexes_and_set_nullable(
-            table,
-            schema,
-            on_empty_table=False,
-            table_cols=df.columns,
+        store.add_indexes_and_set_nullable_and_set_autoincrement(
+            table, schema, on_empty_table=False, table_cols=df.columns
         )
 
 
