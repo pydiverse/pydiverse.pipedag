@@ -304,7 +304,7 @@ class MSSqlTableStore(SQLTableStore):
             future=True,
             pool_size=self.sqlalchemy_pool_size,
             pool_timeout=self.squalchemy_pool_timeout,
-            isolation_level="READ UNCOMMITED",
+            isolation_level="READ UNCOMMITTED",
         )
 
 
