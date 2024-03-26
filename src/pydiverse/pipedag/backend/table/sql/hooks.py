@@ -17,6 +17,7 @@ from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.table.base import AutoVersionSupport, TableHook
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateTableAsSelect,
+    InsertIntoSelect,
     Schema,
 )
 from pydiverse.pipedag.backend.table.sql.sql import (
@@ -51,63 +52,95 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     def materialize(
         cls,
         store: SQLTableStore,
-        table: Table[sa.sql.expression.TextClause | sa.Text],
+        table: Table[sa.sql.expression.TextClause | sa.sql.expression.Selectable],
         stage_name,
     ):
         obj = table.obj
         if isinstance(table.obj, (sa.Table, sa.sql.expression.Alias)):
             obj = sa.select("*").select_from(table.obj)
+            tbl = table.obj if isinstance(table.obj, sa.Table) else table.obj.original
+            source_tables = [
+                dict(
+                    name=tbl.name,
+                    schema=tbl.schema,
+                    shared_lock_allowed=table.shared_lock_allowed,
+                )
+            ]
+        else:
+            source_tables = [
+                dict(
+                    name=tbl.name,
+                    schema=store.get_schema(tbl.stage.current_name).get()
+                    if tbl.external_schema is None
+                    else tbl.external_schema,
+                    shared_lock_allowed=tbl.shared_lock_allowed,
+                )
+                for tbl in TaskContext.get().input_tables
+            ]
 
-        source_tables = [
-            dict(
-                name=tbl.name,
-                schema=store.get_schema(tbl.stage.current_name).get()
-                if tbl.external_schema is None
-                else tbl.external_schema,
-                shared_lock_allowed=tbl.shared_lock_allowed,
-            )
-            for tbl in TaskContext.get().input_tables
-        ]
         schema = store.get_schema(stage_name)
 
         store.check_materialization_details_supported(
             resolve_materialization_details_label(table)
         )
 
-        store.execute(
-            CreateTableAsSelect(
-                table.name,
-                schema,
-                obj,
-                early_not_null=table.primary_key,
-                source_tables=source_tables,
-                suffix=store.get_create_table_suffix(
-                    resolve_materialization_details_label(table)
-                ),
-            )
+        suffix = store.get_create_table_suffix(
+            resolve_materialization_details_label(table)
         )
-        store.add_indexes(table, schema, early_not_null_possible=True)
+        unlogged = store.get_unlogged(resolve_materialization_details_label(table))
+        if store.dialect_requests_empty_creation(table, is_sql=True):
+            limit_query = store.get_limit_query(obj, rows=0)
+            store.execute(
+                CreateTableAsSelect(
+                    table.name,
+                    schema,
+                    limit_query,
+                    unlogged=unlogged,
+                    suffix=suffix,
+                )
+            )
+            store.add_indexes_and_set_nullable(table, schema, on_empty_table=True)
+            statements = store.lock_table(table, schema)
+            statements += store.lock_source_tables(source_tables)
+            statements += [
+                InsertIntoSelect(
+                    table.name,
+                    schema,
+                    obj,
+                )
+            ]
+            store.execute(
+                statements,
+                truncate_printed_select=True,
+            )
+            store.add_indexes_and_set_nullable(table, schema, on_empty_table=False)
+        else:
+            statements = store.lock_source_tables(source_tables)
+            statements += [
+                CreateTableAsSelect(
+                    table.name,
+                    schema,
+                    obj,
+                    unlogged=unlogged,
+                    suffix=suffix,
+                )
+            ]
+            store.execute(statements)
+            store.add_indexes_and_set_nullable(table, schema)
 
     @classmethod
     def retrieve(
-        cls, store, table: Table, stage_name: str, as_type: type[sa.Table]
+        cls,
+        store: SQLTableStore,
+        table: Table,
+        stage_name: str,
+        as_type: type[sa.Table],
     ) -> sa.sql.expression.Selectable:
         table_name, schema = store.resolve_alias(table, stage_name)
         alias_name = TaskContext.get().name_disambiguator.get_name(table_name)
 
-        for retry_iteration in range(4):
-            # retry operation since it might have been terminated as a deadlock victim
-            try:
-                return sa.Table(
-                    table_name,
-                    sa.MetaData(),
-                    schema=schema,
-                    autoload_with=store.engine,
-                ).alias(alias_name)
-            except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
-                if retry_iteration == 3:
-                    raise
-                time.sleep(retry_iteration * retry_iteration * 1.2)
+        tbl = store.reflect_table(table_name, schema)
+        return tbl.alias(alias_name)
 
     @classmethod
     def lazy_query_str(cls, store, obj) -> str:
@@ -248,7 +281,28 @@ class PandasTableHook(TableHook[SQLTableStore]):
             schema=schema,
             dtypes=dtypes,
         )
-        store.add_indexes(table, schema)
+
+    @classmethod
+    def _get_dialect_dtypes(cls, dtypes: dict[str, DType], table: Table[pd.DataFrame]):
+        _ = table
+        return {name: dtype.to_sql() for name, dtype in dtypes.items()}
+
+    @classmethod
+    def _dialect_create_empty_table(
+        cls,
+        store: SQLTableStore,
+        df: pd.DataFrame,
+        table: Table[pd.DataFrame],
+        schema: Schema,
+        dtypes: dict[str, DType],
+    ):
+        df[:0].to_sql(
+            table.name,
+            store.engine,
+            schema=schema.get(),
+            index=False,
+            dtype=dtypes,
+        )
 
     @classmethod
     def _execute_materialize(
@@ -259,7 +313,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         schema: Schema,
         dtypes: dict[str, DType],
     ):
-        dtypes = {name: dtype.to_sql() for name, dtype in dtypes.items()}
+        dtypes = cls._get_dialect_dtypes(dtypes, table)
         if table.type_map:
             dtypes.update(table.type_map)
 
@@ -267,13 +321,30 @@ class PandasTableHook(TableHook[SQLTableStore]):
             resolve_materialization_details_label(table)
         )
 
-        df.to_sql(
-            table.name,
-            store.engine,
-            schema=schema.get(),
-            index=False,
-            dtype=dtypes,
-            chunksize=100_000,
+        if early := store.dialect_requests_empty_creation(table, is_sql=False):
+            cls._dialect_create_empty_table(store, df, table, schema, dtypes)
+            store.add_indexes_and_set_nullable(
+                table, schema, on_empty_table=True, table_cols=df.columns
+            )
+
+        with store.engine_connect() as conn:
+            with conn.begin():
+                if early:
+                    store.lock_table(table, schema, conn)
+                df.to_sql(
+                    table.name,
+                    conn,
+                    schema=schema.get(),
+                    index=False,
+                    dtype=dtypes,
+                    chunksize=100_000,
+                    if_exists="append" if early else "fail",
+                )
+        store.add_indexes_and_set_nullable(
+            table,
+            schema,
+            on_empty_table=False if early else None,
+            table_cols=df.columns,
         )
 
     @classmethod
@@ -316,15 +387,9 @@ class PandasTableHook(TableHook[SQLTableStore]):
         stage_name: str,
         backend: PandasDTypeBackend,
     ) -> tuple[Any, dict[str, DType]]:
-        engine = store.engine
         table_name, schema = store.resolve_alias(table, stage_name)
 
-        sql_table = sa.Table(
-            table_name,
-            sa.MetaData(),
-            schema=schema,
-            autoload_with=engine,
-        ).alias("tbl")
+        sql_table = store.reflect_table(table_name, schema).alias("tbl")
 
         cols = {col.name: col for col in sql_table.columns}
         dtypes = {name: DType.from_sql(col.type) for name, col in cols.items()}

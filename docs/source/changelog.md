@@ -1,14 +1,36 @@
 # Changelog
 
-## 0.7.2 (2024-03-DD)
+## 0.8.0 (2024-MM-DD)
+- Significant refactoring of materialization is included. It splits creation of table from filling a table in many cases.
+    This may lead to unexpected changes in log output. For now, the `INSERT INTO SELECT` statement is only printed in 
+    shortened version, because the creation of the table already includes the same statement in full. In the future, this
+    might be made configurable, so your feedback is highly welcome.
+- pipedag.Table() now supports new parameters `nullable` and `non_nullable`. This allows specifying which columns are 
+    nullable both as a positive and negative list. If both are specified, they must mention each column in the table and
+    have no overlap. For most dialects, non-nullable statements are issued after creating the empty table. For dialects 
+    `mssql` and `ibm_db2`, both nullable and non-nullable column alterations are issued because constant literals create
+    non-nullable columns by default. If neither nullable nor non_nullable are specified, the default `CREATE TABLE as SELECT`
+    is kept unmodified except for primary key columns where some dialects require explicit `NOT NULL` statements.
+- Refactored configuration for cache validation options. Now, there is a separate section called cache_validation configurable
+    per instance which includes the following options:
+  * mode: NORMAL, IGNORE_FRESH_INPUT (same as ignore_cache_function=True before), 
+        FORCE_FRESH_INPUT (invalidates all tasks with cache function), FORCE_CACHE_INVALID (rerun all tasks)
+  * disable_cache_function: True disables the call of cache functions. Downside: next mode=NORMAL run will be cache invalid.
+  * ignore_task_version: Option existed before but a level higher
+- Fix that unlogged tables were created as logged tables when they were copied as cache valid
+- Materialize lazy tasks, when they are executed without stage context.
+
+## 0.7.2 (2024-03-25)
 - Disable Kroki links by default. New setting disable_kroki=True allows to still default kroki_url to https://kroki.io.
     Function create_basic_pipedag_config() just has a kroki_url parameter which defaults to None.
 - Added max_query_print_length parameter to MSSqlTableStore to limit the length of the printed SQL queries.
     Default is max_query_print_length=500000 characters.
-- Fix bug when creating a table with the same name as a `Table` given by `ExternalTableReference` in the same stage.
-- Add support for `force_task_execution` in `Flow.run` to force execution of tasks even if they are cache valid. This implies `ignore_cache_function=True`.
-- Make `ignore_cache_function=True` prevent cache function calls.
-- Materialize lazy tasks, when they are executed without stage context.
+- Fix bug when creating a table with the same name as a `Table` given by `ExternalTableReference` in the same stage  
+- New config options for `SQLTableStore`:
+  * `max_concurrent_copy_operations` to limit the number of concurrent copy operations when copying tables between schemas.
+  * `sqlalchemy_pool_size` and `sqlalchemy_pool_timeout` to configure the pool size and timeout for the SQLAlchemy connection pool.
+  * The defaults fix a bug by setting sqlalchemy options to not time out when the first cache invalid task in a stage triggers
+    copying of cache valid tables between schemas and copying takes longer than 30s.
 
 ## 0.7.1 (2024-03-11)
 - Fix bug when Reading DECIMAL(precision, scale) columns to pandas task (precision was interpreted like for Float where 
@@ -43,6 +65,7 @@ precision <= 24 leads to float32). Beware that ``isinstance(sa.Float(), sa.Numer
   * Raw SQL statements changing database link of connection via `USE` was causing pipedag generated commands to fail
 
 ## 0.6.7 (2023-12-05)
+- increased metadata_version to 0.3.2 => please delete metadata with pipedag-manage when upgrading from <= 0.6.6 to >= 0.6.7
 - Make separator customizable when splitting RawSql into statements.
 - Add `DropNickname` for DB2 and drop nicknames when dropping schemas.
 - Add debug function `materialize_table`.

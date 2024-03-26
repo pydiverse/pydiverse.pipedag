@@ -3,13 +3,14 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass
 from io import StringIO
+from typing import Any
 
 import pandas as pd
-import sqlalchemy as sa
 
 from pydiverse.pipedag.backend.table.sql.ddl import (
     ChangeTableLogged,
-    CreateTableAsSelect,
+    LockSourceTable,
+    LockTable,
     Schema,
 )
 from pydiverse.pipedag.backend.table.sql.hooks import (
@@ -66,6 +67,30 @@ class PostgresTableStore(SQLTableStore):
             self.logger,
         )
 
+    def lock_table(
+        self, table: Table | str, schema: Schema | str, conn: Any = None
+    ) -> list:
+        """
+        For some dialects, it might be beneficial to lock a table before writing to it.
+        """
+        stmt = LockTable(table.name if isinstance(table, Table) else table, schema)
+        if conn is not None:
+            self.execute(stmt, conn=conn)
+        return [stmt]
+
+    def lock_source_table(
+        self, table: Table | str, schema: Schema | str, conn: Any = None
+    ) -> list:
+        """
+        For some dialects, it might be beneficial to lock source tables before reading.
+        """
+        stmt = LockSourceTable(
+            table.name if isinstance(table, Table) else table, schema
+        )
+        if conn is not None:
+            self.execute(stmt, conn=conn)
+        return [stmt]
+
     def check_materialization_details_supported(self, label: str | None) -> None:
         _ = label
         return
@@ -85,33 +110,7 @@ class PostgresTableStore(SQLTableStore):
 
 @PostgresTableStore.register_table()
 class SQLAlchemyTableHook(SQLAlchemyTableHook):
-    @classmethod
-    def materialize(
-        cls,
-        store: PostgresTableStore,
-        table: Table[sa.sql.expression.TextClause | sa.Text],
-        stage_name,
-    ):
-        obj = table.obj
-        if isinstance(table.obj, (sa.Table, sa.sql.expression.Alias)):
-            obj = sa.select("*").select_from(table.obj)
-
-        store.check_materialization_details_supported(
-            resolve_materialization_details_label(table)
-        )
-
-        schema = store.get_schema(stage_name)
-        store.execute(
-            CreateTableAsSelect(
-                table.name,
-                schema,
-                obj,
-                unlogged=store.get_unlogged(
-                    resolve_materialization_details_label(table)
-                ),
-            )
-        )
-        store.add_indexes(table, schema, early_not_null_possible=True)
+    pass  # postges is our reference dialect
 
 
 @PostgresTableStore.register_table(pd)
@@ -125,23 +124,18 @@ class PandasTableHook(PandasTableHook):
         schema: Schema,
         dtypes: dict[str, DType],
     ):
-        engine = store.engine
         dtypes = {name: dtype.to_sql() for name, dtype in dtypes.items()}
         if table.type_map:
             dtypes.update(table.type_map)
 
         # Create empty table
-        df[:0].to_sql(
-            table.name,
-            engine,
-            schema=schema.get(),
-            index=False,
-            dtype=dtypes,
+        cls._dialect_create_empty_table(store, df, table, schema, dtypes)
+        store.add_indexes_and_set_nullable(
+            table, schema, on_empty_table=True, table_cols=df.columns
         )
 
         if store.get_unlogged(resolve_materialization_details_label(table)):
-            with engine.begin() as conn:
-                conn.execute(ChangeTableLogged(table.name, schema, False))
+            store.execute(ChangeTableLogged(table.name, schema, False))
 
         # COPY data
         # TODO: For python 3.12, there is csv.QUOTE_STRINGS
@@ -157,6 +151,7 @@ class PandasTableHook(PandasTableHook):
         )
         s_buf.seek(0)
 
+        engine = store.engine
         table_name = engine.dialect.identifier_preparer.quote(table.name)
         schema_name = engine.dialect.identifier_preparer.format_schema(schema.get())
 
@@ -167,6 +162,7 @@ class PandasTableHook(PandasTableHook):
                     f"COPY {schema_name}.{table_name} FROM STDIN"
                     " WITH (FORMAT CSV, NULL '\\N')"
                 )
+                store.logger.info("Executing bulk load", query=sql)
                 cur.copy_expert(sql=sql, file=s_buf)
             dbapi_conn.commit()
         finally:

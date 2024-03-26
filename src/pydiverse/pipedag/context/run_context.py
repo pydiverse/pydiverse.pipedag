@@ -101,7 +101,10 @@ class RunContextServer(IPCServer):
         self.task_memo: defaultdict[Any, Any] = defaultdict(lambda: MemoState.NONE)
 
         # DEFERRED TABLE STORE OPERATIONS
-        self.deferred_thread_pool = ThreadPoolExecutor()
+        max_workers = 5
+        if hasattr(config_ctx.store.table_store, "max_concurrent_copy_operations"):
+            max_workers = config_ctx.store.table_store.max_concurrent_copy_operations
+        self.deferred_thread_pool = ThreadPoolExecutor(max_workers=max_workers)
         self.deferred_ts_ops: dict[int, list[DeferredTableStoreOp]] = {}
         self.deferred_ts_ops_futures: dict[int, list[Future]] = {}
         self.changed_stages: set[int] = set()

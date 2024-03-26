@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from typing import Any
 
 import pandas as pd
@@ -21,7 +22,6 @@ from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.materialize import Table
 from pydiverse.pipedag.materialize.container import RawSql
-from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
 
 
 class MSSqlTableStore(SQLTableStore):
@@ -87,22 +87,7 @@ class MSSqlTableStore(SQLTableStore):
         key_columns: list[str],
         *,
         name: str | None = None,
-        early_not_null_possible: bool = False,
     ):
-        _ = early_not_null_possible  # not needed for this dialect
-        sql_types = self.reflect_sql_types(key_columns, table_name, schema)
-        # impose some varchar(max) limit to allow use in primary key / index
-        # TODO: consider making cap_varchar_max a config option
-        self.execute(
-            ChangeColumnTypes(
-                table_name,
-                schema,
-                key_columns,
-                sql_types,
-                nullable=False,
-                cap_varchar_max=1024,
-            )
-        )
         self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
 
     def add_index(
@@ -126,6 +111,89 @@ class MSSqlTableStore(SQLTableStore):
                 )
             )
         self.execute(AddIndex(table_name, schema, index_columns, name))
+
+    def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
+        _ = is_sql
+        return (
+            table.nullable is not None
+            or table.non_nullable is not None
+            or (table.primary_key is not None and len(table.primary_key) > 0)
+        )
+
+    def get_forced_nullability_columns(
+        self, table: Table, table_cols: Iterable[str], report_nullable_cols=False
+    ) -> tuple[list[str], list[str]]:
+        # mssql dialect has literals as non-nullable types by default, so we also need
+        # the list of nullable columns as well
+        return self._process_table_nullable_parameters(table, table_cols)
+
+    def add_indexes_and_set_nullable(
+        self,
+        table: Table,
+        schema: Schema,
+        *,
+        on_empty_table: bool | None = None,
+        table_cols: Iterable[str] | None = None,
+    ):
+        if on_empty_table is None or on_empty_table:
+            # Set non-nullable and primary key on empty table
+            key_columns = (
+                [table.primary_key]
+                if isinstance(table.primary_key, str)
+                else table.primary_key
+                if table.primary_key is not None
+                else []
+            )
+            # reflect sql types because mssql cannot just change nullable flag
+            inspector = sa.inspect(self.engine)
+            columns = inspector.get_columns(table.name, schema=schema.get())
+            table_cols = [d["name"] for d in columns]
+            types = {d["name"]: d["type"] for d in columns}
+            nullable_cols, non_nullable_cols = self.get_forced_nullability_columns(
+                table, table_cols
+            )
+            non_nullable_cols = [
+                col for col in non_nullable_cols if col not in key_columns
+            ]
+            sql_types = [types[col] for col in nullable_cols]
+            if len(nullable_cols) > 0:
+                self.execute(
+                    ChangeColumnTypes(
+                        table.name,
+                        schema,
+                        nullable_cols,
+                        sql_types,
+                        nullable=True,
+                    )
+                )
+            sql_types = [types[col] for col in non_nullable_cols]
+            if len(non_nullable_cols) > 0:
+                self.execute(
+                    ChangeColumnTypes(
+                        table.name,
+                        schema,
+                        non_nullable_cols,
+                        sql_types,
+                        nullable=False,
+                    )
+                )
+            if len(key_columns) > 0:
+                sql_types = [types[col] for col in key_columns]
+                # impose some varchar(max) limit to allow use in primary key / index
+                # TODO: consider making cap_varchar_max a config option
+                self.execute(
+                    ChangeColumnTypes(
+                        table.name,
+                        schema,
+                        key_columns,
+                        sql_types,
+                        nullable=False,
+                        cap_varchar_max=1024,
+                    )
+                )
+            self.add_table_primary_key(table, schema)
+        if on_empty_table is None or not on_empty_table:
+            self.add_table_indexes(table, schema)
 
     def execute_raw_sql(self, raw_sql: RawSql):
         if self.disable_pytsql:
@@ -233,36 +301,14 @@ class MSSqlTableStore(SQLTableStore):
 @MSSqlTableStore.register_table(pd)
 class PandasTableHook(PandasTableHook):
     @classmethod
-    def _execute_materialize(
-        cls,
-        df: pd.DataFrame,
-        store: MSSqlTableStore,
-        table: Table[pd.DataFrame],
-        schema: Schema,
-        dtypes: dict[str, DType],
-    ):
-        dtypes = ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
+    def _get_dialect_dtypes(cls, dtypes: dict[str, DType], table: Table[pd.DataFrame]):
+        _ = table
+        return ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
             {
                 name: sa.dialects.mssql.DATETIME2()
                 for name, dtype in dtypes.items()
                 if dtype == DType.DATETIME
             }
-        )
-
-        if table.type_map:
-            dtypes.update(table.type_map)
-
-        store.check_materialization_details_supported(
-            resolve_materialization_details_label(table)
-        )
-
-        df.to_sql(
-            table.name,
-            store.engine,
-            schema=schema.get(),
-            index=False,
-            dtype=dtypes,
-            chunksize=100_000,
         )
 
 
