@@ -4,6 +4,7 @@ import pandas as pd
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import StageLockContext
+from pydiverse.pipedag.context.context import CacheValidationMode
 
 dfA_source = pd.DataFrame(
     {
@@ -86,7 +87,7 @@ def test_source_invalidation():
 
     with StageLockContext():
         # this run should ignore fresh input at source nodes and not change outputs
-        result = flow.run(ignore_cache_function=True)
+        result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
         assert result.successful
 
         v_out1, v_out2 = result.get(out1), result.get(out2)

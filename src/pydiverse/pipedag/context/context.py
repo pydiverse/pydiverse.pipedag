@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from contextvars import ContextVar, Token
 from enum import Enum
 from functools import cached_property
@@ -10,6 +11,7 @@ import structlog
 from attrs import define, evolve, field, frozen
 from box import Box
 
+from pydiverse.pipedag.util import deep_merge
 from pydiverse.pipedag.util.import_ import import_object, load_object
 from pydiverse.pipedag.util.naming import NameDisambiguator
 
@@ -179,9 +181,9 @@ class ConfigContext(BaseAttrsContext):
     # per instance attributes
     fail_fast: bool
     strict_result_get_locking: bool
-    ignore_task_version: bool
     instance_id: str  # may be used as database name or locking ID
     stage_commit_technique: StageCommitTechnique
+    cache_validation: Box
     network_interface: str
     disable_kroki: bool
     kroki_url: str | None
@@ -189,15 +191,9 @@ class ConfigContext(BaseAttrsContext):
 
     table_hook_args: Box
 
-    # run specific options
-    ignore_cache_function: bool = False
-
     # INTERNAL FLAGS - ONLY FOR PIPEDAG USE
     # When set to True, exceptions raised in a flow don't get logged
     _swallow_exceptions: bool = False
-    # When set to True, indicates that all tasks should get run, independent
-    # of their cache validity
-    _force_task_execution: bool = False
 
     @cached_property
     def auto_table(self) -> tuple[type, ...]:
@@ -255,6 +251,11 @@ class ConfigContext(BaseAttrsContext):
         .. |attrs.evolve()| replace:: ``attrs.evolve()``
         .. _attrs.evolve(): https://www.attrs.org/en/stable/api.html#attrs.evolve
         """
+        dicts = {}
+        for name, value in changes.items():
+            if isinstance(value, Mapping):
+                dicts[name] = deep_merge(getattr(self, name), value)
+        changes.update(dicts)
         evolved = evolve(self, **changes)
 
         # Transfer cached properties

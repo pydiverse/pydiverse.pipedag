@@ -14,6 +14,7 @@ from pydiverse.pipedag.context import (
     FinalTaskState,
     RunContextServer,
 )
+from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 
@@ -209,8 +210,9 @@ class Flow:
         config: ConfigContext = None,
         orchestration_engine: OrchestrationEngine = None,
         fail_fast: bool | None = None,
-        ignore_cache_function: bool = False,
-        force_task_execution: bool = False,
+        cache_validation_mode: CacheValidationMode | None = None,
+        disable_cache_function: bool | None = None,
+        ignore_task_version: bool | None = None,
         **kwargs,
     ) -> Result:
         """Execute the flow.
@@ -236,13 +238,19 @@ class Flow:
             Whether exceptions should get raised or swallowed.
             If set to True, exceptions that occur get immediately raised and the
             flow gets aborted.
-        :param ignore_cache_function:
-            When set to True, the task's cache function gets ignored when determining
-            the cache validity of a task.
-        :param force_task_execution:
-            Force the execution of all tasks in the executed (sub-)flow,
-            even if they are cache valid. `force_task_execution=True` implies
-            `ignore_cache_function=True`.
+        :param cache_validation_mode:
+            Override the cache validation mode. See :py:class:`CacheValidationMode`.
+            For None, the cache validation mode from the config gets used.
+            See :doc:`/reference/config` :ref:`section-cache_validation` for more
+            information.
+        :param disable_cache_function:
+            Override the disable_cache_function setting from the config.
+            See :doc:`/reference/config` :ref:`section-cache_validation` for more
+            information.
+        :param ignore_task_version:
+            Override the ignore_task_version setting from the config.
+            See :doc:`/reference/config` :ref:`section-cache_validation` for more
+            information.
         :param kwargs:
             Other keyword arguments that get passed on directly to the
             ``run()`` method of the orchestration engine. Consequently, these
@@ -283,18 +291,35 @@ class Flow:
             except LookupError:
                 config = PipedagConfig.default.get(flow=self.name)
 
+        # update cache_validation_mode
+        if cache_validation_mode is None and subflow.is_tasks_subflow:
+            # If subflow consists of a subset of tasks (-> not a subset of stages)
+            # then we want to skip cache validity checking to ensure the tasks
+            # always get executed.
+            cache_validation_mode = CacheValidationMode.FORCE_CACHE_INVALID
+
         # Evolve config using the arguments passed to flow.run
         config = config.evolve(
             fail_fast=(fail_fast if fail_fast is not None else config.fail_fast),
-            ignore_cache_function=ignore_cache_function or force_task_execution,
-            force_task_execution=(
-                # If subflow consists of a subset of tasks (-> not a subset of stages)
-                # then we want to skip cache validity checking to ensure the tasks
-                # always get executed.
-                subflow.is_tasks_subflow
-                or force_task_execution
-            ),
+            cache_validation={
+                k: v
+                for k, v in [
+                    ("mode", cache_validation_mode),
+                    ("disable_cache_function", disable_cache_function),
+                    ("ignore_task_version", ignore_task_version),
+                ]
+                if v is not None
+            },
         )
+
+        if (
+            config.cache_validation.mode == CacheValidationMode.NORMAL
+            and config.cache_validation.disable_cache_function
+        ):
+            raise ValueError(
+                "disable_cache_function=True is not allowed in combination with "
+                f"cache_validation_mode=NORMAL: {config.cache_validation}"
+            )
 
         with config, RunContextServer(subflow):
             if orchestration_engine is None:

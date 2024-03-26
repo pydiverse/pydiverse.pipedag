@@ -353,14 +353,17 @@ class BaseTableStore(TableHookResolver, Disposable):
 
         # Store the table
         try:
+            if task_cache_info.force_task_execution:
+                self.logger.info(
+                    "Forced task execution due to config",
+                    cache_validation=config_context.cache_validation,
+                )
+                raise CacheError("Forced task execution")
             # Try retrieving the table from the cache and then copying it
             # to the transaction stage
             metadata = self.retrieve_lazy_table_metadata(
                 query_hash, task_cache_info.cache_key, table.stage
             )
-            if config_context._force_task_execution:
-                self.logger.info("Forced task execution")
-                raise CacheError("Forced task execution")
             self.copy_lazy_table_to_transaction(metadata, table)
             self.logger.info(f"Lazy cache of table '{table.name}' found")
         except CacheError as e:

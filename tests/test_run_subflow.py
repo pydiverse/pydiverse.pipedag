@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pydiverse.pipedag import Flow, Stage, Task, materialize
 from pydiverse.pipedag.context import FinalTaskState
+from pydiverse.pipedag.context.context import CacheValidationMode
 from tests.fixtures.instances import with_instances
 from tests.util import select_as
 from tests.util import tasks_library as m
@@ -23,7 +24,7 @@ def test_run_specific_task(mocker):
     def cache():
         assert (
             cache_function_call_allowed
-        ), "Cache function call not allowed with force_task_execution=True"
+        ), "Cache function call not allowed with disable_cache_function=True"
         return 0
 
     @materialize(lazy=True, cache=cache)
@@ -100,7 +101,10 @@ def test_run_specific_task(mocker):
 
     cache_function_call_allowed = False
 
-    res = f.run(force_task_execution=True)
+    res = f.run(
+        cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID,
+        disable_cache_function=True,
+    )
     x1_spy.assert_called_once()
     x2_spy.assert_called_once()
     l1_spy.assert_called_once()

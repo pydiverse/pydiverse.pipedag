@@ -583,7 +583,7 @@ def test_change_version_table(mocker):
 
 
 def test_ignore_task_version(mocker):
-    cfg = ConfigContext.get().evolve(ignore_task_version=True)
+    cfg = ConfigContext.get().evolve(cache_validation=dict(ignore_task_version=True))
 
     with Flow() as flow:
         with Stage("stage_1"):
