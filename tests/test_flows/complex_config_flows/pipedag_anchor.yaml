@@ -38,6 +38,12 @@ _technical_setups:
     kroki_url: "https://kroki.io"
 
     instance_id: pipedag_default
+
+    cache_validation:
+      mode: "normal"
+      disable_cache_function: false
+      ignore_task_version: false
+
     table_store:
       class: "pydiverse.pipedag.backend.table.SQLTableStore"
 
