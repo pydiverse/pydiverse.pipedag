@@ -127,7 +127,7 @@ class MSSqlTableStore(SQLTableStore):
         # the list of nullable columns as well
         return self._process_table_nullable_parameters(table, table_cols)
 
-    def add_indexes_and_set_nullable(
+    def postprocess_table_creation(
         self,
         table: Table,
         schema: Schema,

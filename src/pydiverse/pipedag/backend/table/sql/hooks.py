@@ -99,7 +99,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                     suffix=suffix,
                 )
             )
-            store.add_indexes_and_set_nullable(table, schema, on_empty_table=True)
+            store.postprocess_table_creation(table, schema, on_empty_table=True)
             statements = store.lock_table(table, schema)
             statements += store.lock_source_tables(source_tables)
             statements += [
@@ -113,7 +113,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                 statements,
                 truncate_printed_select=True,
             )
-            store.add_indexes_and_set_nullable(table, schema, on_empty_table=False)
+            store.postprocess_table_creation(table, schema, on_empty_table=False)
         else:
             statements = store.lock_source_tables(source_tables)
             statements += [
@@ -126,7 +126,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                 )
             ]
             store.execute(statements)
-            store.add_indexes_and_set_nullable(table, schema)
+            store.postprocess_table_creation(table, schema)
 
     @classmethod
     def retrieve(
@@ -323,7 +323,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
         if early := store.dialect_requests_empty_creation(table, is_sql=False):
             cls._dialect_create_empty_table(store, df, table, schema, dtypes)
-            store.add_indexes_and_set_nullable(
+            store.postprocess_table_creation(
                 table, schema, on_empty_table=True, table_cols=df.columns
             )
 
@@ -340,7 +340,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
                     chunksize=100_000,
                     if_exists="append" if early else "fail",
                 )
-        store.add_indexes_and_set_nullable(
+        store.postprocess_table_creation(
             table,
             schema,
             on_empty_table=False if early else None,
