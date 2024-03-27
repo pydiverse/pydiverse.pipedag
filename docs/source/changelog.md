@@ -11,8 +11,18 @@
     `mssql` and `ibm_db2`, both nullable and non-nullable column alterations are issued because constant literals create
     non-nullable columns by default. If neither nullable nor non_nullable are specified, the default `CREATE TABLE as SELECT`
     is kept unmodified except for primary key columns where some dialects require explicit `NOT NULL` statements.
+- Refactored configuration for cache validation options. Now, there is a separate section called cache_validation configurable
+    per instance which includes the following options:
+  * mode: NORMAL, ASSERT_NO_FRESH_INPUT (protect a stable pipeline / fail if tasks with cache function are executed), 
+        IGNORE_FRESH_INPUT (same as ignore_cache_function=True before), 
+        FORCE_FRESH_INPUT (invalidates all tasks with cache function), FORCE_CACHE_INVALID (rerun all tasks)
+  * disable_cache_function: True disables the call of cache functions. Downside: next mode=NORMAL run will be cache invalid.
+  * ignore_task_version: Option existed before but a level higher
+  * REMOVED option ignore_cache_function: Use `cache_validation: mode: IGNORE_FRESH_INPUT` in pipedag.yaml or 
+    `flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)` instead.
 - Set transaction isolation level to READ UNCOMMITTED via SQLAlchemy functionality
 - Fix that unlogged tables were created as logged tables when they were copied as cache valid
+- Materialize lazy tasks, when they are executed without stage context.
 
 ## 0.7.2 (2024-03-25)
 - Disable Kroki links by default. New setting disable_kroki=True allows to still default kroki_url to https://kroki.io.

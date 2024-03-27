@@ -14,6 +14,7 @@ import structlog
 import yaml
 from box import Box
 
+from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.util.deep_merge import deep_merge
 
 if TYPE_CHECKING:
@@ -146,7 +147,11 @@ class PipedagConfig:
                 "kroki_url": "https://kroki.io",
                 "per_user_template": "{id}_{username}",
                 "strict_result_get_locking": True,
-                "ignore_task_version": False,
+                "cache_validation": dict(
+                    mode="normal",
+                    disable_cache_function=False,
+                    ignore_task_version=False,
+                ),
                 "stage_commit_technique": "SCHEMA_SWAP",
                 "auto_table": [],
                 "auto_blob": [],
@@ -159,18 +164,32 @@ class PipedagConfig:
         # in case default value is set to Enum
         from pydiverse.pipedag.context.context import StageCommitTechnique
 
-        config["stage_commit_technique"] = (
-            config["stage_commit_technique"].strip().upper()
-        )
-        if not hasattr(StageCommitTechnique, config["stage_commit_technique"]):
-            raise ValueError(
-                "Found unknown setting stage_commit_technique:"
-                f" '{config['stage_commit_technique']}'; Expected one of:"
-                f" {', '.join([v.name for v in StageCommitTechnique])}"
-            )
+        for parent_cfg, enum_name, enum_type in [
+            (config, "stage_commit_technique", StageCommitTechnique),
+            (config["cache_validation"], "mode", CacheValidationMode),
+        ]:
+            parent_cfg[enum_name] = parent_cfg[enum_name].strip().upper()
+            if not hasattr(enum_type, parent_cfg[enum_name]):
+                raise ValueError(
+                    f"Found unknown setting {enum_name}: '{parent_cfg[enum_name]}';"
+                    f" Expected one of: {', '.join([v.name for v in enum_type])}"
+                )
         stage_commit_technique = getattr(
             StageCommitTechnique, config["stage_commit_technique"]
         )
+        cache_validation = copy.deepcopy(config["cache_validation"])
+        cache_validation["mode"] = getattr(
+            CacheValidationMode, config["cache_validation"]["mode"]
+        )
+
+        if (
+            cache_validation["mode"] == CacheValidationMode.NORMAL
+            and cache_validation["disable_cache_function"]
+        ):
+            raise ValueError(
+                "cache_validation.disable_cache_function=True is not allowed in "
+                "combination with cache_validation.mode=NORMAL"
+            )
 
         # TODO: Delegate selecting where variables can be expanded to the
         #  corresponding classes.
@@ -211,12 +230,12 @@ class PipedagConfig:
             config_dict=config,
             pipedag_name=self.name,
             flow_name=flow,
-            strict_result_get_locking=config["strict_result_get_locking"],
-            ignore_task_version=config["ignore_task_version"],
             instance_name=instance,
+            fail_fast=config["fail_fast"],
+            strict_result_get_locking=config["strict_result_get_locking"],
             instance_id=config["instance_id"],
             stage_commit_technique=stage_commit_technique,
-            fail_fast=config["fail_fast"],
+            cache_validation=Box(cache_validation, frozen_box=True),
             network_interface=config["network_interface"],
             disable_kroki=config.get("disable_kroki"),
             kroki_url=config.get("kroki_url"),

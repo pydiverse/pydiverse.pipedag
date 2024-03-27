@@ -1,18 +1,44 @@
 from __future__ import annotations
 
-from pydiverse.pipedag import Flow, Stage
+from pydiverse.pipedag import Flow, Stage, Task, materialize
+from pydiverse.pipedag.context import FinalTaskState
+from pydiverse.pipedag.context.context import CacheValidationMode
 from tests.fixtures.instances import with_instances
+from tests.util import select_as
 from tests.util import tasks_library as m
 from tests.util.spy import spy_task
 
 
 def test_run_specific_task(mocker):
+    cache_function_call_allowed = True
+
+    def assert_task_state(
+        task_states: dict[Task, FinalTaskState],
+        task_name: str,
+        expected_state: FinalTaskState,
+    ):
+        tasks = [t for t in task_states if t.name == task_name]
+        assert len(tasks) > 0
+        assert all(task_states[t] == expected_state for t in tasks)
+
+    def cache():
+        assert (
+            cache_function_call_allowed
+        ), "Cache function call not allowed with disable_cache_function=True"
+        return 0
+
+    @materialize(lazy=True, cache=cache)
+    def task_with_cache_fun():
+        return select_as(0, "x")
+
     # We need to assign unique names to these stages, because we can't reuse the
     # same stage lock context between different runs.
     with Flow() as f:
         with Stage("subflow_t1") as s1:
             x1 = m.one()
             x2 = m.two()
+            l1 = m.one_sql_lazy()
+            task_with_cache_fun()
 
         with Stage("subflow_t2") as s2:
             y1 = m.create_tuple(x1, x2)
@@ -22,6 +48,7 @@ def test_run_specific_task(mocker):
 
     x1_spy = spy_task(mocker, x1)
     x2_spy = spy_task(mocker, x2)
+    l1_spy = spy_task(mocker, l1)
     s1_spy = spy_task(mocker, s1.commit_task)
     y1_spy = spy_task(mocker, y1)
     y2_spy = spy_task(mocker, y2)
@@ -29,31 +56,67 @@ def test_run_specific_task(mocker):
 
     # Run single task separately
 
-    f.run(x1)
+    res = f.run(x1)
     x1_spy.assert_called_once()
     x2_spy.assert_not_called()
+    l1_spy.assert_not_called()
     s1_spy.assert_not_called()
     y1_spy.assert_not_called()
     y2_spy.assert_not_called()
     s2_spy.assert_not_called()
+    assert_task_state(res.task_states, x1.name, FinalTaskState.COMPLETED)
 
-    f.run(y1)
+    res = f.run(y1)
     x1_spy.assert_not_called()
     x2_spy.assert_not_called()
+    l1_spy.assert_not_called()
     s1_spy.assert_not_called()
     y1_spy.assert_called_once()
     y2_spy.assert_not_called()
     s2_spy.assert_not_called()
+    assert_task_state(res.task_states, y1.name, FinalTaskState.COMPLETED)
 
     # Run multiple tasks at once
 
-    f.run(x2, y2)
+    res = f.run(x2, y2)
     x1_spy.assert_not_called()
     x2_spy.assert_called_once()
+    l1_spy.assert_not_called()
     s1_spy.assert_not_called()
     y1_spy.assert_not_called()
     y2_spy.assert_called_once()
     s2_spy.assert_not_called()
+    assert_task_state(res.task_states, x2.name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, y2.name, FinalTaskState.COMPLETED)
+
+    res = f.run(l1)
+    x1_spy.assert_not_called()
+    x2_spy.assert_not_called()
+    l1_spy.assert_called_once()
+    s1_spy.assert_not_called()
+    y1_spy.assert_not_called()
+    y2_spy.assert_not_called()
+    s2_spy.assert_not_called()
+    assert_task_state(res.task_states, l1.name, FinalTaskState.COMPLETED)
+
+    cache_function_call_allowed = False
+
+    res = f.run(
+        cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID,
+        disable_cache_function=True,
+    )
+    x1_spy.assert_called_once()
+    x2_spy.assert_called_once()
+    l1_spy.assert_called_once()
+    s1_spy.assert_called_once()
+    y1_spy.assert_called_once()
+    y2_spy.assert_called_once()
+    s2_spy.assert_called_once()
+    assert_task_state(res.task_states, x1.name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, x2.name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, l1.name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, y1.name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, y2.name, FinalTaskState.COMPLETED)
 
 
 def test_run_specific_task_ambiguous_input(mocker):

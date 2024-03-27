@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Callable, overload
 
 from pydiverse.pipedag._typing import CallableT
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
+from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.core.task import Task, TaskGetItem, UnboundTask
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.cache import TaskCacheInfo, task_cache_key
@@ -501,8 +502,13 @@ class MaterializationWrapper:
 
         cache_fn_hash = ""
         if task.cache is not None:
-            cache_fn_output = store.json_encode(task.cache(*args, **kwargs))
-            cache_fn_hash = stable_hash("CACHE_FN", cache_fn_output)
+            if config_context.cache_validation.disable_cache_function:
+                # choose random cache_fn_hash to ensure downstream tasks are
+                # invalidated for FORCE_FRESH_INPUT
+                cache_fn_hash = stable_hash("CACHE_FN", uuid.uuid4().hex)
+            else:
+                cache_fn_output = store.json_encode(task.cache(*args, **kwargs))
+                cache_fn_hash = stable_hash("CACHE_FN", cache_fn_output)
 
         memo_cache_key = task_cache_key(task, input_hash, cache_fn_hash)
 
@@ -517,18 +523,44 @@ class MaterializationWrapper:
 
                 return memo
 
-            if task.version is AUTO_VERSION:
-                assert not task.lazy
-
-                auto_version = self.compute_auto_version(task, store, bound)
-                task.version = auto_version
-                task.logger.info("Assigned auto version to task", version=auto_version)
-
             # Cache Lookup (only required if task isn't lazy)
-            force_task_execution = config_context._force_task_execution
-            skip_cache_lookup = (
-                config_context.ignore_task_version or task.version is None
+            force_task_execution = (
+                config_context.cache_validation.mode
+                == CacheValidationMode.FORCE_CACHE_INVALID
+                or (
+                    config_context.cache_validation.mode
+                    == CacheValidationMode.FORCE_FRESH_INPUT
+                    and task.cache is not None
+                )
             )
+            skip_cache_lookup = (
+                config_context.cache_validation.ignore_task_version
+                and task.version != AUTO_VERSION
+            ) or task.version is None
+            assert_no_fresh_input = (
+                config_context.cache_validation.mode
+                == CacheValidationMode.ASSERT_NO_FRESH_INPUT
+            )
+
+            if task.version is AUTO_VERSION:
+                if (
+                    force_task_execution
+                    and config_context.cache_validation.disable_cache_function
+                ):
+                    task.version = None
+                    skip_cache_lookup = True
+                    task.logger.info(
+                        "Skipping determination of auto version of task due to forced "
+                        "execution and disable_cache_function=True"
+                    )
+                else:
+                    assert not task.lazy
+
+                    auto_version = self.compute_auto_version(task, store, bound)
+                    task.version = auto_version
+                    task.logger.info(
+                        "Assigned auto version to task", version=auto_version
+                    )
 
             if not task.lazy and not skip_cache_lookup and not force_task_execution:
                 try:
@@ -546,12 +578,24 @@ class MaterializationWrapper:
                     task.logger.info("Failed to retrieve task from cache", cause=str(e))
                     TaskContext.get().is_cache_valid = False
 
+            if not task.lazy:
+                if assert_no_fresh_input and task.cache is not None:
+                    raise AssertionError(
+                        "cache_validation.mode=ASSERT_NO_FRESH_INPUT is a "
+                        "protection mechanism to prevent execution of "
+                        "source tasks to keep pipeline input stable. However,"
+                        "this task was still triggered."
+                    ) from None
+
             if task.lazy:
                 # For lazy tasks, is_cache_valid gets set to false during the
                 # store.materialize_task procedure
                 TaskContext.get().is_cache_valid = True
 
-                if config_context.ignore_cache_function:
+                if (
+                    config_context.cache_validation.mode
+                    == CacheValidationMode.IGNORE_FRESH_INPUT
+                ):
                     # `cache_fn_hash` is not used for cache retrieval if
                     # ignore_cache_function is set to True.
                     # In that case, cache_metadata.cache_fn_hash may be different
@@ -559,7 +603,7 @@ class MaterializationWrapper:
 
                     try:
                         _, cache_metadata = store.retrieve_cached_output(
-                            task, input_hash, cache_fn_hash
+                            task, input_hash, ""
                         )
                         cache_fn_hash = cache_metadata.cache_fn_hash
                     except CacheError as e:
@@ -578,6 +622,8 @@ class MaterializationWrapper:
                 input_hash=input_hash,
                 cache_fn_hash=cache_fn_hash,
                 cache_key=task_cache_key(task, input_hash, cache_fn_hash),
+                assert_no_materialization=assert_no_fresh_input,
+                force_task_execution=force_task_execution,
             )
 
             # Compute the input_tables value of the TaskContext
@@ -748,6 +794,8 @@ class MaterializationWrapper:
             input_hash="AUTO_VERSION",
             cache_fn_hash="AUTO_VERSION",
             cache_key="AUTO_VERSION",
+            assert_no_materialization=False,
+            force_task_execution=False,
         )
 
         # Replace computation tracer proxy objects in output

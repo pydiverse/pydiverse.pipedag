@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from contextvars import ContextVar, Token
 from enum import Enum
 from functools import cached_property
@@ -10,6 +11,7 @@ import structlog
 from attrs import define, evolve, field, frozen
 from box import Box
 
+from pydiverse.pipedag.util import deep_merge
 from pydiverse.pipedag.util.import_ import import_object, load_object
 from pydiverse.pipedag.util.naming import NameDisambiguator
 
@@ -100,8 +102,38 @@ class TaskContext(BaseContext):
 
 
 class StageCommitTechnique(Enum):
+    """
+    - SCHEMA_SWAP: We prepare output in a `<stage>__tmp` schema and then swap
+      schemas for `<stage>` and `<stage>__tmp` with three rename operations.
+    - READ_VIEWS: We use two schemas, `<stage>__odd` and `<stage>__even`, and
+      fill schema `<stage>` just with views to one of those schemas.
+    """
+
     SCHEMA_SWAP = 0
     READ_VIEWS = 1
+
+
+class CacheValidationMode(Enum):
+    """
+    - NORMAL: Normal cache invalidation.
+    - ASSERT_NO_FRESH_INPUT: Same as IGNORE_FRESH_INPUT and additionally fail if tasks
+      having a cache function would still be executed (change in version or lazy query
+      ).
+    - IGNORE_FRESH_INPUT: Ignore the output of cache functions that help determine
+      the availability of fresh input. With `disable_cache_function=False`, it still
+      calls cache functions, so cache invalidation works interchangeably between
+      IGNORE_FRESH_INPUT and NORMAL.
+    - FORCE_FRESH_INPUT: Consider all cache function outputs as different and thus make
+      source tasks cache invalid.
+    - FORCE_CACHE_INVALID: Disable caching and thus force all tasks as cache invalid.
+      This option implies FORCE_FRESH_INPUT.
+    """
+
+    NORMAL = 0
+    ASSERT_NO_FRESH_INPUT = 1
+    IGNORE_FRESH_INPUT = 2
+    FORCE_FRESH_INPUT = 3
+    FORCE_CACHE_INVALID = 4
 
 
 @frozen(slots=False)
@@ -153,9 +185,9 @@ class ConfigContext(BaseAttrsContext):
     # per instance attributes
     fail_fast: bool
     strict_result_get_locking: bool
-    ignore_task_version: bool
     instance_id: str  # may be used as database name or locking ID
     stage_commit_technique: StageCommitTechnique
+    cache_validation: Box
     network_interface: str
     disable_kroki: bool
     kroki_url: str | None
@@ -163,15 +195,9 @@ class ConfigContext(BaseAttrsContext):
 
     table_hook_args: Box
 
-    # run specific options
-    ignore_cache_function: bool = False
-
     # INTERNAL FLAGS - ONLY FOR PIPEDAG USE
     # When set to True, exceptions raised in a flow don't get logged
     _swallow_exceptions: bool = False
-    # When set to True, indicates that all tasks should get run, independent
-    # of their cache validity
-    _force_task_execution: bool = False
 
     @cached_property
     def auto_table(self) -> tuple[type, ...]:
@@ -229,6 +255,11 @@ class ConfigContext(BaseAttrsContext):
         .. |attrs.evolve()| replace:: ``attrs.evolve()``
         .. _attrs.evolve(): https://www.attrs.org/en/stable/api.html#attrs.evolve
         """
+        dicts = {}
+        for name, value in changes.items():
+            if isinstance(value, Mapping):
+                dicts[name] = deep_merge(getattr(self, name), value)
+        changes.update(dicts)
         evolved = evolve(self, **changes)
 
         # Transfer cached properties

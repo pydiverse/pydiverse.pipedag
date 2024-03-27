@@ -31,7 +31,11 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     split_ddl_statement,
 )
 from pydiverse.pipedag.context import RunContext
-from pydiverse.pipedag.context.context import ConfigContext, StageCommitTechnique
+from pydiverse.pipedag.context.context import (
+    CacheValidationMode,
+    ConfigContext,
+    StageCommitTechnique,
+)
 from pydiverse.pipedag.context.run_context import DeferredTableStoreOp
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.container import RawSql
@@ -1330,7 +1334,10 @@ class SQLTableStore(BaseTableStore):
                 f" cache: {task}"
             )
 
-        ignore_cache_function = ConfigContext.get().ignore_cache_function
+        ignore_cache_function = (
+            ConfigContext.get().cache_validation.mode
+            == CacheValidationMode.IGNORE_FRESH_INPUT
+        )
         try:
             with self.engine_connect() as conn:
                 result = (

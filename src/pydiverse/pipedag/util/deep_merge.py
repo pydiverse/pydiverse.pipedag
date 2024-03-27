@@ -9,15 +9,19 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 
+from box import Box
+
 
 def deep_merge(x, y, check_enum=False):
-    if type(x) != type(y):
+    if type(x) != type(y) and not (isinstance(x, Mapping) and isinstance(y, Mapping)):
         raise TypeError(
             f"deep_merge failed due to type mismatch '{x}' (type: {type(x)}) vs. '{y}'"
             f" (type: {type(y)})"
         )
 
-    if isinstance(x, Mapping):
+    if isinstance(x, Box):
+        z = Box(_deep_merge_dict(x, y), frozen_box=True)
+    elif isinstance(x, Mapping):
         z = _deep_merge_dict(x, y)
     elif isinstance(x, Iterable) and not isinstance(x, str):
         z = _deep_merge_iterable(x, y)
