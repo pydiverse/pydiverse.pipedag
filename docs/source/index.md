@@ -276,6 +276,7 @@ quickstart
 examples
 table_backends
 database_testing
+best_practices
 reference/config
 reference/api
 reference/cli
