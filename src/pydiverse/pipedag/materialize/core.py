@@ -577,13 +577,15 @@ class MaterializationWrapper:
                 except CacheError as e:
                     task.logger.info("Failed to retrieve task from cache", cause=str(e))
                     TaskContext.get().is_cache_valid = False
-                    if assert_no_fresh_input and task.cache is not None:
-                        raise AssertionError(
-                            "cache_validation.mode=ASSERT_NO_FRESH_INPUT is a "
-                            "protection mechanism to prevent execution of "
-                            "source tasks to keep pipeline input stable. However,"
-                            "this task was still triggered."
-                        ) from None
+
+            if not task.lazy:
+                if assert_no_fresh_input and task.cache is not None:
+                    raise AssertionError(
+                        "cache_validation.mode=ASSERT_NO_FRESH_INPUT is a "
+                        "protection mechanism to prevent execution of "
+                        "source tasks to keep pipeline input stable. However,"
+                        "this task was still triggered."
+                    ) from None
 
             if task.lazy:
                 # For lazy tasks, is_cache_valid gets set to false during the

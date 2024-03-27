@@ -589,68 +589,80 @@ def test_change_version_table(mocker):
 def test_cache_validation_mode_assert(
     ignore_task_version, disable_cache_function, mode
 ):
-    # mode = getattr(CacheValidationMode, mode.upper())
-    # kwargs = dict(
-    #     ignore_task_version=ignore_task_version,
-    #     disable_cache_function=disable_cache_function,
-    #     cache_validation_mode=mode
-    # )
-    # if not disable_cache_function and mode == CacheValidationMode.NORMAL:
-    #     pytest.skip("Combination does not provoke exception")
-    #     return
-    #
-    # cache_value = 0
-    # return_value = 0
-    #
-    # def cache():
-    #     return cache_value
-    #
-    # def get_flow(version):
-    #     @materialize(version=version, cache=cache)
-    #     def source():
-    #         return pd.DataFrame(dict(x=[return_value]))
-    #
-    #     @materialize(lazy=True, cache=cache)
-    #     def lazy_source():
-    #         return Table(select_as(return_value, "x"))
-    #
-    #     with Flow() as flow:
-    #         with Stage("stage_1"):
-    #             s1 = source()
-    #             s2 = lazy_source()
-    #     return flow, s1, s2
-    #
-    # flow, s1, s2 = get_flow(version="1.0")
-    # # Initial Call
-    # with StageLockContext():
-    #     result = flow.run(
-    #         cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID,
-    #         disable_cache_function=False,
-    #         ignore_task_version=False,
-    #     )
-    #     assert result.successful
-    #     assert result.get(s1, as_type=pd.DataFrame)["x"].iloc[0] == return_value
-    #     assert result.get(s2, as_type=pd.DataFrame)["x"].iloc[0] == return_value
-    #
-    # if disable_cache_function or ignore_task_version:
-    #     with pytest.raises(AssertionError):
-    #         result = flow.run(**kwargs)
-    #         assert result.successful
-    #
-    # cache_value = 1  # IGNORE_FRESH_INPUT should be implied
-    # if not disable_cache_function and not ignore_task_version:
-    #     result = flow.run(**kwargs)
-    #     assert result.successful
-    #
-    # return_value = 1
-    # with pytest.raises(AssertionError):
-    #     flow.run(**kwargs)
-    #
-    # return_value = 0
-    # flow, _, _ = get_flow(version="1.1")
-    # with pytest.raises(AssertionError):
-    #     flow.run(**kwargs)
-    pass
+    mode = getattr(CacheValidationMode, mode.upper())
+    kwargs = dict(
+        ignore_task_version=ignore_task_version,
+        disable_cache_function=disable_cache_function,
+        cache_validation_mode=mode,
+    )
+    if not disable_cache_function and mode == CacheValidationMode.NORMAL:
+        pytest.skip("Combination does not provoke exception")
+        return
+    error = (
+        AssertionError
+        if mode == CacheValidationMode.ASSERT_NO_FRESH_INPUT
+        else ValueError
+    )
+
+    cache_value = 0
+    return_value = 0
+
+    def cache():
+        return cache_value
+
+    def get_flow(version):
+        @materialize(version=version, cache=cache)
+        def source():
+            return pd.DataFrame(dict(x=[return_value]))
+
+        @materialize(lazy=True, cache=cache)
+        def lazy_source():
+            return Table(select_as(return_value, "x"))
+
+        with Flow() as flow:
+            with Stage("stage_1"):
+                s1 = source()
+                s2 = lazy_source()
+        return flow, s1, s2
+
+    flow, s1, s2 = get_flow(version="1.0")
+    # Initial Call
+    with StageLockContext():
+        result = flow.run(
+            cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID,
+            disable_cache_function=False,
+            ignore_task_version=False,
+        )
+        assert result.successful
+        assert result.get(s1, as_type=pd.DataFrame)["x"].iloc[0] == return_value
+        assert result.get(s2, as_type=pd.DataFrame)["x"].iloc[0] == return_value
+
+    if disable_cache_function or ignore_task_version:
+        with pytest.raises(error):
+            result = flow.run(**kwargs)
+            assert result.successful
+
+    cache_value = 1  # IGNORE_FRESH_INPUT should be implied
+    if (
+        not disable_cache_function
+        and not ignore_task_version
+        and mode != CacheValidationMode.NORMAL
+    ):
+        result = flow.run(
+            cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID,
+            disable_cache_function=False,
+            ignore_task_version=False,
+        )
+        assert result.successful
+
+    return_value = 1
+    with pytest.raises(error):
+        flow.run(**kwargs)
+
+    return_value = 0
+    flow, _, _ = get_flow(version="1.1")
+    with pytest.raises(error):
+        flow.run(**kwargs)
 
 
 @pytest.mark.parametrize("ignore_task_version", [True, False])
