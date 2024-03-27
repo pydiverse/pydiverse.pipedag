@@ -89,6 +89,8 @@ A realistic pipeline typically includes the following stages:
 
 To try it out, refer to the [quickstart guide](/quickstart).
 
+Here, you can find more [examples](/examples).
+
 ## The Pydiverse Library Collection
 
 Pydiverse is a collection of libraries for describing data transformations and data processing pipelines.
@@ -271,6 +273,7 @@ instances.
 :hidden:
 
 quickstart
+examples
 table_backends
 database_testing
 reference/config
