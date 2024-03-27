@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import inspect
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Callable
@@ -72,7 +73,9 @@ class UnboundTask:
             raise StageError("Can't call pipedag task outside of a stage.")
 
         # Construct Task
-        bound_args = self._signature.bind(*args, **kwargs)
+        Task.__deepcopy__ = lambda self, memo: self
+        bound_args = self._signature.bind(*copy.deepcopy(args), **copy.deepcopy(kwargs))
+        delattr(Task, "__deepcopy__")
         return self._bound_task_type(self, bound_args, ctx.flow, ctx.stage)
 
     def _call_original_function(self, *args, **kwargs):
