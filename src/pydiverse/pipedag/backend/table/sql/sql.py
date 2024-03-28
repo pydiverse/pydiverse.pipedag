@@ -756,7 +756,9 @@ class SQLTableStore(BaseTableStore):
                 table, table_cols
             )
             self.execute(
-                ChangeColumnAutoincrement(table.name, schema, autoincrement_col_options)
+                ChangeColumnAutoincrement(
+                    table.name, schema, table_cols, autoincrement_col_options
+                )
             )
 
         if on_empty_table is None or not on_empty_table:
