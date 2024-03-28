@@ -148,7 +148,7 @@ class IBMDB2TableStore(SQLTableStore):
             ]
         return nullable_cols, non_nullable_cols
 
-    def add_indexes_and_set_nullable(
+    def postprocess_table_creation(
         self,
         table: Table,
         schema: Schema,
@@ -156,7 +156,7 @@ class IBMDB2TableStore(SQLTableStore):
         on_empty_table: bool | None = None,
         table_cols: Iterable[str] | None = None,
     ):
-        super().add_indexes_and_set_nullable(
+        super().postprocess_table_creation(
             table, schema, on_empty_table=on_empty_table, table_cols=table_cols
         )
         table_name = self.engine.dialect.identifier_preparer.quote(table.name)

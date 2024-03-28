@@ -43,7 +43,11 @@ class Table(Generic[T]):
         is not None, all other columns will be nullable.
     :param materialization_details: The label of the materialization_details to be used.
         Overwrites the label given by the stage.
-
+    :param autoincrement: Dictionary holding the values for the autoincrement property
+        of the different columns. Eg. {'col1': True, 'col2': False}.
+        The default is False.
+        Refer to https://docs.sqlalchemy.org/en/20/core/metadata.html#sqlalchemy.schema.Column.params.autoincrement
+        for a documentation of the autoincrement property.
     .. seealso:: You can specify which types of objects should automatically get
         converted to tables using the :ref:`auto_table` config option.
     """
@@ -59,6 +63,7 @@ class Table(Generic[T]):
         nullable: list[str] | None = None,
         non_nullable: list[str] | None = None,
         materialization_details: str | None = None,
+        autoincrement: dict[str, str | bool] = None,
     ):
         self._name = None
         self.stage: Stage | None = None
@@ -73,6 +78,7 @@ class Table(Generic[T]):
         self.nullable = nullable
         self.non_nullable = non_nullable
         self.materialization_details = materialization_details
+        self.autoincrement = autoincrement
 
         # Check that indexes is of type list[list[str]]
         indexes_type_error = TypeError(
@@ -100,7 +106,17 @@ class Table(Generic[T]):
                     raise type_error
                 if not all(isinstance(x, str) for x in arg):
                     raise type_error
-
+        if self.autoincrement is not None:
+            type_error = (
+                "Table argument: autoincrement must be of type dict[str, str | bool]"
+            )
+            if not isinstance(self.autoincrement, dict):
+                raise type_error
+            for key, val in self.autoincrement.items():
+                if not isinstance(key, str):
+                    raise type_error
+                if (not isinstance(val, str)) and (not isinstance(val, bool)):
+                    raise type_error
         from pydiverse.pipedag.backend.table.sql import ExternalTableReference
 
         # ExternalTableReference can reference a table from an external schema

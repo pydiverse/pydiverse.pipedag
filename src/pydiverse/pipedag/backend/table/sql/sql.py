@@ -16,6 +16,7 @@ from pydiverse.pipedag.backend.table.base import BaseTableStore
 from pydiverse.pipedag.backend.table.sql.ddl import (
     AddIndex,
     AddPrimaryKey,
+    ChangeColumnAutoincrement,
     ChangeColumnNullable,
     CopyTable,
     CreateAlias,
@@ -639,6 +640,38 @@ class SQLTableStore(BaseTableStore):
         # in most dialects columns are nullable by default
         return [], non_nullable_cols
 
+    def get_autoincrement_options(
+        self, table: Table, table_cols: Iterable[str]
+    ) -> list[str | bool]:
+        autoincrement_options = self._process_table_autoincrement_options(
+            table, table_cols
+        )
+        return autoincrement_options
+
+    @staticmethod
+    def _process_table_autoincrement_options(table: Table, table_cols: Iterable[str]):
+        if table.autoincrement is None:
+            # if autoincrement not specified set to False for all columns
+            return [False for _ in table_cols]
+
+        name = f'"{table.name}"'
+        table_cols_set = set(table_cols)
+        autoincrement_cols = set(table.autoincrement.keys())
+        if invalid_cols := autoincrement_cols - table_cols_set:
+            raise ValueError(
+                f"The columns {invalid_cols} in Table({name},"
+                f" autoincrement={autoincrement_cols}) aren't contained in the table"
+                f" columns: {table_cols}"
+            )
+
+        autoincrement_out = []
+        for col in table_cols:
+            # cols that were not specified are set to autoincrement=False
+            autoincrement_out.append(
+                table.autoincrement[col] if col in autoincrement_cols else False
+            )
+        return autoincrement_out
+
     @staticmethod
     def _process_table_nullable_parameters(table: Table, table_cols: Iterable[str]):
         name = f'"{table.name}"'
@@ -690,7 +723,7 @@ class SQLTableStore(BaseTableStore):
         _ = is_sql
         return table.nullable is not None or table.non_nullable is not None
 
-    def add_indexes_and_set_nullable(
+    def postprocess_table_creation(
         self,
         table: Table,
         schema: Schema,
@@ -708,6 +741,7 @@ class SQLTableStore(BaseTableStore):
             nullable_cols, non_nullable_cols = self.get_forced_nullability_columns(
                 table, table_cols
             )
+
             if len(nullable_cols) > 0:
                 # some dialects represent literals as non-nullable types
                 self.execute(
@@ -721,6 +755,16 @@ class SQLTableStore(BaseTableStore):
                         table.name, schema, non_nullable_cols, nullable=False
                     )
                 )
+
+            autoincrement_col_options = self.get_autoincrement_options(
+                table, table_cols
+            )
+            self.execute(
+                ChangeColumnAutoincrement(
+                    table.name, schema, table_cols, autoincrement_col_options
+                )
+            )
+
         if on_empty_table is None or not on_empty_table:
             # By default, we set indexes after loading full table. This can be
             # overridden by dialect
