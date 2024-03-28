@@ -128,6 +128,8 @@ This means that everything went as expected.
 
 If you like to connect to a running database, you can find another way of configuring pipedag [here](database_testing.md).
 
+Here, you can find more [examples](/examples).
+
 ### What is going on here?
 
 ## Declaration time vs. run time

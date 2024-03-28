@@ -1,26 +1,16 @@
-# pydiverse.pipedag
+# Simple pipeline
 
-[![CI](https://github.com/pydiverse/pydiverse.pipedag/actions/workflows/tests.yml/badge.svg)](https://github.com/pydiverse/pydiverse.pipedag/actions/workflows/tests.yml)
+This [example](../examples.md) shows a simple pipeline with a few tasks and stages. It is the same example as used
+in [Database Testing](../database_testing.md) but with a DuckDB connection that does not require `docker-compose` or 
+`pipedag.yaml`.
 
-A pipeline orchestration library executing tasks within one python session. It takes care of SQL table
-(de)materialization, caching and cache invalidation. Blob storage is supported as well for example
-for storing model files.
+It also shows how to unit-test a pipeline by dematerializing tables after running the flow: 
+`result.get(lazy_1, as_type=pd.DataFrame)`
 
-This is an early stage version 0.x, however, it is already used in real projects. Please contact
-https://github.com/orgs/pydiverse/teams/code-owners if you like to become an early adopter. We will 
-help you getting started and are curious about how it fits your needs.
-
-## Usage
-
-pydiverse.pipedag can either be installed via pypi with `pip install pydiverse-pipedag duckdb duckdb-engine` or via 
-conda-forge with `conda install pydiverse-pipedag duckdb duckdb-engine -c conda-forge`. If you don't use duckdb for 
-testing, you can obmit it here. However, it is needed to run the following example.
-
-## Example
-
-A flow can look like this (i.e. put this in a file named `run_pipeline.py`):
 
 ```python
+from __future__ import annotations
+
 import tempfile
 
 import pandas as pd
@@ -87,8 +77,8 @@ def main():
         cfg = create_basic_pipedag_config(
             f"duckdb:///{temp_dir}/db.duckdb",
             disable_stage_locking=True,  # This is special for duckdb
-            # Attention: If uncommented, stage and task names might be sent to the following URL.
-            #   You can self-host kroki if you like:
+            # Attention: If uncommented, stage and task names might be sent to the
+            #   following URL. You can self-host kroki if you like:
             #   https://docs.kroki.io/kroki/setup/install/
             # kroki_url="https://kroki.io",
         ).get("default")
@@ -97,20 +87,20 @@ def main():
                 with Stage("stage_1"):
                     lazy_1 = lazy_task_1()
                     a, b = eager_inputs()
-    
+
                 with Stage("stage_2"):
                     lazy_2 = lazy_task_2(lazy_1, b)
                     lazy_3 = lazy_task_3(lazy_2)
                     eager = eager_task(lazy_1, b)
-    
+
                 with Stage("stage_3"):
                     lazy_4 = lazy_task_4(lazy_2)
                 _ = lazy_3, lazy_4, eager  # unused terminal output tables
-    
+
             # Run flow
             result = f.run()
             assert result.successful
-    
+
             # Run in a different way for testing
             with StageLockContext():
                 result = f.run()
@@ -122,30 +112,3 @@ if __name__ == "__main__":
     setup_logging()  # you can setup the logging and/or structlog libraries as you wish
     main()
 ```
-
-The `with tempfile.TemporaryDirectory()` is only needed to have an OS independent temporary directory available.
-You can also get rid of it like this:
-
-```python
-def main():
-    cfg = create_basic_pipedag_config(
-        "duckdb:////tmp/pipedag/{instance_id}/db.duckdb",
-        disable_stage_locking=True,  # This is special for duckdb
-    ).get("default")
-    ...
-```
-
-For a more sophisiticated setup with a `pipedag.yaml` configuration file and with a separate database 
-(i.e. containerized Postgres), please look [here](https://pydiversepipedag.readthedocs.io/en/latest/database_testing.html).
-
-## Troubleshooting
-
-### Installing mssql odbc driver for linux
-
-Installing with
-instructions [here](https://docs.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server)
-worked.
-But `odbcinst -j` revealed that it installed the configuration in `/etc/unixODBC/*`. But conda installed pyodbc brings
-its own `odbcinst` executable and that shows odbc config files are expected in `/etc/*`. Symlinks were enough to fix the
-problem. Try `python -c 'import pyodbc;print(pyodbc.drivers())'` and see whether you get more than an empty list.
-Furthermore, make sure you use 127.0.0.1 instead of localhost. It seems that /etc/hosts is ignored.
