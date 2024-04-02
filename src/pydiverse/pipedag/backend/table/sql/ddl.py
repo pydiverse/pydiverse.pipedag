@@ -778,6 +778,14 @@ def insert_into_in_query(select_sql, schema, table):
         regex = re.compile(r"\b" + marker + r"\b", re.IGNORECASE)
         for match in regex.finditer(select_sql):
             match_start = match.span()[0]
+            match_end = match.span()[1]
+            # special case handling: ignore escaped from
+            prev_char = select_sql[match_start - 1]
+            next_char = select_sql[match_end]
+            if (prev_char == "[" and next_char == "]") or (
+                prev_char == '"' and next_char == '"'
+            ):
+                break
             prev = select_sql[0:match_start]
             # ignore marker in subqueries in select columns
             if prev.count("(") == prev.count(")"):
