@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.0 (2024-MM-DD)
+## 0.8.0 (2024-04-02)
 - Significant refactoring of materialization is included. It splits creation of table from filling a table in many cases.
     This may lead to unexpected changes in log output. For now, the `INSERT INTO SELECT` statement is only printed in 
     shortened version, because the creation of the table already includes the same statement in full. In the future, this
