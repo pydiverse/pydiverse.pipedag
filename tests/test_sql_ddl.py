@@ -17,8 +17,9 @@ def test_insert_into():
         "Select (SELECT (SELECT 1 FROM Z) FROM Y) From X": (
             "Select (SELECT (SELECT 1 FROM Z) FROM Y) INTO a.b From X"
         ),
-        "Select a.[from] from a": "Select a.[from] from a INTO a.b",
-        'Select "from" from a': 'Select "from" from a INTO a.b',
+        "Select a.[from] from a": "Select a.[from] INTO a.b from a",
+        "Select a.[ from ] from a": "Select a.[ from ] INTO a.b from a",
+        'Select "from" from a': 'Select "from" INTO a.b from a',
     }
     for raw_query, expected_query in test_pairs.items():
         res = insert_into_in_query(raw_query, "a", "b")
