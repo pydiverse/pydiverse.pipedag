@@ -356,6 +356,20 @@ class ChangeColumnNullable(DDLElement):
         self.nullable = nullable
 
 
+class ChangeColumnAutoincrement(DDLElement):
+    def __init__(
+        self,
+        table_name: str,
+        schema: Schema,
+        column_names: list[str],
+        autoincrement: list[bool | str],
+    ):
+        self.table_name = table_name
+        self.schema = schema
+        self.column_names = column_names
+        self.autoincrement = autoincrement
+
+
 class ChangeTableLogged(DDLElement):
     """Changes a postgres table from LOGGED to UNLOGGED (or vice-versa)
 
