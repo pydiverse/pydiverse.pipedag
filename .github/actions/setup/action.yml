@@ -34,7 +34,7 @@ runs:
       run: poetry install -vv ${{ inputs.poetry-flags }} --no-interaction
 
     - name: Start Docker Compose
-      uses: isbang/compose-action@v1.4.1
+      uses: isbang/compose-action@v1.5.1
       with:
         compose-file: ${{ inputs.docker-compose-file }}
         services: ${{ inputs.docker-services }}
