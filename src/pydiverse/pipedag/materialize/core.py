@@ -7,6 +7,8 @@ import uuid
 from functools import partial
 from typing import TYPE_CHECKING, Any, Callable, overload
 
+import sqlalchemy as sa
+
 from pydiverse.pipedag._typing import CallableT
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.context.context import CacheValidationMode
@@ -642,12 +644,67 @@ class MaterializationWrapper:
                 task, bound.args, bound.kwargs
             )
 
+            def imperative_materialize(
+                table: Table,
+                config_context: ConfigContext | None,
+                return_as_type: type | None = None,
+                return_nothing: bool = False,
+            ):
+                my_store = config_context.store if config_context is not None else store
+                state = task_cache_info.imperative_materialization_state
+                if id(table) in state.table_ids:
+                    raise RuntimeError(
+                        "The table has already been imperatively materialized."
+                    )
+                table.assumed_dependencies = (
+                    list(state.assumed_dependencies)
+                    if len(state.assumed_dependencies) > 0
+                    else []
+                )
+                _ = my_store.materialize_task(task, task_cache_info, table)
+                if not return_nothing:
+                    if return_as_type is None:
+                        return_as_type = task.input_type
+                        if (
+                            return_as_type is None
+                            or not my_store.table_store.get_r_table_hook(
+                                return_as_type
+                            ).retrieve_as_reference(return_as_type)
+                        ):
+                            # dematerialize as sa.Table if it would transfer all rows
+                            # to python when dematerializing with input_type
+                            return_as_type = sa.Table
+                    obj = my_store.dematerialize_item(
+                        table, return_as_type, run_context
+                    )
+                    state.add_table_lookup(obj, table)
+                    return obj
+
+            task_context.imperative_materialize_callback = imperative_materialize
             result = self.fn(*args, **kwargs)
+            task_context.imperative_materialize_callback = None
             if task.debug_tainted:
                 raise RuntimeError(
                     f"The task {task.name} has been tainted by interactive debugging."
                     f" Aborting."
                 )
+
+            def result_finalization_mutator(x):
+                state = task_cache_info.imperative_materialization_state
+                object_lookup = state.object_lookup
+                if id(x) in object_lookup:
+                    # substitute imperatively materialized object references with
+                    # their respective table objects
+                    x = object_lookup[id(x)]
+                if isinstance(x, (Table, RawSql)):
+                    # fill assumed_dependencies for Tables that were not yet
+                    # materialized
+                    if len(state.assumed_dependencies) > 0:
+                        if x.assumed_dependencies is None:
+                            x.assumed_dependencies = list(state.assumed_dependencies)
+                return x
+
+            result = deep_map(result, result_finalization_mutator)
             result = store.materialize_task(task, task_cache_info, result)
 
             # Delete underlying objects from result (after materializing them)
@@ -656,6 +713,10 @@ class MaterializationWrapper:
                     x.obj = None
                 if isinstance(x, RawSql):
                     x.loaded_tables = None
+                if isinstance(x, (Table, RawSql)):
+                    x.assumed_dependencies = deep_map(
+                        x.assumed_dependencies, obj_del_mutator
+                    )
                 return x
 
             result = deep_map(result, obj_del_mutator)

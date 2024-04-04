@@ -4,10 +4,14 @@ import copy
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Generic
 
+import structlog
+
 from pydiverse.pipedag._typing import T
+from pydiverse.pipedag.context import ConfigContext, TaskContext
 from pydiverse.pipedag.util import normalize_name
 
 if TYPE_CHECKING:
+    from pydiverse.pipedag.backend.table.sql.ddl import Schema
     from pydiverse.pipedag.core.stage import Stage
 
 
@@ -118,6 +122,9 @@ class Table(Generic[T]):
         # that use it to compute their input_hash for cache_invalidation due to input
         # change
         self.cache_key = None
+        # assumed dependencies are filled by imperative materialization to ensure
+        # correct cache invalidation
+        self.assumed_dependencies: list[Table] | None = None
 
     def __repr__(self):
         stage_name = self.stage.name if self.stage else None
@@ -139,6 +146,75 @@ class Table(Generic[T]):
         self_copy = copy.deepcopy(self)
         self.obj = obj
         return self_copy
+
+    def materialize(
+        self,
+        config_context: ConfigContext | None = None,
+        schema: Schema | str | None = None,
+        return_as_type=None,
+        return_nothing=False,
+    ):
+        """Materialize the table.
+
+        This method is used to materialize the table in the table store.
+        This imperative way of triggering materialization is useful for debugging
+        and it allows materializing subqueries within a task. Every call of this
+        function is registered in TaskContext and if any object returned
+        by this is returned from an ``@materialize`` task, it will be replaced by
+        the respective Table object that was materialized.
+
+        :param config_context: The config context to use for materialization during
+            interactive debugging. If it is provided while task is regularly executed,
+            it must be identical to ConfigContext.get().
+        :param return_as: By default, the materialized table is returned as the
+            input_type of the task (for dataframes with AUTO_VERSION support, it
+            just dematerializes the empty dataframes). With return_as you can
+            override this behavior and explicitly choose the dematiarlization type.
+            ``return_as=sqlalchemy.Table`` might be a useful choice for tasks with
+            pandas or polars input_type.
+        :param return_nothing: If True, the method will return None instead of the
+            dematerialized created table.
+        """
+        if task_context := TaskContext.get():
+            if config_context is not None and config_context != ConfigContext.get():
+                raise ValueError(
+                    "config_context must be identical to ConfigContext.get() "
+                    "when task is regularly executed by pipedag orchestration."
+                )
+            try:
+                return task_context.imperative_materialize_callback(
+                    self, config_context, return_as_type, return_nothing
+                )
+            except RuntimeError:
+                # fall back to debug materialization when Table.materialize() is
+                # called twice for the same table
+                logger = structlog.getLogger(__name__, table=self)
+                logger.info(
+                    "Falling back to debug materialization due to duplicate "
+                    "materializtion this table"
+                )
+                config_context = ConfigContext.get()
+                schema = config_context.store.table_store.get_schema(
+                    task_context.task.stage.transaction_name
+                )
+
+        if config_context is not None:
+            # fall back to debug behavior when an explicit table_store is given
+            # via config_context
+            from pydiverse.pipedag.materialize import debug
+
+            debug.materialize_table(
+                table=self, config_context=config_context, schema=schema
+            )
+        elif not return_nothing:
+            # We support calling dataframe tasks outside flow declaration by
+            # assuming that input tables are already given dematerialized by the
+            # caller and returning dataframe objects unmaterialized. In this scenario,
+            # we still like `return Table(...)` to behave identical to
+            # `return Table(...).materialize()` at the end of tasks.
+            # Furthermore, we can support
+            # `df = Table(...).materialize(return_as_type=pd.DataFrame)`
+            return self.obj
 
     def __getstate__(self):
         # The table `obj` field can't necessarily be pickled. That's why we remove it
@@ -230,6 +306,10 @@ class RawSql:
         # that use it to compute their input_hash for cache_invalidation due to input
         # change
         self.cache_key = None
+
+        # assumed dependencies are filled by imperative materialization to ensure
+        # correct cache invalidation
+        self.assumed_dependencies: list[Table] | None = None
 
         # If a task receives a RawSQL object as input, it loads all tables
         # produced by it and makes them available through a dict like interface.

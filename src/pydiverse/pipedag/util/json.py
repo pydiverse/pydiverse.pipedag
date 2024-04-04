@@ -41,6 +41,13 @@ class Type(str, Enum):
 def json_default(o):
     """Encode `Table`, `RawSql`, 'Stage', and `Blob` objects"""
     if isinstance(o, Table):
+        kwargs = {}
+        if o.assumed_dependencies is not None:
+            kwargs[
+                "assumed_dependencies"
+            ] = (
+                o.assumed_dependencies
+            )  # [json_default(t) for t in o.assumed_dependencies]
         return {
             TYPE_KEY: Type.TABLE,
             "stage": o.stage.name,
@@ -51,14 +58,19 @@ def json_default(o):
             "materialization_details": o.materialization_details,
             "external_schema": o.external_schema,
             "shared_lock_allowed": o.shared_lock_allowed,
+            **kwargs,
         }
     if isinstance(o, RawSql):
+        kwargs = {}
+        if o.assumed_dependencies is not None:
+            kwargs["assumed_dependencies"] = o.assumed_dependencies
         return {
             TYPE_KEY: Type.RAW_SQL,
             "stage": o.stage.name,
             "name": o.name,
             "cache_key": o.cache_key,
             "table_names": o.table_names,
+            **kwargs,
         }
     if isinstance(o, Blob):
         return {
@@ -118,12 +130,14 @@ def json_object_hook(d: dict):
         tbl.cache_key = d["cache_key"]
         tbl.external_schema = d.get("external_schema")
         tbl.shared_lock_allowed = d.get("shared_lock_allowed", True)
+        tbl.assumed_dependencies = d.get("assumed_dependencies")
         return tbl
     if type_ == Type.RAW_SQL:
         raw_sql = RawSql(name=d["name"])
         raw_sql.stage = get_stage(d["stage"])
         raw_sql.cache_key = d["cache_key"]
         raw_sql.table_names = d["table_names"]
+        raw_sql.assumed_dependencies = d.get("assumed_dependencies")
         return raw_sql
     if type_ == Type.BLOB:
         blob = Blob(name=d["name"])

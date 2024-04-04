@@ -18,6 +18,7 @@ from tests.fixtures.instances import (
 )
 from tests.util import select_as, swallowing_raises
 from tests.util import tasks_library as m
+from tests.util import tasks_library_imperative as m2
 
 pytestmark = [with_instances(ALL_INSTANCES, ORCHESTRATION_INSTANCES)]
 
@@ -76,40 +77,48 @@ def test_materialize_literals():
     assert f.run().successful
 
 
-def test_materialize_table():
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_table(imperative):
+    _m = m if not imperative else m2
     with Flow("flow") as f:
         with Stage("stage"):
-            x = m.simple_dataframe()
-            m.assert_table_equal(x, x)
+            x = _m.simple_dataframe()
+            _m.assert_table_equal(x, x)
 
     assert f.run().successful
 
 
-def test_materialize_table_twice():
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_table_twice(imperative):
+    _m = m if not imperative else m2
     with Flow("flow") as f:
         with Stage("stage"):
-            x = m.simple_dataframe()
-            y = m.simple_dataframe()
+            x = _m.simple_dataframe()
+            y = _m.simple_dataframe()
 
             m.assert_table_equal(x, y)
 
     assert f.run().successful
 
 
-def test_debug_materialize_table_no_taint():
+@pytest.mark.parametrize("imperative", [False, True])
+def test_debug_materialize_table_no_taint(imperative):
+    _m = m if not imperative else m2
     with Flow("flow") as f:
         with Stage("stage"):
-            x = m.simple_dataframe_debug_materialize_no_taint()
-            m.assert_table_equal(x, x)
+            x = _m.simple_dataframe_debug_materialize_no_taint()
+            _m.assert_table_equal(x, x)
 
     assert f.run().successful
 
 
-def test_debug_materialize_table_twice():
+@pytest.mark.parametrize("imperative", [False, True])
+def test_debug_materialize_table_twice(imperative):
+    _m = m if not imperative else m2
     with Flow("flow") as f:
         with Stage("stage"):
-            x = m.simple_dataframe_debug_materialize_twice()
-            m.assert_table_equal(x, x)
+            x = _m.simple_dataframe_debug_materialize_twice()
+            _m.assert_table_equal(x, x)
 
     with pytest.raises(RuntimeError, match="interactive debugging"):
         assert f.run().successful
@@ -185,41 +194,43 @@ def test_materialize_memo_literal():
     assert f.run().successful
 
 
-def test_materialize_memo_table():
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_memo_table(imperative):
+    _m = m if not imperative else m2
     with Flow("flow") as f:
         with Stage("stage_0"):
-            t_0 = m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
-            t_1 = m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
-            t_2 = m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
-            t_3 = m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
+            t_0 = _m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
+            t_1 = _m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
+            t_2 = _m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
+            t_3 = _m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
 
-            m.assert_table_equal(t_0, t_1)
-            m.assert_table_equal(t_1, t_2)
-            m.assert_table_equal(t_2, t_3)
+            _m.assert_table_equal(t_0, t_1)
+            _m.assert_table_equal(t_1, t_2)
+            _m.assert_table_equal(t_2, t_3)
 
         with Stage("stage_1"):
-            t_4 = m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
-            t_5 = m.noop(t_4)
-            t_6 = m.noop(t_5)
-            t_7 = m.noop(t_0)
-            t_8 = m.noop_sql(t_4)
-            t_9 = m.noop_sql(t_5)
-            t_10 = m.noop_sql(t_0)
-            t_11 = m.noop_lazy(t_4)
-            t_12 = m.noop_lazy(t_5)
-            t_13 = m.noop_lazy(t_0)
+            t_4 = _m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
+            t_5 = _m.noop(t_4)
+            t_6 = _m.noop(t_5)
+            t_7 = _m.noop(t_0)
+            t_8 = _m.noop_sql(t_4)
+            t_9 = _m.noop_sql(t_5)
+            t_10 = _m.noop_sql(t_0)
+            t_11 = _m.noop_lazy(t_4)
+            t_12 = _m.noop_lazy(t_5)
+            t_13 = _m.noop_lazy(t_0)
 
         with Stage("stage_2"):
-            m.assert_table_equal(t_0, t_4)
-            m.assert_table_equal(t_1, t_5)
-            m.assert_table_equal(t_2, t_6)
-            m.assert_table_equal(t_3, t_7)
-            m.assert_table_equal(t_1, t_8)
-            m.assert_table_equal(t_2, t_9)
-            m.assert_table_equal(t_3, t_10)
-            m.assert_table_equal(t_1, t_11)
-            m.assert_table_equal(t_2, t_12)
-            m.assert_table_equal(t_3, t_13)
+            _m.assert_table_equal(t_0, t_4)
+            _m.assert_table_equal(t_1, t_5)
+            _m.assert_table_equal(t_2, t_6)
+            _m.assert_table_equal(t_3, t_7)
+            _m.assert_table_equal(t_1, t_8)
+            _m.assert_table_equal(t_2, t_9)
+            _m.assert_table_equal(t_3, t_10)
+            _m.assert_table_equal(t_1, t_11)
+            _m.assert_table_equal(t_2, t_12)
+            _m.assert_table_equal(t_3, t_13)
 
     assert f.run().successful
 
@@ -320,14 +331,17 @@ def test_nout_and_getitem():
     assert f.run().successful
 
 
-def test_name_mangling_tables():
+@pytest.mark.parametrize("imperative", [False, True])
+def test_name_mangling_tables(imperative):
     @materialize
     def table_task_1():
-        return Table(pd.DataFrame({"x": [1]}), name="table_%%")
+        tbl = Table(pd.DataFrame({"x": [1]}), name="table_%%")
+        return tbl.materialize() if imperative else tbl
 
     @materialize
     def table_task_2():
-        return Table(pd.DataFrame({"x": [2]}), name="table_%%")
+        tbl = Table(pd.DataFrame({"x": [2]}), name="table_%%")
+        return tbl.materialize() if imperative else tbl
 
     with Flow() as f:
         with Stage("stage_1"):
@@ -340,14 +354,17 @@ def test_name_mangling_tables():
         assert result.get(table_2, as_type=pd.DataFrame)["x"][0] == 2
 
 
-def test_name_mangling_lazy_tables():
+@pytest.mark.parametrize("imperative", [False, True])
+def test_name_mangling_lazy_tables(imperative):
     @materialize(lazy=True)
     def lazy_task_1():
-        return Table(select_as(1, "x"), name="table_%%")
+        tbl = Table(select_as(1, "x"), name="table_%%")
+        return tbl.materialize() if imperative else tbl
 
     @materialize(lazy=True)
     def lazy_task_2():
-        return Table(select_as(2, "x"), name="table_%%")
+        tbl = Table(select_as(2, "x"), name="table_%%")
+        return tbl.materialize() if imperative else tbl
 
     with Flow() as f:
         with Stage("stage_1"):
@@ -360,15 +377,18 @@ def test_name_mangling_lazy_tables():
         assert result.get(lazy_2, as_type=pd.DataFrame)["x"][0] == 2
 
 
-def test_name_mangling_lazy_table_cache_fn():
+@pytest.mark.parametrize("imperative", [False, True])
+def test_name_mangling_lazy_table_cache_fn(imperative):
     # Only the cache fn output of these two tasks is different
     @materialize(lazy=True, cache=lambda: 1, name="lazy_task")
     def lazy_task_1():
-        return Table(select_as(1, "x"))
+        tbl = Table(select_as(1, "x"))
+        return tbl.materialize() if imperative else tbl
 
     @materialize(lazy=True, cache=lambda: 2, name="lazy_task")
     def lazy_task_2():
-        return Table(select_as(2, "x"))
+        tbl = Table(select_as(2, "x"))
+        return tbl.materialize() if imperative else tbl
 
     with Flow() as f:
         with Stage("stage_1"):

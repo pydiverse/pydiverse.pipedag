@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1 (2024-MM-DD)
+- Support imperative materialization with `tbl_ref = dag.Table(...).materialize()`. This is particularly useful for 
+    materializing subqueries within a task.
+
 ## 0.8.0 (2024-04-02)
 - Significant refactoring of materialization is included. It splits creation of table from filling a table in many cases.
     This may lead to unexpected changes in log output. For now, the `INSERT INTO SELECT` statement is only printed in 

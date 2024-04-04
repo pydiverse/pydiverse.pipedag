@@ -13,6 +13,7 @@ from pydiverse.pipedag.materialize.core import AUTO_VERSION, materialize
 from tests.fixtures.instances import ALL_INSTANCES, with_instances
 from tests.util import compile_sql, select_as
 from tests.util import tasks_library as m
+from tests.util import tasks_library_imperative as m2
 from tests.util.spy import spy_task
 
 try:
@@ -26,13 +27,15 @@ pytestmark = [with_instances(ALL_INSTANCES)]
 # Test Basic Cache Invalidation Behaviour
 
 
-def test_change_bound_argument(mocker):
+@pytest.mark.parametrize("imperative", [False, True])
+def test_change_bound_argument(mocker, imperative):
+    _m = m if not imperative else m2
     input_list = [1]
 
     with Flow() as flow:
         with Stage("stage_1"):
-            out = m.noop(input_list)
-            child = m.noop2(out)
+            out = _m.noop(input_list)
+            child = _m.noop2(out)
 
     # Initial Call
     with StageLockContext():

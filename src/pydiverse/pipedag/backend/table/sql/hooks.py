@@ -49,6 +49,10 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         return type_ == sa.Table
 
     @classmethod
+    def retrieve_as_reference(cls, type_):
+        return True
+
+    @classmethod
     def materialize(
         cls,
         store: SQLTableStore,
@@ -762,6 +766,12 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         return issubclass(type_, (PandasTableImpl, SQLTableImpl))
 
     @classmethod
+    def retrieve_as_reference(cls, type_) -> bool:
+        from pydiverse.transform.lazy import SQLTableImpl
+
+        return issubclass(type_, SQLTableImpl)
+
+    @classmethod
     def materialize(cls, store, table: Table[pdt.Table], stage_name):
         from pydiverse.transform.core.verbs import collect
         from pydiverse.transform.eager import PandasTableImpl
@@ -849,6 +859,10 @@ class IbisTableHook(TableHook[SQLTableStore]):
     @classmethod
     def can_retrieve(cls, type_) -> bool:
         return issubclass(type_, ibis.api.Table)
+
+    @classmethod
+    def retrieve_as_reference(cls, type_) -> bool:
+        return True
 
     @classmethod
     def materialize(cls, store, table: Table[ibis.api.Table], stage_name):

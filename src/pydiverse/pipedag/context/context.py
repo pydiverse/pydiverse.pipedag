@@ -97,6 +97,7 @@ class TaskContext(BaseContext):
     is_cache_valid: bool | None = None
     name_disambiguator: NameDisambiguator = field(factory=NameDisambiguator)
     override_version: str | None = None
+    imperative_materialize_callback = None
 
     _context_var = ContextVar("task_context")
 
