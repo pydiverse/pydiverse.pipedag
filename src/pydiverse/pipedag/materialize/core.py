@@ -289,7 +289,7 @@ class UnboundMaterializingTask(UnboundTask):
         result = self._original_fn(*args, **kwargs)
 
         def unwrap_mutator(x):
-            if isinstance(x, (Task, Blob)):
+            if isinstance(x, (Table, Blob)):
                 return x.obj
             if isinstance(x, RawSql):
                 return x.sql
