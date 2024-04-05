@@ -24,7 +24,7 @@ runs:
         installer-parallel: true
 
     - name: Set up Python ${{ inputs.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ inputs.python-version }}
         cache: 'poetry'
@@ -34,7 +34,7 @@ runs:
       run: poetry install -vv ${{ inputs.poetry-flags }} --no-interaction
 
     - name: Start Docker Compose
-      uses: isbang/compose-action@v1.4.1
+      uses: isbang/compose-action@v2.0.0
       with:
         compose-file: ${{ inputs.docker-compose-file }}
         services: ${{ inputs.docker-services }}
