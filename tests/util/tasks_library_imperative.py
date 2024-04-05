@@ -3,7 +3,8 @@ from __future__ import annotations
 import pandas as pd
 import sqlalchemy as sa
 
-from pydiverse.pipedag import RawSql, Table, materialize
+from pydiverse.pipedag import RawSql, Table, Task, materialize
+from pydiverse.pipedag.core.task import TaskGetItem
 from tests.util import select_as
 
 try:
@@ -12,9 +13,17 @@ except ImportError:
     pl = None
 
 
-@materialize(input_type=pd.DataFrame, version="1.0")
 def noop(x):
-    return Table(x).materialize()
+    # fail already at declare time
+    assert isinstance(x, (Task, TaskGetItem))
+
+    @materialize(input_type=pd.DataFrame, version="1.0")
+    def _noop(x):
+        # constant or collection of constants not supported in imperative version
+        assert isinstance(x, pd.DataFrame)
+        return Table(x).materialize()
+
+    return _noop(x)
 
 
 @materialize(input_type=pd.DataFrame, version="1.0")

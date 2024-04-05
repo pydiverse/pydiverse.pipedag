@@ -4,8 +4,6 @@ import copy
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Generic
 
-import structlog
-
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.context import ConfigContext, TaskContext
 from pydiverse.pipedag.util import normalize_name
@@ -188,10 +186,9 @@ class Table(Generic[T]):
             except RuntimeError:
                 # fall back to debug materialization when Table.materialize() is
                 # called twice for the same table
-                logger = structlog.getLogger(__name__, table=self)
-                logger.info(
+                task_context.task.logger.info(
                     "Falling back to debug materialization due to duplicate "
-                    "materializtion this table"
+                    "materializtion of this table"
                 )
                 config_context = ConfigContext.get()
                 schema = config_context.store.table_store.get_schema(

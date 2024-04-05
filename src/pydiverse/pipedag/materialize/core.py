@@ -573,11 +573,21 @@ class MaterializationWrapper:
                         cached_output, cache_metadata, task
                     )
                     run_context.store_task_memo(task, memo_cache_key, cached_output)
-                    task.logger.info("Found task in cache. Using cached result.")
+                    task.logger.info(
+                        "Found task in cache. Using cached result.",
+                        input_hash=input_hash,
+                        cache_fn_hash=cache_fn_hash,
+                    )
                     TaskContext.get().is_cache_valid = True
                     return cached_output
                 except CacheError as e:
-                    task.logger.info("Failed to retrieve task from cache", cause=str(e))
+                    task.logger.info(
+                        "Failed to retrieve task from cache",
+                        input_hash=input_hash,
+                        cache_fn_hash=cache_fn_hash,
+                        version=task.version,
+                        cause=str(e),
+                    )
                     TaskContext.get().is_cache_valid = False
 
             if not task.lazy:
@@ -610,7 +620,11 @@ class MaterializationWrapper:
                         cache_fn_hash = cache_metadata.cache_fn_hash
                     except CacheError as e:
                         task.logger.info(
-                            "Failed to retrieve task from cache", cause=str(e)
+                            "Failed to retrieve lazy task from cache",
+                            cause=str(e),
+                            input_hash=input_hash,
+                            version=task.version,
+                            cache_fn_hash=cache_fn_hash,
                         )
 
             # Prepare TaskCacheInfo
@@ -661,7 +675,9 @@ class MaterializationWrapper:
                     if len(state.assumed_dependencies) > 0
                     else []
                 )
-                _ = my_store.materialize_task(task, task_cache_info, table)
+                _ = my_store.materialize_task(
+                    task, task_cache_info, table, disable_task_finalization=True
+                )
                 if not return_nothing:
                     if return_as_type is None:
                         return_as_type = task.input_type

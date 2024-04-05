@@ -13,7 +13,6 @@ from pydiverse.pipedag.materialize.core import AUTO_VERSION, materialize
 from tests.fixtures.instances import ALL_INSTANCES, with_instances
 from tests.util import compile_sql, select_as
 from tests.util import tasks_library as m
-from tests.util import tasks_library_imperative as m2
 from tests.util.spy import spy_task
 
 try:
@@ -27,15 +26,13 @@ pytestmark = [with_instances(ALL_INSTANCES)]
 # Test Basic Cache Invalidation Behaviour
 
 
-@pytest.mark.parametrize("imperative", [False, True])
-def test_change_bound_argument(mocker, imperative):
-    _m = m if not imperative else m2
+def test_change_bound_argument(mocker):
     input_list = [1]
 
     with Flow() as flow:
         with Stage("stage_1"):
-            out = _m.noop(input_list)
-            child = _m.noop2(out)
+            out = m.noop(input_list)
+            child = m.noop2(out)
 
     # Initial Call
     with StageLockContext():
@@ -104,7 +101,8 @@ def test_changed_cache_fn_literal(mocker):
         child_spy.assert_called_once()
 
 
-def test_change_cache_fn_table(mocker):
+@pytest.mark.parametrize("imperative", [False, True])
+def test_change_cache_fn_table(mocker, imperative):
     cache_value = 0
 
     def cache():
@@ -112,7 +110,8 @@ def test_change_cache_fn_table(mocker):
 
     @materialize(cache=cache, version="1.0")
     def return_cache_table():
-        return Table(select_as(cache_value, "x"))
+        tbl = Table(select_as(cache_value, "x"))
+        return tbl.materialize() if imperative else tbl
 
     @materialize(input_type=pd.DataFrame, version="1.0")
     def get_first(table, col):
