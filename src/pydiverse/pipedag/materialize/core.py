@@ -190,7 +190,6 @@ def materialize(
             nout=nout,
         )
 
-    print(f"### HACKYDEBUG ###: {input_type}")
     return UnboundMaterializingTask(
         fn,
         name=name,
@@ -338,7 +337,6 @@ class MaterializingTask(Task):
     ):
         super().__init__(unbound_task, bound_args, flow, stage)
 
-        print(f"### HACKYDEBUG2 ###: {unbound_task.input_type}")
         self.input_type = unbound_task.input_type
         self._version = unbound_task.version
         self.cache = unbound_task.cache
