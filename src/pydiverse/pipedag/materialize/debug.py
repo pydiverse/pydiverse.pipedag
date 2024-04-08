@@ -54,11 +54,13 @@ def materialize_table(
     try:
         task_context = TaskContext.get()
         task = task_context.task  # type: ignore
+        task_name = task.name
 
         table.stage = task.stage
         if schema is None:
             schema = table_store.get_schema(table.stage.transaction_name)
     except LookupError:
+        task_name = None
         # LookupError happens if no TaskContext is open
         if schema is None:
             raise ValueError(
@@ -70,7 +72,7 @@ def materialize_table(
         stable_hash(str(random.randbytes(8))) + "_0000" if debug_suffix is None else ""
     )
     old_table_name = table.name
-    table.name = mangle_table_name(table.name, task.name, suffix)
+    table.name = mangle_table_name(table.name, task_name, suffix)
     if debug_suffix is not None:
         table.name += debug_suffix
 
@@ -85,7 +87,22 @@ def materialize_table(
             logger.warning(
                 "drop_if_exists not supported for non SQLTableStore table stores."
             )
-    table_store.store_table(table, task)
+    if task is None:
+        hook = table_store.get_m_table_hook(type(table.obj))
+        schema_name = (
+            schema.name
+            if table_store.get_schema(schema.name).get() == schema.get()
+            else schema.get()
+        )
+        if table_store.get_schema(schema_name).get() != schema.get():
+            raise ValueError(
+                "Schema prefix and postfix must match prefix and postfix of provided "
+                "config_context: "
+                f"{table_store.get_schema(schema_name).get()} != {schema.get()}"
+            )
+        hook.materialize(table_store, table, schema_name)
+    else:
+        table_store.store_table(table, task)
 
     new_table_name = table.name
     if keep_table_name:

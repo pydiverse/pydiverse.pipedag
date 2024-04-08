@@ -141,7 +141,11 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         as_type: type[sa.Table],
     ) -> sa.sql.expression.Selectable:
         table_name, schema = store.resolve_alias(table, stage_name)
-        alias_name = TaskContext.get().name_disambiguator.get_name(table_name)
+        try:
+            alias_name = TaskContext.get().name_disambiguator.get_name(table_name)
+        except LookupError:
+            # Used for imperative materialization with explicit config_context
+            alias_name = table_name
 
         tbl = store.reflect_table(table_name, schema)
         return tbl.alias(alias_name)

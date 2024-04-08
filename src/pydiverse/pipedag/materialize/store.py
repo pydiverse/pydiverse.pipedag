@@ -582,8 +582,10 @@ def dematerialize_output_from_store(
         )
 
 
-def mangle_table_name(table_name: str, task_name: str, suffix: str):
+def mangle_table_name(table_name: str, task_name: str | None, suffix: str):
     if table_name is None:
+        if task_name is None:
+            return suffix
         table_name = task_name + "_" + suffix
     elif table_name.endswith("%%"):
         table_name = table_name[:-2] + suffix

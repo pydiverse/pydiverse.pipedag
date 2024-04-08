@@ -241,11 +241,23 @@ class Table(Generic[T]):
                 if return_as_type is None:
                     # use sqlalchemy as default reference dematerialization
                     return_as_type = sa.Table
-                hook = config_context.store.table_store.get_r_table_hook(return_as_type)
+                store = config_context.store.table_store
+                hook = store.get_r_table_hook(return_as_type)
                 save_name = self.name
                 self.name = table_name
+                schema_name = (
+                    schema.name
+                    if store.get_schema(schema.name).get() == schema.get()
+                    else schema.get()
+                )
+                if store.get_schema(schema_name).get() != schema.get():
+                    raise ValueError(
+                        "Schema prefix and postfix must match prefix and postfix of "
+                        "provided config_context: "
+                        f"{store.get_schema(schema_name).get()} != {schema.get()}"
+                    )
                 obj = hook.retrieve(
-                    config_context.store.table_store, self, schema.name, return_as_type
+                    config_context.store.table_store, self, schema_name, return_as_type
                 )
                 self.name = save_name
                 return obj
