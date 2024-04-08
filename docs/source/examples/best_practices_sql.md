@@ -35,11 +35,11 @@ import sqlalchemy as sa
 import pydiverse.pipedag as dag
 from pydiverse.pipedag import materialize
 
-def ref(table: sa.expression.sql.Alias):
+def ref(table: sa.Alias):
     return f"[{table.original.schema}].[{table.original.name}]"
 
 @materialize(lazy=True, input_type=sa.Table)
-def table01(raw01: sa.expression.sql.Alias):
+def table01(raw01: sa.Alias):
     sql = f"""
         SELECT DISTINCT raw01.entity entity, 'Missing in raw01' reason
         FROM {ref(raw01)} as raw01 WITH (NOLOCK)
@@ -88,7 +88,7 @@ import pydiverse.pipedag as dag
 from pydiverse.pipedag import materialize
 
 @materialize(lazy=True, input_type=sa.Table)
-def table01(raw01: sa.expression.sql.Alias):
+def table01(raw01: sa.Alias):
     raw01x = sa.select([raw01.c.entity]).distinct().alias("raw01x")
     sql = (
         sa.select([raw01.c.entity, sa.literal("Missing in raw01").label("reason")])

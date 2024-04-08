@@ -34,13 +34,13 @@ import sqlalchemy as sa
 import pydiverse.pipedag as dag
 from pydiverse.pipedag import materialize
 
-def table01(raw01: sa.expression.sql.Alias):
+def table01(raw01: sa.Alias):
     @materialize(lazy=True, input_type=sa.Table)
-    def raw01x(raw01: sa.expression.sql.Alias):
+    def raw01x(raw01: sa.Alias):
         return dag.Table(sa.select([raw01.c.entity]).distinct(), name="raw01x")
 
     @materialize(lazy=True, input_type=sa.Table)
-    def query(raw01: sa.expression.sql.Alias, raw01x: sa.expression.sql.Alias):
+    def query(raw01: sa.Alias, raw01x: sa.Alias):
         sql = (
             sa.select([raw01.c.entity, sa.literal("Missing in raw01").label("reason")])
             .select_from(raw01.outer_join(raw01x, raw01.c.entity == raw01x.c.entity))
