@@ -190,10 +190,7 @@ def materialize(
             nout=nout,
         )
 
-    import sys
-
-    sys.stderr.write(f"### HACKYDEBUG ###: {input_type}")
-    assert input_type != 0
+    print(f"### HACKYDEBUG ###: {input_type}")
     return UnboundMaterializingTask(
         fn,
         name=name,
