@@ -286,6 +286,23 @@ class UnboundMaterializingTask(UnboundTask):
         return super().__call__(*args, **kwargs)  # type: ignore
 
     def _call_original_function(self, *args, **kwargs):
+        try:
+            task_context = TaskContext.get()  # this may raise Lookup Error
+            # this is a subtask call. Thus we demand identical input_types
+            sub_task: MaterializingTask = task_context.task  # type: ignore
+            if (
+                sub_task.input_type is not None
+                and self.input_type is not None
+                and sub_task.input_type != self.input_type
+            ):
+                raise RuntimeError(
+                    f"Subtask input type {self.input_type} does not match parent task "
+                    f"input type {sub_task.input_type}: "
+                    f"task={self}, sub_task={sub_task}"
+                )
+        except LookupError:
+            # this is expected when calling the task outside of flow declaration
+            pass
         result = self._original_fn(*args, **kwargs)
 
         def unwrap_mutator(x):
