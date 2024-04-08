@@ -244,12 +244,13 @@ def test_materialize_memo_table(imperative):
             t_11 = _m.noop_lazy(t_4)
             t_12 = _m.noop_lazy(t_5)
             t_13 = _m.noop_lazy(t_0)
-            t_14 = _m.noop_polars(t_4)
-            t_15 = _m.noop_polars(t_5)
-            t_16 = _m.noop_polars(t_0)
-            t_17 = _m.noop_lazy_polars(t_4)
-            t_18 = _m.noop_lazy_polars(t_5)
-            t_19 = _m.noop_lazy_polars(t_0)
+            if _m.pl is not None:
+                t_14 = _m.noop_polars(t_4)
+                t_15 = _m.noop_polars(t_5)
+                t_16 = _m.noop_polars(t_0)
+                t_17 = _m.noop_lazy_polars(t_4)
+                t_18 = _m.noop_lazy_polars(t_5)
+                t_19 = _m.noop_lazy_polars(t_0)
 
         with Stage("stage_2"):
             _m.assert_table_equal(t_0, t_4)
@@ -262,12 +263,13 @@ def test_materialize_memo_table(imperative):
             _m.assert_table_equal(t_1, t_11)
             _m.assert_table_equal(t_2, t_12)
             _m.assert_table_equal(t_3, t_13)
-            _m.assert_table_equal(t_1, t_14)
-            _m.assert_table_equal(t_2, t_15)
-            _m.assert_table_equal(t_3, t_16)
-            _m.assert_table_equal(t_1, t_17)
-            _m.assert_table_equal(t_2, t_18)
-            _m.assert_table_equal(t_3, t_19)
+            if _m.pl is not None:
+                _m.assert_table_equal(t_1, t_14)
+                _m.assert_table_equal(t_2, t_15)
+                _m.assert_table_equal(t_3, t_16)
+                _m.assert_table_equal(t_1, t_17)
+                _m.assert_table_equal(t_2, t_18)
+                _m.assert_table_equal(t_3, t_19)
 
     assert f.run().successful
 

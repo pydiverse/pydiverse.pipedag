@@ -35,12 +35,12 @@ def noop_lazy(x):
     return Table(x).materialize()
 
 
-@materialize(input_type=pl.DataFrame if pl else 0)
+@materialize(input_type=pl.DataFrame if pl else "<polars task without polars>")
 def noop_polars(x):
     return Table(x).materialize()
 
 
-@materialize(input_type=pl.LazyFrame if pl else 0)
+@materialize(input_type=pl.LazyFrame if pl else "<polars task without polars>")
 def noop_lazy_polars(x):
     return Table(x).materialize()
 
