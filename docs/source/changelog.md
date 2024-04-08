@@ -5,6 +5,7 @@
     materializing subqueries within a task. It also helps see task in stack trace when materialization fails. There is
     one downside of using it: when a task returns multiple tables, it is assumed that all tables depend on previously 
     imperatively materialized tables.
+- Fixed an edgecase for mssql backend causing queries with columns named "from" to crash.
 
 ## 0.8.0 (2024-04-02)
 - Significant refactoring of materialization is included. It splits creation of table from filling a table in many cases.
