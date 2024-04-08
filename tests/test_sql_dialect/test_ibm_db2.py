@@ -8,13 +8,13 @@ import pytest
 import sqlalchemy as sa
 
 from pydiverse.pipedag import ConfigContext, Flow, RawSql, Stage, Table, materialize
-from pydiverse.pipedag.backend.table.sql import ExternalTableReference
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateSchema,
     CreateTableAsSelect,
     DropTable,
     Schema,
 )
+from pydiverse.pipedag.materialize.container import ExternalTableReference
 from tests.fixtures.instances import with_instances
 from tests.util.sql import sql_table_expr
 from tests.util.tasks_library import (

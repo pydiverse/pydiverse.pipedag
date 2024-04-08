@@ -7,7 +7,6 @@ from sqlalchemy.exc import ProgrammingError
 
 import tests.util.tasks_library as m
 from pydiverse.pipedag import *
-from pydiverse.pipedag.backend.table.sql import ExternalTableReference
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateSchema,
     CreateTableAsSelect,
@@ -16,6 +15,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     DropView,
     Schema,
 )
+from pydiverse.pipedag.materialize.container import ExternalTableReference
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
