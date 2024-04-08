@@ -8,7 +8,7 @@ from typing import Callable, Union
 
 import structlog
 
-from pydiverse.pipedag import Stage
+from pydiverse.pipedag.core import Stage
 from pydiverse.pipedag.errors import LockError
 from pydiverse.pipedag.util import Disposable
 
