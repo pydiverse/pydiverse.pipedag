@@ -170,6 +170,7 @@ class PipeDAGStore(Disposable):
         ctx = RunContext.get()
 
         def dematerialize_mapper(x):
+            print(f"### HACKYDEBUG3 ###: {task.input_type}")
             return self.dematerialize_item(
                 x,
                 as_type=task.input_type,

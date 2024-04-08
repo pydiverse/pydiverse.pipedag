@@ -211,6 +211,7 @@ class TableHookResolver:
                 "to dematerialize a Table."
             )
 
+        print(f"### HACKYDEBUG4 ###: {as_type}")
         hook = self.get_r_table_hook(as_type)
         try:
             if for_auto_versioning:
