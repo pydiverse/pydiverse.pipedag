@@ -51,18 +51,20 @@ def materialize_table(
     table_store = config_context.store.table_store
 
     task: MaterializingTask | None = None
-    if task_context := TaskContext.get():
+    try:
+        task_context = TaskContext.get()
         task = task_context.task  # type: ignore
 
         table.stage = task.stage
         if schema is None:
             schema = table_store.get_schema(table.stage.transaction_name)
-    else:
+    except LookupError:
+        # LookupError happens if no TaskContext is open
         if schema is None:
             raise ValueError(
                 "Parameter schema must be provided if task is not called by "
                 "normal pipedag orchestration."
-            )
+            ) from None
 
     suffix = (
         stable_hash(str(random.randbytes(8))) + "_0000" if debug_suffix is None else ""

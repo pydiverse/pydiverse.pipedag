@@ -4,6 +4,8 @@ import copy
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Generic
 
+import sqlalchemy as sa
+
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.context import ConfigContext, TaskContext
 from pydiverse.pipedag.util import normalize_name
@@ -11,6 +13,7 @@ from pydiverse.pipedag.util import normalize_name
 if TYPE_CHECKING:
     from pydiverse.pipedag.backend.table.sql.ddl import Schema
     from pydiverse.pipedag.core.stage import Stage
+    from pydiverse.pipedag.materialize.core import MaterializingTask
 
 
 class Table(Generic[T]):
@@ -148,7 +151,7 @@ class Table(Generic[T]):
     def materialize(
         self,
         config_context: ConfigContext | None = None,
-        schema: Schema | str | None = None,
+        schema: Schema | None = None,
         return_as_type=None,
         return_nothing=False,
     ):
@@ -173,12 +176,28 @@ class Table(Generic[T]):
         :param return_nothing: If True, the method will return None instead of the
             dematerialized created table.
         """
-        if task_context := TaskContext.get():
-            if config_context is not None and config_context != ConfigContext.get():
+        try:
+            task_context = (
+                TaskContext.get()
+            )  # raises Lookup Error if no TaskContext is open
+            if config_context is not None and config_context is not ConfigContext.get():
                 raise ValueError(
                     "config_context must be identical to ConfigContext.get() "
                     "when task is regularly executed by pipedag orchestration."
                 )
+            config_context = ConfigContext.get()
+            task_schema = config_context.store.table_store.get_schema(
+                task_context.task.stage.transaction_name
+            )
+            if schema is not None and schema != task_schema:
+                raise ValueError(
+                    "schema must be identical to Task Stage transaction schema "
+                    "when task is regularly executed by pipedag orchestration."
+                )
+            schema = task_schema
+            if task_context.imperative_materialize_callback is None:
+                # this path is triggered while determining auto-version
+                return self.obj
             try:
                 return task_context.imperative_materialize_callback(
                     self, config_context, return_as_type, return_nothing
@@ -190,19 +209,48 @@ class Table(Generic[T]):
                     "Falling back to debug materialization due to duplicate "
                     "materializtion of this table"
                 )
-                config_context = ConfigContext.get()
-                schema = config_context.store.table_store.get_schema(
-                    task_context.task.stage.transaction_name
-                )
-
+                if return_as_type is None:
+                    task: MaterializingTask = task_context.task  # type: ignore
+                    return_as_type = task.input_type
+                    if (
+                        return_as_type is None
+                        or not config_context.store.table_store.get_r_table_hook(
+                            return_as_type
+                        ).retrieve_as_reference(return_as_type)
+                    ):
+                        # dematerialize as sa.Table if it would transfer all rows
+                        # to python when dematerializing with input_type
+                        return_as_type = sa.Table
+        except LookupError:
+            # LookupError happens if no TaskContext is open
+            pass
         if config_context is not None:
+            if schema is None:
+                raise ValueError(
+                    "schema must be provided when task is not regularly "
+                    "executed by pipedag orchestration."
+                )
             # fall back to debug behavior when an explicit table_store is given
             # via config_context
             from pydiverse.pipedag.materialize import debug
 
-            debug.materialize_table(
-                table=self, config_context=config_context, schema=schema
+            table_name = debug.materialize_table(
+                table=self,
+                config_context=config_context,
+                schema=schema,
             )
+            if not return_nothing:
+                if return_as_type is None:
+                    # use sqlalchemy as default reference dematerialization
+                    return_as_type = sa.Table
+                hook = config_context.store.table_store.get_r_table_hook(return_as_type)
+                save_name = self.name
+                self.name = table_name
+                obj = hook.retrieve(
+                    config_context.store.table_store, self, schema.name, return_as_type
+                )
+                self.name = save_name
+                return obj
         elif not return_nothing:
             # We support calling dataframe tasks outside flow declaration by
             # assuming that input tables are already given dematerialized by the

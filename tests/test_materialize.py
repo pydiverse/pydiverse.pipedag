@@ -89,6 +89,31 @@ def test_materialize_table(imperative):
 
 
 @pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_table_subtask(imperative):
+    _m = m if not imperative else m2
+    with Flow("flow") as f:
+        with Stage("stage"):
+            x = _m.simple_dataframe_subtask()
+            y = _m.noop_subtask(x)
+            z = _m.noop_subtask_lazy(x)
+            _m.assert_table_equal(x, y)
+            _m.assert_table_equal(x, z)
+
+    assert f.run().successful
+
+
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_table_subtask_fail_input_type(imperative):
+    _m = m if not imperative else m2
+    with Flow("flow") as f:
+        with Stage("stage"):
+            x = _m.simple_dataframe_subtask()
+            _ = _m.noop_subtask_fail_input_type(x)
+    with pytest.raises(RuntimeError, match="does not match parent task input type"):
+        f.run()
+
+
+@pytest.mark.parametrize("imperative", [False, True])
 def test_materialize_table_twice(imperative):
     _m = m if not imperative else m2
     with Flow("flow") as f:
@@ -219,6 +244,12 @@ def test_materialize_memo_table(imperative):
             t_11 = _m.noop_lazy(t_4)
             t_12 = _m.noop_lazy(t_5)
             t_13 = _m.noop_lazy(t_0)
+            t_14 = _m.noop_polars(t_4)
+            t_15 = _m.noop_polars(t_5)
+            t_16 = _m.noop_polars(t_0)
+            t_17 = _m.noop_lazy_polars(t_4)
+            t_18 = _m.noop_lazy_polars(t_5)
+            t_19 = _m.noop_lazy_polars(t_0)
 
         with Stage("stage_2"):
             _m.assert_table_equal(t_0, t_4)
@@ -231,6 +262,12 @@ def test_materialize_memo_table(imperative):
             _m.assert_table_equal(t_1, t_11)
             _m.assert_table_equal(t_2, t_12)
             _m.assert_table_equal(t_3, t_13)
+            _m.assert_table_equal(t_1, t_14)
+            _m.assert_table_equal(t_2, t_15)
+            _m.assert_table_equal(t_3, t_16)
+            _m.assert_table_equal(t_1, t_17)
+            _m.assert_table_equal(t_2, t_18)
+            _m.assert_table_equal(t_3, t_19)
 
     assert f.run().successful
 

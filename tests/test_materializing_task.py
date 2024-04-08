@@ -1,19 +1,23 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from pydiverse.pipedag import Flow, Stage, StageLockContext
 from tests.fixtures.instances import with_instances
 from tests.util import tasks_library as m
+from tests.util import tasks_library_imperative as m2
 
 
 @with_instances("postgres", "local_table_cache", "local_table_cache_inout")
-def test_get_output_from_store():
+@pytest.mark.parametrize("imperative", [False, True])
+def test_get_output_from_store(imperative):
+    _m = m2 if imperative else m
     with Flow() as f:
         with Stage("stage_1"):
-            df1 = m.pd_dataframe({"x": [0, 1, 2, 3]})
-            df2 = m.pd_dataframe({"y": [0, 1, 2, 3]})
-            dataframes = m.create_tuple(df1, df2)
+            df1 = _m.pd_dataframe({"x": [0, 1, 2, 3]})
+            df2 = _m.pd_dataframe({"y": [0, 1, 2, 3]})
+            dataframes = _m.create_tuple(df1, df2)
 
     # We only use the StageLockContext for testing
     with StageLockContext():

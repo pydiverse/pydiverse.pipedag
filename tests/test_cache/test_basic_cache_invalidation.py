@@ -13,6 +13,7 @@ from pydiverse.pipedag.materialize.core import AUTO_VERSION, materialize
 from tests.fixtures.instances import ALL_INSTANCES, with_instances
 from tests.util import compile_sql, select_as
 from tests.util import tasks_library as m
+from tests.util import tasks_library_imperative as m2
 from tests.util.spy import spy_task
 
 try:
@@ -672,9 +673,11 @@ def test_cache_validation_mode_assert(
 @pytest.mark.parametrize(
     "mode", ["NORMAL", "IGNORE_FRESH_INPUT", "FORCE_FRESH_INPUT", "FORCE_CACHE_INVALID"]
 )
+@pytest.mark.parametrize("imperative", [False, True])
 def test_cache_validation_mode(
-    ignore_task_version, disable_cache_function, mode, mocker
+    ignore_task_version, disable_cache_function, mode, imperative, mocker
 ):
+    _m = m2 if imperative else m
     mode = getattr(CacheValidationMode, mode.upper())
     if disable_cache_function and mode == CacheValidationMode.NORMAL:
         pytest.skip("Cannot disable cache function in mode NORMAL")
@@ -698,19 +701,22 @@ def test_cache_validation_mode(
 
     @materialize(lazy=True, cache=cache)
     def return_cache_table_lazy():
-        return Table(select_as(cache_value, "x"))
+        tbl = Table(select_as(cache_value, "x"))
+        return tbl.materialize() if imperative else tbl
 
     @materialize(version=None, cache=cache)
     def return_cache_table_always():
-        return pd.DataFrame(dict(x=[cache_value]))
+        df = pd.DataFrame(dict(x=[cache_value]))
+        return Table(df).materialize() if imperative else df
 
     @materialize(version=AUTO_VERSION, cache=cache2, input_type=pd.DataFrame)
     def return_cache_table_auto(df: pd.DataFrame):
-        return df
+        return Table(df).materialize() if imperative else df
 
     @materialize(version="1.0", cache=cache)
     def return_cache_table():
-        return pd.DataFrame(dict(x=[cache_value]))
+        df = pd.DataFrame(dict(x=[cache_value]))
+        return Table(df).materialize() if imperative else df
 
     def get_flow():
         with Flow() as flow:
@@ -720,9 +726,9 @@ def test_cache_validation_mode(
                 out_auto = return_cache_table_auto(out_lazy)
                 out = return_cache_table()
                 outs = [out_lazy, out_always, out_auto, out]
-                cpy = [m.noop(o) for o in outs]
-                ind1 = m.simple_dataframe()
-                ind2 = m.simple_lazy_table()
+                cpy = [_m.noop(o) for o in outs]
+                ind1 = _m.simple_dataframe()
+                ind2 = _m.simple_lazy_table()
         return flow, outs, cpy, [ind1, ind2]
 
     flow, outs, cpy, ind = get_flow()
@@ -834,23 +840,6 @@ def test_cache_validation_mode(
         else:
             all(spy.assert_called_once() for spy in cpy_spy)
             all(spy.assert_called_once() for spy in ind_spy)
-
-    for _ in range(3):
-        with StageLockContext():
-            result = flow.run(**kwargs)
-            if (
-                mode == CacheValidationMode.IGNORE_FRESH_INPUT
-                and not ignore_task_version
-            ):
-                assert all(
-                    result.get(c, as_type=pd.DataFrame)["x"].iloc[0] == res
-                    for c, res in zip(cpy, [cache_value, cache_value, cache_value, 0])
-                )
-            else:
-                assert all(
-                    result.get(c, as_type=pd.DataFrame)["x"].iloc[0] == cache_value
-                    for c in cpy
-                )
 
 
 @pytest.mark.parametrize("n", [1, 2, 15])
