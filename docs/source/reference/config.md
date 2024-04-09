@@ -477,7 +477,7 @@ class
   Available classes:
   - [](#pydiverse.pipedag.engine.SequentialEngine)
   - [](#pydiverse.pipedag.engine.DaskEngine)
-  - [](#pydiverse.pipedag.engine.PrefectEngine)
+  - [](#pydiverse.pipedag.engine.prefect.PrefectEngine)
     
 args
 : Any values in this subsection will be passed as arguments to the `__init__` or, if available, the `_init_conf_` method of the orchestration engine class.
@@ -560,7 +560,7 @@ technical_setups:
     orchestration:
       class: "pydiverse.pipedag.engine.SequentialEngine"
       ## Activate this class to work either with prefect 1.x or prefect 2.y
-      # class: "pydiverse.pipedag.engine.PrefectEngine"
+      # class: "pydiverse.pipedag.engine.prefect.PrefectEngine"
 
 instances:
   __any__:

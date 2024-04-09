@@ -83,15 +83,15 @@ Orchestration Engine
 .. autoclass:: pydiverse.pipedag.engine.DaskEngine
 
 .. py:class:: PrefectEngine
-   :canonical: pydiverse.pipedag.engine.PrefectEngine
+   :canonical: pydiverse.pipedag.engine.prefect.PrefectEngine
 
    Alias for either
-   :class:`PrefectOneEngine <pydiverse.pipedag.engine.PrefectOneEngine>` or
-   :class:`PrefectTwoEngine <pydiverse.pipedag.engine.PrefectTwoEngine>`
+   :class:`PrefectOneEngine <pydiverse.pipedag.engine.prefect.PrefectOneEngine>` or
+   :class:`PrefectTwoEngine <pydiverse.pipedag.engine.prefect.PrefectTwoEngine>`
    depending on the version of Prefect that is installed.
 
-.. autoclass:: pydiverse.pipedag.engine.PrefectOneEngine
-.. autoclass:: pydiverse.pipedag.engine.PrefectTwoEngine
+.. autoclass:: pydiverse.pipedag.engine.prefect.PrefectOneEngine
+.. autoclass:: pydiverse.pipedag.engine.prefect.PrefectTwoEngine
 
 Special Table Types
 -------------------

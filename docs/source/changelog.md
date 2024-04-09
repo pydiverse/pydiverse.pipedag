@@ -7,6 +7,9 @@
     imperatively materialized tables.
 - ExternalTableReference moved module and is now also a member of pydiverse.pipedag module. This is a breaking 
     interface change for pipedag.
+- PrefectEngine moved to module pydiverse.pipedag.engine.prefect.PrefectEngine because it would otherwise import prefect
+    whenever it is installed in environment which messes with logging library initialization. This is a breaking 
+    interface change.
 - Fixed an edgecase for mssql backend causing queries with columns named "from" to crash. The code to insert an INTO into
     mssql SELECT statements is still hacky but supports open quote detection. Comments may still confuse the logic.
 
