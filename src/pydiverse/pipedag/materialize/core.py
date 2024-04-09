@@ -4,6 +4,7 @@ import copy
 import functools
 import inspect
 import uuid
+from collections.abc import Iterable
 from functools import partial
 from typing import TYPE_CHECKING, Any, Callable, overload
 
@@ -696,22 +697,29 @@ class MaterializationWrapper:
                     task, task_cache_info, table, disable_task_finalization=True
                 )
                 if not return_nothing:
-                    if return_as_type is None:
-                        return_as_type = task.input_type
-                        if (
-                            return_as_type is None
-                            or not my_store.table_store.get_r_table_hook(
-                                return_as_type
-                            ).retrieve_as_reference(return_as_type)
-                        ):
-                            # dematerialize as sa.Table if it would transfer all rows
-                            # to python when dematerializing with input_type
-                            return_as_type = sa.Table
-                    obj = my_store.dematerialize_item(
-                        table, return_as_type, run_context
-                    )
-                    state.add_table_lookup(obj, table)
-                    return obj
+
+                    def get_return_obj(return_as_type):
+                        if return_as_type is None:
+                            return_as_type = task.input_type
+                            if (
+                                return_as_type is None
+                                or not my_store.table_store.get_r_table_hook(
+                                    return_as_type
+                                ).retrieve_as_reference(return_as_type)
+                            ):
+                                # dematerialize as sa.Table if it would transfer all
+                                # rows to python when dematerializing with input_type
+                                return_as_type = sa.Table
+                        obj = my_store.dematerialize_item(
+                            table, return_as_type, run_context
+                        )
+                        state.add_table_lookup(obj, table)
+                        return obj
+
+                    if isinstance(return_as_type, Iterable):
+                        return tuple(get_return_obj(t) for t in return_as_type)
+                    else:
+                        return get_return_obj(return_as_type)
 
             task_context.imperative_materialize_callback = imperative_materialize
             result = self.fn(*args, **kwargs)

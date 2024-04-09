@@ -6,6 +6,7 @@ from pydiverse.pipedag.materialize import (
     Blob,
     ExternalTableReference,
     RawSql,
+    Schema,
     Table,
     materialize,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "Table",
     "RawSql",
     "Blob",
+    "Schema",
     "Result",
     "PipedagConfig",
     "ConfigContext",

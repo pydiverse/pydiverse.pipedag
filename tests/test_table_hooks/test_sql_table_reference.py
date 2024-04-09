@@ -13,9 +13,8 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateViewAsSelect,
     DropTable,
     DropView,
-    Schema,
 )
-from pydiverse.pipedag.materialize.container import ExternalTableReference
+from pydiverse.pipedag.materialize.container import ExternalTableReference, Schema
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances

@@ -18,7 +18,6 @@ from pydiverse.pipedag.backend.table.base import AutoVersionSupport, TableHook
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateTableAsSelect,
     InsertIntoSelect,
-    Schema,
 )
 from pydiverse.pipedag.backend.table.sql.sql import (
     SQLTableStore,
@@ -29,7 +28,7 @@ from pydiverse.pipedag.backend.table.util import (
 )
 from pydiverse.pipedag.context import TaskContext
 from pydiverse.pipedag.materialize import Table
-from pydiverse.pipedag.materialize.container import ExternalTableReference
+from pydiverse.pipedag.materialize.container import ExternalTableReference, Schema
 from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
 from pydiverse.pipedag.util.computation_tracing import ComputationTracer
 
@@ -71,6 +70,10 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                 )
             ]
         else:
+            try:
+                input_tables = TaskContext.get().input_tables
+            except LookupError:
+                input_tables = []
             source_tables = [
                 dict(
                     name=tbl.name,
@@ -79,7 +82,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                     else tbl.external_schema,
                     shared_lock_allowed=tbl.shared_lock_allowed,
                 )
-                for tbl in TaskContext.get().input_tables
+                for tbl in input_tables
             ]
 
         schema = store.get_schema(stage_name)
@@ -371,9 +374,12 @@ class PandasTableHook(TableHook[SQLTableStore]):
         else:
             backend_str = "numpy"
 
-        if hook_args := ConfigContext.get().table_hook_args.get("pandas", None):
-            if dtype_backend := hook_args.get("dtype_backend", None):
-                backend_str = dtype_backend
+        try:
+            if hook_args := ConfigContext.get().table_hook_args.get("pandas", None):
+                if dtype_backend := hook_args.get("dtype_backend", None):
+                    backend_str = dtype_backend
+        except LookupError:
+            pass  # in case dematerialization is called without open ConfigContext
 
         if isinstance(as_type, tuple):
             backend_str = as_type[1]

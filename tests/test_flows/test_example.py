@@ -1,30 +1,25 @@
 from __future__ import annotations
 
+import pytest
+
 from example.run_pipeline import main as example_flow_main
 from example_imperative.run_pipeline import main as example_imperative_flow_main
+from example_interactive.run_tasks_interactively import main as example_interactive_main
 from example_postgres.run_pipeline import main as example_postgres_flow_main
 
 
-def test_example_flow():
+@pytest.mark.parametrize(
+    "fn",
+    [
+        example_flow_main,
+        example_imperative_flow_main,
+        example_postgres_flow_main,
+        example_interactive_main,
+    ],
+)
+def test_examples(fn):
     """
     This test just runs the example pipeline that we provide in example/run_pipeline.py
     """
 
-    example_flow_main()
-
-
-def test_example_imperative_flow():
-    """
-    This test just runs the example pipeline that we provide in example/run_pipeline.py
-    """
-
-    example_imperative_flow_main()
-
-
-def test_example_postgres_flow():
-    """
-    This test just runs the example pipeline that we provide in
-    example_postgres/run_pipeline.py
-    """
-
-    example_postgres_flow_main()
+    fn()

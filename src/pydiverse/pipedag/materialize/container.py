@@ -5,13 +5,15 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Generic
 
 import sqlalchemy as sa
+import structlog
+from attr import frozen
 
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.context import ConfigContext, TaskContext
+from pydiverse.pipedag.errors import DuplicateNameError
 from pydiverse.pipedag.util import normalize_name
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag.backend.table.sql.ddl import Schema
     from pydiverse.pipedag.core.stage import Stage
     from pydiverse.pipedag.materialize.core import MaterializingTask
 
@@ -165,12 +167,13 @@ class Table(Generic[T]):
         :param config_context: The config context to use for materialization during
             interactive debugging. If it is provided while task is regularly executed,
             it must be identical to ConfigContext.get().
-        :param return_as: By default, the materialized table is returned as the
+        :param return_as_type: By default, the materialized table is returned as the
             input_type of the task (for dataframes with AUTO_VERSION support, it
             just dematerializes the empty dataframes). With return_as you can
             override this behavior and explicitly choose the dematiarlization type.
             ``return_as=sqlalchemy.Table`` might be a useful choice for tasks with
-            pandas or polars input_type.
+            pandas or polars input_type. It is also possible to pass an `Iterable` like
+            list in order to receive a tuple of the dematerialized objects.
         :param return_nothing: If True, the method will return None instead of the
             dematerialized created table.
         """
@@ -200,25 +203,34 @@ class Table(Generic[T]):
                 return task_context.imperative_materialize_callback(
                     self, config_context, return_as_type, return_nothing
                 )
-            except RuntimeError:
+            except (RuntimeError, DuplicateNameError):
                 # fall back to debug materialization when Table.materialize() is
                 # called twice for the same table
                 task_context.task.logger.info(
                     "Falling back to debug materialization due to duplicate "
                     "materializtion of this table"
                 )
-                if return_as_type is None:
-                    task: MaterializingTask = task_context.task  # type: ignore
-                    return_as_type = task.input_type
-                    if (
-                        return_as_type is None
-                        or not config_context.store.table_store.get_r_table_hook(
-                            return_as_type
-                        ).retrieve_as_reference(return_as_type)
-                    ):
-                        # dematerialize as sa.Table if it would transfer all rows
-                        # to python when dematerializing with input_type
-                        return_as_type = sa.Table
+
+                def return_type_mutator(return_as_type):
+                    if return_as_type is None:
+                        task: MaterializingTask = task_context.task  # type: ignore
+                        return_as_type = task.input_type
+                        if (
+                            return_as_type is None
+                            or not config_context.store.table_store.get_r_table_hook(
+                                return_as_type
+                            ).retrieve_as_reference(return_as_type)
+                        ):
+                            # dematerialize as sa.Table if it would transfer all rows
+                            # to python when dematerializing with input_type
+                            return_as_type = sa.Table
+
+                if isinstance(return_as_type, Iterable):
+                    return_as_type = tuple(
+                        return_type_mutator(t) for t in return_as_type
+                    )
+                else:
+                    return_as_type = return_type_mutator(return_as_type)
         except LookupError:
             # LookupError happens if no TaskContext is open
             pass
@@ -238,29 +250,40 @@ class Table(Generic[T]):
                 schema=schema,
             )
             if not return_nothing:
-                if return_as_type is None:
-                    # use sqlalchemy as default reference dematerialization
-                    return_as_type = sa.Table
-                store = config_context.store.table_store
-                hook = store.get_r_table_hook(return_as_type)
-                save_name = self.name
-                self.name = table_name
-                schema_name = (
-                    schema.name
-                    if store.get_schema(schema.name).get() == schema.get()
-                    else schema.get()
-                )
-                if store.get_schema(schema_name).get() != schema.get():
-                    raise ValueError(
-                        "Schema prefix and postfix must match prefix and postfix of "
-                        "provided config_context: "
-                        f"{store.get_schema(schema_name).get()} != {schema.get()}"
+
+                def get_return_obj(return_as_type):
+                    if return_as_type is None:
+                        # use sqlalchemy as default reference dematerialization
+                        return_as_type = sa.Table
+                    store = config_context.store.table_store
+                    hook = store.get_r_table_hook(return_as_type)
+                    save_name = self.name
+                    self.name = table_name
+                    schema_name = (
+                        schema.name
+                        if store.get_schema(schema.name).get() == schema.get()
+                        else schema.get()
                     )
-                obj = hook.retrieve(
-                    config_context.store.table_store, self, schema_name, return_as_type
-                )
-                self.name = save_name
-                return obj
+                    if store.get_schema(schema_name).get() != schema.get():
+                        raise ValueError(
+                            "Schema prefix and postfix must match prefix and postfix of"
+                            " provided config_context: "
+                            f"{store.get_schema(schema_name).get()} != {schema.get()}"
+                        )
+                    obj = hook.retrieve(
+                        config_context.store.table_store,
+                        self,
+                        schema_name,
+                        return_as_type,
+                    )
+                    self.name = save_name
+                    return obj
+
+                if isinstance(return_as_type, Iterable):
+                    return tuple(get_return_obj(t) for t in return_as_type)
+                else:
+                    return get_return_obj(return_as_type)
+
         elif not return_nothing:
             # We support calling dataframe tasks outside flow declaration by
             # assuming that input tables are already given dematerialized by the
@@ -269,6 +292,13 @@ class Table(Generic[T]):
             # `return Table(...).materialize()` at the end of tasks.
             # Furthermore, we can support
             # `df = Table(...).materialize(return_as_type=pd.DataFrame)`
+            if return_as_type is not None:
+                logger = structlog.get_logger(self.__class__.__name__, table=self)
+                logger.info(
+                    "Ignoring return_as_type in Table.materialize() outside of flow "
+                    "without given config_context.",
+                    return_as_type=return_as_type,
+                )
             return self.obj
 
     def __getstate__(self):
@@ -555,3 +585,16 @@ class ExternalTableReference:
 
     def __repr__(self):
         return f"<ExternalTableReference: {hex(id(self))}" f" (schema: {self.schema})>"
+
+
+@frozen
+class Schema:
+    name: str
+    prefix: str = ""
+    suffix: str = ""
+
+    def get(self):
+        return self.prefix + self.name + self.suffix
+
+    def __str__(self):
+        return self.get()

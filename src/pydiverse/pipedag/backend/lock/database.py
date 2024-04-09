@@ -13,9 +13,9 @@ from pydiverse.pipedag import ConfigContext, Stage
 from pydiverse.pipedag.backend.lock.base import BaseLockManager, Lockable, LockState
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateSchema,
-    Schema,
 )
 from pydiverse.pipedag.errors import LockError
+from pydiverse.pipedag.materialize.container import Schema
 
 
 class DatabaseLockManager(BaseLockManager):

@@ -11,7 +11,6 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     ChangeTableLogged,
     LockSourceTable,
     LockTable,
-    Schema,
 )
 from pydiverse.pipedag.backend.table.sql.hooks import (
     PandasTableHook,
@@ -20,6 +19,7 @@ from pydiverse.pipedag.backend.table.sql.hooks import (
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.materialize import Table
+from pydiverse.pipedag.materialize.container import Schema
 from pydiverse.pipedag.materialize.details import (
     BaseMaterializationDetails,
     resolve_materialization_details_label,

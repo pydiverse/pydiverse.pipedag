@@ -5,14 +5,12 @@ import re
 
 import pyparsing as pp
 import sqlalchemy as sa
-from attr import frozen
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.schema import DDLElement
 from sqlalchemy.sql import Select
 from sqlalchemy.sql.elements import TextClause
 
 __all__ = [
-    "Schema",
     "CreateSchema",
     "DropSchema",
     "RenameSchema",
@@ -42,18 +40,7 @@ __all__ = [
 
 from sqlalchemy.sql.type_api import TypeEngine
 
-
-@frozen
-class Schema:
-    name: str
-    prefix: str = ""
-    suffix: str = ""
-
-    def get(self):
-        return self.prefix + self.name + self.suffix
-
-    def __str__(self):
-        return self.get()
+from pydiverse.pipedag import Schema
 
 
 class CreateSchema(DDLElement):
