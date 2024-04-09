@@ -36,7 +36,7 @@ def double_values(df: pd.DataFrame):
 
 
 @materialize(input_type=sa.Table, lazy=True)
-def join_on_a(left: sa.Table, right: sa.Table):
+def join_on_a(left: sa.sql.expression.Alias, right: sa.sql.expression.Alias):
     return Table(left.select().join(right, left.c.a == right.c.a))
 
 

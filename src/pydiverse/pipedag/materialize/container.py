@@ -4,11 +4,18 @@ import copy
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Generic
 
+import sqlalchemy as sa
+import structlog
+from attr import frozen
+
 from pydiverse.pipedag._typing import T
+from pydiverse.pipedag.context import ConfigContext, TaskContext
+from pydiverse.pipedag.errors import DuplicateNameError
 from pydiverse.pipedag.util import normalize_name
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core.stage import Stage
+    from pydiverse.pipedag.materialize.core import MaterializingTask
 
 
 class Table(Generic[T]):
@@ -101,8 +108,6 @@ class Table(Generic[T]):
                 if not all(isinstance(x, str) for x in arg):
                     raise type_error
 
-        from pydiverse.pipedag.backend.table.sql import ExternalTableReference
-
         # ExternalTableReference can reference a table from an external schema
         if isinstance(self.obj, ExternalTableReference):
             self.external_schema = self.obj.schema
@@ -118,6 +123,9 @@ class Table(Generic[T]):
         # that use it to compute their input_hash for cache_invalidation due to input
         # change
         self.cache_key = None
+        # assumed dependencies are filled by imperative materialization to ensure
+        # correct cache invalidation
+        self.assumed_dependencies: list[Table] | None = None
 
     def __repr__(self):
         stage_name = self.stage.name if self.stage else None
@@ -139,6 +147,159 @@ class Table(Generic[T]):
         self_copy = copy.deepcopy(self)
         self.obj = obj
         return self_copy
+
+    def materialize(
+        self,
+        config_context: ConfigContext | None = None,
+        schema: Schema | None = None,
+        return_as_type=None,
+        return_nothing=False,
+    ):
+        """Materialize the table.
+
+        This method is used to materialize the table in the table store.
+        This imperative way of triggering materialization is useful for debugging
+        and it allows materializing subqueries within a task. Every call of this
+        function is registered in TaskContext and if any object returned
+        by this is returned from an ``@materialize`` task, it will be replaced by
+        the respective Table object that was materialized.
+
+        :param config_context: The config context to use for materialization during
+            interactive debugging. If it is provided while task is regularly executed,
+            it must be identical to ConfigContext.get().
+        :param return_as_type: By default, the materialized table is returned as the
+            input_type of the task (for dataframes with AUTO_VERSION support, it
+            just dematerializes the empty dataframes). With return_as you can
+            override this behavior and explicitly choose the dematiarlization type.
+            ``return_as=sqlalchemy.Table`` might be a useful choice for tasks with
+            pandas or polars input_type. It is also possible to pass an `Iterable` like
+            list in order to receive a tuple of the dematerialized objects.
+        :param return_nothing: If True, the method will return None instead of the
+            dematerialized created table.
+        """
+        try:
+            task_context = (
+                TaskContext.get()
+            )  # raises Lookup Error if no TaskContext is open
+            if config_context is not None and config_context is not ConfigContext.get():
+                raise ValueError(
+                    "config_context must be identical to ConfigContext.get() "
+                    "when task is regularly executed by pipedag orchestration."
+                )
+            config_context = ConfigContext.get()
+            task_schema = config_context.store.table_store.get_schema(
+                task_context.task.stage.transaction_name
+            )
+            if schema is not None and schema != task_schema:
+                raise ValueError(
+                    "schema must be identical to Task Stage transaction schema "
+                    "when task is regularly executed by pipedag orchestration."
+                )
+            schema = task_schema
+            if task_context.imperative_materialize_callback is None:
+                # this path is triggered while determining auto-version
+                return self.obj
+            try:
+                return task_context.imperative_materialize_callback(
+                    self, config_context, return_as_type, return_nothing
+                )
+            except (RuntimeError, DuplicateNameError):
+                # fall back to debug materialization when Table.materialize() is
+                # called twice for the same table
+                task_context.task.logger.info(
+                    "Falling back to debug materialization due to duplicate "
+                    "materializtion of this table"
+                )
+
+                def return_type_mutator(return_as_type):
+                    if return_as_type is None:
+                        task: MaterializingTask = task_context.task  # type: ignore
+                        return_as_type = task.input_type
+                        if (
+                            return_as_type is None
+                            or not config_context.store.table_store.get_r_table_hook(
+                                return_as_type
+                            ).retrieve_as_reference(return_as_type)
+                        ):
+                            # dematerialize as sa.Table if it would transfer all rows
+                            # to python when dematerializing with input_type
+                            return_as_type = sa.Table
+
+                if isinstance(return_as_type, Iterable):
+                    return_as_type = tuple(
+                        return_type_mutator(t) for t in return_as_type
+                    )
+                else:
+                    return_as_type = return_type_mutator(return_as_type)
+        except LookupError:
+            # LookupError happens if no TaskContext is open
+            pass
+        if config_context is not None:
+            if schema is None:
+                raise ValueError(
+                    "schema must be provided when task is not regularly "
+                    "executed by pipedag orchestration."
+                )
+            # fall back to debug behavior when an explicit table_store is given
+            # via config_context
+            from pydiverse.pipedag.materialize import debug
+
+            table_name = debug.materialize_table(
+                table=self,
+                config_context=config_context,
+                schema=schema,
+            )
+            if not return_nothing:
+
+                def get_return_obj(return_as_type):
+                    if return_as_type is None:
+                        # use sqlalchemy as default reference dematerialization
+                        return_as_type = sa.Table
+                    store = config_context.store.table_store
+                    hook = store.get_r_table_hook(return_as_type)
+                    save_name = self.name
+                    self.name = table_name
+                    schema_name = (
+                        schema.name
+                        if store.get_schema(schema.name).get() == schema.get()
+                        else schema.get()
+                    )
+                    if store.get_schema(schema_name).get() != schema.get():
+                        raise ValueError(
+                            "Schema prefix and postfix must match prefix and postfix of"
+                            " provided config_context: "
+                            f"{store.get_schema(schema_name).get()} != {schema.get()}"
+                        )
+                    obj = hook.retrieve(
+                        config_context.store.table_store,
+                        self,
+                        schema_name,
+                        return_as_type,
+                    )
+                    self.name = save_name
+                    return obj
+
+                if isinstance(return_as_type, Iterable):
+                    return tuple(get_return_obj(t) for t in return_as_type)
+                else:
+                    return get_return_obj(return_as_type)
+
+        elif not return_nothing:
+            # We support calling dataframe tasks outside flow declaration by
+            # assuming that input tables are already given dematerialized by the
+            # caller and returning dataframe objects unmaterialized. In this scenario,
+            # we still like `return Table(...)` to behave identical to
+            # `return Table(...).materialize()` at the end of tasks.
+            # Furthermore, we can support
+            # `df = Table(...).materialize(return_as_type=pd.DataFrame)`
+            if return_as_type is not None:
+                logger = structlog.get_logger(self.__class__.__name__, table=self)
+                logger.info(
+                    "Ignoring return_as_type in Table.materialize() outside of flow "
+                    "without given config_context.",
+                    return_as_type=return_as_type,
+                )
+            return self.obj
 
     def __getstate__(self):
         # The table `obj` field can't necessarily be pickled. That's why we remove it
@@ -230,6 +391,10 @@ class RawSql:
         # that use it to compute their input_hash for cache_invalidation due to input
         # change
         self.cache_key = None
+
+        # assumed dependencies are filled by imperative materialization to ensure
+        # correct cache invalidation
+        self.assumed_dependencies: list[Table] | None = None
 
         # If a task receives a RawSQL object as input, it loads all tables
         # produced by it and makes them available through a dict like interface.
@@ -359,3 +524,77 @@ class Blob(Generic[T]):
     @name.setter
     def name(self, value):
         self._name = normalize_name(value)
+
+
+class ExternalTableReference:
+    """Reference to a user-created table.
+
+    By returning a `ExternalTableReference` wrapped in a :py:class:`~.Table` from,
+    a task you can tell pipedag about a table, a view or DB2 nickname in an external
+    `schema`. The schema may be a multi-part identifier like "[db_name].[schema_name]"
+    if the database supports this. It is passed to SQLAlchemy as-is.
+
+    Only supported by :py:class:`~.SQLTableStore`.
+
+    Warning
+    -------
+    When using a `ExternalTableReference`, pipedag has no way of knowing the cache
+    validity of the external object. Hence, the user should provide a cache function
+    for the `Task`.
+    It is now allowed to specify a `ExternalTableReference` to a table in schema of the
+    current stage.
+
+    Example
+    -------
+    You can use a `ExternalTableReference` to tell pipedag about a table that exists
+    in an external schema::
+
+        @materialize(version="1.0")
+        def task():
+            return Table(ExternalTableReference("name_of_table", "schema"))
+
+    By using a cache function, you can establish the cache (in-)validity of the
+    external table::
+
+        from datetime import date
+
+        # The external table becomes cache invalid every day at midnight
+        def my_cache_fun():
+            return date.today().strftime("%Y/%m/%d")
+
+        @materialize(cache=my_cache_fun)
+        def task():
+            return Table(ExternalTableReference("name_of_table", "schema"))
+    """
+
+    def __init__(self, name: str, schema: str, shared_lock_allowed: bool = False):
+        """
+        :param name: The name of the table, view, or nickname/alias
+        :param schema: The external schema of the object. A multi-part schema
+            is allowed with '.' separator as also supported by SQLAlchemy Table
+            schema argument.
+        :param shared_lock_allowed: Whether to disable acquiring a shared lock
+            when using the object in a SQL query. If set to `False`, no lock is
+            used. This is useful when the user is not allowed to lock the table.
+            If pipedag does not lock source tables for this dialect, this argument
+            has no effect. The default is `False`.
+        """
+        self.name = name
+        self.schema = schema
+        self.shared_lock_allowed = shared_lock_allowed
+
+    def __repr__(self):
+        return f"<ExternalTableReference: {hex(id(self))}" f" (schema: {self.schema})>"
+
+
+@frozen
+class Schema:
+    name: str
+    prefix: str = ""
+    suffix: str = ""
+
+    def get(self):
+        return self.prefix + self.name + self.suffix
+
+    def __str__(self):
+        return self.get()

@@ -205,4 +205,4 @@ instances:
   prefect_engine:
     instance_id: prefect_engine
     orchestration:
-      class: "pydiverse.pipedag.engine.PrefectEngine"
+      class: "pydiverse.pipedag.engine.prefect.PrefectEngine"

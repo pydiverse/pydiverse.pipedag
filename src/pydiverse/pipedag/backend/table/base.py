@@ -349,7 +349,14 @@ class BaseTableStore(TableHookResolver, Disposable):
             # Assign random query string to ensure that task is not cache valid
             query_str = uuid.uuid4().hex
 
-        query_hash = stable_hash("LAZY-TABLE", query_str)
+        if table.assumed_dependencies is None:
+            query_hash = stable_hash("LAZY-TABLE", query_str)
+        else:
+            # include assumed dependencies in query hash for imperative materialize
+            dependencies = config_context.store.json_encoder.encode(
+                table.assumed_dependencies
+            )
+            query_hash = stable_hash("LAZY-TABLE", query_str, dependencies)
 
         # Store the table
         try:
@@ -699,6 +706,15 @@ class TableHook(Generic[TableHookResolverT], ABC):
         and convert it to the specified type. If `True` is returned, the
         `retrieve` method MUST be implemented for the type.
         """
+
+    @classmethod
+    def retrieve_as_reference(cls, type_: type) -> bool:
+        """
+        Table hooks that retrieve `type_` as reference instead of copying the content
+        of the table should return True. This is used by imperative materialization
+        to determine whether input_type is a good default for returned references.
+        """
+        return False
 
     @classmethod
     @abstractmethod

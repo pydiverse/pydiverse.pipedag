@@ -5,6 +5,8 @@ pydiverse.pipedag already has quite a rich set of features. So we like to provid
 * [Quickstart example](/quickstart)
 * [Simple pipeline](/examples/simple_pipeline)
 * [Working with real database](/database_testing)
+* [Imperative materialization / Materializing Subqueries](/examples/imperative_materialization)
+* [Interactive development](/examples/interactive_development)
 * [Slightly more realistic pipeline](/examples/realistic_pipeline)
 * [Introduction to vectorization principle with some example pipelines](https://github.com/Quantco/vectorization-tutorial/blob/main/README.md)
 * [Multiple instances: full, mini, midi](/examples/multi_instance_pipeline)

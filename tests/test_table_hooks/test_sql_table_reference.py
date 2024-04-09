@@ -7,15 +7,14 @@ from sqlalchemy.exc import ProgrammingError
 
 import tests.util.tasks_library as m
 from pydiverse.pipedag import *
-from pydiverse.pipedag.backend.table.sql import ExternalTableReference
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateSchema,
     CreateTableAsSelect,
     CreateViewAsSelect,
     DropTable,
     DropView,
-    Schema,
 )
+from pydiverse.pipedag.materialize.container import ExternalTableReference, Schema
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
@@ -49,13 +48,13 @@ def test_table_store():
         return Table(ExternalTableReference(table_name, schema=schema.get()))
 
     @materialize(input_type=sa.Table)
-    def duplicate_table_reference(tbl: sa.Table):
+    def duplicate_table_reference(tbl: sa.sql.expression.Alias):
         return Table(
             ExternalTableReference(tbl.original.name, schema=tbl.original.schema)
         )
 
     @materialize(version="1.0", input_type=sa.Table)
-    def in_view(tbl: sa.Table):
+    def in_view(tbl: sa.sql.expression.Alias):
         table_store = ConfigContext.get().store.table_store
         schema = Schema("user_controlled_schema", prefix="", suffix="")
         view_name = "external_view"
@@ -95,7 +94,7 @@ def test_table_store():
         )
 
     @materialize(input_type=sa.Table)
-    def copy_table(tbl: sa.Table):
+    def copy_table(tbl: sa.sql.expression.Alias):
         query = sa.select(tbl)
         return Table(query, name=tbl.original.name)
 

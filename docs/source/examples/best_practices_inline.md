@@ -34,13 +34,13 @@ import sqlalchemy as sa
 import pydiverse.pipedag as dag
 from pydiverse.pipedag import materialize
 
-def table01(raw01: sa.expression.sql.Alias):
+def table01(raw01: sa.Alias):
     @materialize(lazy=True, input_type=sa.Table)
-    def raw01x(raw01: sa.expression.sql.Alias):
+    def raw01x(raw01: sa.Alias):
         return dag.Table(sa.select([raw01.c.entity]).distinct(), name="raw01x")
 
     @materialize(lazy=True, input_type=sa.Table)
-    def query(raw01: sa.expression.sql.Alias, raw01x: sa.expression.sql.Alias):
+    def query(raw01: sa.Alias, raw01x: sa.Alias):
         sql = (
             sa.select([raw01.c.entity, sa.literal("Missing in raw01").label("reason")])
             .select_from(raw01.outer_join(raw01x, raw01.c.entity == raw01x.c.entity))
@@ -49,4 +49,24 @@ def table01(raw01: sa.expression.sql.Alias):
         return dag.Table(sql, name="table01", primary_key=["entity", "reason"])
 
     return query(raw01, raw01x(raw01))
+```
+Attention: sa.Alias only exists for SQLAlchemy >= 2.0. Use sa.Table or sa.sql.expression.Alias for older versions.
+
+Another alternative is to use [imperative materialization](/examples/imperative_materialization):
+```python
+import sqlalchemy as sa
+import pydiverse.pipedag as dag
+from pydiverse.pipedag import materialize
+
+@materialize(lazy=True, input_type=sa.Table)
+def table01(raw01: sa.Alias):
+    raw01x_sql = sa.select([raw01.c.entity]).distinct()
+    raw01x = dag.Table(raw01x_sql, name="raw01x").materialize()
+
+    sql = (
+        sa.select([raw01.c.entity, sa.literal("Missing in raw01").label("reason")])
+        .select_from(raw01.outer_join(raw01x, raw01.c.entity == raw01x.c.entity))
+        .where((raw01.c.end_date == "9999-01-01") & (raw01x.c.entity.is_(None)))
+    )
+    return dag.Table(sql, name="table01", primary_key=["entity", "reason"])
 ```

@@ -27,7 +27,6 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     DropTable,
     RenameSchema,
     RenameTable,
-    Schema,
     split_ddl_statement,
 )
 from pydiverse.pipedag.context import RunContext
@@ -38,7 +37,7 @@ from pydiverse.pipedag.context.context import (
 )
 from pydiverse.pipedag.context.run_context import DeferredTableStoreOp
 from pydiverse.pipedag.errors import CacheError
-from pydiverse.pipedag.materialize.container import RawSql
+from pydiverse.pipedag.materialize.container import RawSql, Schema
 from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import (
     LazyTableMetadata,
@@ -1571,67 +1570,6 @@ class SQLTableStore(BaseTableStore):
 
     def get_lock_schema(self) -> Schema:
         return self.get_schema(self.LOCK_SCHEMA)
-
-
-class ExternalTableReference:
-    """Reference to a user-created table.
-
-    By returning a `ExternalTableReference` wrapped in a :py:class:`~.Table` from,
-    a task you can tell pipedag about a table, a view or DB2 nickname in an external
-    `schema`. The schema may be a multi-part identifier like "[db_name].[schema_name]"
-    if the database supports this. It is passed to SQLAlchemy as-is.
-
-    Only supported by :py:class:`~.SQLTableStore`.
-
-    Warning
-    -------
-    When using a `ExternalTableReference`, pipedag has no way of knowing the cache
-    validity of the external object. Hence, the user should provide a cache function
-    for the `Task`.
-    It is now allowed to specify a `ExternalTableReference` to a table in schema of the
-    current stage.
-
-    Example
-    -------
-    You can use a `ExternalTableReference` to tell pipedag about a table that exists
-    in an external schema::
-
-        @materialize(version="1.0")
-        def task():
-            return Table(ExternalTableReference("name_of_table", "schema"))
-
-    By using a cache function, you can establish the cache (in-)validity of the
-    external table::
-
-        from datetime import date
-
-        # The external table becomes cache invalid every day at midnight
-        def my_cache_fun():
-            return date.today().strftime("%Y/%m/%d")
-
-        @materialize(cache=my_cache_fun)
-        def task():
-            return Table(ExternalTableReference("name_of_table", "schema"))
-    """
-
-    def __init__(self, name: str, schema: str, shared_lock_allowed: bool = False):
-        """
-        :param name: The name of the table, view, or nickname/alias
-        :param schema: The external schema of the object. A multi-part schema
-            is allowed with '.' separator as also supported by SQLAlchemy Table
-            schema argument.
-        :param shared_lock_allowed: Whether to disable acquiring a shared lock
-            when using the object in a SQL query. If set to `False`, no lock is
-            used. This is useful when the user is not allowed to lock the table.
-            If pipedag does not lock source tables for this dialect, this argument
-            has no effect. The default is `False`.
-        """
-        self.name = name
-        self.schema = schema
-        self.shared_lock_allowed = shared_lock_allowed
-
-    def __repr__(self):
-        return f"<ExternalTableReference: {hex(id(self))}" f" (schema: {self.schema})>"
 
 
 # Load SQLTableStore Hooks

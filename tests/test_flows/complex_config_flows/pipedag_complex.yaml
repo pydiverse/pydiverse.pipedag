@@ -74,7 +74,7 @@ technical_setups:
     orchestration:
       class: "pydiverse.pipedag.engine.SequentialEngine"
       ## Activate this class to work either with prefect 1.x or prefect 2.y
-      # class: "pydiverse.pipedag.engine.PrefectEngine"
+      # class: "pydiverse.pipedag.engine.prefect.PrefectEngine"
 
 instances:
   __any__:

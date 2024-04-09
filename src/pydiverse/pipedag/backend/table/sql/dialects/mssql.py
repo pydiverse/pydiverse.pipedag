@@ -13,7 +13,6 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     AddPrimaryKey,
     ChangeColumnTypes,
     CreateAlias,
-    Schema,
     _mssql_update_definition,
 )
 from pydiverse.pipedag.backend.table.sql.hooks import IbisTableHook, PandasTableHook
@@ -21,7 +20,7 @@ from pydiverse.pipedag.backend.table.sql.reflection import PipedagMSSqlReflectio
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.materialize import Table
-from pydiverse.pipedag.materialize.container import RawSql
+from pydiverse.pipedag.materialize.container import RawSql, Schema
 
 
 class MSSqlTableStore(SQLTableStore):

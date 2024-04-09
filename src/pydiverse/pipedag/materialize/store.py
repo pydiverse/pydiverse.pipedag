@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import itertools
 from datetime import datetime
 from typing import Any, Callable
 
@@ -188,6 +187,7 @@ class PipeDAGStore(Disposable):
         task: MaterializingTask,
         task_cache_info: TaskCacheInfo,
         value: Materializable,
+        disable_task_finalization=False,
     ) -> Materializable:
         """Stores the output of a task in the backend
 
@@ -203,6 +203,8 @@ class PipeDAGStore(Disposable):
             `dict`, `list`, `tuple`,
             `int`, `float`, `str`, `bool`, `None`,
             and PipeDAG's `Table` and `Blob` type.
+        :param disable_task_finalization: True for imperative materialization
+            when task is not finished, yet.
         :return: A copy of `value` with additional metadata
         """
 
@@ -225,19 +227,20 @@ class PipeDAGStore(Disposable):
             because during materialization the cache_key of the different objects
             can get changed.
             """
-            output_json = self.json_encode(value)
-            metadata = TaskMetadata(
-                name=task.name,
-                stage=task.stage.name,
-                version=task.version,
-                timestamp=datetime.now(),
-                run_id=ctx.run_id,
-                position_hash=task.position_hash,
-                input_hash=task_cache_info.input_hash,
-                cache_fn_hash=task_cache_info.cache_fn_hash,
-                output_json=output_json,
-            )
-            self.table_store.store_task_metadata(metadata, stage)
+            if not disable_task_finalization:
+                output_json = self.json_encode(value)
+                metadata = TaskMetadata(
+                    name=task.name,
+                    stage=task.stage.name,
+                    version=task.version,
+                    timestamp=datetime.now(),
+                    run_id=ctx.run_id,
+                    position_hash=task.position_hash,
+                    input_hash=task_cache_info.input_hash,
+                    cache_fn_hash=task_cache_info.cache_fn_hash,
+                    output_json=output_json,
+                )
+                self.table_store.store_task_metadata(metadata, stage)
 
         def store_table(table: Table):
             if task.lazy:
@@ -273,7 +276,9 @@ class PipeDAGStore(Disposable):
         blobs = []
 
         config = ConfigContext.get()
-        auto_suffix_counter = itertools.count()
+        auto_suffix_counter = (
+            task_cache_info.imperative_materialization_state.auto_suffix_counter
+        )
 
         def preparation_mutator(x):
             # Automatically convert an object to a table / blob if its
@@ -294,8 +299,12 @@ class PipeDAGStore(Disposable):
                     "You can't return a PipedagConfig object from a materializing task."
                 )
 
-            # Add missing metadata
-            if isinstance(x, (Table, RawSql, Blob)):
+            # Add missing metadata (if table was not already imperatively materialized)
+            if (
+                isinstance(x, (Table, RawSql, Blob))
+                and id(x)
+                not in task_cache_info.imperative_materialization_state.table_ids
+            ):
                 if not task.lazy:
                     # task cache_key is output cache_key for eager tables
                     x.cache_key = task_cache_info.cache_key
@@ -306,7 +315,7 @@ class PipeDAGStore(Disposable):
                 # - If no name has been provided, generate on automatically
                 # - If the provided name ends with %%, perform name mangling
                 object_number = next(auto_suffix_counter)
-                auto_suffix = f"{task_cache_info.cache_key}" f"_{object_number:04d}"
+                auto_suffix = f"{task_cache_info.cache_key}_{object_number:04d}"
 
                 x.name = mangle_table_name(x.name, task.name, auto_suffix)
 
@@ -573,8 +582,10 @@ def dematerialize_output_from_store(
         )
 
 
-def mangle_table_name(table_name: str, task_name: str, suffix: str):
+def mangle_table_name(table_name: str, task_name: str | None, suffix: str):
     if table_name is None:
+        if task_name is None:
+            return suffix
         table_name = task_name + "_" + suffix
     elif table_name.endswith("%%"):
         table_name = table_name[:-2] + suffix

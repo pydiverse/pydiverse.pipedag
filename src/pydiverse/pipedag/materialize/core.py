@@ -4,8 +4,11 @@ import copy
 import functools
 import inspect
 import uuid
+from collections.abc import Iterable
 from functools import partial
 from typing import TYPE_CHECKING, Any, Callable, overload
+
+import sqlalchemy as sa
 
 from pydiverse.pipedag._typing import CallableT
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
@@ -128,7 +131,7 @@ def materialize(
             return Table(df)
 
         @materialize(lazy=True, input_type=sa.Table)
-        def lazy_task(tbl: sa.Table) -> sa.Table:
+        def lazy_task(tbl: sa.Alias) -> sa.Table:
             query = sa.select(tbl).where(...)
             return Table(query)
 
@@ -284,10 +287,27 @@ class UnboundMaterializingTask(UnboundTask):
         return super().__call__(*args, **kwargs)  # type: ignore
 
     def _call_original_function(self, *args, **kwargs):
+        try:
+            task_context = TaskContext.get()  # this may raise Lookup Error
+            # this is a subtask call. Thus we demand identical input_types
+            sub_task: MaterializingTask = task_context.task  # type: ignore
+            if (
+                sub_task.input_type is not None
+                and self.input_type is not None
+                and sub_task.input_type != self.input_type
+            ):
+                raise RuntimeError(
+                    f"Subtask input type {self.input_type} does not match parent task "
+                    f"input type {sub_task.input_type}: "
+                    f"task={self}, sub_task={sub_task}"
+                )
+        except LookupError:
+            # this is expected when calling the task outside of flow declaration
+            pass
         result = self._original_fn(*args, **kwargs)
 
         def unwrap_mutator(x):
-            if isinstance(x, (Task, Blob)):
+            if isinstance(x, (Table, Blob)):
                 return x.obj
             if isinstance(x, RawSql):
                 return x.sql
@@ -571,11 +591,21 @@ class MaterializationWrapper:
                         cached_output, cache_metadata, task
                     )
                     run_context.store_task_memo(task, memo_cache_key, cached_output)
-                    task.logger.info("Found task in cache. Using cached result.")
+                    task.logger.info(
+                        "Found task in cache. Using cached result.",
+                        input_hash=input_hash,
+                        cache_fn_hash=cache_fn_hash,
+                    )
                     TaskContext.get().is_cache_valid = True
                     return cached_output
                 except CacheError as e:
-                    task.logger.info("Failed to retrieve task from cache", cause=str(e))
+                    task.logger.info(
+                        "Failed to retrieve task from cache",
+                        input_hash=input_hash,
+                        cache_fn_hash=cache_fn_hash,
+                        version=task.version,
+                        cause=str(e),
+                    )
                     TaskContext.get().is_cache_valid = False
 
             if not task.lazy:
@@ -608,7 +638,11 @@ class MaterializationWrapper:
                         cache_fn_hash = cache_metadata.cache_fn_hash
                     except CacheError as e:
                         task.logger.info(
-                            "Failed to retrieve task from cache", cause=str(e)
+                            "Failed to retrieve lazy task from cache",
+                            cause=str(e),
+                            input_hash=input_hash,
+                            version=task.version,
+                            cache_fn_hash=cache_fn_hash,
                         )
 
             # Prepare TaskCacheInfo
@@ -642,12 +676,76 @@ class MaterializationWrapper:
                 task, bound.args, bound.kwargs
             )
 
+            def imperative_materialize(
+                table: Table,
+                config_context: ConfigContext | None,
+                return_as_type: type | None = None,
+                return_nothing: bool = False,
+            ):
+                my_store = config_context.store if config_context is not None else store
+                state = task_cache_info.imperative_materialization_state
+                if id(table) in state.table_ids:
+                    raise RuntimeError(
+                        "The table has already been imperatively materialized."
+                    )
+                table.assumed_dependencies = (
+                    list(state.assumed_dependencies)
+                    if len(state.assumed_dependencies) > 0
+                    else []
+                )
+                _ = my_store.materialize_task(
+                    task, task_cache_info, table, disable_task_finalization=True
+                )
+                if not return_nothing:
+
+                    def get_return_obj(return_as_type):
+                        if return_as_type is None:
+                            return_as_type = task.input_type
+                            if (
+                                return_as_type is None
+                                or not my_store.table_store.get_r_table_hook(
+                                    return_as_type
+                                ).retrieve_as_reference(return_as_type)
+                            ):
+                                # dematerialize as sa.Table if it would transfer all
+                                # rows to python when dematerializing with input_type
+                                return_as_type = sa.Table
+                        obj = my_store.dematerialize_item(
+                            table, return_as_type, run_context
+                        )
+                        state.add_table_lookup(obj, table)
+                        return obj
+
+                    if isinstance(return_as_type, Iterable):
+                        return tuple(get_return_obj(t) for t in return_as_type)
+                    else:
+                        return get_return_obj(return_as_type)
+
+            task_context.imperative_materialize_callback = imperative_materialize
             result = self.fn(*args, **kwargs)
+            task_context.imperative_materialize_callback = None
             if task.debug_tainted:
                 raise RuntimeError(
                     f"The task {task.name} has been tainted by interactive debugging."
                     f" Aborting."
                 )
+
+            def result_finalization_mutator(x):
+                state = task_cache_info.imperative_materialization_state
+                object_lookup = state.object_lookup
+                if id(x) in object_lookup:
+                    # substitute imperatively materialized object references with
+                    # their respective table objects
+                    x = object_lookup[id(x)]
+                if isinstance(x, (Table, RawSql)):
+                    # fill assumed_dependencies for Tables that were not yet
+                    # materialized
+                    if len(state.assumed_dependencies) > 0:
+                        if x.assumed_dependencies is None:
+                            x.assumed_dependencies = list(state.assumed_dependencies)
+                return x
+
+            result = deep_map(result, result_finalization_mutator)
             result = store.materialize_task(task, task_cache_info, result)
 
             # Delete underlying objects from result (after materializing them)
@@ -656,6 +754,10 @@ class MaterializationWrapper:
                     x.obj = None
                 if isinstance(x, RawSql):
                     x.loaded_tables = None
+                if isinstance(x, (Table, RawSql)):
+                    x.assumed_dependencies = deep_map(
+                        x.assumed_dependencies, obj_del_mutator
+                    )
                 return x
 
             result = deep_map(result, obj_del_mutator)

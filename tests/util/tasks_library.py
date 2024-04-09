@@ -33,14 +33,47 @@ def noop_lazy(x):
     return x
 
 
-@materialize(input_type=pl.DataFrame if pl else 0)
+@materialize(input_type=pl.DataFrame if pl else "<polars task without polars>")
 def noop_polars(x):
     return Table(x)
 
 
-@materialize(input_type=pl.LazyFrame if pl else 0)
+@materialize(input_type=pl.LazyFrame if pl else "<polars task without polars>")
 def noop_lazy_polars(x):
     return Table(x)
+
+
+@materialize(input_type=pd.DataFrame, version="1.0")
+def noop_subtask(x):
+    @materialize(input_type=pd.DataFrame, version="1.0")
+    def _noop(x):
+        return Table(x)
+
+    # This is somewhat crazy behavior to call a task within a task. However, since we
+    # support calling tasks outside of `with Flow`, this will work for dataframe tasks.
+    return _noop(x)
+
+
+@materialize(input_type=sa.Table, lazy=True)
+def noop_subtask_lazy(x):
+    @materialize(input_type=sa.Table, lazy=True)
+    def _noop(x):
+        return Table(x)
+
+    # This is somewhat crazy behavior to call a task within a task. However, since we
+    # support calling tasks outside of `with Flow`, this will work for same type.
+    return _noop(x)
+
+
+@materialize(input_type=pd.DataFrame, version="1.0")
+def noop_subtask_fail_input_type(x):
+    @materialize(input_type=sa.Table, version="1.0")
+    def _noop(x):
+        return Table(x)
+
+    # calling task with different input type should fail with good error message
+    # because we call subtasks without separate dematerialization
+    return _noop(x)
 
 
 @materialize(nout=2, version="1.0", input_type=pd.DataFrame)
@@ -95,6 +128,13 @@ def simple_dataframe():
         }
     )
     return Table(df)
+
+
+@materialize(version="1.0")
+def simple_dataframe_subtask():
+    # This is somewhat crazy behavior to call a task within a task. However, since we
+    # support calling tasks outside of `with Flow`, this will work for dataframe tasks.
+    return simple_dataframe()
 
 
 @materialize(version="1.0", nout=2)

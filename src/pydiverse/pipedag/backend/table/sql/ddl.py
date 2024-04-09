@@ -5,14 +5,12 @@ import re
 
 import pyparsing as pp
 import sqlalchemy as sa
-from attr import frozen
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.schema import DDLElement
 from sqlalchemy.sql import Select
 from sqlalchemy.sql.elements import TextClause
 
 __all__ = [
-    "Schema",
     "CreateSchema",
     "DropSchema",
     "RenameSchema",
@@ -42,18 +40,7 @@ __all__ = [
 
 from sqlalchemy.sql.type_api import TypeEngine
 
-
-@frozen
-class Schema:
-    name: str
-    prefix: str
-    suffix: str
-
-    def get(self):
-        return self.prefix + self.name + self.suffix
-
-    def __str__(self):
-        return self.get()
+from pydiverse.pipedag import Schema
 
 
 class CreateSchema(DDLElement):
@@ -209,7 +196,7 @@ class RenameTable(DDLElement):
 
 
 class DropTable(DDLElement):
-    def __init__(self, name, schema: Schema, if_exists=False, cascade=False):
+    def __init__(self, name, schema: Schema | str, if_exists=False, cascade=False):
         self.name = name
         self.schema = schema
         self.if_exists = if_exists
@@ -222,7 +209,7 @@ class DropView(DDLElement):
                a 'USE <database>' statement.
     """
 
-    def __init__(self, name, schema: Schema, if_exists=False):
+    def __init__(self, name, schema: Schema | str, if_exists=False):
         self.name = name
         self.schema = schema
         self.if_exists = if_exists
@@ -233,7 +220,7 @@ class DropAlias(DDLElement):
     This is used for dialect=ibm_sa_db
     """
 
-    def __init__(self, name, schema: Schema, if_exists=False, *, engine=None):
+    def __init__(self, name, schema: Schema | str, if_exists=False, *, engine=None):
         """
         :param engine: Used if if_exists=True but the database doesn't support it.
         """
@@ -260,7 +247,7 @@ class DropProcedure(DDLElement):
                a 'USE <database>' statement.
     """
 
-    def __init__(self, name, schema: Schema, if_exists=False):
+    def __init__(self, name, schema: Schema | str, if_exists=False):
         self.name = name
         self.schema = schema
         self.if_exists = if_exists
@@ -272,7 +259,7 @@ class DropFunction(DDLElement):
                a 'USE <database>' statement.
     """
 
-    def __init__(self, name, schema: Schema, if_exists=False):
+    def __init__(self, name, schema: Schema | str, if_exists=False):
         self.name = name
         self.schema = schema
         self.if_exists = if_exists
@@ -920,8 +907,11 @@ def visit_drop_alias_ibm_db_sa(drop: DropAlias, compiler, **kw):
     if drop.if_exists:
         from pydiverse.pipedag.backend.table.sql.reflection import PipedagDB2Reflection
 
+        schema_str = (
+            drop.schema.get() if isinstance(drop.schema, Schema) else drop.schema
+        )
         if drop.name not in PipedagDB2Reflection.get_alias_names(
-            drop.engine, schema=drop.schema.get()
+            drop.engine, schema=schema_str
         ):
             return ""
         drop = DropAlias(drop.name, drop.schema, if_exists=False)
@@ -951,7 +941,8 @@ def _visit_drop_anything(
 ):
     _ = kw
     table = compiler.preparer.quote(drop.name)
-    schema = compiler.preparer.format_schema(drop.schema.get())
+    schema_str = drop.schema.get() if isinstance(drop.schema, Schema) else drop.schema
+    schema = compiler.preparer.format_schema(schema_str)
     text = [f"DROP {_type}"]
     if drop.if_exists:
         text.append("IF EXISTS")
