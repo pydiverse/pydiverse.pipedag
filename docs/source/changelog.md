@@ -5,7 +5,10 @@
     materializing subqueries within a task. It also helps see task in stack trace when materialization fails. There is
     one downside of using it: when a task returns multiple tables, it is assumed that all tables depend on previously 
     imperatively materialized tables.
-- Fixed an edgecase for mssql backend causing queries with columns named "from" to crash.
+- ExternalTableReference moved module and is now also a member of pydiverse.pipedag module. This is a breaking 
+    interface change for pipedag.
+- Fixed an edgecase for mssql backend causing queries with columns named "from" to crash. The code to insert an INTO into
+    mssql SELECT statements is still hacky but supports open quote detection. Comments may still confuse the logic.
 
 ## 0.8.0 (2024-04-02)
 - Significant refactoring of materialization is included. It splits creation of table from filling a table in many cases.
