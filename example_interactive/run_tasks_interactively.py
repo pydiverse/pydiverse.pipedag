@@ -7,6 +7,7 @@ import sqlalchemy as sa
 
 from pydiverse.pipedag import Schema, Table, materialize
 from pydiverse.pipedag.core.config import create_basic_pipedag_config
+from pydiverse.pipedag.materialize.debug import materialize_table
 from pydiverse.pipedag.util.structlog import setup_logging
 
 
@@ -109,6 +110,36 @@ def main():
             str(lazy_4.compile(engine, compile_kwargs={"literal_binds": True}))
             == '\n        SELECT * FROM "stage_2"."task_2_out" as input1\n        '
             'LEFT JOIN "stage_3"."_sub" as sub ON input1.a = sub.a\n    '
+        )
+
+        # it is also possible to run code inside tasks in exactly the same way:
+        # lazy_4 = lazy_task_4(lazy_2, cfg, stage_3):
+        input1 = lazy_2
+        subquery = f"""
+            SELECT input1.a, sum(input1.x5) as x_sum FROM {ref(input1)} as input1
+            GROUP BY a
+        """
+        sub_ref = Table(sa.text(subquery), name="_sub").materialize(cfg, stage_3)
+        query = f"""
+            SELECT * FROM {ref(input1)} as input1
+            LEFT JOIN {ref(sub_ref)} as sub ON input1.a = sub.a
+        """
+        lazy_4 = Table(sa.text(query), name="enriched_aggregation").materialize()
+        assert (
+            str(lazy_4.compile(engine, compile_kwargs={"literal_binds": True}))
+            == '\n            SELECT * FROM "stage_2"."task_2_out" as input1\n         '
+            '   LEFT JOIN "stage_3"."_sub" as sub ON input1.a = sub.a\n        '
+        )
+
+        # eager = eager_task(lazy_1_df, b_df):
+        tbl1, tbl2 = lazy_1_df, b_df
+        eager = Table(tbl1.merge(tbl2, on="x")).materialize()
+        assert sorted(eager.columns) == ["a", "x", "y"]
+
+        # there is a more low level function to debug materialize tables with a few more
+        # options exposed:
+        materialize_table(
+            Table(lazy_task_1(), name="task_1_out"), cfg, stage_1, debug_suffix="_debug"
         )
 
 
