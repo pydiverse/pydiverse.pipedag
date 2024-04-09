@@ -24,7 +24,7 @@ def test_postgres_unlogged():
         return sa.select(sa.literal(1).label("x"))
 
     @materialize(input_type=sa.Table)
-    def get_relpersistence(table: sa.Table):
+    def get_relpersistence(table: sa.sql.expression.Alias):
         return sa.text(
             """
             SELECT relpersistence

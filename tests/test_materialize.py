@@ -636,7 +636,7 @@ def _lazy_task_2():
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def _lazy_join(src1: sa.Table, src2: sa.Table):
+def _lazy_join(src1: sa.sql.expression.Alias, src2: sa.sql.expression.Alias):
     query = sa.select(src1.c.x, src2.c.x.label("x2")).select_from(
         src1.outerjoin(src2, src1.c.x == src2.c.x)
     )
@@ -657,7 +657,7 @@ def _sql_task_2():
 
 
 @materialize(version="1.0", input_type=sa.Table)
-def _sql_join(src1: sa.Table, src2: sa.Table):
+def _sql_join(src1: sa.sql.expression.Alias, src2: sa.sql.expression.Alias):
     query = sa.select(src1.c.x, src2.c.x.label("x2")).select_from(
         src1.outerjoin(src2, src1.c.x == src2.c.x)
     )

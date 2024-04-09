@@ -62,7 +62,7 @@ def noop_subtask(x):
 @materialize(input_type=sa.Table, lazy=True)
 def noop_subtask_lazy(x):
     # constant or collection of constants not supported in imperative version
-    assert isinstance(x, sa.Alias)
+    assert isinstance(x, sa.sql.expression.Alias)
 
     @materialize(input_type=sa.Table, lazy=True)
     def _noop(x):

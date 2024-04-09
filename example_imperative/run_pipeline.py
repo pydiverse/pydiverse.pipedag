@@ -13,10 +13,12 @@ from pydiverse.pipedag.util.structlog import setup_logging
 
 @materialize(lazy=True)
 def lazy_task_1():
-    return sa.select(
-        sa.literal(1).label("x"),
-        sa.literal(2).label("y"),
-    )
+    return Table(
+        sa.select(
+            sa.literal(1).label("x"),
+            sa.literal(2).label("y"),
+        )
+    ).materialize()
 
 
 @materialize(lazy=True, input_type=sa.Table)
@@ -26,17 +28,31 @@ def lazy_task_2(input1: sa.sql.expression.Alias, input2: sa.sql.expression.Alias
         input2.c.a,
     ).select_from(input1.outerjoin(input2, input2.c.x == input1.c.x))
 
-    return Table(query, name="task_2_out", primary_key=["a"])
+    return Table(query, name="task_2_out", primary_key=["a"]).materialize()
+
+
+def ref(tbl: sa.sql.expression.Alias):
+    return f'"{tbl.original.schema}"."{tbl.original.name}"'
 
 
 @materialize(lazy=True, input_type=sa.Table)
 def lazy_task_3(input1: sa.sql.expression.Alias):
-    return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.original.name}")
+    return Table(sa.text(f"SELECT * FROM {ref(input1)}")).materialize()
 
 
 @materialize(lazy=True, input_type=sa.Table)
 def lazy_task_4(input1: sa.sql.expression.Alias):
-    return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.original.name}")
+    # imperatively materialize a subquery
+    subquery = f"""
+        SELECT input1.a, sum(input1.x5) as x_sum FROM {ref(input1)} as input1
+        GROUP BY a
+    """
+    sub_ref = Table(sa.text(subquery), name="_sub").materialize()
+    query = f"""
+        SELECT * FROM {ref(input1)} as input1
+        LEFT JOIN {ref(sub_ref)} as sub ON input1.a = sub.a
+    """
+    return Table(sa.text(query), name="enriched_aggregation").materialize()
 
 
 @materialize(nout=2, version="1.0.0")
@@ -53,12 +69,12 @@ def eager_inputs():
             "x": [1, 1, 2, 2],
         }
     )
-    return Table(dfA, "dfA"), Table(dfB, "dfB_%%")
+    return Table(dfA, "dfA").materialize(), Table(dfB, "dfB_%%").materialize()
 
 
 @materialize(version="1.0.0", input_type=pd.DataFrame)
 def eager_task(tbl1: pd.DataFrame, tbl2: pd.DataFrame):
-    return tbl1.merge(tbl2, on="x")
+    return Table(tbl1.merge(tbl2, on="x")).materialize()
 
 
 def main():

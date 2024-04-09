@@ -53,6 +53,7 @@ def table01(raw01: sa.Alias):
     """    
     return dag.Table(sa.text(sql), name="table01", primary_key=["entity", "reason"])
 ```
+Attention: sa.Alias only exists for SQLAlchemy >= 2.0. Use sa.Table or sa.sql.expression.Alias for older versions.
 
 In the [raw sql example](/examples/raw_sql), this task can be embedded even in the middle of raw SQL scripts:
 

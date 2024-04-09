@@ -30,7 +30,7 @@ def test_db2_nicknames():
     lock_path = Path(__file__).parent / "scripts" / "lock"
 
     @materialize(input_type=sa.Table)
-    def create_nicknames(table: sa.Table):
+    def create_nicknames(table: sa.sql.expression.Alias):
         script_path = Path(__file__).parent / "scripts" / "simple_nicknames.sql"
         simple_nicknames = Path(script_path).read_text(encoding="utf-8")
         simple_nicknames = simple_nicknames.replace(
@@ -120,7 +120,7 @@ def test_db2_table_spaces(task):
         return RawSql(simple_table_spaces, "create_table_spaces", separator="|")
 
     @materialize(input_type=sa.Table, lazy=False)
-    def get_actual_table_space_attributes(table: sa.Table):
+    def get_actual_table_space_attributes(table: sa.sql.expression.Alias):
         query = f"""
             SELECT TBSPACE, INDEX_TBSPACE, LONG_TBSPACE FROM SYSCAT.TABLES
              WHERE TABSCHEMA = '{table.original.schema.upper()}'

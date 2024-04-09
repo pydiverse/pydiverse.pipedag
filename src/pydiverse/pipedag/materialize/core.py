@@ -130,7 +130,7 @@ def materialize(
             return Table(df)
 
         @materialize(lazy=True, input_type=sa.Table)
-        def lazy_task(tbl: sa.Table) -> sa.Table:
+        def lazy_task(tbl: sa.Alias) -> sa.Table:
             query = sa.select(tbl).where(...)
             return Table(query)
 
