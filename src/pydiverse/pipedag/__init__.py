@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pydiverse.pipedag.context import ConfigContext, StageLockContext
-from pydiverse.pipedag.core import Flow, PipedagConfig, Result, Stage, Task
+from pydiverse.pipedag.core import Flow, GroupNode, PipedagConfig, Result, Stage, Task
 from pydiverse.pipedag.materialize import (
     Blob,
     ExternalTableReference,
@@ -20,6 +20,7 @@ __all__ = [
     "Table",
     "RawSql",
     "Blob",
+    "GroupNode",
     "Schema",
     "Result",
     "PipedagConfig",

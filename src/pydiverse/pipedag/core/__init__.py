@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .config import PipedagConfig
 from .flow import Flow, Subflow
+from .group_node import GroupNode
 from .result import Result
 from .stage import Stage
 from .task import Task, UnboundTask
@@ -12,6 +13,7 @@ __all__ = [
     "PipedagConfig",
     "Result",
     "Stage",
+    "GroupNode",
     "UnboundTask",
     "Task",
 ]

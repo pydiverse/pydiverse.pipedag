@@ -73,7 +73,10 @@ class UnboundTask:
 
         # Construct Task
         bound_args = self._signature.bind(*args, **kwargs)
-        return self._bound_task_type(self, bound_args, ctx.flow, ctx.stage)
+        task = self._bound_task_type(self, bound_args, ctx.flow, ctx.stage)
+        if ctx.group_node is not None:
+            ctx.group_node.add_task(task)
+        return task
 
     def _call_original_function(self, *args, **kwargs):
         return self.fn(*args, **kwargs)

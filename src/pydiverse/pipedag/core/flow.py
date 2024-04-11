@@ -19,7 +19,7 @@ from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag.core import Result, Stage, Task
+    from pydiverse.pipedag.core import GroupNode, Result, Stage, Task
     from pydiverse.pipedag.core.stage import CommitStageTask
     from pydiverse.pipedag.core.task import TaskGetItem
     from pydiverse.pipedag.engine import OrchestrationEngine
@@ -64,6 +64,7 @@ class Flow:
         self.logger = structlog.get_logger(logger_name=type(self).__name__)
         self.stages: dict[str, Stage] = {}
         self.tasks: list[Task] = []
+        self.group_nodes: list[GroupNode] = []
 
         self.graph = nx.DiGraph()
         self.explicit_graph: nx.DiGraph | None = None
@@ -80,7 +81,7 @@ class Flow:
         # Initialize context (both Flow and Stage use DAGContext to transport
         # information to @materialize annotations within the flow and to
         # support nesting of stages)
-        self._ctx = DAGContext(flow=self, stage=None)
+        self._ctx = DAGContext(flow=self, stage=None, group_node=None)
         self._ctx.__enter__()
         return self
 
@@ -108,6 +109,10 @@ class Flow:
         stage.id = len(self.stages)
         self.stages[stage.name] = stage
 
+    def add_group_node(self, group_node: GroupNode):
+        group_node.id = len(self.group_nodes)
+        self.group_nodes.append(group_node)
+
     def add_task(self, task: Task):
         assert self.stages[task.stage.name] is task.stage
 
@@ -134,6 +139,39 @@ class Flow:
 
         explicit_graph = self.graph.copy()
         stages = self.stages.values()
+        group_nodes = self.group_nodes
+
+        # Barrier Tasks
+        for group_node in group_nodes:
+            if group_node.entry_barrier_task is not None:
+                explicit_graph.add_node(group_node.entry_barrier_task)
+                # link entry barrier to leafs before
+                before_leafs = group_node.prev_tasks
+                for task in group_node.prev_tasks:
+                    before_leafs = before_leafs - set(task.input_tasks.values())
+                for task in before_leafs:
+                    explicit_graph.add_edge(task, group_node.entry_barrier_task)
+                # link barrier to source tasks within group node
+                for task in group_node.tasks:
+                    input_tasks = set(task.input_tasks.values())
+                    if not (input_tasks & group_node.tasks):
+                        explicit_graph.add_edge(group_node.entry_barrier_task, task)
+            if group_node.exit_barrier_task is not None:
+                all_tasks = set(group_node.outer_stage.tasks)
+                after_tasks = all_tasks - group_node.tasks - group_node.prev_tasks
+                if after_tasks:
+                    explicit_graph.add_node(group_node.exit_barrier_task)
+                    # link exit barrier to leaf tasks within group node
+                    in_leafs = group_node.tasks
+                    for task in group_node.tasks:
+                        in_leafs = in_leafs - set(task.input_tasks.values())
+                    for task in in_leafs:
+                        explicit_graph.add_edge(task, group_node.exit_barrier_task)
+                    # link exit barrier to source tasks after group bode
+                    for task in after_tasks:
+                        input_tasks = set(task.input_tasks.values())
+                        if not (input_tasks & after_tasks):
+                            explicit_graph.add_edge(group_node.exit_barrier_task, task)
 
         # Commit Tasks
         commit_tasks: dict[Stage, CommitStageTask] = {}

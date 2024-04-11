@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from pydiverse.pipedag._typing import T
     from pydiverse.pipedag.backend import BaseLockManager
     from pydiverse.pipedag.context.run_context import StageLockStateHandler
-    from pydiverse.pipedag.core import Flow, Stage, Task
+    from pydiverse.pipedag.core import Flow, GroupNode, Stage, Task
     from pydiverse.pipedag.engine.base import OrchestrationEngine
     from pydiverse.pipedag.materialize import Table
 
@@ -80,6 +80,7 @@ class DAGContext(BaseAttrsContext):
 
     flow: Flow
     stage: Stage
+    group_node: GroupNode
 
     _context_var = ContextVar("dag_context")
 
