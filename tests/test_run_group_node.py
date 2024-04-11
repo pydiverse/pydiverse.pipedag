@@ -7,7 +7,7 @@ import uuid
 import pytest
 import sqlalchemy as sa
 
-from pydiverse.pipedag import Flow, GroupNode, Stage, materialize
+from pydiverse.pipedag import Flow, GroupNode, Stage, VisualizationStyle, materialize
 from pydiverse.pipedag.context.context import (
     ConfigContext,
     StageLockContext,
@@ -104,8 +104,34 @@ def test_run_specific_task(ordering_barrier):
 
 @with_instances("postgres")
 @skip_instances("dask_engine")
+@pytest.mark.parametrize("label", ["group"])
+@pytest.mark.parametrize(
+    "style",
+    [
+        VisualizationStyle(hide_label=True),
+        VisualizationStyle(hide_content=True, hide_label=True),
+        VisualizationStyle(box_color_always="aaaa22"),
+    ],
+)
+def test_run_specific_task_sequential_styles(label, style):
+    test_run_specific_task_sequential(label, style, ordering_barrier=False)
+
+
+@with_instances("postgres")
+@skip_instances("dask_engine")
+@pytest.mark.parametrize("label", [None, "group"])
+@pytest.mark.parametrize(
+    "style",
+    [
+        None,
+        VisualizationStyle(hide_box=True),
+        VisualizationStyle(hide_box=True, hide_content=True),
+        VisualizationStyle(hide_content=True),
+        VisualizationStyle(),
+    ],
+)
 @pytest.mark.parametrize("ordering_barrier", [True, False])
-def test_run_specific_task_sequential(ordering_barrier):
+def test_run_specific_task_sequential(label, style, ordering_barrier):
     num = [0]
 
     def cache():
@@ -125,7 +151,7 @@ def test_run_specific_task_sequential(ordering_barrier):
         with Stage("stage_1"):
             x1 = task()
             x2 = task()
-            with GroupNode(ordering_barrier=ordering_barrier):
+            with GroupNode(label, style, ordering_barrier=ordering_barrier):
                 x3 = task()
                 x4 = task()
             x5 = task()

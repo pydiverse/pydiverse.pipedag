@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import uuid
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING
 
 import networkx as nx
@@ -16,6 +17,7 @@ from pydiverse.pipedag.context import (
 )
 from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.core.config import PipedagConfig
+from pydiverse.pipedag.core.group_node import VisualizationStyle
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 
 if TYPE_CHECKING:
@@ -425,15 +427,8 @@ class Flow:
             as which tasks ran successfully, or failed.
         :return: A ``pydot.Dot`` graph.
         """
-        task_style = _generate_task_style(self.tasks, result)
-        dot = _build_pydot(
-            stages=list(self.stages.values()),
-            tasks=self.tasks,
-            graph=self.graph,
-            task_style=task_style,
-        )
-
-        return dot
+        subflow = self.get_subflow()
+        return subflow.visualize_pydot(result)
 
 
 class Subflow:
@@ -498,29 +493,151 @@ class Subflow:
         return _pydot_url(dot)
 
     def visualize_pydot(self, result: Result | None = None) -> pydot.Dot:
-        graph = nx.DiGraph()
+        from pydiverse.pipedag.core import GroupNode, Stage
 
-        relevant_stages = set()
-        relevant_tasks = set()
+        graph_boxes = set()
+        graph_nodes = set()
+        relevant_group_nodes = set()
 
+        default_style = VisualizationStyle()
+
+        def get_style(obj: GroupNode):
+            return obj.style if obj.style else default_style
+
+        # add tasks to graph and collect group nodes
         for task in self.get_tasks():
-            graph.add_node(task)
-            relevant_stages.add(task.stage)
-            relevant_tasks.add(task)
+            if hasattr(task, "_visualize_hidden") and task._visualize_hidden:
+                continue
+            graph_boxes.add(task.stage)
+            graph_nodes.add(task)
+            if task.group_node:
+                relevant_group_nodes.add(task.group_node)
 
             for input_task in task.input_tasks.values():
-                relevant_stages.add(input_task.stage)
-                relevant_tasks.add(input_task)
+                graph_nodes.add(input_task)
+                graph_boxes.add(input_task.stage)
+                if input_task.group_node:
+                    relevant_group_nodes.add(input_task.group_node)
 
-                if input_task in self.selected_tasks:
-                    graph.add_node(input_task)
-                graph.add_edge(input_task, task)
+        # add stages to graph and collect group nodes
+        for stage in graph_boxes:
+            if stage.outer_group_node:
+                relevant_group_nodes.add(stage.outer_group_node)
 
+        # add parent group nodes to graph
+        for node in relevant_group_nodes.copy():
+            parent = node.outer_group_node
+            while parent:
+                relevant_group_nodes.add(parent)
+                parent = parent.outer_group_node
+
+        barrier_tasks = set()
+        # add group nodes to graph and potentially hide stages and tasks
+        for group_node in relevant_group_nodes:
+            style = get_style(group_node)
+            if group_node.is_content_hidden(get_style):
+                graph_nodes -= group_node.tasks
+                graph_boxes -= group_node.stages
+            if (
+                not group_node.outer_group_node
+                or not group_node.outer_group_node.is_content_hidden(get_style)
+            ):
+                if style.hide_box:
+                    if group_node.entry_barrier_task:
+                        # in-degree > 0 was already verified when creating
+                        # entry_barrier_task
+                        graph_nodes.add(group_node.entry_barrier_task)
+                        barrier_tasks.add(group_node.entry_barrier_task)
+                    if (
+                        group_node.exit_barrier_task
+                        and result.flow.explicit_graph.out_degree(
+                            group_node.exit_barrier_task
+                        )
+                        > 0
+                    ):
+                        graph_nodes.add(group_node.exit_barrier_task)
+                        barrier_tasks.add(group_node.exit_barrier_task)
+                else:
+                    if group_node.box_like_stage(style):
+                        graph_boxes.add(group_node)
+                    else:
+                        graph_nodes.add(group_node)
+
+        # add nodes and edges to graph
+        graph = nx.DiGraph()
+
+        def get_node(task: Task) -> Task | GroupNode:
+            if task.group_node:
+                if task.group_node.is_content_hidden(get_style):
+                    obj = task.group_node
+                    while (
+                        obj.outer_group_node
+                        and obj.outer_group_node.is_content_hidden(get_style)
+                    ):
+                        obj = obj.outer_group_node
+                    return obj
+            return task
+
+        def add_edges(input_tasks: dict[int, Task], target: Task | GroupNode):
+            for input_task in input_tasks.values():
+                input_node = get_node(input_task)
+                if input_node in graph_nodes:
+                    graph.add_edge(input_node, target)
+
+        def add_group_node_edges(group_node: GroupNode):
+            if group_node.entry_barrier_task:
+                task = group_node.entry_barrier_task
+                for prev_task in result.flow.explicit_graph.predecessors(task):
+                    prev_node = get_node(prev_task)
+                    if prev_node in graph_nodes:
+                        graph.add_edge(prev_node, group_node)
+            if group_node.exit_barrier_task:
+                task = group_node.exit_barrier_task
+                for next_task in result.flow.explicit_graph.successors(task):
+                    next_node = get_node(next_task)
+                    if next_node in graph_nodes:
+                        graph.add_edge(group_node, next_node)
+
+        for task in graph_nodes:
+            graph.add_node(task)
+            if task in barrier_tasks:
+                for prev_task in result.flow.explicit_graph.predecessors(task):
+                    prev_node = get_node(prev_task)
+                    if prev_node in graph_nodes:
+                        graph.add_edge(prev_node, task)
+                for next_task in result.flow.explicit_graph.successors(task):
+                    next_node = get_node(next_task)
+                    if next_node in graph_nodes:
+                        graph.add_edge(task, next_node)
+            elif isinstance(task, GroupNode):
+                group_node = task
+                content_hidden = group_node.is_content_hidden(get_style)
+                for subtask in group_node.tasks:
+                    target = group_node if content_hidden else subtask
+                    if subtask in self.selected_tasks:
+                        add_edges(subtask.input_tasks, target)
+                add_group_node_edges(group_node)
+            else:
+                add_edges(task.input_tasks, task)
+
+        for group_node in [b for b in graph_boxes if isinstance(b, GroupNode)]:
+            content_hidden = group_node.is_content_hidden(get_style)
+            for subtask in group_node.tasks:
+                target = group_node if content_hidden else subtask
+                if subtask in self.selected_tasks:
+                    add_edges(subtask.input_tasks, target)
+            if not get_style(group_node).hide_box:
+                add_group_node_edges(group_node)
+
+        # start preparing styles
         stage_style = {}
-        task_style = _generate_task_style(relevant_tasks, result)
+        task_style = _generate_task_style(graph_nodes, result)
+        group_node_style = _generate_group_node_style(
+            relevant_group_nodes, result, get_style
+        )
         edge_style = {}
 
-        for stage in relevant_stages:
+        for stage in graph_boxes:
             if stage not in self.selected_stages:
                 stage_style[stage] = {
                     "style": '"dashed"',
@@ -529,8 +646,8 @@ class Subflow:
                     "fontcolor": "#909090",
                 }
 
-        for task in relevant_tasks:
-            if task not in self.selected_tasks:
+        for task in graph_nodes:
+            if task not in self.selected_tasks and task not in barrier_tasks:
                 task_style[task] = {
                     "style": '"filled,dashed"',
                     "fillcolor": "#FFFFFF80",
@@ -538,20 +655,62 @@ class Subflow:
                     "fontcolor": "#909090",
                 }
 
+        for group_node in relevant_group_nodes:
+            style = get_style(group_node)
+            if not style.hide_box:
+                if group_node.box_like_stage(style):
+                    stage_style[group_node] = group_node_style[group_node]
+                else:
+                    task_style[group_node] = group_node_style[group_node]
+            if not (group_node.tasks & self.selected_tasks) and not style.hide_box:
+                if group_node.box_like_stage(style):
+                    stage_style[group_node] = {
+                        "style": '"dashed"',
+                        "bgcolor": "#0000000A",
+                        "color": "#909090",
+                        "fontcolor": "#909090",
+                    }
+                else:
+                    task_style[group_node] = {
+                        "style": '"filled,dashed"',
+                        "fillcolor": "#FFFFFF80",
+                        "color": "#808080",
+                        "fontcolor": "#909090",
+                    }
+
         for edge in graph.edges:
-            if edge[0] not in self.selected_tasks:
+            if (
+                edge[0] not in self.selected_tasks
+                and edge[0] not in barrier_tasks
+                and (
+                    not isinstance(edge[0], GroupNode)
+                    or all(t not in self.selected_tasks for t in edge[0].tasks)
+                )
+            ):
                 edge_style[edge] = {
                     "style": "dashed",
                     "color": "#909090",
                 }
 
+        def stage_sort_key(s):
+            return (
+                float(s.id)
+                if isinstance(s, Stage)
+                else stage_sort_key(s.outer_group_node) + 0.01
+                if s.outer_group_node
+                else s.outer_stage.id + 0.1
+                if s.outer_stage
+                else min(s2.id for s2 in s.stages) - 0.1
+            )
+
         return _build_pydot(
-            stages=sorted(relevant_stages, key=lambda s: s.id),
-            tasks=list(relevant_tasks),
+            stages=sorted(graph_boxes, key=stage_sort_key),
+            tasks=list(graph_nodes),
             graph=graph,
             stage_style=stage_style,
             task_style=task_style,
             edge_style=edge_style,
+            get_style=get_style,
         )
 
 
@@ -574,14 +733,51 @@ def _generate_task_style(tasks: Iterable[Task], result: Result | None) -> dict:
     return task_style
 
 
+def _generate_group_node_style(
+    group_nodes: Iterable[GroupNode],
+    result: Result | None,
+    get_style: Callable[[GroupNode], VisualizationStyle],
+) -> dict:
+    group_node_style = {}
+    if result:
+        for group_node in group_nodes:
+            style = get_style(group_node)
+            final_states = {
+                result.task_states.get(task, FinalTaskState.UNKNOWN)
+                for task in group_node.tasks
+            }
+            if not style.hide_box:
+                if style.box_color_always:
+                    group_node_style[group_node] = {"fillcolor": style.box_color_always}
+                elif FinalTaskState.FAILED in final_states:
+                    fill_color = style.box_color_any_failure or "#ff453a"
+                    group_node_style[group_node] = {"fillcolor": fill_color}
+                elif final_states == {FinalTaskState.SKIPPED}:
+                    fill_color = style.box_color_all_skipped or "#fccb83"
+                    group_node_style[group_node] = {"fillcolor": fill_color}
+                elif FinalTaskState.CACHE_VALID not in final_states:
+                    fill_color = style.box_color_none_cache_valid or "#adef9b"
+                    group_node_style[group_node] = {"fillcolor": fill_color}
+                elif final_states == {FinalTaskState.CACHE_VALID}:
+                    fill_color = style.box_color_all_cache_valid or "#e8ffc6"
+                    group_node_style[group_node] = {"fillcolor": fill_color}
+                else:
+                    fill_color = style.box_color_any_cache_valid or "#caffff"
+                    group_node_style[group_node] = {"fillcolor": fill_color}
+    return group_node_style
+
+
 def _build_pydot(
-    stages: list[Stage],
-    tasks: list[Task],
+    stages: list[Stage | GroupNode],
+    tasks: list[Task | GroupNode],
     graph: nx.Graph,
-    stage_style: dict[Stage, dict] = None,
-    task_style: dict[Task, dict] = None,
-    edge_style: dict[tuple[Task, Task], dict] = None,
+    stage_style: dict[Stage | GroupNode, dict] | None,
+    task_style: dict[Task | GroupNode, dict] | None,
+    edge_style: dict[tuple[Task | GroupNode, Task | GroupNode], dict] | None,
+    get_style: Callable[[GroupNode], VisualizationStyle],
 ) -> pydot.Dot:
+    from pydiverse.pipedag.core import GroupNode
+
     if stage_style is None:
         stage_style = {}
     if task_style is None:
@@ -589,9 +785,9 @@ def _build_pydot(
     if edge_style is None:
         edge_style = {}
 
-    dot = pydot.Dot()
-    subgraphs: dict[Stage, pydot.Subgraph] = {}
-    nodes: dict[Task, pydot.Node] = {}
+    dot = pydot.Dot(compound="true")
+    subgraphs: dict[Stage | GroupNode, pydot.Subgraph] = {}
+    nodes: dict[Task | GroupNode, pydot.Node] = {}
 
     for stage in stages:
         style = dict(
@@ -601,30 +797,76 @@ def _build_pydot(
             fontcolor="black",
         ) | (stage_style.get(stage, {}))
 
-        s = pydot.Subgraph(f"cluster_{stage.name}", label=stage.name, **style)
+        if isinstance(stage, GroupNode):
+            label = stage.label or ""
+            if get_style(stage).hide_label:
+                label = ""
+            s = pydot.Cluster(f"n_{uuid.uuid4().hex}", label=label, **style)
+        else:
+            s = pydot.Cluster(f"s_{stage.name}", label=stage.name, **style)
         subgraphs[stage] = s
 
-        if stage.outer_stage in stages:
+        if stage.outer_group_node in stages and (
+            not stage.outer_stage
+            or stage.outer_stage not in stage.outer_group_node.stages
+        ):
+            subgraphs[stage.outer_group_node].add_subgraph(s)
+        elif stage.outer_stage in stages:
             subgraphs[stage.outer_stage].add_subgraph(s)
         else:
             dot.add_subgraph(s)
 
     for task in tasks:
-        if task._visualize_hidden:
-            continue
-
         style = dict(
             fillcolor="#FFFFFF",
             style='"filled"',
         ) | (task_style.get(task, {}))
 
-        node = pydot.Node(task.id, label=task.name, **style)
+        if isinstance(task, GroupNode):
+            group_node = task
+            label = group_node.label or "|".join([t.name for t in group_node.tasks])
+            if get_style(group_node).hide_label:
+                label = ""
+            node = pydot.Node(uuid.uuid4().hex, label=label, **style)
+            if group_node.outer_group_node in stages and (
+                not group_node.outer_stage
+                or group_node.outer_stage not in group_node.outer_group_node.stages
+            ):
+                subgraphs[group_node.outer_group_node].add_node(node)
+            elif group_node.outer_stage in stages:
+                subgraphs[group_node.outer_stage].add_node(node)
+            else:
+                dot.add_node(node)
+        else:
+            node = pydot.Node(task.id, label=task.name, **style)
+            if (
+                hasattr(task, "group_node")
+                and task.group_node
+                and task.group_node in stages
+                and task.stage not in task.group_node.stages
+            ):
+                subgraphs[task.group_node].add_node(node)
+            else:
+                subgraphs[task.stage].add_node(node)
         nodes[task] = node
-        subgraphs[task.stage].add_node(node)
 
     for nx_edge in graph.edges:
         style = edge_style.get(nx_edge, {})
-        edge = pydot.Edge(nodes[nx_edge[0]], nodes[nx_edge[1]], **style)
+        sender = nodes[nx_edge[0]] if nx_edge[0] in nodes else subgraphs[nx_edge[0]]
+        receiver = nodes[nx_edge[1]] if nx_edge[1] in nodes else subgraphs[nx_edge[1]]
+        sender_task = (
+            sender if nx_edge[0] in nodes else nodes[list(nx_edge[0].tasks)[0]]
+        )
+        receiver_task = (
+            receiver if nx_edge[1] in nodes else nodes[list(nx_edge[1].tasks)[0]]
+        )
+        edge = pydot.Edge(
+            sender_task,
+            receiver_task,
+            ltail=sender.get_name(),
+            lhead=receiver.get_name(),
+            **style,
+        )
         dot.add_edge(edge)
 
     return dot

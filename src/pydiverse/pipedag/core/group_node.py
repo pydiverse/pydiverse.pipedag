@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Callable
 from dataclasses import dataclass
-from enum import Enum
 from typing import TYPE_CHECKING
 
 import structlog
@@ -13,18 +13,6 @@ from pydiverse.pipedag.errors import GroupNodeError, StageError
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Flow, Stage
-
-
-class Box(Enum):
-    # Box is not shown in visualization:
-    HIDDEN = 0
-    # Box should look like a stage box if at least one stage included else like a task
-    # box:
-    AUTO = 1
-    # Box should look like a stage box:
-    STAGE = 2
-    # Box should look like a task box:
-    TASK = 3
 
 
 @dataclass
@@ -50,7 +38,7 @@ class VisualizationStyle:
         included tasks were skipped
     """
 
-    box: Box = Box.HIDDEN
+    hide_box: bool = False
     hide_content: bool = False
     hide_label: bool = False
     box_color_always: str | None = None
@@ -176,6 +164,18 @@ class GroupNode:
     def add_task(self, task: Task):
         self.tasks.add(task)
 
+    def is_content_hidden(self, get_style: Callable[[GroupNode], VisualizationStyle]):
+        # recursive lookup for style.hide_content==True
+        obj = self
+        if get_style(obj).hide_content or False:
+            return True
+        if obj.outer_group_node is not None:
+            return obj.outer_group_node.is_content_hidden(get_style)
+        return False
+
+    def box_like_stage(self, style: VisualizationStyle):
+        return not (style.hide_content or False)
+
 
 class BarrierTask(Task):
     def __init__(self, group_node: GroupNode, stage: Stage, flow: Flow, prefix=""):
@@ -197,7 +197,7 @@ class BarrierTask(Task):
 
         self.input_tasks = {}
         self.upstream_stages = [stage]
-        self._visualize_hidden = False
+        self._visualize_hidden = True
 
     def fn(self):
         self.logger.info(f"{self.prefix}Ordering barrier passed")

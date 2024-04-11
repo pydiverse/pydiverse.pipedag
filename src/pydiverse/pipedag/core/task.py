@@ -76,6 +76,7 @@ class UnboundTask:
         task = self._bound_task_type(self, bound_args, ctx.flow, ctx.stage)
         if ctx.group_node is not None:
             ctx.group_node.add_task(task)
+            task.group_node = ctx.group_node
         return task
 
     def _call_original_function(self, *args, **kwargs):
@@ -99,6 +100,7 @@ class Task:
         self._bound_args = bound_args
         self.flow = flow
         self.stage = stage
+        self.group_node = None  # will be set by UnboundTask.__call__
         self.position_hash = self.__compute_position_hash()
 
         # The ID gets set by calling flow.add_task
