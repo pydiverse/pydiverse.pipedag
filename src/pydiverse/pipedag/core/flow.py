@@ -806,6 +806,8 @@ def _build_pydot(
             s = pydot.Cluster(f"s_{stage.name}", label=stage.name, **style)
         subgraphs[stage] = s
 
+    for stage in stages:
+        s = subgraphs[stage]
         if stage.outer_group_node in stages and (
             not stage.outer_stage
             or stage.outer_stage not in stage.outer_group_node.stages

@@ -114,7 +114,9 @@ def test_run_specific_task(ordering_barrier):
     ],
 )
 def test_run_specific_task_sequential_styles(label, style):
-    test_run_specific_task_sequential(label, style, ordering_barrier=False)
+    test_run_specific_task_sequential(
+        label, style, ordering_barrier=False, nesting=True
+    )
 
 
 @with_instances("postgres")
@@ -131,7 +133,8 @@ def test_run_specific_task_sequential_styles(label, style):
     ],
 )
 @pytest.mark.parametrize("ordering_barrier", [True, False])
-def test_run_specific_task_sequential(label, style, ordering_barrier):
+@pytest.mark.parametrize("nesting", [False])
+def test_run_specific_task_sequential(label, style, ordering_barrier, nesting):
     num = [0]
 
     def cache():
@@ -148,18 +151,45 @@ def test_run_specific_task_sequential(label, style, ordering_barrier):
     # We need to assign unique names to these stages, because we can't reuse the
     # same stage lock context between different runs.
     with Flow() as f:
-        with Stage("stage_1"):
+        with GroupNode(label, style, ordering_barrier=ordering_barrier):
+            with Stage("stage_1"):
+                one = m.noop(1)
+        with Stage("stage_2"):
+            _ = m.noop(one)
             x1 = task()
             x2 = task()
             with GroupNode(label, style, ordering_barrier=ordering_barrier):
                 x3 = task()
                 x4 = task()
             x5 = task()
+        if nesting:
+            with GroupNode(label, style, ordering_barrier=ordering_barrier):
+                with Stage("stage_3"):
+                    with Stage("stage_4"):
+                        with GroupNode(label, style, ordering_barrier=ordering_barrier):
+                            with GroupNode(
+                                label, style, ordering_barrier=ordering_barrier
+                            ):
+                                _ = m.noop(1)
+                            _ = m.noop(2)
+                        _ = m.noop(3)
+                    _ = m.noop(4)
+                with Stage("stage_5"):
+                    _ = m.noop(5)
+            with GroupNode(label, style, ordering_barrier=ordering_barrier):
+                with Stage("stage_6"):
+                    with Stage("stage_7"):
+                        with GroupNode(label, style, ordering_barrier=ordering_barrier):
+                            with GroupNode(
+                                label, style, ordering_barrier=ordering_barrier
+                            ):
+                                _ = m.noop(6)
 
-    barriers = 0
-    if ordering_barrier:
-        barriers = 2
-    assert len(f.tasks) == 5 + len(f.stages) + barriers
+    if not nesting:
+        barriers = 0
+        if ordering_barrier:
+            barriers = 2
+        assert len(f.tasks) == 2 + 5 + len(f.stages) + barriers
 
     with StageLockContext():
         res = f.run()
