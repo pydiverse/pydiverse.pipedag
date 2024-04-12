@@ -122,4 +122,4 @@ mlruns
 .envrc
 
 # baseline update files
-.updated.json
+*.updated.json
