@@ -44,7 +44,11 @@ class BaselineStore:
             cmp = updated_baseline if updated_baseline else None
             updated_baseline = other
         updated_file = self.compare_file.with_suffix(".updated.json")
-        if os.path.getmtime(updated_file) > os.path.getmtime(self.compare_file):
+        if (
+            exists
+            and updated_file.is_file()
+            and os.path.getmtime(updated_file) > os.path.getmtime(self.compare_file)
+        ):
             # Update the update_file instead of self.compare_file since it is newer.
             # Like this, parameterized tests can accumulate their joint update.
             with open(updated_file) as f:
