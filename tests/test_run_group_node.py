@@ -14,10 +14,14 @@ from pydiverse.pipedag.context.context import (
     TaskContext,
 )
 from pydiverse.pipedag.util.hashing import stable_hash
-from tests.fixtures.instances import skip_instances, with_instances
+from tests.fixtures.instances import (
+    ORCHESTRATION_INSTANCES,
+    skip_instances,
+    with_instances,
+)
 from tests.util import tasks_library as m
 
-pytestmark = [with_instances("postgres", "dask_engine")]
+pytestmark = [with_instances("postgres", ORCHESTRATION_INSTANCES)]
 
 
 @pytest.mark.parametrize("ordering_barrier", [True, False])
@@ -103,7 +107,7 @@ def test_run_specific_task(ordering_barrier):
 
 
 @with_instances("postgres")
-@skip_instances("dask_engine")
+@skip_instances(ORCHESTRATION_INSTANCES)
 @pytest.mark.parametrize("label", ["group"])
 @pytest.mark.parametrize(
     "style",
@@ -121,7 +125,7 @@ def test_run_specific_task_sequential_styles(label, style):
 
 
 @with_instances("postgres")
-@skip_instances("dask_engine")
+@skip_instances(ORCHESTRATION_INSTANCES)
 @pytest.mark.parametrize("label", [None, "group"])
 @pytest.mark.parametrize(
     "style",
