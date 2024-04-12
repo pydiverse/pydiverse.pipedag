@@ -71,6 +71,10 @@ class Result:
             exception=exception,
         )
 
+    def evolve(self, **changes):
+        kwargs = {**dir(self), **changes}
+        return Result(**kwargs)
+
     def get(self, task: Task | TaskGetItem, as_type: type = None) -> Any:
         """Retrieve the output produced by a task.
 

@@ -4,10 +4,19 @@ import random
 import time
 import uuid
 
+import attr
 import pytest
 import sqlalchemy as sa
 
-from pydiverse.pipedag import Flow, GroupNode, Stage, VisualizationStyle, materialize
+from pydiverse.pipedag import (
+    Flow,
+    GroupNode,
+    Result,
+    Stage,
+    VisualizationStyle,
+    materialize,
+)
+from pydiverse.pipedag.context import FinalTaskState
 from pydiverse.pipedag.context.context import (
     ConfigContext,
     StageLockContext,
@@ -107,6 +116,24 @@ def test_run_specific_task(ordering_barrier):
     store.execute(f'DROP TABLE "{table_name}"')
 
 
+def fake_cache_status_deterministic_for_baseline_tests(result: Result):
+    def fix_state(task, state):
+        if state in [FinalTaskState.CACHE_VALID, FinalTaskState.COMPLETED]:
+            # chose stable pseudo-random
+            return (
+                FinalTaskState.COMPLETED
+                if sum([ord(c) for c in stable_hash(task.id)]) % 2 == 0
+                else FinalTaskState.CACHE_VALID
+            )
+
+    return attr.evolve(
+        result,
+        task_states={
+            task: fix_state(task, state) for task, state in result.task_states.items()
+        },
+    )
+
+
 @with_instances("postgres")
 @skip_instances(ORCHESTRATION_INSTANCES)
 @pytest.mark.parametrize("label", [None, "group"])
@@ -187,17 +214,19 @@ def test_run_specific_task_sequential(label, style, ordering_barrier, nesting):
         assert res.get(x3) == 3
         assert res.get(x4) == 4
         assert res.get(x5) == 5
+        viz_res = fake_cache_status_deterministic_for_baseline_tests(res)
         assert BaselineStore(
             "flow", label, style, ordering_barrier, nesting
-        ) == f.visualize_url(res)
+        ) == f.visualize_url(viz_res)
 
     with StageLockContext():
         res = f.run(x1, x3)
         assert res.get(x1) == 6
         assert res.get(x3) == 7
+        viz_res = fake_cache_status_deterministic_for_baseline_tests(res)
         assert BaselineStore(
             "subflow", label, style, ordering_barrier, nesting
-        ) == f.visualize_url(res)
+        ) == f.visualize_url(viz_res)
 
 
 @with_instances("postgres")
