@@ -108,6 +108,7 @@ def test_run_specific_task(ordering_barrier):
 @pytest.mark.parametrize(
     "style",
     [
+        VisualizationStyle(),
         VisualizationStyle(hide_label=True),
         VisualizationStyle(hide_content=True, hide_label=True),
         VisualizationStyle(box_color_always="aaaa22"),

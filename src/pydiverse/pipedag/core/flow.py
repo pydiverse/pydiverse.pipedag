@@ -17,7 +17,7 @@ from pydiverse.pipedag.context import (
 )
 from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.core.config import PipedagConfig
-from pydiverse.pipedag.core.group_node import VisualizationStyle
+from pydiverse.pipedag.core.group_node import BarrierTask, VisualizationStyle
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 
 if TYPE_CHECKING:
@@ -468,19 +468,26 @@ class Subflow:
         Guaranteed to be in the same order as they were added to the flow
         (they will be ordered topologically).
         """
+        graph = self.flow.explicit_graph
         for task in self.flow.tasks:
-            if task in self.selected_tasks:
+            if task in self.selected_tasks or (
+                isinstance(task, BarrierTask)
+                and (set(graph.predecessors(task)) | set(graph.successors(task)))
+                & self.selected_tasks
+            ):
                 yield task
 
     def get_parent_tasks(self, task: Task) -> Iterable[Task]:
         """
         Returns tasks that must be executed before `task`.
         """
-        if task not in self.selected_tasks:
+        if task not in self.selected_tasks and not isinstance(task, BarrierTask):
             return
 
         for parent_task, _ in self.flow.explicit_graph.in_edges(task):
-            if parent_task in self.selected_tasks:
+            if parent_task in self.selected_tasks or isinstance(
+                parent_task, BarrierTask
+            ):
                 yield parent_task
 
     def visualize(self, result: Result | None = None):
@@ -504,7 +511,7 @@ class Subflow:
         def get_style(obj: GroupNode):
             return obj.style if obj.style else default_style
 
-        # add tasks to graph and collect group nodes
+        # add tasks and stages to graph and collect group nodes
         for task in self.get_tasks():
             if hasattr(task, "_visualize_hidden") and task._visualize_hidden:
                 continue
@@ -519,10 +526,26 @@ class Subflow:
                 if input_task.group_node:
                     relevant_group_nodes.add(input_task.group_node)
 
-        # add stages to graph and collect group nodes
+        # add parent stages to graph
+        for stage in graph_boxes.copy():
+            if stage.outer_stage:
+                graph_boxes.add(stage.outer_stage)
+
+        # collect parent group nodes
         for stage in graph_boxes:
             if stage.outer_group_node:
                 relevant_group_nodes.add(stage.outer_group_node)
+
+        # get group nodes including selected tasks recursively
+        selected_group_nodes = set()
+        for group_node in relevant_group_nodes:
+            obj = group_node
+            if obj.tasks & self.selected_tasks:
+                while True:
+                    selected_group_nodes.add(obj)
+                    obj = obj.outer_group_node
+                    if obj is None:
+                        break
 
         # add parent group nodes to graph
         for node in relevant_group_nodes.copy():
@@ -662,7 +685,7 @@ class Subflow:
                     stage_style[group_node] = group_node_style[group_node]
                 else:
                     task_style[group_node] = group_node_style[group_node]
-            if not (group_node.tasks & self.selected_tasks) and not style.hide_box:
+            if group_node not in selected_group_nodes and not style.hide_box:
                 if group_node.box_like_stage(style):
                     stage_style[group_node] = {
                         "style": '"dashed"',
