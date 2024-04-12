@@ -20,6 +20,7 @@ from tests.fixtures.instances import (
     with_instances,
 )
 from tests.util import tasks_library as m
+from tests.util.baseline import BaselineStore
 
 pytestmark = [with_instances("postgres", ORCHESTRATION_INSTANCES)]
 
@@ -108,24 +109,6 @@ def test_run_specific_task(ordering_barrier):
 
 @with_instances("postgres")
 @skip_instances(ORCHESTRATION_INSTANCES)
-@pytest.mark.parametrize("label", ["group"])
-@pytest.mark.parametrize(
-    "style",
-    [
-        VisualizationStyle(),
-        VisualizationStyle(hide_label=True),
-        VisualizationStyle(hide_content=True, hide_label=True),
-        VisualizationStyle(box_color_always="aaaa22"),
-    ],
-)
-def test_run_specific_task_sequential_styles(label, style):
-    test_run_specific_task_sequential(
-        label, style, ordering_barrier=False, nesting=True
-    )
-
-
-@with_instances("postgres")
-@skip_instances(ORCHESTRATION_INSTANCES)
 @pytest.mark.parametrize("label", [None, "group"])
 @pytest.mark.parametrize(
     "style",
@@ -196,6 +179,7 @@ def test_run_specific_task_sequential(label, style, ordering_barrier, nesting):
             barriers = 2
         assert len(f.tasks) == 2 + 5 + len(f.stages) + barriers
 
+    random.seed(0)  # needed for Baseline comparisons of visualize_url() calls
     with StageLockContext():
         res = f.run()
         assert res.get(x1) == 1
@@ -203,8 +187,32 @@ def test_run_specific_task_sequential(label, style, ordering_barrier, nesting):
         assert res.get(x3) == 3
         assert res.get(x4) == 4
         assert res.get(x5) == 5
+        assert BaselineStore(
+            "flow", label, style, ordering_barrier, nesting
+        ) == f.visualize_url(res)
 
     with StageLockContext():
         res = f.run(x1, x3)
         assert res.get(x1) == 6
         assert res.get(x3) == 7
+        assert BaselineStore(
+            "subflow", label, style, ordering_barrier, nesting
+        ) == f.visualize_url(res)
+
+
+@with_instances("postgres")
+@skip_instances(ORCHESTRATION_INSTANCES)
+@pytest.mark.parametrize("label", ["group"])
+@pytest.mark.parametrize(
+    "style",
+    [
+        VisualizationStyle(),
+        VisualizationStyle(hide_label=True),
+        VisualizationStyle(hide_content=True, hide_label=True),
+        VisualizationStyle(box_color_always="aaaa22"),
+    ],
+)
+def test_run_specific_task_sequential_styles(label, style):
+    test_run_specific_task_sequential(
+        label, style, ordering_barrier=False, nesting=True
+    )

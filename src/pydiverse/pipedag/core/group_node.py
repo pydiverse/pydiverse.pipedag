@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from pydiverse.pipedag import Flow, Stage
 
 
-@dataclass
+@dataclass(frozen=True)
 class VisualizationStyle:
     """
     Visualization style for group nodes.

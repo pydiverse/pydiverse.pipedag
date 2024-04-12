@@ -40,7 +40,12 @@ class Stage:
         before any of its upstream stage dependencies have been committed.
     """
 
-    def __init__(self, name: str, materialization_details: str | None = None):
+    def __init__(
+        self,
+        name: str,
+        materialization_details: str | None = None,
+        group_node_tag: str | None = None,
+    ):
         self._name = normalize_name(name)
         self._transaction_name = f"{self._name}__tmp"
 
@@ -54,6 +59,7 @@ class Stage:
         self.id: int = None  # type: ignore
 
         self.materialization_details = materialization_details
+        self.group_node_tag = group_node_tag
 
         self._did_enter = False
 
