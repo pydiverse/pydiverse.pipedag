@@ -208,8 +208,9 @@ def test_run_specific_task_sequential(label, style, ordering_barrier, nesting):
         assert len(f.tasks) == 2 + 5 + len(f.stages) + barriers
 
     random.seed(0)  # needed for Baseline comparisons of visualize_url() calls
+    cfg = ConfigContext.get().evolve(disable_kroki=False)
     with StageLockContext():
-        res = f.run()
+        res = f.run(config=cfg)
         assert res.get(x1) == 1
         assert res.get(x2) == 2
         assert res.get(x3) == 3
@@ -221,7 +222,7 @@ def test_run_specific_task_sequential(label, style, ordering_barrier, nesting):
         ) == f.visualize_url(viz_res)
 
     with StageLockContext():
-        res = f.run(x1, x3)
+        res = f.run(x1, x3, config=cfg)
         assert res.get(x1) == 6
         assert res.get(x3) == 7
         viz_res = fake_cache_status_deterministic_for_baseline_tests(res)
@@ -285,7 +286,7 @@ def test_run_specific_task_config(label, style):
     pipedag_config = PipedagConfig.default
     raw_cfg = pipedag_config.raw_config.copy()
     raw_cfg["instances"]["__any__"]["visualization"] = visualization
-    cfg = PipedagConfig(raw_cfg).get()
+    cfg = PipedagConfig(raw_cfg).get().evolve(disable_kroki=False)
     num = [0]
 
     def cache():

@@ -504,7 +504,7 @@ class Subflow:
         self, result: Result | None = None, visualization_tag: str | None = None
     ) -> str:
         dot = self.visualize_pydot(result, visualization_tag)
-        return _pydot_url(dot)
+        return _pydot_url(dot, result.config_context)
 
     def visualize_pydot(
         self, result: Result | None = None, visualization_tag: str | None = None
@@ -1033,14 +1033,15 @@ def _display_pydot(dot: pydot.Dot):
         globals()["__pipedag_tmp_file_reference__"] = f
 
 
-def _pydot_url(dot: pydot.Dot) -> str:
+def _pydot_url(dot: pydot.Dot, config: ConfigContext | None = None) -> str:
     import base64
     import zlib
 
-    try:
-        config = ConfigContext.get()
-    except LookupError:
-        config = PipedagConfig.default.get()
+    if config is None:
+        try:
+            config = ConfigContext.get()
+        except LookupError:
+            config = PipedagConfig.default.get()
 
     kroki_url = config.kroki_url
     if config.disable_kroki or kroki_url is None:
