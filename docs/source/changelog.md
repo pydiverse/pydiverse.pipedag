@@ -5,6 +5,10 @@
     materializing subqueries within a task. It also helps see task in stack trace when materialization fails. There is
     one downside of using it: when a task returns multiple tables, it is assumed that all tables depend on previously 
     imperatively materialized tables.
+- Support group nodes with or without barrier effect on task ordering. They either be added by `with GroupNode():` 
+    blocks around or within `with Stage():` blocks. Or they can be added in configuration via
+    `visualization: default: group_nodes: group_name: {label: "some_str", tasks: ["task_name"], stages: ["stage_name"]}`.
+    Visualization of group nodes can be controlled very flexibly with hide_box, hide_content, box_color_always, ...
 - ExternalTableReference moved module and is now also a member of pydiverse.pipedag module. This is a breaking 
     interface change for pipedag.
 - PrefectEngine moved to module pydiverse.pipedag.engine.prefect.PrefectEngine because it would otherwise import prefect

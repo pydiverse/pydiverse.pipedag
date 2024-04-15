@@ -261,6 +261,8 @@ def test_run_specific_task_sequential_styles(label, style):
         VisualizationStyle(hide_box=True),
         VisualizationStyle(hide_box=True, hide_content=True),
         VisualizationStyle(hide_content=True),
+        VisualizationStyle(hide_content=True, box_color_any_cache_valid="#cc88cc"),
+        VisualizationStyle(box_color_always="#cc88cc"),
         VisualizationStyle(),
     ],
 )
@@ -326,11 +328,15 @@ def test_run_specific_task_config(label, style):
         with Stage("stage_2"):
             with Stage("stage_3"):
                 _ = m.noop(6)
+                with GroupNode("style_tag", style_tag="test_style"):
+                    _ = noop2(1)
+                with GroupNode("no_style_tag"):
+                    _ = noop2(2)
         with Stage("stage_4"):
             _ = noop2(7)
 
     barriers = 0
-    assert len(f.tasks) == 2 + 5 + len(f.stages) + barriers
+    assert len(f.tasks) == 4 + 5 + len(f.stages) + barriers
 
     random.seed(0)  # needed for Baseline comparisons of visualize_url() calls
     with StageLockContext():

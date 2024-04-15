@@ -699,7 +699,7 @@ class Subflow:
                 else s.outer_stage.id + 0.1
                 if s.outer_stage
                 else min(s2.id for s2 in s.stages) - 0.1
-            )
+            ) + (0.001 * s.id if isinstance(s, GroupNode) else 0)
 
         def task_sort_key(t):
             return (
@@ -1110,6 +1110,7 @@ def _get_config_group_nodes(
                 group_node = GroupNode(
                     node_config.label, style, style_tag=node_config.style_tag
                 )
+                group_node.id = len(group_nodes) + len(flow.group_nodes)
                 group_nodes[node_tag] = group_node
                 for stage_name in node_config.stages or []:
                     if stage_name in flow.stages:

@@ -82,6 +82,7 @@ class GroupNode:
         self.exit_barrier_task: BarrierTask = None  # type: ignore
         self.outer_stage: Stage | None = None
         self.outer_group_node: GroupNode | None = None
+        self.id = None  # will be set by flow.add_group_node
 
         self.logger = structlog.get_logger(logger_name=type(self).__name__, group=self)
 
