@@ -504,19 +504,20 @@ class Subflow:
         self, result: Result | None = None, visualization_tag: str | None = None
     ) -> str:
         dot = self.visualize_pydot(result, visualization_tag)
-        return _pydot_url(dot, result.config_context)
+        return _pydot_url(dot, result.config_context if result else None)
 
     def visualize_pydot(
         self, result: Result | None = None, visualization_tag: str | None = None
     ) -> pydot.Dot:
         from pydiverse.pipedag.core import GroupNode, Stage, Task
 
+        flow = self.flow
         # Some group nodes are explicitly wired in the flow at declaration time, but
         # it is also possible to add group nodes via configuration. We must not modify
         # any objects in the flow to make them effective. Thus we create dictionaries
         # on the side to look up config created group nodes.
         task_group_nodes, stage_group_nodes, style_tags = _get_config_group_nodes(
-            result, visualization_tag
+            flow, result, visualization_tag
         )
 
         graph_boxes = set()  # type: Set[Stage | GroupNode]
@@ -612,9 +613,7 @@ class Subflow:
                         barrier_tasks.add(group_node.entry_barrier_task)
                     if (
                         group_node.exit_barrier_task
-                        and result.flow.explicit_graph.out_degree(
-                            group_node.exit_barrier_task
-                        )
+                        and flow.explicit_graph.out_degree(group_node.exit_barrier_task)
                         > 0
                     ):
                         graph_nodes.add(group_node.exit_barrier_task)
@@ -649,24 +648,24 @@ class Subflow:
         def add_group_node_edges(group_node: GroupNode):
             if group_node.entry_barrier_task:
                 task = group_node.entry_barrier_task
-                for prev_task in result.flow.explicit_graph.predecessors(task):
+                for prev_task in flow.explicit_graph.predecessors(task):
                     prev_node = get_node(prev_task)
                     if prev_node in graph_nodes:
                         graph_edges.add((prev_node, group_node))
             if group_node.exit_barrier_task:
                 task = group_node.exit_barrier_task
-                for next_task in result.flow.explicit_graph.successors(task):
+                for next_task in flow.explicit_graph.successors(task):
                     next_node = get_node(next_task)
                     if next_node in graph_nodes:
                         graph_edges.add((group_node, next_node))
 
         for node in graph_nodes:
             if node in barrier_tasks:
-                for prev_task in result.flow.explicit_graph.predecessors(node):
+                for prev_task in flow.explicit_graph.predecessors(node):
                     prev_node = get_node(prev_task)
                     if prev_node in graph_nodes:
                         graph_edges.add((prev_node, node))
-                for next_task in result.flow.explicit_graph.successors(node):
+                for next_task in flow.explicit_graph.successors(node):
                     next_node = get_node(next_task)
                     if next_node in graph_nodes:
                         graph_edges.add((node, next_node))
@@ -1053,11 +1052,20 @@ def _pydot_url(dot: pydot.Dot, config: ConfigContext | None = None) -> str:
     return f"{kroki_url}/graphviz/svg/{query}"
 
 
-def _get_config_group_nodes(result: Result, visualization_tag: str | None):
+def _get_config_group_nodes(
+    flow: Flow, result: Result | None, visualization_tag: str | None
+):
     from pydiverse.pipedag.core import GroupNode
 
-    logger = result.flow.logger
-    config_context = result.config_context
+    logger = flow.logger
+    if result:
+        config_context = result.config_context
+    else:
+        try:
+            config_context = ConfigContext.get()
+        except LookupError:
+            config_context = PipedagConfig.default.get(flow=flow.name)
+
     group_nodes, task_group_nodes, stage_group_nodes, style_tags = {}, {}, {}, {}
     if visualization_tag is None:
         visualization_tag = "default"
@@ -1076,8 +1084,8 @@ def _get_config_group_nodes(result: Result, visualization_tag: str | None):
                 )
                 group_nodes[node_tag] = group_node
                 for stage_name in node_config.stages or []:
-                    if stage_name in result.flow.stages:
-                        stage = result.flow.stages[stage_name]
+                    if stage_name in flow.stages:
+                        stage = flow.stages[stage_name]
                         group_node.add_stage(stage)
                         stage_group_nodes[stage] = group_node
                     else:
@@ -1089,7 +1097,7 @@ def _get_config_group_nodes(result: Result, visualization_tag: str | None):
 
                 for task_name in node_config.tasks or []:
                     found = False
-                    for task in result.flow.tasks:
+                    for task in flow.tasks:
                         if task.name == task_name:
                             if found:
                                 raise ValueError(
@@ -1195,7 +1203,7 @@ def _get_config_group_nodes(result: Result, visualization_tag: str | None):
         return stage_outer_group_node
 
     # link tasks and stages to next outer group nodes
-    for task in [t for t in result.flow.tasks if t not in task_group_nodes]:
+    for task in [t for t in flow.tasks if t not in task_group_nodes]:
         if hasattr(task, "group_node") and not task.group_node:
             if group_node := update_outer_group_node(task.stage):
                 task_group_nodes[task] = group_node
