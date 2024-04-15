@@ -751,9 +751,16 @@ class Subflow:
 
         for group_node in relevant_group_nodes:
             style = get_group_node_style(group_node)
-            if not style.hide_box:
+            if not style.hide_box and group_node in group_node_style:
                 if group_node.box_like_stage(style):
                     stage_style[group_node] = group_node_style[group_node]
+                    if group_node_style[group_node].get("style") == "filled":
+                        # included stages shall not inherit color from group node
+                        for stage in group_node.stages:
+                            stage_style[stage] = {
+                                "style": "filled",
+                                "fillcolor": "#dddddd",
+                            }
                 else:
                     task_style[group_node] = group_node_style[group_node]
             if group_node not in selected_group_nodes and not style.hide_box:
@@ -833,22 +840,43 @@ def _generate_group_node_style(
             }
             if not style.hide_box:
                 if style.box_color_always:
-                    group_node_style[group_node] = {"fillcolor": style.box_color_always}
-                elif FinalTaskState.FAILED in final_states:
-                    fill_color = style.box_color_any_failure or "#ff453a"
-                    group_node_style[group_node] = {"fillcolor": fill_color}
-                elif final_states == {FinalTaskState.SKIPPED}:
-                    fill_color = style.box_color_all_skipped or "#fccb83"
-                    group_node_style[group_node] = {"fillcolor": fill_color}
-                elif FinalTaskState.CACHE_VALID not in final_states:
-                    fill_color = style.box_color_none_cache_valid or "#adef9b"
-                    group_node_style[group_node] = {"fillcolor": fill_color}
-                elif final_states == {FinalTaskState.CACHE_VALID}:
-                    fill_color = style.box_color_all_cache_valid or "#e8ffc6"
-                    group_node_style[group_node] = {"fillcolor": fill_color}
+                    group_node_style[group_node] = {
+                        "style": "filled",
+                        "fillcolor": style.box_color_always,
+                    }
+                elif style.hide_content:
+                    if FinalTaskState.FAILED in final_states:
+                        fill_color = style.box_color_any_failure or "#ff453a"
+                        group_node_style[group_node] = {
+                            "style": "filled",
+                            "fillcolor": fill_color,
+                        }
+                    elif final_states == {FinalTaskState.SKIPPED}:
+                        fill_color = style.box_color_all_skipped or "#eeeeee"
+                        group_node_style[group_node] = {
+                            "style": "filled",
+                            "fillcolor": fill_color,
+                        }
+                    elif FinalTaskState.CACHE_VALID not in final_states:
+                        fill_color = style.box_color_none_cache_valid or "#adef9b"
+                        group_node_style[group_node] = {
+                            "style": "filled",
+                            "fillcolor": fill_color,
+                        }
+                    elif final_states == {FinalTaskState.CACHE_VALID}:
+                        fill_color = style.box_color_all_cache_valid or "#e8ffc6"
+                        group_node_style[group_node] = {
+                            "style": "filled",
+                            "fillcolor": fill_color,
+                        }
+                    else:
+                        fill_color = style.box_color_any_cache_valid or "#caffaf"
+                        group_node_style[group_node] = {
+                            "style": "filled",
+                            "fillcolor": fill_color,
+                        }
                 else:
-                    fill_color = style.box_color_any_cache_valid or "#caffff"
-                    group_node_style[group_node] = {"fillcolor": fill_color}
+                    group_node_style[group_node] = {"style": "solid"}
     return group_node_style
 
 

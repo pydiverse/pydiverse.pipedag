@@ -240,7 +240,9 @@ def test_run_specific_task_sequential(label, style, ordering_barrier, nesting):
         VisualizationStyle(),
         VisualizationStyle(hide_label=True),
         VisualizationStyle(hide_content=True, hide_label=True),
-        VisualizationStyle(box_color_always="aaaa22"),
+        VisualizationStyle(box_color_always="#cc88cc"),
+        VisualizationStyle(hide_content=True, box_color_always="#cc88cc"),
+        VisualizationStyle(hide_content=True, box_color_all_cache_valid="#cc88cc"),
     ],
 )
 def test_run_specific_task_sequential_styles(label, style):
