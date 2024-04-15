@@ -387,7 +387,9 @@ class Flow:
         return self[name]
 
     # Visualization
-    def visualize(self, result: Result | None = None):
+    def visualize(
+        self, result: Result | None = None, visualization_tag: str | None = None
+    ):
         """Visualizes the flow as a graph.
 
         If you are running in a jupyter notebook, the graph will get displayed inline.
@@ -399,11 +401,11 @@ class Flow:
             If provided, the visualization will contain additional information such
             as which tasks ran successfully, or failed.
         """
-        dot = self.visualize_pydot(result)
-        _display_pydot(dot)
-        return dot
+        return self.get_subflow().visualize(result, visualization_tag)
 
-    def visualize_url(self, result: Result | None = None) -> str:
+    def visualize_url(
+        self, result: Result | None = None, visualization_tag: str | None = None
+    ) -> str:
         """Visualizes the flow as a graph and returns a URL to view the visualization.
 
         If you don't have Graphviz installed on your computer (and thus aren't able to
@@ -417,10 +419,11 @@ class Flow:
         :return:
             A URL that, when opened, displays the graph.
         """
-        dot = self.visualize_pydot(result)
-        return _pydot_url(dot)
+        return self.get_subflow().visualize_url(result, visualization_tag)
 
-    def visualize_pydot(self, result: Result | None = None) -> pydot.Dot:
+    def visualize_pydot(
+        self, result: Result | None = None, visualization_tag: str | None = None
+    ) -> pydot.Dot:
         """Visualizes the flow as a graph and return a ``pydot.Dot`` graph.
 
         :param result: An optional :py:class:`Result` instance.
@@ -428,8 +431,7 @@ class Flow:
             as which tasks ran successfully, or failed.
         :return: A ``pydot.Dot`` graph.
         """
-        subflow = self.get_subflow()
-        return subflow.visualize_pydot(result)
+        return self.get_subflow().visualize_pydot(result, visualization_tag)
 
 
 class Subflow:
@@ -491,17 +493,31 @@ class Subflow:
             ):
                 yield parent_task
 
-    def visualize(self, result: Result | None = None):
-        dot = self.visualize_pydot(result)
+    def visualize(
+        self, result: Result | None = None, visualization_tag: str | None = None
+    ):
+        dot = self.visualize_pydot(result, visualization_tag)
         _display_pydot(dot)
         return dot
 
-    def visualize_url(self, result: Result | None = None) -> str:
-        dot = self.visualize_pydot(result)
+    def visualize_url(
+        self, result: Result | None = None, visualization_tag: str | None = None
+    ) -> str:
+        dot = self.visualize_pydot(result, visualization_tag)
         return _pydot_url(dot)
 
-    def visualize_pydot(self, result: Result | None = None) -> pydot.Dot:
+    def visualize_pydot(
+        self, result: Result | None = None, visualization_tag: str | None = None
+    ) -> pydot.Dot:
         from pydiverse.pipedag.core import GroupNode, Stage, Task
+
+        # Some group nodes are explicitly wired in the flow at declaration time, but
+        # it is also possible to add group nodes via configuration. We must not modify
+        # any objects in the flow to make them effective. Thus we create dictionaries
+        # on the side to look up config created group nodes.
+        task_group_nodes, stage_group_nodes, style_tags = _get_config_group_nodes(
+            result, visualization_tag
+        )
 
         graph_boxes = set()  # type: Set[Stage | GroupNode]
         graph_nodes = set()  # type: Set[Task | GroupNode]
@@ -510,23 +526,33 @@ class Subflow:
 
         default_style = VisualizationStyle()
 
-        def get_style(obj: GroupNode):
-            return obj.style if obj.style else default_style
+        def get_group_node_style(obj: GroupNode):
+            return (
+                obj.style if obj.style else style_tags.get(obj.style_tag, default_style)
+            )
+
+        def get_task_group_node(task: Task):
+            return task_group_nodes.get(
+                task, task.group_node if hasattr(task, "group_node") else None
+            )
+
+        def get_stage_outer_group_node(stage: Stage | GroupNode):
+            return stage_group_nodes.get(stage, stage.outer_group_node)
 
         # add tasks and stages to graph and collect group nodes
-        for node in self.get_tasks():
-            if hasattr(node, "_visualize_hidden") and node._visualize_hidden:
+        for task in self.get_tasks():
+            if hasattr(task, "_visualize_hidden") and task._visualize_hidden:
                 continue
-            graph_boxes.add(node.stage)
-            graph_nodes.add(node)
-            if node.group_node:
-                relevant_group_nodes.add(node.group_node)
+            graph_boxes.add(task.stage)
+            graph_nodes.add(task)
+            if group_node := get_task_group_node(task):
+                relevant_group_nodes.add(group_node)
 
-            for input_task in node.input_tasks.values():
+            for input_task in task.input_tasks.values():
                 graph_nodes.add(input_task)
                 graph_boxes.add(input_task.stage)
-                if input_task.group_node:
-                    relevant_group_nodes.add(input_task.group_node)
+                if group_node := get_task_group_node(input_task):
+                    relevant_group_nodes.add(group_node)
 
         # add parent stages to graph
         for stage in graph_boxes.copy():
@@ -535,8 +561,8 @@ class Subflow:
 
         # collect parent group nodes
         for stage in graph_boxes:
-            if stage.outer_group_node:
-                relevant_group_nodes.add(stage.outer_group_node)
+            if group_node := get_stage_outer_group_node(stage):
+                relevant_group_nodes.add(group_node)
 
         # get group nodes including selected tasks recursively
         selected_group_nodes = set()
@@ -556,16 +582,27 @@ class Subflow:
                 relevant_group_nodes.add(parent)
                 parent = parent.outer_group_node
 
+        # hide all tasks within hidden group nodes
+        for task in graph_nodes.copy():
+            if group_node := get_task_group_node(task):
+                if group_node.is_content_hidden(get_group_node_style):
+                    graph_nodes.remove(task)
+
+        # hide all stages within hidden group nodes
+        for stage in graph_boxes.copy():
+            if group_node := get_stage_outer_group_node(stage):
+                if group_node.is_content_hidden(get_group_node_style):
+                    graph_boxes.remove(stage)
+
         barrier_tasks = set()
         # add group nodes to graph and potentially hide stages and tasks
         for group_node in relevant_group_nodes:
-            style = get_style(group_node)
-            if group_node.is_content_hidden(get_style):
-                graph_nodes -= group_node.tasks
-                graph_boxes -= group_node.stages
+            style = get_group_node_style(group_node)
             if (
                 not group_node.outer_group_node
-                or not group_node.outer_group_node.is_content_hidden(get_style)
+                or not group_node.outer_group_node.is_content_hidden(
+                    get_group_node_style
+                )
             ):
                 if style.hide_box:
                     if group_node.entry_barrier_task:
@@ -592,12 +629,12 @@ class Subflow:
         graph = nx.DiGraph()
 
         def get_node(task: Task) -> Task | GroupNode:
-            if task.group_node:
-                if task.group_node.is_content_hidden(get_style):
-                    obj = task.group_node
+            if group_node := get_task_group_node(task):
+                if group_node.is_content_hidden(get_group_node_style):
+                    obj = group_node
                     while (
                         obj.outer_group_node
-                        and obj.outer_group_node.is_content_hidden(get_style)
+                        and obj.outer_group_node.is_content_hidden(get_group_node_style)
                     ):
                         obj = obj.outer_group_node
                     return obj
@@ -635,7 +672,7 @@ class Subflow:
                         graph_edges.add((node, next_node))
             elif isinstance(node, GroupNode):
                 group_node = node
-                content_hidden = group_node.is_content_hidden(get_style)
+                content_hidden = group_node.is_content_hidden(get_group_node_style)
                 for subtask in group_node.tasks:
                     target = group_node if content_hidden else subtask
                     if subtask in self.selected_tasks:
@@ -645,12 +682,12 @@ class Subflow:
                 add_edges(node.input_tasks, node)
 
         for group_node in [b for b in graph_boxes if isinstance(b, GroupNode)]:
-            content_hidden = group_node.is_content_hidden(get_style)
+            content_hidden = group_node.is_content_hidden(get_group_node_style)
             for subtask in group_node.tasks:
                 target = group_node if content_hidden else subtask
                 if subtask in self.selected_tasks:
                     add_edges(subtask.input_tasks, target)
-            if not get_style(group_node).hide_box:
+            if not get_group_node_style(group_node).hide_box:
                 add_group_node_edges(group_node)
 
         # canonically sort boxes, nodes, and edges
@@ -666,7 +703,13 @@ class Subflow:
             )
 
         def task_sort_key(t):
-            return t.id if isinstance(t, Task) else t.id + 1e6
+            return (
+                t.id
+                if isinstance(t, Task)
+                else min(t.id for t in t.tasks) - 0.1
+                if t.tasks
+                else min(stage_sort_key(s) for s in t.stages) - 0.01
+            )
 
         def edge_sort_key(e):
             return (task_sort_key(e[0]), task_sort_key(e[1]))
@@ -685,7 +728,7 @@ class Subflow:
         stage_style = {}
         task_style = _generate_task_style(graph_nodes, result)
         group_node_style = _generate_group_node_style(
-            relevant_group_nodes, result, get_style
+            relevant_group_nodes, result, get_group_node_style
         )
         edge_style = {}
 
@@ -708,7 +751,7 @@ class Subflow:
                 }
 
         for group_node in relevant_group_nodes:
-            style = get_style(group_node)
+            style = get_group_node_style(group_node)
             if not style.hide_box:
                 if group_node.box_like_stage(style):
                     stage_style[group_node] = group_node_style[group_node]
@@ -747,11 +790,13 @@ class Subflow:
         return _build_pydot(
             stages=list(sorted_boxes),
             tasks=list(sorted_nodes),
+            get_task_group_node=get_task_group_node,
+            get_stage_outer_group_node=get_stage_outer_group_node,
+            get_group_node_style=get_group_node_style,
             graph=graph,
             stage_style=stage_style,
             task_style=task_style,
             edge_style=edge_style,
-            get_style=get_style,
         )
 
 
@@ -811,12 +856,39 @@ def _generate_group_node_style(
 def _build_pydot(
     stages: list[Stage | GroupNode],
     tasks: list[Task | GroupNode],
+    get_task_group_node: Callable[[Task], GroupNode],
+    get_stage_outer_group_node: Callable[[Stage], GroupNode],
+    get_group_node_style: Callable[[GroupNode], VisualizationStyle],
     graph: nx.Graph,
     stage_style: dict[Stage | GroupNode, dict] | None,
     task_style: dict[Task | GroupNode, dict] | None,
     edge_style: dict[tuple[Task | GroupNode, Task | GroupNode], dict] | None,
-    get_style: Callable[[GroupNode], VisualizationStyle],
 ) -> pydot.Dot:
+    """
+    Build a pydot graph from a graph of tasks and stages.
+
+    :param stages:
+        List of boxes around tasks be it stages or group nodes
+    :param tasks:
+        List of nodes in the graph be it tasks or group nodes
+    :param get_task_group_node:
+        Function to get the group node of a task. We can't use task.group_node directly
+        because group nodes added by configuration should not modify the flow.
+    :param get_stage_outer_group_node:
+        Function to get the outer group node of a stage. We can't use
+        stage.outer_group_node directly because group nodes added by configuration
+        should not modify the flow.
+    :param graph:
+        The graph representing edges between tasks and stages
+    :param stage_style:
+        Style of boxes be it stages or group nodes
+    :param task_style:
+        Style of nodes in the graph be it tasks or group nodes
+    :param edge_style:
+        Style of edges in the graph
+    :return:
+        A pydot graph
+    """
     from pydiverse.pipedag.core import GroupNode
 
     if stage_style is None:
@@ -839,8 +911,9 @@ def _build_pydot(
         ) | (stage_style.get(stage, {}))
 
         if isinstance(stage, GroupNode):
-            label = stage.label or ""
-            if get_style(stage).hide_label:
+            group_node = stage
+            label = group_node.label or ""
+            if get_group_node_style(group_node).hide_label:
                 label = ""
             s = pydot.Cluster(
                 f"n_{base64.b64encode(random.randbytes(8)).decode('ascii')}",
@@ -853,11 +926,17 @@ def _build_pydot(
 
     for stage in stages:
         s = subgraphs[stage]
-        if stage.outer_group_node in stages and (
-            not stage.outer_stage
-            or stage.outer_stage not in stage.outer_group_node.stages
+        stage_outer_group_node = get_stage_outer_group_node(stage)
+        if (
+            stage.outer_stage in stages
+            and get_stage_outer_group_node(stage.outer_stage) is stage_outer_group_node
         ):
-            subgraphs[stage.outer_group_node].add_subgraph(s)
+            subgraphs[stage.outer_stage].add_subgraph(s)
+        elif stage_outer_group_node in stages and (
+            not stage.outer_stage
+            or stage.outer_stage not in stage_outer_group_node.stages
+        ):
+            subgraphs[stage_outer_group_node].add_subgraph(s)
         elif stage.outer_stage in stages:
             subgraphs[stage.outer_stage].add_subgraph(s)
         else:
@@ -871,8 +950,11 @@ def _build_pydot(
 
         if isinstance(task, GroupNode):
             group_node = task
-            label = group_node.label or "|".join([t.name for t in group_node.tasks])
-            if get_style(group_node).hide_label:
+            label = group_node.label or "|".join(
+                sorted([t.name for t in group_node.stages])
+                + sorted([t.name for t in group_node.tasks])
+            )
+            if get_group_node_style(group_node).hide_label:
                 label = ""
             node = pydot.Node(
                 base64.b64encode(random.randbytes(8)).decode("ascii"),
@@ -890,13 +972,14 @@ def _build_pydot(
                 dot.add_node(node)
         else:
             node = pydot.Node(task.id, label=task.name, **style)
+            task_group_node = get_task_group_node(task)
             if (
                 hasattr(task, "group_node")
-                and task.group_node
-                and task.group_node in stages
-                and task.stage not in task.group_node.stages
+                and task_group_node
+                and task_group_node in stages
+                and task.stage not in task_group_node.stages
             ):
-                subgraphs[task.group_node].add_node(node)
+                subgraphs[task_group_node].add_node(node)
             else:
                 subgraphs[task.stage].add_node(node)
         nodes[task] = node
@@ -967,3 +1050,164 @@ def _pydot_url(dot: pydot.Dot) -> str:
     query = base64.urlsafe_b64encode(query_data).decode("ascii")
 
     return f"{kroki_url}/graphviz/svg/{query}"
+
+
+def _get_config_group_nodes(result: Result, visualization_tag: str | None):
+    from pydiverse.pipedag.core import GroupNode
+
+    logger = result.flow.logger
+    config_context = result.config_context
+    group_nodes, task_group_nodes, stage_group_nodes, style_tags = {}, {}, {}, {}
+    if visualization_tag is None:
+        visualization_tag = "default"
+    if visualization_tag in config_context.visualization:
+        visualization = config_context.visualization[visualization_tag]
+        style_tags = visualization.styles or {}
+        if visualization.group_nodes:
+            for node_tag, node_config in visualization.group_nodes.items():
+                style = (
+                    visualization.styles.get(node_config.style_tag)
+                    if visualization.styles
+                    else None
+                )
+                group_node = GroupNode(
+                    node_config.label, style, style_tag=node_config.style_tag
+                )
+                group_nodes[node_tag] = group_node
+                for stage_name in node_config.stages or []:
+                    if stage_name in result.flow.stages:
+                        stage = result.flow.stages[stage_name]
+                        group_node.add_stage(stage)
+                        stage_group_nodes[stage] = group_node
+                    else:
+                        logger.error(
+                            f"Stage {stage_name} in config based visualization "
+                            f"group node {visualization_tag}.{node_tag} not found "
+                            f"in flow."
+                        )
+
+                for task_name in node_config.tasks or []:
+                    found = False
+                    for task in result.flow.tasks:
+                        if task.name == task_name:
+                            if found:
+                                raise ValueError(
+                                    f"Task {task_name} in config based "
+                                    f"visualization group node "
+                                    f"{visualization_tag}.{node_tag} appears "
+                                    f"multiple times in flow."
+                                )
+                            found = True
+                            if other_group_node := stage_group_nodes.get(task.stage):
+                                if other_group_node is group_node:
+                                    logger.info(
+                                        f"Ignoring task {task_name} in config based"
+                                        f" visualization group node "
+                                        f"{visualization_tag}.{node_tag} because "
+                                        f"its whole stage is included."
+                                    )
+                                    continue
+                                if (
+                                    group_node.outer_group_node
+                                    and group_node.outer_group_node
+                                    is not other_group_node
+                                ):
+                                    raise ValueError(
+                                        f"Configured group node {node_tag} includes"
+                                        f" tasks from multiple outer group nodes "
+                                        f"which is not allowed: "
+                                        f"{group_node.outer_group_node}, "
+                                        f"{other_group_node}"
+                                    )
+                                group_node.outer_group_node = other_group_node
+                                if (
+                                    group_node.outer_stage
+                                    and group_node.outer_stage not in group_node.stages
+                                    and group_node.outer_stage
+                                    is not other_group_node.outer_stage
+                                ):
+                                    raise ValueError(
+                                        f"Configured group node {node_tag} includes"
+                                        f" tasks from multiple stages which is not"
+                                        f" allowed: "
+                                        f"{group_node.outer_stage}, "
+                                        f"{other_group_node.outer_stage}, "
+                                        f"included_stages={group_node.stages}"
+                                    )
+                                group_node.outer_stage = other_group_node.outer_stage
+
+                            if (
+                                group_node.outer_stage
+                                and group_node.outer_stage is not task.stage
+                            ):
+                                raise ValueError(
+                                    f"Configured group node {node_tag} includes "
+                                    f"tasks from multiple stages which is not "
+                                    f"allowed: "
+                                    f"{group_node.outer_stage}, {task.stage}"
+                                )
+                            group_node.outer_stage = task.stage
+                            group_node.add_task(task)
+                            if task.group_node:
+                                logger.info(
+                                    f"Adding task {task_name} to config based "
+                                    f"visualization group node "
+                                    f"{visualization_tag}.{node_tag}. The flow "
+                                    f"based membership in {task.group_node} will "
+                                    f"not take any effect (empty groups will not be"
+                                    f" displayed)."
+                                )
+                            if task in task_group_nodes:
+                                raise ValueError(
+                                    f"Task {task_name} in config based "
+                                    f"visualization group node "
+                                    f"{visualization_tag}.{node_tag} appears"
+                                    f" in multiple configured group nodes: "
+                                    f"{task_group_nodes[task]}, {group_node}."
+                                )
+                            task_group_nodes[task] = group_node
+                    if not found:
+                        logger.error(
+                            f"Task {task_name} in config based visualization "
+                            f"group node {visualization_tag}.{node_tag} not found "
+                            f"in flow."
+                        )
+    elif visualization_tag != "default":
+        logger.error(f"Visualization tag {visualization_tag} not found in config.")
+    else:
+        logger.info("No visualization customization found in config.")
+
+    def find_outer_group_node(stage: Stage, stages: list[Stage]):
+        if stage in stage_group_nodes:
+            return stage_group_nodes[stage], stages + [stage]
+        if stage.outer_stage:
+            return find_outer_group_node(stage.outer_stage, stages + [stage])
+        if stage.outer_group_node:
+            return stage.outer_group_node, stages + [stage]
+        return None, []
+
+    def update_outer_group_node(stage: Stage):
+        stage_outer_group_node, stages = find_outer_group_node(stage, [])
+        if stage_outer_group_node:
+            for stage in stages:
+                stage_group_nodes[stage] = stage_outer_group_node
+        return stage_outer_group_node
+
+    # link tasks and stages to next outer group nodes
+    for task in [t for t in result.flow.tasks if t not in task_group_nodes]:
+        if hasattr(task, "group_node") and not task.group_node:
+            if group_node := update_outer_group_node(task.stage):
+                task_group_nodes[task] = group_node
+
+    # link group nodes to outer group nodes and stages
+    for group_node in group_nodes.values():
+        outer_node = group_node.outer_group_node
+        for task in group_node.tasks:
+            outer_node = outer_node or update_outer_group_node(task.stage)
+        for stage in group_node.stages:
+            stage_outer_group_node = update_outer_group_node(stage)
+            if stage_outer_group_node is not group_node:
+                outer_node = outer_node or stage_outer_group_node
+        group_node.outer_group_node = outer_node
+
+    return task_group_nodes, stage_group_nodes, style_tags

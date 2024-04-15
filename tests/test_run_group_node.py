@@ -22,6 +22,7 @@ from pydiverse.pipedag.context.context import (
     StageLockContext,
     TaskContext,
 )
+from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.util.hashing import stable_hash
 from tests.fixtures.instances import (
     ORCHESTRATION_INSTANCES,
@@ -226,7 +227,7 @@ def test_run_specific_task_sequential(label, style, ordering_barrier, nesting):
         viz_res = fake_cache_status_deterministic_for_baseline_tests(res)
         assert BaselineStore(
             "subflow", label, style, ordering_barrier, nesting
-        ) == f.visualize_url(viz_res)
+        ) == res.subflow.visualize_url(viz_res)
 
 
 @with_instances("postgres")
@@ -245,3 +246,111 @@ def test_run_specific_task_sequential_styles(label, style):
     test_run_specific_task_sequential(
         label, style, ordering_barrier=False, nesting=True
     )
+
+
+@with_instances("postgres")
+@skip_instances(ORCHESTRATION_INSTANCES)
+@pytest.mark.parametrize("label", [None, "group"])
+@pytest.mark.parametrize(
+    "style",
+    [
+        None,
+        VisualizationStyle(hide_box=True),
+        VisualizationStyle(hide_box=True, hide_content=True),
+        VisualizationStyle(hide_content=True),
+        VisualizationStyle(),
+    ],
+)
+def test_run_specific_task_config(label, style):
+    group_nodes = dict(
+        group=dict(tasks=["task3", "task4"]),
+        noop=dict(tasks=["noop"]),
+        stage=dict(stages=["stage_2", "stage_4"]),
+    )
+    visualization = dict(default=dict(group_nodes=group_nodes), alternative={})
+    if label:
+        for group_node in group_nodes.values():
+            group_node["label"] = label
+    if style:
+        visualization["default"]["styles"] = dict(
+            test_style={
+                k: style.__dict__[k]
+                for k in style.__dataclass_fields__.keys()
+                if style.__dict__[k] is not None
+            }
+        )
+        for group_node in group_nodes.values():
+            group_node["style_tag"] = "test_style"
+
+    pipedag_config = PipedagConfig.default
+    raw_cfg = pipedag_config.raw_config.copy()
+    raw_cfg["instances"]["__any__"]["visualization"] = visualization
+    cfg = PipedagConfig(raw_cfg).get()
+    num = [0]
+
+    def cache():
+        return num[0]
+
+    @materialize(cache=cache)
+    def task():
+        time.sleep(random.randint(0, 1) * 0.1)
+        # random parameter is needed to make sure task is called multiple times
+        # despite identical position hash
+        num[0] += 1
+        return num[0]
+
+    @materialize(cache=cache)
+    def task3():
+        return task()
+
+    @materialize(cache=cache)
+    def task4():
+        return task()
+
+    @materialize
+    def noop2(x):
+        return m.noop(x)
+
+    # We need to assign unique names to these stages, because we can't reuse the
+    # same stage lock context between different runs.
+    with Flow() as f:
+        with Stage("stage_1"):
+            x1 = task()
+            x2 = task()
+            x3 = task3()
+            x4 = task4()
+            x5 = task()
+        with Stage("stage_2"):
+            with Stage("stage_3"):
+                _ = m.noop(6)
+        with Stage("stage_4"):
+            _ = noop2(7)
+
+    barriers = 0
+    assert len(f.tasks) == 2 + 5 + len(f.stages) + barriers
+
+    random.seed(0)  # needed for Baseline comparisons of visualize_url() calls
+    with StageLockContext():
+        res = f.run(config=cfg)
+        assert res.get(x1) == 1
+        assert res.get(x2) == 2
+        assert res.get(x3) == 3
+        assert res.get(x4) == 4
+        assert res.get(x5) == 5
+        viz_res = fake_cache_status_deterministic_for_baseline_tests(res)
+        assert BaselineStore("config_flow", label, style) == f.visualize_url(viz_res)
+        assert BaselineStore("config2_flow", label, style) == f.visualize_url(
+            viz_res, "alternative"
+        )
+
+    with StageLockContext():
+        res = f.run(x1, x3, config=cfg)
+        assert res.get(x1) == 6
+        assert res.get(x3) == 7
+        viz_res = fake_cache_status_deterministic_for_baseline_tests(res)
+        assert BaselineStore(
+            "config_subflow", label, style
+        ) == res.subflow.visualize_url(viz_res)
+        assert BaselineStore(
+            "config2_subflow", label, style
+        ) == res.subflow.visualize_url(viz_res, "alternative")

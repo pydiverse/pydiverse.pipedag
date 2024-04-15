@@ -117,20 +117,20 @@ class Result:
             store = self.config_context.store
             return dematerialize_output_from_store(store, task, task_output, as_type)
 
-    def visualize(self):
+    def visualize(self, visualization_tag: str | None = None):
         """
         Wrapper for :py:meth:`Flow.visualize()`.
         """
-        return self.subflow.visualize(result=self)
+        return self.subflow.visualize(self, visualization_tag)
 
-    def visualize_url(self) -> str:
+    def visualize_url(self, visualization_tag: str | None = None) -> str:
         """
         Wrapper for :py:meth:`Flow.visualize_url()`.
         """
-        return self.subflow.visualize_url(result=self)
+        return self.subflow.visualize_url(self, visualization_tag)
 
-    def visualize_pydot(self) -> pydot.Dot:
+    def visualize_pydot(self, visualization_tag: str | None = None) -> pydot.Dot:
         """
         Wrapper for :py:meth:`Flow.visualize_pydot()`.
         """
-        return self.subflow.visualize_pydot(result=self)
+        return self.subflow.visualize_pydot(self, visualization_tag)

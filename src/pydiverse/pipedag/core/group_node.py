@@ -84,7 +84,6 @@ class GroupNode:
         self.outer_group_node: GroupNode | None = None
 
         self.logger = structlog.get_logger(logger_name=type(self).__name__, group=self)
-        self.id: int = None  # type: ignore
 
         self._did_enter = False
 
@@ -149,14 +148,6 @@ class GroupNode:
             self.outer_stage.barrier_tasks.append(self.exit_barrier_task)
         self._ctx.__exit__()
         del self._ctx
-
-    def is_inner(self, other: GroupNode):
-        outer = self.outer_group_node
-        while outer is not None:
-            if outer == other:
-                return True
-            outer = outer.outer_group_node
-        return False
 
     def add_stage(self, stage: Stage):
         self.stages.add(stage)
