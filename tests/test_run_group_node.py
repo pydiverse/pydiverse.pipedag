@@ -268,9 +268,9 @@ def test_run_specific_task_sequential_styles(label, style):
 )
 def test_run_specific_task_config(label, style):
     group_nodes = dict(
-        group=dict(tasks=["task3", "task4"]),
+        group=dict(tasks=["task4"]),
         noop=dict(tasks=["noop"]),
-        stage=dict(stages=["stage_2", "stage_4"]),
+        stage=dict(stages=["stage_4"]),
     )
     visualization = dict(default=dict(group_nodes=group_nodes), alternative={})
     if label:
@@ -304,7 +304,7 @@ def test_run_specific_task_config(label, style):
         num[0] += 1
         return num[0]
 
-    @materialize(cache=cache)
+    @materialize(cache=cache, group_node_tag="group")
     def task3():
         return task()
 
@@ -325,7 +325,7 @@ def test_run_specific_task_config(label, style):
             x3 = task3()
             x4 = task4()
             x5 = task()
-        with Stage("stage_2"):
+        with Stage("stage_2", group_node_tag="stage"):
             with Stage("stage_3"):
                 _ = m.noop(6)
                 with GroupNode("style_tag", style_tag="test_style"):

@@ -34,8 +34,9 @@ class UnboundTask:
         self,
         fn: Callable,
         *,
-        name: str = None,
-        nout: int = None,
+        name: str | None = None,
+        nout: int | None = None,
+        group_node_tag: str | None = None,
     ):
         if not callable(fn):
             raise TypeError("`fn` must be callable")
@@ -48,6 +49,7 @@ class UnboundTask:
         self.fn = fn
         self.name = name
         self.nout = nout
+        self.group_node_tag = group_node_tag
 
         self._bound_task_type = Task
         self._signature = inspect.signature(fn)
@@ -94,6 +96,7 @@ class Task:
         self.fn = unbound_task.fn
         self.name = unbound_task.name
         self.nout = unbound_task.nout
+        self.group_node_tag = unbound_task.group_node_tag
 
         self.logger = structlog.get_logger(logger_name=f"Task '{self.name}'", task=self)
 

@@ -1124,6 +1124,10 @@ def _get_config_group_nodes(
                             f"group node {visualization_tag}.{node_tag} not found "
                             f"in flow."
                         )
+                for stage in flow.stages.values():
+                    if stage.group_node_tag == node_tag:
+                        group_node.add_stage(stage)
+                        stage_group_nodes[stage] = group_node
 
                 for task_name in node_config.tasks or []:
                     found = False
@@ -1211,6 +1215,15 @@ def _get_config_group_nodes(
                             f"group node {visualization_tag}.{node_tag} not found "
                             f"in flow."
                         )
+
+                for task in flow.tasks:
+                    if (
+                        hasattr(task, "group_node_tag")
+                        and task.group_node_tag == node_tag
+                    ):
+                        task_group_nodes[task] = group_node
+                        group_node.add_task(task)
+
     elif visualization_tag != "default":
         logger.error(f"Visualization tag {visualization_tag} not found in config.")
     else:

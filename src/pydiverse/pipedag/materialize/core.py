@@ -4,9 +4,9 @@ import copy
 import functools
 import inspect
 import uuid
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from functools import partial
-from typing import TYPE_CHECKING, Any, Callable, overload
+from typing import TYPE_CHECKING, Any, overload
 
 import sqlalchemy as sa
 
@@ -33,10 +33,10 @@ if TYPE_CHECKING:
 @overload
 def materialize(
     *,
-    name: str = None,
-    input_type: type | tuple | dict[str, Any] = None,
-    version: str = None,
-    cache: Callable = None,
+    name: str | None = None,
+    input_type: type | tuple | dict[str, Any] | None = None,
+    version: str | None = None,
+    cache: Callable[[Any], Any] | None = None,
     lazy: bool = False,
     nout: int = 1,
 ) -> Callable[[CallableT], CallableT | UnboundMaterializingTask]:
@@ -49,13 +49,14 @@ def materialize(fn: CallableT, /) -> CallableT | UnboundMaterializingTask:
 
 
 def materialize(
-    fn: CallableT = None,
+    fn: CallableT | None = None,
     *,
-    name: str = None,
-    input_type: type | tuple | dict[str, Any] = None,
-    version: str = None,
-    cache: Callable = None,
+    name: str | None = None,
+    input_type: type | tuple | dict[str, Any] | None = None,
+    version: str | None = None,
+    cache: Callable[[Any], Any] | None = None,
     lazy: bool = False,
+    group_node_tag: str | None = None,
     nout: int = 1,
 ):
     """Decorator to create a task whose outputs get materialized.
@@ -116,6 +117,8 @@ def materialize(
         This behaviour is very useful, because you don't need to manually bump
         the `version` of a lazy task. This only works because for lazy tables
         generating the query is very cheap compared to executing it.
+    :param group_node_tag:
+        Set a tag that may add this task to a configuration based group node.
     :param nout:
         The number of objects returned by the task.
         If set, this allows unpacking and iterating over the results from the task.
@@ -188,6 +191,7 @@ def materialize(
             version=version,
             cache=cache,
             lazy=lazy,
+            group_node_tag=group_node_tag,
             nout=nout,
         )
 
@@ -198,6 +202,7 @@ def materialize(
         version=version,
         cache=cache,
         lazy=lazy,
+        group_node_tag=group_node_tag,
         nout=nout,
     )
 
@@ -252,11 +257,12 @@ class UnboundMaterializingTask(UnboundTask):
         self,
         fn: Callable,
         *,
-        name: str = None,
-        input_type: type = None,
-        version: str = None,
-        cache: Callable = None,
+        name: str | None = None,
+        input_type: type | None = None,
+        version: str | None = None,
+        cache: Callable[[Any], Any] | None = None,
         lazy: bool = False,
+        group_node_tag: str | None = None,
         nout: int = 1,
     ):
         super().__init__(
@@ -272,6 +278,7 @@ class UnboundMaterializingTask(UnboundTask):
         self.version = version
         self.cache = cache
         self.lazy = lazy
+        self.group_node_tag = group_node_tag
 
         if version is AUTO_VERSION:
             if input_type is None:
