@@ -640,8 +640,12 @@ class Subflow:
                     return obj
             return task
 
-        def add_edges(input_tasks: dict[int, Task], target: Task | GroupNode):
-            for input_task in input_tasks.values():
+        def add_edges(
+            input_tasks: dict[int, Task] | Iterable[Task], target: Task | GroupNode
+        ):
+            if isinstance(input_tasks, dict):
+                input_tasks = input_tasks.values()
+            for input_task in input_tasks:
                 input_node = get_node(input_task)
                 if input_node in graph_nodes:
                     graph_edges.add((input_node, target))
@@ -676,7 +680,9 @@ class Subflow:
                 for subtask in group_node.tasks:
                     target = group_node if content_hidden else subtask
                     if subtask in self.selected_tasks:
-                        add_edges(subtask.input_tasks, target)
+                        add_edges(
+                            set(subtask.input_tasks.values()) - group_node.tasks, target
+                        )
                 add_group_node_edges(group_node)
             else:
                 add_edges(node.input_tasks, node)

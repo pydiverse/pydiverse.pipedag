@@ -58,12 +58,27 @@ class GroupNode:
 
     Group nodes can contain stages and can be contained by stages.
 
+    .. code-block:: python
+       :caption: Example: How to group tasks with a group node.
+
+        with Flow() as flow:
+            with Stage("stage1"):
+                _ = any_task()
+                with GroupNode("group1"):
+                    task1 = task_within_group()
+                    _ = task_within_group2(task1)
+                _ = any_task()
+
+    https://kroki.io/graphviz/svg/eNqljk1LxDAQQO_5FUO8rtjUk5R4XdnjXhcJkyZtw45JyQeyiP_dbsOCyiKoOc7kvTfGjRHnCbbwxvrwMofijcyx2I6louuup5KyjSqplHG0Yvmqxz5QiJLfNOtrG96xOtKE_bFjQ_D5y4BQW5LVsMjziaxMgZz5VOKXlFfz7knst8N0F4Lk_ymOMZT5e1HAYXBEFyUaOzxovoGKZExH9ery5Lxa8Q1Ump8ha_hzx9rfGdorinfGmh8t6E_qbLrC3v8VXKICbh-hBTjQZNHI5TTK6EiKdf0Bc8SyVQ==
+
     :param label:
         label displayed in the visualization
     :param style:
         visualization style for this group node
     :param ordering_barrier:
         If True, a barrier task will be added to the stage before and after this group
+        to ensure all tasks before/after this group are executed before/after tasks in
+        this group.
     :param style_tag:
         Style tag to be used for visualization
     """

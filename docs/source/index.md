@@ -270,6 +270,7 @@ instances.
 [//]: # (Contents of the Sidebar)
 
 ```{toctree}
+:maxdepth: 2
 :hidden:
 
 quickstart
@@ -288,3 +289,4 @@ reference/cli
 
 changelog
 license
+```

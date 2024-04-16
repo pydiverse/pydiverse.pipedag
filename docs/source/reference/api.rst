@@ -4,6 +4,20 @@ API
 
 Public
 ======
+    "Flow",
+    "Stage",
+    "materialize",
+    "AUTO_VERSION",
+    "Table",
+    "RawSql",
+    "Blob",
+    "GroupNode",
+    "VisualizationStyle",
+    "Schema",
+    "Result",
+    "PipedagConfig",
+    "ConfigContext",
+    "StageLockContext",
 
 .. py:module:: pydiverse.pipedag
 
@@ -11,6 +25,7 @@ Public
     :members:
     :inherited-members:
     :special-members: __getitem__
+
 .. autoclass:: Stage
     :members:
     :inherited-members:
@@ -21,18 +36,29 @@ Public
 .. autodata:: AUTO_VERSION
 
 .. autoclass:: Table
+
 .. autoclass:: RawSql
     :members:
     :special-members: __iter__, __getitem__, __contains__
+
 .. autoclass:: Blob
+
+.. autoclass:: GroupNode
+
+.. autoclass:: VisualizationStyle
+
+.. autoclass:: Schema
+    :members:
 
 .. autoclass:: Result
     :members:
 
 .. autoclass:: PipedagConfig
     :inherited-members:
+
 .. autoclass:: ConfigContext
     :inherited-members:
+
 .. autoclass:: StageLockContext
     :inherited-members:
 
@@ -96,4 +122,4 @@ Orchestration Engine
 Special Table Types
 -------------------
 
-.. autoclass:: pydiverse.pipedag.backend.table.sql.ExternalTableReference
+.. autoclass:: pydiverse.pipedag.materialize.container.ExternalTableReference
