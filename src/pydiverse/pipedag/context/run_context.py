@@ -778,7 +778,6 @@ class FinalTaskState(Enum):
     COMPLETED = 1
     CACHE_VALID = 2
     FAILED = 10
-    SKIPPED = 20
 
     def is_successful(self) -> bool:
         return self in (FinalTaskState.COMPLETED, FinalTaskState.CACHE_VALID)

@@ -827,8 +827,8 @@ def _generate_task_style(tasks: Iterable[Task], result: Result | None) -> dict:
                 task_style[task] = {"fillcolor": "#e8ffc6"}
             elif final_state == FinalTaskState.FAILED:
                 task_style[task] = {"fillcolor": "#ff453a"}
-            elif final_state == FinalTaskState.SKIPPED:
-                task_style[task] = {"fillcolor": "#fccb83"}
+            elif final_state == FinalTaskState.UNKNOWN:
+                task_style[task] = {"fillcolor": "#ffffff"}
     return task_style
 
 
@@ -858,8 +858,8 @@ def _generate_group_node_style(
                             "style": "filled",
                             "fillcolor": fill_color,
                         }
-                    elif final_states == {FinalTaskState.SKIPPED}:
-                        fill_color = style.box_color_all_skipped or "#eeeeee"
+                    elif final_states == {FinalTaskState.UNKNOWN}:
+                        fill_color = style.box_color_all_skipped or "#ffffff"
                         group_node_style[group_node] = {
                             "style": "filled",
                             "fillcolor": fill_color,

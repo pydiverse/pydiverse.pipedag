@@ -17,20 +17,31 @@ class SequentialEngine(OrchestrationEngine):
         run_context = RunContext.get()
         config_context = ConfigContext.get()
 
+        failed_tasks = set()  # type: set[Task]
         results = {}
         exception = None
 
         try:
             for task in flow.get_tasks():
-                results[task] = task.run(
-                    inputs={
-                        in_id: results[in_t]
-                        for in_id, in_t in task.input_tasks.items()
-                        if in_t in results
-                    },
-                    run_context=run_context,
-                    config_context=config_context,
-                )
+                try:
+                    if not (set(task.input_tasks) & failed_tasks):
+                        results[task] = task.run(
+                            inputs={
+                                in_id: results[in_t]
+                                for in_id, in_t in task.input_tasks.items()
+                                if in_t in results
+                            },
+                            run_context=run_context,
+                            config_context=config_context,
+                        )
+                    else:
+                        failed_tasks.add(task)
+                except Exception as e:
+                    if config_context._swallow_exceptions:
+                        exception = e
+                        failed_tasks.add(task)
+                    else:
+                        raise e
 
         except Exception as e:
             if run_kwargs.get("fail_fast", False):

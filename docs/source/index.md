@@ -31,12 +31,15 @@ with Flow() as flow:
 flow.run()
 ```
 
+Graphical representations of the flow are generated automatically:
+![Graph representation of flow](examples/simple_pipeline01.svg)
+
 In the above example, each task like `join_tables()` can choose the format it prefers for table access.
 Here, SQL Alchemy is used to generate a JOIN-SQL-Query from two table references:
 
 ```python
 @materialize(lazy=True, input_type=sa.Table)
-def join_tables(names, ages):
+def join_tables(names: sa.Alias, ages: sa.Alias):
     return (
         sa.select(names.c.id, names.c.name, ages.c.age)
         .join_from(names, ages, names.c.id == ages.c.id)
@@ -51,11 +54,26 @@ def join_tables(names: pd.DataFrame, ages: pd.DataFrame):
     return names.merge(ages, on="id", how="inner")[["id", "name", "age"]]
 ```
 
+Or handwritten SQL:
+
+```python
+def ref(table: sa.Alias):
+    return f'"{table.original.schema}"."{table.original.name}"'
+
+@materialize(lazy=True, input_type=sa.Table)
+def join_tables(names: sa.Alias, ages: sa.Alias):
+    sql = f"""
+        SELECT names.id, names.name, ages.age
+        FROM {ref(names)} AS names INNER JOIN {ref(ages)} ages ON names.id = ages.id
+    """
+    return sa.text(sql)
+```
+
 Or with pydiverse.transform:
 
 ```python
 @materialize(lazy=True, input_type=pdt.SQLTableImpl)
-def join_tables(names, ages):
+def join_tables(names: pdt.Table, ages: pdt.Table):
     return (
             names
             >> join(ages, names.id == ages.id)

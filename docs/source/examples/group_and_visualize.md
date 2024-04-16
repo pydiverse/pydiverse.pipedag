@@ -1,4 +1,4 @@
-# Grouping Tasks/Stages and visualization
+# DAG Visualization and Grouping Tasks/Stages
 
 This [example](../examples.md) how to group tasks and stages within the visualization of the pipeline. Grouping may also be used
 as a way to ensure some tasks to be executed before/after others even if they don't have an explicit dependency.
@@ -140,6 +140,11 @@ For testing, it might be easier to assemble the configuration in code:
 
 ![Visualization of group of stage](group_and_visualize06.svg)
 
+Here is a legend of default [colors](https://kroki.io/graphviz/svg/eNqlkl1LwzAUhu_7K0K9dEI_VnGUeuFQN-Z0iLvQISXNR9stS0qbDobsv5uubqXZB8hyeZL3Oc_hBKdxDrMEPIMfA4llJkqOA5mXxDeKMqrvECsLSfKwCAsJY2Krp1GMBBN5YF5Z2-NYpm_UpYhBtPANKrhsFRiMCAtqgoLLNSNBIViKfcMCM5oytkNCTGgvMjugjlRajEiCw6iUIYIoIWHKV1BFO6DmmFWcYPPbN-w2i9xRim4b1jZ9KrsxTg7tXDy0ow3ttkUp7Xou3ItSmCqp_zm6Fzu6mqOnO1Zn71gs0iw7KmmmS3u0-ugNrQcrMM9uN85FmYVccBIeWU6NrIh0YDu4P3Y-ralORJBSSDUi5OvzQJ70n6avbjGOH3Wg9mn-gIydB04mA_72_lUu5mMdqC23MWyvuWFdw-Rl3h1ZK294yGotoZHT1rGHqR_jgpt74AEwYwmBOPBUWKrOgXvorR5q3XepdnmHaMe37X4B23d0HQ==)
+used for tasks and group nodes:
+
+![Legend of default task and group node colors](color_legend.svg)
+
 The following code is a basis for testing the code snippets from above. 
 It can also be executed as [jupyter notebook](https://github.com/pydiverse/pydiverse.pipedag/tree/main/docs/source/examples/group_and_visualize.ipynb)
 when using an ipython kernel similar to running `conda env create` 
@@ -204,3 +209,89 @@ if __name__ == "__main__":
     main()
 ```
 For SQLAlchemy >= 2.0, you can use sa.Alias instead of sa.sql.expression.Alias.
+
+This code was used for creating the legend of colors:
+```python
+from __future__ import annotations
+
+import tempfile
+
+from pydiverse.pipedag import Flow, GroupNode, Stage, VisualizationStyle, materialize
+from pydiverse.pipedag.core.config import create_basic_pipedag_config
+from pydiverse.pipedag.util.structlog import setup_logging
+
+
+@materialize
+def failed():
+    assert False, "This task is supposed to fail"
+
+
+@materialize(version=None)
+def completed_but_cache_invalid():
+    return 1
+
+
+@materialize(version="1.0")
+def cache_valid():
+    return 2
+
+
+@materialize(version="1.0")
+def cache_valid2():
+    return 3
+
+
+@materialize
+def skipped(out):
+    return out + 1
+
+
+def main():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        cfg = create_basic_pipedag_config(
+            f"duckdb:///{temp_dir}/db.duckdb",
+            disable_stage_locking=True,  # This is special for duckdb
+            # Attention: stage and task names might be sent to the
+            #   following URL. You can self-host kroki if you like:
+            #   https://docs.kroki.io/kroki/setup/install/
+            kroki_url="https://kroki.io",
+            fail_fast=False,
+        ).get("default").evolve(swallow_exceptions=True)
+        with cfg:
+            with Flow() as flow:
+                with Stage("stage1"):
+                    _ = completed_but_cache_invalid()
+                    _ = cache_valid()
+                with Stage("stage2"):
+                    out = failed()
+                with Stage("stage3"):
+                    _ = skipped(out)
+                    with GroupNode("group_none_cache_valid", style=VisualizationStyle(hide_content=True)):
+                        _ = completed_but_cache_invalid()
+                    with GroupNode("group_any_cache_valid", style=VisualizationStyle(hide_content=True)):
+                        _ = completed_but_cache_invalid()
+                        _ = cache_valid()
+                    with GroupNode("group_all_cache_valid", style=VisualizationStyle(hide_content=True)):
+                        # avoid memoization (not counted as cache valid)
+                        _ = cache_valid2()
+                    with GroupNode("group_any_failed", style=VisualizationStyle(hide_content=True)):
+                        _ = completed_but_cache_invalid()
+                        out = failed()
+                        _ = skipped(out)
+
+            # Run flow
+            result = flow.run()
+            assert not result.successful
+
+            # Run flow again for cache validity
+            result = flow.run()
+            assert not result.successful
+
+            # you can also visualize the flow explicitly:
+            # kroki_url = result.visualize_url()
+            # result.visualize()
+
+if __name__ == "__main__":
+    setup_logging()  # you can setup the logging and/or structlog libraries as you wish
+    main()
+```
