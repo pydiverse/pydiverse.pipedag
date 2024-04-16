@@ -37,6 +37,8 @@ class SequentialEngine(OrchestrationEngine):
                     else:
                         failed_tasks.add(task)
                 except Exception as e:
+                    if config_context.fail_fast:
+                        raise e
                     if config_context._swallow_exceptions:
                         exception = e
                         failed_tasks.add(task)
@@ -44,7 +46,7 @@ class SequentialEngine(OrchestrationEngine):
                         raise e
 
         except Exception as e:
-            if run_kwargs.get("fail_fast", False):
+            if config_context.fail_fast:
                 raise e
             exception = e
 

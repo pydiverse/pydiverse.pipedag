@@ -86,7 +86,7 @@ class DaskEngine(OrchestrationEngine):
         try:
             results = dask.compute(results, **self.dask_compute_kwargs)[0]
         except Exception as e:
-            if run_kwargs.get("fail_fast", False):
+            if config_context.fail_fast:
                 raise e
             exception = e
 
