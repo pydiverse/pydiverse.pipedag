@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.1 (2024-MM-DD)
+## 0.9.0 (2024-04-17)
 - Support imperative materialization with `tbl_ref = dag.Table(...).materialize()`. This is particularly useful for 
     materializing subqueries within a task. It also helps see task in stack trace when materialization fails. There is
     one downside of using it: when a task returns multiple tables, it is assumed that all tables depend on previously 
