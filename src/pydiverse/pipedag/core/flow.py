@@ -569,7 +569,8 @@ class Subflow:
         selected_group_nodes = set()
         for group_node in relevant_group_nodes:
             obj = group_node
-            if obj.tasks & self.selected_tasks:
+            stage_tasks = {t for s in obj.stages for t in s.tasks}
+            if (obj.tasks | stage_tasks) & self.selected_tasks:
                 while True:
                     selected_group_nodes.add(obj)
                     obj = obj.outer_group_node

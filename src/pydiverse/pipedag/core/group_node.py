@@ -59,7 +59,13 @@ class GroupNode:
     Group nodes can contain stages and can be contained by stages.
 
     :param label:
-    TODO
+        label displayed in the visualization
+    :param style:
+        visualization style for this group node
+    :param ordering_barrier:
+        If True, a barrier task will be added to the stage before and after this group
+    :param style_tag:
+        Style tag to be used for visualization
     """
 
     def __init__(
