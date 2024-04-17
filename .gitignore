@@ -120,3 +120,6 @@ mlruns
 
 # direnv
 .envrc
+
+# baseline update files
+*.updated.json

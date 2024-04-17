@@ -589,11 +589,27 @@ class ExternalTableReference:
 
 @frozen
 class Schema:
+    """
+    Class for holding a schema name with separable prefix and suffix.
+
+    Attributes
+    ----------
+    name : str
+        The schema name.
+    prefix : str
+        The prefix to be added to the schema name.
+    suffix : str
+        The suffix to be added to the schema name.
+    """
+
     name: str
     prefix: str = ""
     suffix: str = ""
 
-    def get(self):
+    def get(self) -> str:
+        """
+        Get the schema name with prefix and suffix.
+        """
         return self.prefix + self.name + self.suffix
 
     def __str__(self):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from contextvars import ContextVar, Token
+from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
 from threading import Lock
@@ -16,10 +17,10 @@ from pydiverse.pipedag.util.import_ import import_object, load_object
 from pydiverse.pipedag.util.naming import NameDisambiguator
 
 if TYPE_CHECKING:
+    from pydiverse.pipedag import Flow, GroupNode, Stage, Task, VisualizationStyle
     from pydiverse.pipedag._typing import T
     from pydiverse.pipedag.backend import BaseLockManager
     from pydiverse.pipedag.context.run_context import StageLockStateHandler
-    from pydiverse.pipedag.core import Flow, Stage, Task
     from pydiverse.pipedag.engine.base import OrchestrationEngine
     from pydiverse.pipedag.materialize import Table
 
@@ -80,6 +81,7 @@ class DAGContext(BaseAttrsContext):
 
     flow: Flow
     stage: Stage
+    group_node: GroupNode
 
     _context_var = ContextVar("dag_context")
 
@@ -137,6 +139,20 @@ class CacheValidationMode(Enum):
     FORCE_CACHE_INVALID = 4
 
 
+@dataclass(frozen=True)
+class GroupNodeConfig:
+    label: str | None = None
+    tasks: list[str] | None = None
+    stages: list[str] | None = None
+    style_tag: str | None = None
+
+
+@dataclass(frozen=True)
+class VisualizationConfig:
+    styles: dict[str, VisualizationStyle] | None = None
+    group_nodes: dict[str, GroupNodeConfig] | None = None
+
+
 @frozen(slots=False)
 class ConfigContext(BaseAttrsContext):
     """Configuration context for running a particular pipedag instance.
@@ -189,6 +205,7 @@ class ConfigContext(BaseAttrsContext):
     instance_id: str  # may be used as database name or locking ID
     stage_commit_technique: StageCommitTechnique
     cache_validation: Box
+    visualization: dict[str, VisualizationConfig]
     network_interface: str
     disable_kroki: bool
     kroki_url: str | None

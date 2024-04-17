@@ -1,8 +1,16 @@
 from __future__ import annotations
 
-from pydiverse.pipedag.context import ConfigContext, StageLockContext
-from pydiverse.pipedag.core import Flow, PipedagConfig, Result, Stage, Task
-from pydiverse.pipedag.materialize import (
+from .context import ConfigContext, StageLockContext
+from .core import (
+    Flow,
+    GroupNode,
+    PipedagConfig,
+    Result,
+    Stage,
+    Task,
+    VisualizationStyle,
+)
+from .materialize import (
     Blob,
     ExternalTableReference,
     RawSql,
@@ -10,7 +18,7 @@ from pydiverse.pipedag.materialize import (
     Table,
     materialize,
 )
-from pydiverse.pipedag.materialize.core import AUTO_VERSION
+from .materialize.core import AUTO_VERSION
 
 __all__ = [
     "Flow",
@@ -20,6 +28,8 @@ __all__ = [
     "Table",
     "RawSql",
     "Blob",
+    "GroupNode",
+    "VisualizationStyle",
     "Schema",
     "Result",
     "PipedagConfig",

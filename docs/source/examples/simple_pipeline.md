@@ -113,3 +113,5 @@ if __name__ == "__main__":
     main()
 ```
 For SQLAlchemy >= 2.0, you can use sa.Alias instead of sa.sql.expression.Alias.
+
+![Simple pipeline visualization](simple_pipeline01.svg)

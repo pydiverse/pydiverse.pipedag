@@ -34,8 +34,9 @@ class UnboundTask:
         self,
         fn: Callable,
         *,
-        name: str = None,
-        nout: int = None,
+        name: str | None = None,
+        nout: int | None = None,
+        group_node_tag: str | None = None,
     ):
         if not callable(fn):
             raise TypeError("`fn` must be callable")
@@ -48,6 +49,7 @@ class UnboundTask:
         self.fn = fn
         self.name = name
         self.nout = nout
+        self.group_node_tag = group_node_tag
 
         self._bound_task_type = Task
         self._signature = inspect.signature(fn)
@@ -73,7 +75,11 @@ class UnboundTask:
 
         # Construct Task
         bound_args = self._signature.bind(*args, **kwargs)
-        return self._bound_task_type(self, bound_args, ctx.flow, ctx.stage)
+        task = self._bound_task_type(self, bound_args, ctx.flow, ctx.stage)
+        if ctx.group_node is not None:
+            ctx.group_node.add_task(task)
+            task.group_node = ctx.group_node
+        return task
 
     def _call_original_function(self, *args, **kwargs):
         return self.fn(*args, **kwargs)
@@ -90,12 +96,14 @@ class Task:
         self.fn = unbound_task.fn
         self.name = unbound_task.name
         self.nout = unbound_task.nout
+        self.group_node_tag = unbound_task.group_node_tag
 
         self.logger = structlog.get_logger(logger_name=f"Task '{self.name}'", task=self)
 
         self._bound_args = bound_args
         self.flow = flow
         self.stage = stage
+        self.group_node = None  # will be set by UnboundTask.__call__
         self.position_hash = self.__compute_position_hash()
 
         # The ID gets set by calling flow.add_task

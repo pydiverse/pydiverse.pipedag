@@ -14,7 +14,11 @@ import structlog
 import yaml
 from box import Box
 
-from pydiverse.pipedag.context.context import CacheValidationMode
+from pydiverse.pipedag.context.context import (
+    CacheValidationMode,
+    GroupNodeConfig,
+    VisualizationConfig,
+)
 from pydiverse.pipedag.util.deep_merge import deep_merge
 
 if TYPE_CHECKING:
@@ -182,6 +186,34 @@ class PipedagConfig:
             CacheValidationMode, config["cache_validation"]["mode"]
         )
 
+        # parsing visualization dictionaries into objects (this could be generalized
+        # and possible an open source solution exists)
+        from pydiverse.pipedag import VisualizationStyle
+
+        if not isinstance(config.get("visualization", {}), dict):
+            raise ValueError(
+                "Config section 'visualization' must be a dictionary, "
+                f"found {type(config['visualization'])}"
+            )
+        visualization = {}
+        for key, value in config.get("visualization", {}).items():
+            self.parse_in_object(
+                key, value, VisualizationConfig, "visualization", inout=visualization
+            )
+            for field, structure, class_type in [
+                ("styles", visualization[key].styles, VisualizationStyle),
+                ("group_nodes", visualization[key].group_nodes, GroupNodeConfig),
+            ]:
+                if structure:
+                    for key2, value2 in structure.items():
+                        self.parse_in_object(
+                            key2,
+                            value2,
+                            class_type,
+                            f"visualization.{key}.{field}",
+                            inout=structure,
+                        )
+
         if (
             cache_validation["mode"] == CacheValidationMode.NORMAL
             and cache_validation["disable_cache_function"]
@@ -236,6 +268,7 @@ class PipedagConfig:
             instance_id=config["instance_id"],
             stage_commit_technique=stage_commit_technique,
             cache_validation=Box(cache_validation, frozen_box=True),
+            visualization=visualization,
             network_interface=config["network_interface"],
             disable_kroki=config.get("disable_kroki"),
             kroki_url=config.get("kroki_url"),
@@ -264,6 +297,53 @@ class PipedagConfig:
                 ) from e
 
         return config_context
+
+    @staticmethod
+    def parse_in_object(
+        key: str,
+        value: dict[str, Any],
+        class_type: Any,
+        within: str,
+        *,
+        inout: dict[str, Any],
+    ):
+        structure = inout
+        if not isinstance(value, dict):
+            raise ValueError(
+                f"Config section '{key}' within '{within}' must be a dictionary, "
+                f"found {type(value)}"
+            )
+        members = set(class_type.__dataclass_fields__.keys())
+        if unexpected := set(value.keys()) - members:
+            raise ValueError(
+                f"Unexpected keys in section '{key}' within '{within}': "
+                f"{unexpected}; expected: '{', '.join(members)}'"
+            )
+        structure[key] = class_type(
+            **{m: copy.copy(value[m]) for m in members if m in value}
+        )
+        for m in value:
+            annotation = class_type.__annotations__[m]
+            if annotation.startswith("dict[") and not isinstance(value[m], dict):
+                raise ValueError(
+                    f"Expected dictionary for '{m}' within '{within}.{key}', "
+                    f"found {type(value[m])}"
+                )
+            if annotation.startswith("bool") and not isinstance(value[m], bool):
+                raise ValueError(
+                    f"Expected boolean for '{m}' within '{within}.{key}', "
+                    f"found {type(value[m])}"
+                )
+            if annotation.startswith("str") and not isinstance(value[m], str):
+                raise ValueError(
+                    f"Expected string for '{m}' within '{within}.{key}', "
+                    f"found {type(value[m])}"
+                )
+            if annotation.startswith("int") and not isinstance(value[m], int):
+                raise ValueError(
+                    f"Expected integer for '{m}' within '{within}.{key}', "
+                    f"found {type(value[m])}"
+                )
 
     def __get_merged_config_dict(self, instance, flow, default=None):
         search_paths = [

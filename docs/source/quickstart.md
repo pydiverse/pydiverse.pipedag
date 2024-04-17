@@ -128,6 +128,15 @@ This means that everything went as expected.
 
 If you like to connect to a running database, you can find another way of configuring pipedag [here](database_testing.md).
 
+There are various ways to [visualize](/examples/group_and_visualize) your flow which will color encode which 
+tasks ran, which ones failed, which ones were cache, valid, etc.:
+
+![Flow visualization example](examples/simple_pipeline01.svg)
+
+Here is a legend of default colors:
+
+![Flow visualization example](examples/color_legend.svg)
+
 Here, you can find more [examples](/examples).
 
 ### What is going on here?

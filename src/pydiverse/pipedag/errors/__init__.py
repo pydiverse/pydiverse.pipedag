@@ -13,6 +13,12 @@ class StageError(Exception):
     """
 
 
+class GroupNodeError(Exception):
+    """
+    Exception raised when something is wrong with the stage.
+    """
+
+
 class CacheError(Exception):
     """
     Exception raised if something couldn't be retrieved from the cache.

@@ -103,13 +103,12 @@ class SQLTableStore(BaseTableStore):
            | ``pdt.lazy.SQLTableImpl``
 
        * - pydiverse.pipedag table reference
-         - | :py:class:`~.ExternalTableReference` (no materialization)
+         - :py:class:`~.ExternalTableReference` (no materialization)
          - Can be read with all dematerialization methods above
-
 
     :param url:
         The :external+sa:ref:`SQLAlchemy engine url <database_urls>`
-        use to connect to the database.
+        used to connect to the database.
 
         This URL may contain placeholders like ``{name}`` or ``{instance_id}``
         (additional ones can be defined in the ``url_attrs_file``) or

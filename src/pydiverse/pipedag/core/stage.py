@@ -11,7 +11,7 @@ from pydiverse.pipedag.errors import StageError
 from pydiverse.pipedag.util import normalize_name
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag.core.flow import Flow
+    from pydiverse.pipedag import Flow, GroupNode
 
 
 class Stage:
@@ -40,18 +40,26 @@ class Stage:
         before any of its upstream stage dependencies have been committed.
     """
 
-    def __init__(self, name: str, materialization_details: str | None = None):
+    def __init__(
+        self,
+        name: str,
+        materialization_details: str | None = None,
+        group_node_tag: str | None = None,
+    ):
         self._name = normalize_name(name)
         self._transaction_name = f"{self._name}__tmp"
 
         self.tasks: list[Task] = []
         self.commit_task: CommitStageTask = None  # type: ignore
+        self.barrier_tasks: list[Task] = []
         self.outer_stage: Stage | None = None
+        self.outer_group_node: GroupNode | None = None
 
         self.logger = structlog.get_logger(logger_name=type(self).__name__, stage=self)
         self.id: int = None  # type: ignore
 
         self.materialization_details = materialization_details
+        self.group_node_tag = group_node_tag
 
         self._did_enter = False
 
@@ -96,6 +104,7 @@ class Stage:
         state = self.__dict__.copy()
         state.pop("tasks", None)
         state.pop("commit_task", None)
+        state.pop("barrier_tasks", None)
         state.pop("logger", None)
         return state
 
@@ -117,6 +126,9 @@ class Stage:
         outer_ctx.flow.add_stage(self)
         if outer_ctx.stage is not None:
             self.outer_stage = outer_ctx.stage
+        if outer_ctx.group_node is not None:
+            self.outer_group_node = outer_ctx.group_node
+            outer_ctx.group_node.add_stage(self)
 
         # Initialize new context (both Flow and Stage use DAGContext to transport
         # information to @materialize annotations within the flow and to support
@@ -124,6 +136,7 @@ class Stage:
         self._ctx = DAGContext(
             flow=outer_ctx.flow,
             stage=self,
+            group_node=outer_ctx.group_node,
         )
         self._ctx.__enter__()
         return self
@@ -185,6 +198,7 @@ class Stage:
 
     def all_tasks(self):
         yield from self.tasks
+        yield from self.barrier_tasks
         yield self.commit_task
 
     def is_inner(self, other: Stage):

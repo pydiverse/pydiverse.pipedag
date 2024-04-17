@@ -10,3 +10,9 @@ best practice suggestions:
 * [moving from Raw SQL over handwritten SELECT statements to programmatic SQL](/examples/best_practices_sql)
 * [multiple instances: full_fresh, full_stable, mini_stable, midi_stable](/examples/best_practices_instances)
 * [inline views, CTEs, and subqueries](/examples/best_practices_inline)
+
+```{toctree}
+/examples/best_practices_sql
+/examples/best_practices_instances
+/examples/best_practices_inline
+```
