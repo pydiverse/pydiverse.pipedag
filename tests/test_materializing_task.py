@@ -119,7 +119,8 @@ def test_imperative_materialize_given_config():
     with engine.connect() as conn:
         conn.execute(sa.text("DROP SCHEMA IF EXISTS dummy_schema CASCADE"))
         conn.execute(sa.text("CREATE SCHEMA IF NOT EXISTS dummy_schema"))
-        conn.commit()
+        if sa.__version__ >= "2.0.0":
+            conn.commit()
 
     # test failure on materialization without schema
     with pytest.raises(ValueError, match="schema must be provided"):
