@@ -571,7 +571,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         connection_uri = store.engine_url.render_as_string(hide_password=False)
         try:
             return cls._execute_query(query, connection_uri)
-        except RuntimeError as e:
+        except (RuntimeError, ModuleNotFoundError) as e:
             logger = structlog.get_logger(logger_name=cls.__name__)
             logger.error(
                 "Fallback via Pandas since Polars failed to execute query on "
@@ -605,7 +605,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         try:
             df = polars.read_database(query, connection_uri)
             return df
-        except RuntimeError as e:
+        except (RuntimeError, ModuleNotFoundError) as e:
             logger = structlog.get_logger(logger_name=cls.__name__)
             engine = sa.create_engine(connection_uri)
             logger.error(
