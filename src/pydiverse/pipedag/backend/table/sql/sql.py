@@ -347,7 +347,11 @@ class SQLTableStore(BaseTableStore):
         )
 
     def _init_database_with_database(
-        self, database: str, execution_options: dict = None
+        self,
+        database: str,
+        execution_options: dict = None,
+        create_database: str | None = None,
+        disable_exists_check=False,
     ):
         if not self.create_database_if_not_exists:
             return
@@ -355,22 +359,25 @@ class SQLTableStore(BaseTableStore):
         if execution_options is None:
             execution_options = {}
 
-        try:
-            # Check if database exists
-            with self.engine.connect() as conn:
-                conn.exec_driver_sql("SELECT 1")
-            return
-        except sa.exc.DBAPIError:
-            # Database doesn't exist
-            pass
+        if not disable_exists_check:
+            try:
+                # Check if database exists
+                with self.engine.connect() as conn:
+                    conn.exec_driver_sql("SELECT 1")
+                return
+            except sa.exc.DBAPIError:
+                # Database doesn't exist
+                pass
 
         # Create new database using temporary engine object
         tmp_db_url = self.engine_url.set(database=database)
         tmp_engine = sa.create_engine(tmp_db_url, execution_options=execution_options)
 
         try:
+            if create_database is None:
+                create_database = self.engine_url.database
             with tmp_engine.connect() as conn:
-                conn.execute(CreateDatabase(self.engine_url.database))
+                conn.execute(CreateDatabase(create_database))
         except sa.exc.DBAPIError:
             # This happens if multiple instances try to create the database
             # at the same time.

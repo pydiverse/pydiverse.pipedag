@@ -26,6 +26,7 @@ INSTANCE_MARKS = {
     "ibm_db2_avoid_schema": pytest.mark.ibm_db2,
     "ibm_db2_materialization_details": pytest.mark.ibm_db2,
     "duckdb": pytest.mark.duckdb,
+    "snowflake": pytest.mark.snowflake,
     # Local Table Cache Instances
     "local_table_cache": pytest.mark.postgres,
     "local_table_cache_inout": pytest.mark.postgres,
@@ -58,6 +59,7 @@ ALL_INSTANCES = (
     "ibm_db2_avoid_schema",
     "ibm_db2_materialization_details",
     "duckdb",
+    "snowflake",
     "local_table_cache",
 )
 

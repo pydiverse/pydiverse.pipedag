@@ -22,6 +22,12 @@ table_store_connections:
       url: "duckdb:////tmp/pipedag/{instance_id}/db.duckdb"
       create_database_if_not_exists: true
 
+  snowflake:
+    args:
+      url: "snowflake://{$SNOWFLAKE_USER}:{$SNOWFLAKE_PASSWORD}@{$SNOWFLAKE_ACCOUNT}/pipedag/DBO?warehouse=pipedag&role=accountadmin"
+      schema_prefix: "{instance_id}_"
+      create_database_if_not_exists: true
+
 blob_store_connections:
   file:
     class: "pydiverse.pipedag.backend.blob.FileBlobStore"
@@ -160,6 +166,16 @@ instances:
       class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
       args:
         hosts: "localhost:2181"
+
+  snowflake:
+    instance_id: pd_snowflake
+    table_store:
+      table_store_connection: snowflake
+    lock_manager:
+      class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
+      args:
+        hosts: "localhost:2181"
+
 
   ## Table Cache Instances
 

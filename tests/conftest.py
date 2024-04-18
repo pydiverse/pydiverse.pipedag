@@ -87,6 +87,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc):
 
 
 supported_options = [
+    "snowflake",
     "mssql",
     "ibm_db2",
     "duckdb",
