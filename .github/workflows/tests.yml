@@ -204,3 +204,29 @@ jobs:
         with:
           arguments: --workers 4 --dask --prefect -m "dask or prefect"
 
+  snowflake_test:
+    name: "Don't wait for Snowflake Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    needs: [smoke_test]
+    runs-on: ${{ matrix.os }}-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        os: [Ubuntu]
+        python-version: ['3.11']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+        with:
+          python-version: ${{ matrix.python-version }}
+          poetry-flags: --all-extras --with=tests
+          pip-install: 'SQLAlchemy<2' 'pandas<2' snowflake-sqlalchemy
+          docker-services: |
+            postgres
+            zoo
+
+      - name: Run Tests
+        uses: ./.github/actions/test
+        with:
+          arguments: --workers 4 --polars --ibis --pdtransform

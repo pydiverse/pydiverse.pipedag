@@ -7,6 +7,10 @@ inputs:
     description: 'Poetry flags'
     required: false
     default: ''
+  pip-install:
+    description: 'Pip install flags'
+    required: false
+    default: ''
   docker-compose-file:
     required: false
     default: './docker-compose.yaml'
@@ -32,6 +36,13 @@ runs:
     - name: Install dependencies
       shell: bash
       run: poetry install -vv ${{ inputs.poetry-flags }} --no-interaction
+
+    - name: Install additional pip dependencies
+      shell: bash
+      run: |
+        if test x != x"${{ inputs.pip-install }}"; then
+          poetry run pip install ${{ inputs.pip-install }}
+        fi
 
     - name: Start Docker Compose
       uses: isbang/compose-action@v2.0.0
