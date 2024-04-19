@@ -111,7 +111,7 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         as_type: type[pd.DataFrame],
     ) -> pd.DataFrame:
         if PandasTableHook.pd_version < Version("2.0"):
-            return cls._retrieve(store, table, use_nullable_dtype=True)
+            return cls._retrieve(store, table, use_nullable_dtypes=True)
 
         # Determine dtype backend for pandas >= 2.0
         # [this is similar to the PandasTableHook found in SQLTableStore]
