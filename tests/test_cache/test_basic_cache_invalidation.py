@@ -952,9 +952,9 @@ def test_lazy_table_without_query_string(mocker):
         with Flow() as flow:
             with Stage("stage_1"):
                 pd_tbl, pl_tbl, pl_lazy_tbl, select_tbl, constant = falsely_lazy_task()
-                res_pd = m.take_first(pd_tbl)
-                res_pl = m.take_first(pl_tbl)
-                res_pl_lazy = m.take_first(pl_lazy_tbl)
+                res_pd = m.take_first(pd_tbl, as_int=True)
+                res_pl = m.take_first(pl_tbl, as_int=True)
+                res_pl_lazy = m.take_first(pl_lazy_tbl, as_int=True)
                 res_select = m.noop(select_tbl)
                 res_constant = m.noop(constant)
         return flow, res_pd, res_pl, res_pl_lazy, res_select, res_constant

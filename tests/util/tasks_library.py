@@ -115,8 +115,14 @@ def assert_blob_equal(x, y):
 
 
 @materialize(version="1.0", input_type=pd.DataFrame)
-def take_first(table):
-    return table["x"][0]
+def take_first(table, as_int=False):
+    ret = table["x"][0]
+    if as_int:
+        # might be needed to avoid returning unserializable numpy.int64
+        # we could also consider JSON serializing numpy equivalents of primitive types
+        # either conserving them being numpy types or converting them to primitive types
+        return int(ret)
+    return ret
 
 
 @materialize(version="1.0")
