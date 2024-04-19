@@ -200,10 +200,9 @@ instances:
         class: "pydiverse.pipedag.backend.table.cache.ParquetTableCache"
         args:
           base_path: "/tmp/pipedag/table_cache"
-          dtype_backend: "arrow"
 
   local_table_cache_inout_numpy:
-    instance_id: local_table_cache_inout
+    instance_id: local_table_cache_inout_numpy
     table_store:
       hook_args:
         pandas:

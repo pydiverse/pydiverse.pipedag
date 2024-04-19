@@ -30,6 +30,7 @@ INSTANCE_MARKS = {
     # Local Table Cache Instances
     "local_table_cache": pytest.mark.postgres,
     "local_table_cache_inout": pytest.mark.postgres,
+    "local_table_cache_inout_numpy": pytest.mark.postgres,
     "local_table_store": pytest.mark.postgres,
     # Orchestration Instances
     "dask_engine": [pytest.mark.dask, pytest.mark.postgres],
