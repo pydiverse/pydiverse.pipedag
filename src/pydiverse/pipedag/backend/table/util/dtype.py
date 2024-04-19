@@ -213,6 +213,8 @@ class DType(Enum):
         if backend == PandasDTypeBackend.NUMPY:
             return self.to_pandas_nullable(backend)
         if backend == PandasDTypeBackend.ARROW:
+            if self == DType.STRING:
+                return pd.StringDtype(storage="pyarrow")
             return pd.ArrowDtype(self.to_arrow())
 
     def to_pandas_nullable(
