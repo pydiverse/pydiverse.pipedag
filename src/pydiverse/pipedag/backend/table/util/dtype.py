@@ -211,12 +211,16 @@ class DType(Enum):
 
     def to_pandas(self, backend: PandasDTypeBackend = PandasDTypeBackend.ARROW):
         if backend == PandasDTypeBackend.NUMPY:
-            return self.to_pandas_nullable()
+            return self.to_pandas_nullable(backend)
         if backend == PandasDTypeBackend.ARROW:
             return pd.ArrowDtype(self.to_arrow())
 
-    def to_pandas_nullable(self):
+    def to_pandas_nullable(
+        self, backend: PandasDTypeBackend = PandasDTypeBackend.ARROW
+    ):
         if self == DType.TIME:
+            if backend == PandasDTypeBackend.ARROW:
+                return pd.ArrowDtype(self.to_arrow())
             raise TypeError("pandas doesn't have a native time dtype")
 
         return {

@@ -110,9 +110,6 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         stage_name: str,
         as_type: type[pd.DataFrame],
     ) -> pd.DataFrame:
-        if PandasTableHook.pd_version < Version("2.0"):
-            return cls._retrieve(store, table, use_nullable_dtypes=True)
-
         # Determine dtype backend for pandas >= 2.0
         # [this is similar to the PandasTableHook found in SQLTableStore]
 
@@ -126,8 +123,15 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         elif isinstance(as_type, dict):
             backend_str = as_type["backend"]
 
-        dtype_backend = {"arrow": "pyarrow", "numpy": "numpy_nullable"}
-        return cls._retrieve(store, table, dtype_backend=dtype_backend[backend_str])
+        if PandasTableHook.pd_version < Version("2.0"):
+            # for use_nullable_dtypes=False, returned types are mostly numpy backed
+            # extension dtypes
+            return cls._retrieve(
+                store, table, use_nullable_dtypes=backend_str != "arrow"
+            )
+
+        dtype_backend_map = {"arrow": "pyarrow", "numpy": "numpy_nullable"}
+        return cls._retrieve(store, table, dtype_backend=dtype_backend_map[backend_str])
 
     @classmethod
     def _retrieve(cls, store, table, **pandas_kwargs):

@@ -469,7 +469,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         dtypes: dict[str, DType],
         backend: PandasDTypeBackend,
     ) -> pd.DataFrame:
-        dtypes = {name: dtype.to_pandas_nullable() for name, dtype in dtypes.items()}
+        dtypes = {name: dtype.to_pandas(backend) for name, dtype in dtypes.items()}
 
         with store.engine.connect() as conn:
             if PandasTableHook.pd_version >= Version("2.0"):

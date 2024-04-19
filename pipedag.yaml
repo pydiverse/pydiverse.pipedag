@@ -90,6 +90,9 @@ instances:
         materialization_details:
           __any__:
             unlogged: true
+      hook_args:
+        pandas:
+          dtype_backend: "numpy"  # also test numpy backed pandas
     blob_store:
       blob_store_connection: no_blob
 
@@ -190,6 +193,21 @@ instances:
   local_table_cache_inout:
     instance_id: local_table_cache_inout
     table_store:
+      local_table_cache:
+        store_input: true
+        store_output: true
+        use_stored_input_as_cache: true
+        class: "pydiverse.pipedag.backend.table.cache.ParquetTableCache"
+        args:
+          base_path: "/tmp/pipedag/table_cache"
+          dtype_backend: "arrow"
+
+  local_table_cache_inout_numpy:
+    instance_id: local_table_cache_inout
+    table_store:
+      hook_args:
+        pandas:
+          dtype_backend: "numpy"
       local_table_cache:
         store_input: true
         store_output: true
