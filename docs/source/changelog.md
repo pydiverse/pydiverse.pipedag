@@ -1,7 +1,10 @@
 # Changelog
 
 ## 0.9.1 (2024-XX-XX)
+- Support Snowflake as a backend for `SQLTableStore`.
 - Make polars dematerialization robust against missing connectorx. Fall back to pandas if connectorx is not available.
+- Fix some bugs with pandas < 2 and sqlalchemy < 2 compatibility as well as pyarrow handling.
+- Use pd.StringDtype("pyarrow") instead of pd.ArrowDtype(pa.string()) for dtype "string[pyarrow]"
 
 ## 0.9.0 (2024-04-17)
 - Support imperative materialization with `tbl_ref = dag.Table(...).materialize()`. This is particularly useful for 
