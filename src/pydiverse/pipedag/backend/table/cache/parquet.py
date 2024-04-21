@@ -8,7 +8,6 @@ from typing import Any
 
 import pandas as pd
 from packaging.version import Version
-from pandas import StringDtype
 
 from pydiverse.pipedag import ConfigContext, Stage, Table
 from pydiverse.pipedag.backend.table.base import TableHook
@@ -136,12 +135,12 @@ class PandasTableHook(TableHook[ParquetTableCache]):
                 store, table, dtype_backend=dtype_backend_map[backend_str]
             )
 
-        # Prefer StringDtype("pyarrow") over ArrowDtype(pa.string())
-        # we need to check this choice with future versions of pandas/pyarrow
+        # Prefer StringDtype("pyarrow") over ArrowDtype(pa.string()) for now.
+        # We need to check this choice with future versions of pandas/pyarrow.
         for col in ret.dtypes[
             (ret.dtypes == "large_string[pyarrow]") | (ret.dtypes == "string[pyarrow]")
         ].index:
-            ret[col] = ret[col].astype(StringDtype("pyarrow"))
+            ret[col] = ret[col].astype(pd.StringDtype("pyarrow"))
         return ret
 
     @classmethod

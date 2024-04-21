@@ -212,6 +212,10 @@ class TestPandasTableHookArrow:
         def assert_expected(in_df):
             pd.testing.assert_frame_equal(in_df, df, check_dtype=False)
             allowed_dtypes = set(df.dtypes)
+            # Prefer StringDtype("pyarrow") over ArrowDtype(pa.string()) for now.
+            # We need to check this choice with future versions of pandas/pyarrow.
+            allowed_dtypes.remove(pd.ArrowDtype(pa.string()))
+            allowed_dtypes.add(pd.StringDtype("pyarrow"))
             for col, dtype in in_df.dtypes.items():
                 if col == "boolean" and get_dialect_name() == "ibm_db_sa":
                     assert dtype == pd.ArrowDtype(pa.int16())
