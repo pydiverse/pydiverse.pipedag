@@ -129,6 +129,10 @@ class PandasTableHook(TableHook[ParquetTableCache]):
             ret = cls._retrieve(
                 store, table, use_nullable_dtypes=backend_str != "arrow"
             )
+            # use_nullable_dtypes=False may still return string[python] even though we
+            # expect and sometimes get string[pyarrow]
+            for col in ret.dtypes[ret.dtypes == "string[python]"].index:
+                ret[col] = ret[col].astype(pd.StringDtype("pyarrow"))
         else:
             dtype_backend_map = {"arrow": "pyarrow", "numpy": "numpy_nullable"}
             ret = cls._retrieve(
