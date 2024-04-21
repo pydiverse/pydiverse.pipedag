@@ -8,6 +8,7 @@ from typing import Any
 
 import pandas as pd
 from packaging.version import Version
+from pandas import StringDtype
 
 from pydiverse.pipedag import ConfigContext, Stage, Table
 from pydiverse.pipedag.backend.table.base import TableHook
@@ -126,12 +127,22 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         if PandasTableHook.pd_version < Version("2.0"):
             # for use_nullable_dtypes=False, returned types are mostly numpy backed
             # extension dtypes
-            return cls._retrieve(
+            ret = cls._retrieve(
                 store, table, use_nullable_dtypes=backend_str != "arrow"
             )
+        else:
+            dtype_backend_map = {"arrow": "pyarrow", "numpy": "numpy_nullable"}
+            ret = cls._retrieve(
+                store, table, dtype_backend=dtype_backend_map[backend_str]
+            )
 
-        dtype_backend_map = {"arrow": "pyarrow", "numpy": "numpy_nullable"}
-        return cls._retrieve(store, table, dtype_backend=dtype_backend_map[backend_str])
+        # Prefer StringDtype("pyarrow") over ArrowDtype(pa.string())
+        # we need to check this choice with future versions of pandas/pyarrow
+        for col in ret.dtypes[
+            (ret.dtypes == "large_string[pyarrow]") | (ret.dtypes == "string[pyarrow]")
+        ].index:
+            ret[col] = ret[col].astype(StringDtype("pyarrow"))
+        return ret
 
     @classmethod
     def _retrieve(cls, store, table, **pandas_kwargs):
