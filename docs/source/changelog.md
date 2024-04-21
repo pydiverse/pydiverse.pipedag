@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.9.1 (2024-XX-XX)
+- Make polars dematerialization robust against missing connectorx. Fall back to pandas if connectorx is not available.
+
 ## 0.9.0 (2024-04-17)
 - Support imperative materialization with `tbl_ref = dag.Table(...).materialize()`. This is particularly useful for 
     materializing subqueries within a task. It also helps see task in stack trace when materialization fails. There is
