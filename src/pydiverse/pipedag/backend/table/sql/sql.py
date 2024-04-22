@@ -115,6 +115,9 @@ class SQLTableStore(BaseTableStore):
         environment variables like ``{$USER}`` which get substituted with their
         respective values.
 
+        Attention: passwords including special characters like ``@`` or ``:`` need
+        to be URL encoded.
+
     :param url_attrs_file:
         Filename of a yaml file which is read shortly before rendering the final
         engine URL and which is used to replace custom placeholders in ``url``.

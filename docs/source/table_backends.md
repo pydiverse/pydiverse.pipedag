@@ -27,10 +27,18 @@ def lazy_query_str(cls, store, obj) -> str:
 The SQLTableStore currently supports the following SQL databases/dialects:
 
 - Postgres
+- Snowflake
 - Microsoft SQL Server/TSQL
 - IBM DB2 (LUW)
 - DuckDB (rather used for testing so far)
 - Every dialect unknown to pipedag will be treated like a postgres database (issues are likely)
+
+Example connection strings:
+- Postgres: `postgresql://user:password@localhost:5432/{instance_id}`
+- Snowflake: `snowflake://{$SNOWFLAKE_USER}:{$SNOWFLAKE_PASSWORD}@{$SNOWFLAKE_ACCOUNT}/database_name/DBO?warehouse=warehouse_name&role=access_role`
+- Microsoft SQL Server: `mssql+pyodbc://user:password@127.0.0.1:1433/{instance_id}?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no`
+- IBM DB2: `db2+ibm_db://db2inst1:password@localhost:50000/testdb`, `schema_prefix: "{instance_id}_"`
+- DuckDB: `duckdb:////tmp/pipedag/{instance_id}/db.duckdb`
 
 See [Database Testing](database_testing.md) for an example how to spin up a database for testing.
 
