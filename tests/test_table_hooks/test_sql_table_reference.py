@@ -27,7 +27,7 @@ pytestmark = [with_instances(DATABASE_INSTANCES)]
 
 @pytest.mark.polars
 def test_table_store():
-    @materialize(version="1.0")
+    @materialize(version="1.1")
     def in_table():
         table_store = ConfigContext.get().store.table_store
         schema = Schema("user_controlled_schema", prefix="", suffix="")
@@ -39,7 +39,12 @@ def test_table_store():
             pass
         table_store.execute(DropTable(table_name, schema, if_exists=True))
         query = sql_table_expr({"col": [0, 1, 2, 3]})
-        for cmd in [CreateTableAsSelect, InsertIntoSelect]:
+        cmds = (
+            [CreateTableAsSelect, InsertIntoSelect]
+            if table_store.engine.dialect.name == "ibm_db_sa"
+            else [CreateTableAsSelect]
+        )
+        for cmd in cmds:
             table_store.execute(
                 cmd(
                     table_name,
