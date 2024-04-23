@@ -1122,7 +1122,12 @@ def input_stage_versions(
                 return None
 
         ret, cfg2, stages, lock_manager = _call_fn(
-            user_cache_fn, args, kwargs, input_type=None, is_dematerialized=False
+            user_cache_fn,
+            args,
+            kwargs,
+            input_type=None,
+            is_dematerialized=False,
+            lock_source_stages=lock_source_stages,
         )
         other_stage_lock_manager.memorize(stages, lock_manager)
         if cfg2 is None:
@@ -1154,7 +1159,12 @@ def input_stage_versions(
     @materialize(**materialize_args)
     def task(*args, **kwargs):
         ret, _, _, _ = _call_fn(
-            fn, args, kwargs, input_type=input_type, is_dematerialized=True
+            fn,
+            args,
+            kwargs,
+            input_type=input_type,
+            is_dematerialized=True,
+            lock_source_stages=False,
         )
         return ret
 
@@ -1165,6 +1175,7 @@ def input_stage_versions(
         *,
         input_type,
         is_dematerialized,
+        lock_source_stages,
     ):
         _task = TaskContext.get().task
         stage = _task.stage
