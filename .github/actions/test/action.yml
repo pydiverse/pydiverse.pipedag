@@ -10,5 +10,5 @@ runs:
     - name: Test
       shell: bash
       run: |
-        poetry run pytest tests -ra -v -s ${DEBUG:+-s} ${{ inputs.arguments }}
+        poetry run pytest tests -ra -v ${DEBUG:+-s} ${{ inputs.arguments }}
 
