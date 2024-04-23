@@ -123,7 +123,8 @@ class DictTableStore(BaseTableStore):
     def get_objects_in_stage(self, stage):
         return list(self.store[stage.transaction_name].keys())
 
-    def get_table_objects_in_stage(self, stage: Stage) -> list[str]:
+    def get_table_objects_in_stage(self, stage: Stage, include_views=True) -> list[str]:
+        _ = include_views  # not supported for dict table store
         return list(self.store[stage.transaction_name].keys())
 
 

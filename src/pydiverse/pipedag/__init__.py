@@ -16,6 +16,7 @@ from .materialize import (
     RawSql,
     Schema,
     Table,
+    input_stage_versions,
     materialize,
 )
 from .materialize.core import AUTO_VERSION
@@ -24,6 +25,7 @@ __all__ = [
     "Flow",
     "Stage",
     "materialize",
+    "input_stage_versions",
     "AUTO_VERSION",
     "Table",
     "RawSql",

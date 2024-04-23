@@ -540,9 +540,15 @@ class BaseTableStore(TableHookResolver, Disposable):
     def retrieve_table_obj(
         self,
         table: Table,
-        as_type: type[T],
+        as_type: type[T] | None,
         for_auto_versioning: bool = False,
     ) -> T:
+        if as_type is None:
+            # Simply return enough information that a user could dematerialize the table
+            # or perform it with some other library.
+            # hint: `schema = table_store.get_schema(table.stage.current_name).get()`
+            return table.name, table.stage.current_name
+
         if for_auto_versioning:
             return super().retrieve_table_obj(table, as_type, for_auto_versioning)
 
@@ -663,7 +669,7 @@ class BaseTableStore(TableHookResolver, Disposable):
         """
 
     @abstractmethod
-    def get_table_objects_in_stage(self, stage: Stage) -> list[str]:
+    def get_table_objects_in_stage(self, stage: Stage, include_views=True) -> list[str]:
         """
         List all table-like objects that are in the current stage.
 

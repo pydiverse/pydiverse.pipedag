@@ -110,7 +110,7 @@ class PipeDAGStore(Disposable):
     def dematerialize_item(
         self,
         item: Table | RawSql | Blob | Any,
-        as_type: type[T],
+        as_type: type[T] | None,
         ctx: RunContext | None = None,
         for_auto_versioning: bool = False,
     ):
@@ -170,12 +170,15 @@ class PipeDAGStore(Disposable):
         ctx = RunContext.get()
 
         def dematerialize_mapper(x):
-            return self.dematerialize_item(
+            ret = self.dematerialize_item(
                 x,
                 as_type=task.input_type,
                 ctx=ctx,
                 for_auto_versioning=for_auto_versioning,
             )
+            if task.add_input_source and isinstance(x, (Table, Blob, RawSql)):
+                return ret, x
+            return ret
 
         d_args = deep_map(args, dematerialize_mapper)
         d_kwargs = deep_map(kwargs, dematerialize_mapper)

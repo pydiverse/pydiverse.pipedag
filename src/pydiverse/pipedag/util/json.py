@@ -13,7 +13,7 @@ from enum import Enum
 from functools import cache
 from pathlib import Path
 
-from pydiverse.pipedag import Stage
+from pydiverse.pipedag import ConfigContext, Stage
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.materialize.container import Blob, RawSql, Table
@@ -28,6 +28,7 @@ class Type(str, Enum):
     BLOB = "blob"
     STAGE = "stage"
     PIPEDAG_CONFIG = "pipedag_config"
+    CONFIG_CONTEXT = "config_context"
 
     # Other types we want to support
     PATHLIB_PATH = "pathlib:path"
@@ -86,8 +87,16 @@ def json_default(o):
         }
     if isinstance(o, PipedagConfig):
         return {
-            TYPE_KEY: Type.STAGE,
+            TYPE_KEY: Type.PIPEDAG_CONFIG,
             "config_dict": o.config_dict,
+        }
+    if isinstance(o, ConfigContext):
+        return {
+            TYPE_KEY: Type.CONFIG_CONTEXT,
+            "config_dict": o._config_dict,
+            "pipedag_name": o.pipedag_name,
+            "flow_name": o.flow_name,
+            "instance_name": o.instance_name,
         }
     if isinstance(o, Path):
         return {
@@ -147,10 +156,11 @@ def json_object_hook(d: dict):
     if type_ == Type.STAGE:
         return get_stage(d["name"])
     if type_ == Type.PIPEDAG_CONFIG:
-        # PipedagConfig objects are allowed as input to @materialize tasks,
-        # but it is not allowed as output since this might cause trouble
-        # for cache-invalidation
-        raise TypeError("PipedagConfig can't be deserialized.")
+        return PipedagConfig(d["config_dict"])
+    if type_ == Type.CONFIG_CONTEXT:
+        return ConfigContext.new(
+            d["config_dict"], d["pipedag_name"], d["flow_name"], d["instance_name"]
+        )
     if type_ == Type.PATHLIB_PATH:
         return Path(d["path"])
     if type_ == Type.DT_DATE:

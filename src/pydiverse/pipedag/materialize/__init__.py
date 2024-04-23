@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .container import Blob, ExternalTableReference, RawSql, Schema, Table
-from .core import materialize
+from .core import input_stage_versions, materialize
 
 __all__ = [
     "Table",
@@ -9,5 +9,6 @@ __all__ = [
     "RawSql",
     "ExternalTableReference",
     "materialize",
+    "input_stage_versions",
     "Schema",
 ]

@@ -45,6 +45,7 @@ class Stage:
         name: str,
         materialization_details: str | None = None,
         group_node_tag: str | None = None,
+        force_committed=False,
     ):
         self._name = normalize_name(name)
         self._transaction_name = f"{self._name}__tmp"
@@ -61,7 +62,11 @@ class Stage:
         self.materialization_details = materialization_details
         self.group_node_tag = group_node_tag
 
+        self.force_committed = force_committed
         self._did_enter = False
+
+    def __lt__(self, other: Stage):
+        return self.name < other.name
 
     @property
     def name(self) -> str:
@@ -93,6 +98,9 @@ class Stage:
 
     @property
     def did_commit(self) -> bool:
+        if self.force_committed:
+            return True
+
         from pydiverse.pipedag.context.run_context import RunContext, StageState
 
         return RunContext.get().get_stage_state(self) == StageState.COMMITTED
