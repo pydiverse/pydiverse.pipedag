@@ -1228,12 +1228,28 @@ def input_stage_versions(
 
                 def _dematerialize_all(cfg, stage):
                     table_dict = {}
-                    tbls1 = cfg.store.table_store.get_table_objects_in_stage(
-                        stage, include_views
-                    )
+                    if include_views:
+                        # also include table aliases
+                        tbls1 = cfg.store.table_store.get_objects_in_stage(stage)
+                    else:
+                        # won't detect aliases
+                        tbls1 = cfg.store.table_store.get_table_objects_in_stage(
+                            stage, include_views=include_views
+                        )
                     for name in tbls1:
                         tbl = Table(name=name)
                         tbl.stage = stage
+                        if include_views:
+                            (
+                                tbl.name,
+                                tbl.external_schema,
+                            ) = cfg.store.table_store.resolve_alias(
+                                tbl, stage.current_name
+                            )
+                            if not cfg.store.table_store.has_table_or_view(
+                                tbl.name, tbl.external_schema
+                            ):
+                                continue  # skip because it is neither view nor alias
                         table_dict[tbl] = cfg.store.dematerialize_item(tbl, input_type)
                     return table_dict
 

@@ -89,7 +89,9 @@ def test_input_versions_table():
     val = 12
 
     @input_stage_versions(input_type=pd.DataFrame, ordering_barrier=False)
-    def validate_stage(tbls: dict[str, sa.Alias], other_tbls: dict[str, sa.Alias]):
+    def validate_stage(
+        tbls: dict[str, pd.DataFrame], other_tbls: dict[str, pd.DataFrame]
+    ):
         if run > 1:
             assert len(tbls) == 1
             assert len(other_tbls) == 1

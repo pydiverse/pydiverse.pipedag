@@ -13,6 +13,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateViewAsSelect,
     DropTable,
     DropView,
+    InsertIntoSelect,
 )
 from pydiverse.pipedag.materialize.container import ExternalTableReference, Schema
 
@@ -38,13 +39,14 @@ def test_table_store():
             pass
         table_store.execute(DropTable(table_name, schema, if_exists=True))
         query = sql_table_expr({"col": [0, 1, 2, 3]})
-        table_store.execute(
-            CreateTableAsSelect(
-                table_name,
-                schema,
-                query,
+        for cmd in [CreateTableAsSelect, InsertIntoSelect]:
+            table_store.execute(
+                cmd(
+                    table_name,
+                    schema,
+                    query,
+                )
             )
-        )
         return Table(ExternalTableReference(table_name, schema=schema.get()))
 
     @materialize(input_type=sa.Table)
@@ -53,7 +55,7 @@ def test_table_store():
             ExternalTableReference(tbl.original.name, schema=tbl.original.schema)
         )
 
-    @materialize(version="1.0", input_type=sa.Table)
+    @materialize(version="1.1", input_type=sa.Table)
     def in_view(tbl: sa.sql.expression.Alias):
         table_store = ConfigContext.get().store.table_store
         schema = Schema("user_controlled_schema", prefix="", suffix="")

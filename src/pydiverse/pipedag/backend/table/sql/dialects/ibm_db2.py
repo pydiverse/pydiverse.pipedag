@@ -240,6 +240,9 @@ class IBMDB2TableStore(SQLTableStore):
         compression_suffix = " ".join(compression)
         return " ".join((table_space_suffix, compression_suffix))
 
+    def _get_all_objects_in_schema(self, schema: Schema) -> dict[str, Any]:
+        return PipedagDB2Reflection.get_all_objects(self.engine, schema.get())
+
 
 @IBMDB2TableStore.register_table(pd)
 class PandasTableHook(PandasTableHook):
