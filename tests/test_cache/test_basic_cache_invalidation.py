@@ -668,7 +668,7 @@ def test_cache_validation_mode_assert(
         flow.run(**kwargs)
 
 
-@skip_instances("duckdb")
+@with_instances("postgres", "local_table_cache")
 @pytest.mark.parametrize("ignore_task_version", [True, False])
 @pytest.mark.parametrize("disable_cache_function", [True, False])
 @pytest.mark.parametrize(
@@ -843,14 +843,14 @@ def test_cache_validation_mode(
             all(spy.assert_called_once() for spy in ind_spy)
 
 
-@with_instances("duckdb")
+@skip_instances("postgres", "local_table_cache")
 @pytest.mark.parametrize("ignore_task_version", [False])
 @pytest.mark.parametrize("disable_cache_function", [False])
 @pytest.mark.parametrize(
     "mode", ["NORMAL", "IGNORE_FRESH_INPUT", "FORCE_FRESH_INPUT", "FORCE_CACHE_INVALID"]
 )
 @pytest.mark.parametrize("imperative", [True])
-def test_cache_validation_mode_duckdb(
+def test_cache_validation_mode_reduced(
     ignore_task_version, disable_cache_function, mode, imperative, mocker
 ):
     # reduce combinatorial space for duckdb to avoid timeout after 10min
