@@ -1158,13 +1158,19 @@ def input_stage_versions(
     # blob name and handed over to the function annotated with @input_stage_versions.
     @materialize(**materialize_args)
     def task(*args, **kwargs):
+        # the locks are already acquired by cache_fn if it is called
+        lock_stages = (
+            False
+            if other_stage_lock_manager.lock_manager is not None
+            else lock_source_stages
+        )
         ret, _, _, _ = _call_fn(
             fn,
             args,
             kwargs,
             input_type=input_type,
             is_dematerialized=True,
-            lock_source_stages=False,
+            lock_source_stages=lock_stages,
         )
         return ret
 

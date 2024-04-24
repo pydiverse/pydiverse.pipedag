@@ -4,6 +4,7 @@ import pandas as pd
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Blob, RawSql, Table, materialize
+from pydiverse.pipedag.context import TaskContext
 from pydiverse.pipedag.debug import materialize_table
 from tests.util import select_as
 
@@ -391,3 +392,7 @@ def exception(x, r: bool):
     if r:
         raise Exception("THIS EXCEPTION IS EXPECTED")
     return x
+
+
+def get_task_logger():
+    return TaskContext.get().task.logger

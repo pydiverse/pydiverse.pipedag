@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
+import sqlalchemy as sa
 
 from pydiverse.pipedag import Blob, ConfigContext, Flow, Stage, Table
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.materialize.container import RawSql
-from pydiverse.pipedag.materialize.core import AUTO_VERSION, materialize
+from pydiverse.pipedag.materialize.core import (
+    AUTO_VERSION,
+    input_stage_versions,
+    materialize,
+)
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import ALL_INSTANCES, skip_instances, with_instances
@@ -15,6 +20,7 @@ from tests.util import compile_sql, select_as
 from tests.util import tasks_library as m
 from tests.util import tasks_library_imperative as m2
 from tests.util.spy import spy_task
+from tests.util.tasks_library import get_task_logger
 
 try:
     import polars as pl
@@ -719,9 +725,41 @@ def test_cache_validation_mode(
         df = pd.DataFrame(dict(x=[cache_value]))
         return Table(df).materialize() if imperative else df
 
+    @input_stage_versions(lazy=True, input_type=sa.Table)
+    def dummy_copy_inputs(
+        transaction: dict[str, sa.sql.expressions.Alias],
+        other: dict[str, sa.sql.expressions.Alias],
+    ):
+        _ = other  # we cannot make any assumptions on the other stage version
+        assert len(transaction) == 0
+        return Table(sa.select(sa.literal(1).label("a")), name="dummy")
+
+    @input_stage_versions(lazy=True, input_type=sa.Table)
+    def validate_stage(
+        transaction: dict[str, sa.sql.expressions.Alias],
+        other: dict[str, sa.sql.expressions.Alias],
+    ):
+        _ = other  # we cannot make any assumptions on the other stage version
+        get_task_logger().info(f"Transaction: {transaction}")
+        assert (
+            len([tbl for tbl in transaction.keys() if not tbl.name.endswith("__copy")])
+            == 12
+        )
+
+    @input_stage_versions(lazy=True, input_type=sa.Table)
+    def validate_stage2(
+        transaction: dict[str, sa.sql.expressions.Alias],
+        other: dict[str, sa.sql.expressions.Alias],
+    ):
+        # it is expected that we have a "Failed to retrieve"-exception in other stage
+        _ = other
+        assert len(transaction) == 1
+
     def get_flow():
         with Flow() as flow:
             with Stage("stage_1"):
+                x = dummy_copy_inputs()
+                _ = m.noop(x)
                 out_lazy = return_cache_table_lazy()
                 out_always = return_cache_table_always()
                 out_auto = return_cache_table_auto(out_lazy)
@@ -730,6 +768,8 @@ def test_cache_validation_mode(
                 cpy = [_m.noop(o) for o in outs]
                 ind1 = _m.simple_dataframe()
                 ind2 = _m.simple_lazy_table()
+                validate_stage()
+                validate_stage2(ind2)
         return flow, outs, cpy, [ind1, ind2]
 
     flow, outs, cpy, ind = get_flow()
