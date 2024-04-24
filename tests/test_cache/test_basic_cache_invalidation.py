@@ -10,7 +10,7 @@ from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import AUTO_VERSION, materialize
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import ALL_INSTANCES, with_instances
+from tests.fixtures.instances import ALL_INSTANCES, skip_instances, with_instances
 from tests.util import compile_sql, select_as
 from tests.util import tasks_library as m
 from tests.util import tasks_library_imperative as m2
@@ -668,6 +668,7 @@ def test_cache_validation_mode_assert(
         flow.run(**kwargs)
 
 
+@skip_instances("duckdb")
 @pytest.mark.parametrize("ignore_task_version", [True, False])
 @pytest.mark.parametrize("disable_cache_function", [True, False])
 @pytest.mark.parametrize(
@@ -840,6 +841,23 @@ def test_cache_validation_mode(
         else:
             all(spy.assert_called_once() for spy in cpy_spy)
             all(spy.assert_called_once() for spy in ind_spy)
+
+
+@with_instances("duckdb")
+@pytest.mark.parametrize("ignore_task_version", [False])
+@pytest.mark.parametrize("disable_cache_function", [False])
+@pytest.mark.parametrize(
+    "mode", ["NORMAL", "IGNORE_FRESH_INPUT", "FORCE_FRESH_INPUT", "FORCE_CACHE_INVALID"]
+)
+@pytest.mark.parametrize("imperative", [True])
+def test_cache_validation_mode_duckdb(
+    ignore_task_version, disable_cache_function, mode, imperative, mocker
+):
+    # reduce combinatorial space for duckdb to avoid timeout after 10min
+    # duckdb is particularly slow for those tests (~10x: 7-15s instead of 1-2s)
+    test_cache_validation_mode(
+        ignore_task_version, disable_cache_function, mode, imperative, mocker
+    )
 
 
 @pytest.mark.parametrize("n", [1, 2, 15])
