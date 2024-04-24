@@ -153,8 +153,8 @@ class RunContextServer(IPCServer):
             for stage in self.stages:
                 # only lock stage if it is not already locked within current
                 # StageLockContext
-                if self.lock_manager.get_lock_state(stage) != LockState.LOCKED:
-                    self.lock_manager.acquire(stage)
+                if self.lock_manager.get_lock_state(stage.name) != LockState.LOCKED:
+                    self.lock_manager.acquire(stage.name)
 
         # INITIALIZE REFERENCE COUNTERS
         for stage in self.stages:
@@ -320,12 +320,12 @@ class RunContextServer(IPCServer):
 
     def acquire_stage_lock(self, stage_id: int):
         stage = self.stages[stage_id]
-        self.lock_manager.acquire(stage)
+        self.lock_manager.acquire(stage.name)
 
     def release_stage_lock(self, stage_id: int):
         if not self.keep_stages_locked:
             stage = self.stages[stage_id]
-            self.lock_manager.release(stage)
+            self.lock_manager.release(stage.name)
 
     def validate_stage_lock(self, stage_id: int):
         stage = self.stages[stage_id]
@@ -420,7 +420,7 @@ class RunContextServer(IPCServer):
 
         if not self.keep_stages_locked:
             for stage in stages_to_release:
-                self.lock_manager.release(stage)
+                self.lock_manager.release(stage.name)
 
     def get_task_states(self) -> list[int]:
         return [state.value for state in self.task_state]
@@ -747,7 +747,7 @@ class StageLockStateHandler(Disposable):
 
         did_log = False
         while True:
-            state = self.lock_manager.get_lock_state(stage)
+            state = self.lock_manager.get_lock_state(stage.name)
 
             if state == LockState.LOCKED:
                 return

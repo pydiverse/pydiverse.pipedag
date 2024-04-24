@@ -1102,7 +1102,7 @@ def input_stage_versions(
             # called
             if self.lock_manager is not None:
                 for stage in sorted(self.stages, reverse=True):
-                    self.lock_manager.release(stage)
+                    self.lock_manager.release(stage.name)
                 self.lock_manager.dispose()
                 self.lock_manager = None
 
@@ -1218,7 +1218,7 @@ def input_stage_versions(
             # lock the source stages if they are read from another instance
             if lock_source_stages:
                 for stage in sorted(stages):
-                    lock_manager.acquire(stage)
+                    lock_manager.acquire(stage.name)
             # cnt[0] counts the number of arguments in args and kwargs. pass_args within
             # kwargs are neglected.
             # cnt[0] is at least 2 due to deep_map calls on args and kwargs. If a
@@ -1330,7 +1330,7 @@ def input_stage_versions(
         except Exception as e:
             if lock_source_stages:
                 for stage in sorted(stages, reverse=True):
-                    lock_manager.release(stage)
+                    lock_manager.release(stage.name)
             raise e
         return ret, cfg2, stages, lock_manager
 
