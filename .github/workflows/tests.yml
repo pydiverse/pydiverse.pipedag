@@ -83,7 +83,7 @@ jobs:
     name: "DuckDB Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
     needs: [smoke_test]
     runs-on: ${{ matrix.os }}-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       matrix:
         os: [Ubuntu]

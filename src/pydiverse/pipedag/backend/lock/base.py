@@ -57,6 +57,8 @@ class BaseLockManager(Disposable, ABC):
     """
 
     def __init__(self, logger_kwargs=None):
+        if logger_kwargs is None:
+            logger_kwargs = {}
         self.logger = structlog.get_logger(
             logger_name=type(self).__name__, **logger_kwargs
         )
