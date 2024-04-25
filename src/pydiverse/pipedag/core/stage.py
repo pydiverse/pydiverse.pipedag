@@ -66,7 +66,24 @@ class Stage:
         self._did_enter = False
 
     def __lt__(self, other: Stage):
+        # Essentially stage name is all that matters and should be unique per flow.
+        # In case of comparing stages among different flows or pipeline instances,
+        # the caller needs to check whether those are different. The stage links to
+        # tasks which are somewhat bound to a flow, but it is unclear what behavior the
+        # caller wants from the comparison operators.
         return self.name < other.name
+
+    def __eq__(self, other: Stage):
+        # Essentially stage name is all that matters and should be unique per flow.
+        # See __lt__ for more details.
+        if not isinstance(other, Stage):
+            return False
+        return self.name == other.name
+
+    def __hash__(self):
+        # Essentially stage name is all that matters and should be unique per flow.
+        # See __lt__ for more details.
+        return hash(self.name)
 
     @property
     def name(self) -> str:
