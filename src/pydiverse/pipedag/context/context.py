@@ -61,7 +61,6 @@ class BaseContext:
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        del state["_instance_state"]
         return state
 
 

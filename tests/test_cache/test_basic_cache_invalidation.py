@@ -741,12 +741,12 @@ def test_cache_validation_mode(
     ):
         _ = other  # we cannot make any assumptions on the other stage version
         get_task_logger().info(f"Transaction tables: {transaction}")
-        assert (
-            list(transaction.values())[0].original.schema
-            != list(other.values())[0].original.schema
-        )
-        assert list(transaction.values())[0].original.schema.startswith(
-            list(other.values())[0].original.schema
+        transaction_schema = {tbl.original.schema for tbl in transaction.values()} - {
+            tbl.original.schema for tbl in other.values()
+        }
+        assert transaction_schema
+        assert transaction_schema.pop().startswith(
+            {tbl.original.schema for tbl in other.values()}.pop()
         )
         assert (
             len([tbl for tbl in transaction.keys() if not tbl.endswith("__copy")]) == 12
