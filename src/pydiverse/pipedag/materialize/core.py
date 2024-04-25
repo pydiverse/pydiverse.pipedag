@@ -1298,16 +1298,16 @@ def input_stage_versions(
                         store2 = cfg2.store.table_store
                         # Only try to dematerialize if an object with the correct name
                         # exists. Otherwise, we might run into retry loops.
-                        if not isinstance(
-                            tbl2, Table
-                        ) or tbl2.name in store2.get_table_objects_in_stage(tbl2.stage):
+                        if not isinstance(tbl2, Table) or tbl2.name.lower() in {
+                            s.lower() for s in store2.get_objects_in_stage(tbl2.stage)
+                        }:
                             other_dict[key] = cfg2.store.dematerialize_item(
                                 tbl2, input_type
                             )
                         else:
                             other_dict[key] = (
                                 "Table not found in other stage version: "
-                                f"{PipedagJSONEncoder.encode(tbl2)}"
+                                f"{PipedagJSONEncoder().encode(tbl2)}"
                             )
                     except Exception as e:
                         _task.logger.error(

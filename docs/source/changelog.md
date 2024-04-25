@@ -2,6 +2,9 @@
 
 ## 0.9.1 (2024-XX-XX)
 - Support Snowflake as a backend for `SQLTableStore`.
+- @input_stage_versions decorator allows specifying tasks which compare tables within the current stage transaction 
+    schema and another version of that stage. This can be the currently active stage schema of the same pipeline 
+    instance or from another instance. See: https://pydiversepipedag.readthedocs.io/en/latest/examples.html
 - Make polars dematerialization robust against missing connectorx. Fall back to pandas if connectorx is not available.
 - Fix some bugs with pandas < 2 and sqlalchemy < 2 compatibility as well as pyarrow handling.
 - Use pd.StringDtype("pyarrow") instead of pd.ArrowDtype(pa.string()) for dtype "string[pyarrow]"

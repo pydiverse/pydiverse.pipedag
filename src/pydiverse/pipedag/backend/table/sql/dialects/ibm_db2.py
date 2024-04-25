@@ -7,7 +7,6 @@ from typing import Any
 
 import pandas as pd
 import sqlalchemy as sa
-import sqlalchemy.exc
 
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateTableWithSuffix,
