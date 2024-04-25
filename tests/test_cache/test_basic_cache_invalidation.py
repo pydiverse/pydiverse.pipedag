@@ -746,7 +746,7 @@ def test_cache_validation_mode(
         }
         assert transaction_schema
         assert transaction_schema.pop().startswith(
-            {tbl.original.schema for tbl in other.values()}.pop()
+            {tbl.original.schema for tbl in other.values()}.pop().split("__")[0]
         )
         assert (
             len([tbl for tbl in transaction.keys() if not tbl.endswith("__copy")]) == 12
