@@ -56,8 +56,10 @@ class BaseLockManager(Disposable, ABC):
     same stage at the same time (which would lead to corrupted data).
     """
 
-    def __init__(self):
-        self.logger = structlog.get_logger(logger_name=type(self).__name__)
+    def __init__(self, logger_kwargs=None):
+        self.logger = structlog.get_logger(
+            logger_name=type(self).__name__, **logger_kwargs
+        )
 
         self.state_listeners = set()
         self.lock_states = {}

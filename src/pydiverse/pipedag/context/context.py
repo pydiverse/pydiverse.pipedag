@@ -28,29 +28,24 @@ if TYPE_CHECKING:
 
 class BaseContext:
     _context_var: ClassVar[ContextVar]
-    _token: Token = None
-    _enter_counter: int = 0
     _lock: Lock = Lock()
+    _instance_state: dict[id, list[Token]] = {}
 
     def __enter__(self):
+        if id(self) not in self._instance_state:
+            self._instance_state[id(self)] = []
+        _tokens = self._instance_state[id(self)]
         with self._lock:
-            object.__setattr__(self, "_enter_counter", self._enter_counter + 1)
-
-            if self._token is not None:
-                return self
-
             token = self._context_var.set(self)
-            object.__setattr__(self, "_token", token)
+            _tokens.append(token)
         return self
 
     def __exit__(self, *_):
         with self._lock:
-            object.__setattr__(self, "_enter_counter", self._enter_counter - 1)
-            if self._enter_counter == 0:
-                if not self._token:
-                    raise RuntimeError
-                self._context_var.reset(self._token)
-                object.__setattr__(self, "_token", None)
+            _tokens = self._instance_state[id(self)]
+            self._context_var.reset(_tokens.pop())
+            if len(_tokens) == 0:
+                del self._instance_state[id(self)]
                 self._close()
 
     def _close(self):
@@ -66,8 +61,7 @@ class BaseContext:
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        del state["_token"]
-        del state["_enter_counter"]
+        del state["_instance_state"]
         return state
 
 
@@ -294,7 +288,8 @@ class ConfigContext(BaseAttrsContext):
         return evolved
 
     def create_lock_manager(self) -> BaseLockManager:
-        return load_object(self._config_dict["lock_manager"])
+        with self:  # ensure that DatabaseLockManager uses correct engine
+            return load_object(self._config_dict["lock_manager"])
 
     def create_orchestration_engine(self) -> OrchestrationEngine:
         return load_object(self._config_dict["orchestration"])

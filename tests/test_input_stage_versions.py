@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 import sqlalchemy as sa
 
 from pydiverse.pipedag import (
@@ -296,7 +295,6 @@ def test_input_versions_other_instance_table():
         )
 
 
-@pytest.mark.skip(reason="TODO: fix locking of other instance")
 @with_instances("postgres")
 def test_input_versions_other_instance_locking():
     run = 1
@@ -331,7 +329,7 @@ def test_input_versions_other_instance_locking():
             x = tbls["x"]
             assert x.iloc[0, 0] == val
 
-    @materialize(version="1.1")
+    @materialize
     def pd_dataframe(data: dict[str, list]):
         return Table(pd.DataFrame(data), name="x")
 
@@ -382,16 +380,11 @@ def test_input_versions_other_instance_locking():
 
     with StageLockContext():
         f = get_flow(cfg)
-        with swallowing_raises(
-            AssertionError, match=r"\[left\]:  \[-5\]\n\[right\]: \[12\]"
-        ):
-            f.run(config=cfg2)
+        assert f.run(config=cfg2).successful
         assert (
             pd.read_sql_table(
                 "x",
-                schema=cfg2.store.table_store.get_schema(
-                    f["stage"].transaction_name
-                ).get(),
+                schema=cfg2.store.table_store.get_schema(f["stage"].name).get(),
                 con=cfg2.store.table_store.engine,
             ).iloc[0, 0]
             == val
