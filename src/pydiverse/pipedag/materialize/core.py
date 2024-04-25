@@ -26,6 +26,7 @@ from pydiverse.pipedag.util.computation_tracing import (
     ComputationTracerProxy,
 )
 from pydiverse.pipedag.util.hashing import stable_hash
+from pydiverse.pipedag.util.json import PipedagJSONEncoder
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Flow, Stage, VisualizationStyle
@@ -1136,7 +1137,11 @@ def input_stage_versions(
         # instance
         ret = stable_hash(ret)
         for stage in stages:
-            ret = ret + cfg2.store.table_store.get_stage_hash(stage)
+            try:
+                ret = ret + cfg2.store.table_store.get_stage_hash(stage)
+            except sa.exc.ProgrammingError:
+                # this happens for example if the other instance did not run, yet
+                return uuid.uuid4().hex  # return random hash to ensure invalidation
         return ret
 
     # extract @materialize arguments from forward_args via __code__.co_varnames:
@@ -1212,7 +1217,7 @@ def input_stage_versions(
             force_committed=True,
         )
         stage2.id = stage.id
-        if other_cfg is not None:
+        if lock_source_stages and other_cfg is not None:
             lock_manager = cfg2.create_lock_manager()
         else:
             lock_manager = None
@@ -1256,7 +1261,9 @@ def input_stage_versions(
                                 tbl.name, tbl.external_schema
                             ):
                                 continue  # skip because it is neither view nor alias
-                        table_dict[tbl] = cfg.store.dematerialize_item(tbl, input_type)
+                        table_dict[tbl.name] = cfg.store.dematerialize_item(
+                            tbl, input_type
+                        )
                     return table_dict
 
                 transaction_table_dict = _dematerialize_all(cfg1, stage)
@@ -1288,9 +1295,20 @@ def input_stage_versions(
                     )
                     tbl2.stage.id = ref.stage.id
                     try:
-                        other_dict[key] = cfg2.store.dematerialize_item(
-                            tbl2, input_type
-                        )
+                        store2 = cfg2.store.table_store
+                        # Only try to dematerialize if an object with the correct name
+                        # exists. Otherwise, we might run into retry loops.
+                        if not isinstance(
+                            tbl2, Table
+                        ) or tbl2.name in store2.get_table_objects_in_stage(tbl2.stage):
+                            other_dict[key] = cfg2.store.dematerialize_item(
+                                tbl2, input_type
+                            )
+                        else:
+                            other_dict[key] = (
+                                "Table not found in other stage version: "
+                                f"{PipedagJSONEncoder.encode(tbl2)}"
+                            )
                     except Exception as e:
                         _task.logger.error(
                             "Failed to dematerialize table from other stage version",
@@ -1321,6 +1339,8 @@ def input_stage_versions(
                             stage,
                         )
 
+            optional_cfg = [] if other_cfg is None else [other_cfg]
+
             # restructure arbitrary arguments referencing Tables/Blobs/RawSQL into 2 or
             # 4 dictionaries providing references only to tables and optionally blobs
             if len(transaction_blob_dict) > 0:
@@ -1329,10 +1349,16 @@ def input_stage_versions(
                     other_table_dict,
                     transaction_blob_dict,
                     other_blob_dict,
+                    *optional_cfg,
                     **pass_kwargs,
                 )
             else:
-                ret = _fn(transaction_table_dict, other_table_dict, **pass_kwargs)
+                ret = _fn(
+                    transaction_table_dict,
+                    other_table_dict,
+                    *optional_cfg,
+                    **pass_kwargs,
+                )
         except Exception as e:
             if lock_source_stages:
                 for stage in sorted(stages, reverse=True):
@@ -1347,9 +1373,13 @@ def input_stage_versions(
         other_cfg = [None]  # list to allow modification in visitor
         cnt = [0]
         cfg_cnt = [0]
+        str_dict_keys = [0]
 
         def visitor(x):
-            cnt[0] += 1
+            if isinstance(x, dict):
+                str_dict_keys[0] += sum(isinstance(k, str) for k in x.keys())
+            if not isinstance(x, (list, tuple, dict)):
+                cnt[0] += 1  # count non-collection arguments
             if isinstance(x, ConfigContext):
                 if cfg_cnt[0] > 0:
                     raise ValueError(
@@ -1377,10 +1407,13 @@ def input_stage_versions(
             elif isinstance(ref, RawSql):
                 # ref and obj are identical for RawSql
                 raw_sqls.append(ref)
+            return x
 
         deep_map(args, visitor)
         deep_map(remaining_kwargs, visitor)
-        any_data_arguements_collected = cnt[0] > 2 + cfg_cnt[0]
+        # dictionary keys don't count since we like to be f(config=cfg) to be considered
+        # as not any_data_arguements_collected
+        any_data_arguements_collected = cnt[0] > cfg_cnt[0] + str_dict_keys[0]
         return (
             stages,
             table_dict,

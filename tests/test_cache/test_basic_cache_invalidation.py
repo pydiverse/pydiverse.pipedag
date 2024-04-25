@@ -740,10 +740,16 @@ def test_cache_validation_mode(
         other: dict[str, sa.sql.expressions.Alias],
     ):
         _ = other  # we cannot make any assumptions on the other stage version
-        get_task_logger().info(f"Transaction: {transaction}")
+        get_task_logger().info(f"Transaction tables: {transaction}")
         assert (
-            len([tbl for tbl in transaction.keys() if not tbl.name.endswith("__copy")])
-            == 12
+            list(transaction.values())[0].original.schema
+            != list(other.values())[0].original.schema
+        )
+        assert list(transaction.values())[0].original.schema.startswith(
+            list(other.values())[0].original.schema
+        )
+        assert (
+            len([tbl for tbl in transaction.keys() if not tbl.endswith("__copy")]) == 12
         )
 
     @input_stage_versions(lazy=True, input_type=sa.Table)

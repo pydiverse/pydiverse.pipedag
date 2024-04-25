@@ -205,7 +205,7 @@ jobs:
           arguments: --workers 4 --dask --prefect -m "dask or prefect"
 
   snowflake_test:
-    name: "Don't wait for Snowflake Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    name: "Snowflake Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
     needs: [smoke_test]
     runs-on: ${{ matrix.os }}-latest
     timeout-minutes: 10

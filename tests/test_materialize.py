@@ -191,6 +191,15 @@ def test_return_pipedag_config():
         f.run(fail_fast=True)
 
 
+def test_return_config_context():
+    with Flow("flow") as f:
+        with Stage("failure_stage"):
+            m.noop(PipedagConfig.default.get())
+
+    with swallowing_raises(TypeError, match="ConfigContext"):
+        f.run(fail_fast=True)
+
+
 def test_materialize_memo_literal():
     # A flow should be able to contain the same task with the same inputs
     # more than once and still run successfully.

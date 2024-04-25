@@ -301,6 +301,12 @@ class PipeDAGStore(Disposable):
                 raise TypeError(
                     "You can't return a PipedagConfig object from a materializing task."
                 )
+            if isinstance(x, ConfigContext):
+                # Config objects are not an allowed return type,
+                # because they might mess up caching.
+                raise TypeError(
+                    "You can't return a ConfigContext object from a materializing task."
+                )
 
             # Add missing metadata (if table was not already imperatively materialized)
             if (

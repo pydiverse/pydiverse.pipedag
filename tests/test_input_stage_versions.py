@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 import sqlalchemy as sa
 
 from pydiverse.pipedag import (
+    ConfigContext,
     Flow,
     GroupNode,
+    PipedagConfig,
     Stage,
     Table,
     input_stage_versions,
@@ -95,11 +98,11 @@ def test_input_versions_table():
         if run > 1:
             assert len(tbls) == 1
             assert len(other_tbls) == 1
-            x = list(tbls.values())[0]
-            y = list(other_tbls.values())[0]
+            x = tbls["x"]
+            y = other_tbls["x"]
             pd.testing.assert_frame_equal(x, y)
 
-    @materialize(version="1.1")
+    @materialize
     def pd_dataframe(data: dict[str, list]):
         return Table(pd.DataFrame(data), name="x")
 
@@ -179,578 +182,217 @@ def test_input_versions_blob():
             f.run()
 
 
-# def test_failure():
-#     with Flow("flow") as f:
-#         with Stage("failure_stage"):
-#             m.exception(0, True)
-#
-#     with swallowing_raises(Exception, match="THIS EXCEPTION IS EXPECTED"):
-#         f.run(fail_fast=True)
-#
-#     with Flow("flow") as f:
-#         with Stage("failure_stage"):
-#             x = m.exception(0, True)
-#             m.noop(x)
-#
-#     with swallowing_raises(Exception, match="THIS EXCEPTION IS EXPECTED"):
-#         f.run(fail_fast=True)
-#
-#
-# def test_return_pipedag_config():
-#     with Flow("flow") as f:
-#         with Stage("failure_stage"):
-#             m.noop(PipedagConfig.default)
-#
-#     with swallowing_raises(TypeError, match="PipedagConfig"):
-#         f.run(fail_fast=True)
-#
-#
-# def test_input_versions_memo_literal():
-#     # A flow should be able to contain the same task with the same inputs
-#     # more than once and still run successfully.
-#
-#     with Flow("flow") as f:
-#         with Stage("stage_0"):
-#             t_0 = m.noop(1)
-#             t_1 = m.noop(1)
-#
-#             one = m.one()
-#             t_2 = m.noop(one)
-#             t_3 = m.noop(one)
-#
-#         with Stage("stage_1"):
-#             t_4 = m.noop(1)
-#             t_5 = m.noop(t_4)
-#             t_6 = m.noop(t_5)
-#             t_7 = m.noop(t_0)
-#
-#         with Stage("stage_2"):
-#             m.assert_equal(t_0, t_4)
-#             m.assert_equal(t_1, t_5)
-#             m.assert_equal(t_2, t_6)
-#             m.assert_equal(t_3, t_7)
-#
-#     assert f.run().successful
-#
-#
-# @pytest.mark.parametrize("imperative", [False, True])
-# def test_input_versions_memo_table(imperative):
-#     _m = m if not imperative else m2
-#     with Flow("flow") as f:
-#         with Stage("stage_0"):
-#             t_0 = _m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
-#             t_1 = _m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
-#             t_2 = _m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
-#             t_3 = _m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
-#
-#             _m.assert_table_equal(t_0, t_1)
-#             _m.assert_table_equal(t_1, t_2)
-#             _m.assert_table_equal(t_2, t_3)
-#
-#         with Stage("stage_1"):
-#             t_4 = _m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
-#             t_5 = _m.noop(t_4)
-#             t_6 = _m.noop(t_5)
-#             t_7 = _m.noop(t_0)
-#             t_8 = _m.noop_sql(t_4)
-#             t_9 = _m.noop_sql(t_5)
-#             t_10 = _m.noop_sql(t_0)
-#             t_11 = _m.noop_lazy(t_4)
-#             t_12 = _m.noop_lazy(t_5)
-#             t_13 = _m.noop_lazy(t_0)
-#             if _m.pl is not None:
-#                 t_14 = _m.noop_polars(t_4)
-#                 t_15 = _m.noop_polars(t_5)
-#                 t_16 = _m.noop_polars(t_0)
-#                 t_17 = _m.noop_lazy_polars(t_4)
-#                 t_18 = _m.noop_lazy_polars(t_5)
-#                 t_19 = _m.noop_lazy_polars(t_0)
-#
-#         with Stage("stage_2"):
-#             _m.assert_table_equal(t_0, t_4)
-#             _m.assert_table_equal(t_1, t_5)
-#             _m.assert_table_equal(t_2, t_6)
-#             _m.assert_table_equal(t_3, t_7)
-#             _m.assert_table_equal(t_1, t_8)
-#             _m.assert_table_equal(t_2, t_9)
-#             _m.assert_table_equal(t_3, t_10)
-#             _m.assert_table_equal(t_1, t_11)
-#             _m.assert_table_equal(t_2, t_12)
-#             _m.assert_table_equal(t_3, t_13)
-#             if _m.pl is not None:
-#                 _m.assert_table_equal(t_1, t_14)
-#                 _m.assert_table_equal(t_2, t_15)
-#                 _m.assert_table_equal(t_3, t_16)
-#                 _m.assert_table_equal(t_1, t_17)
-#                 _m.assert_table_equal(t_2, t_18)
-#                 _m.assert_table_equal(t_3, t_19)
-#
-#     assert f.run().successful
-#
-#
-# def test_input_versions_memo_with_failure():
-#     with Flow("flow") as f:
-#         with Stage("stage"):
-#             m.exception(1, False)
-#             m.exception(1, False)
-#
-#             one = m.one()
-#             m.exception(1, True)
-#             t_3 = m.exception(one, True)
-#             m.exception(t_3, False)
-#
-#     with ConfigContext.get().evolve(swallow_exceptions=True):
-#         assert not f.run(fail_fast=False).successful
-#
-#
-# def test_stage_ref_counter():
-#     def check_rc(stage, expected):
-#         @materialize(lazy=True, input_type=pd.DataFrame)
-#         def _m_check_rc(x):
-#             assert RunContext.get().get_stage_ref_count(stage) == expected
-#             return x
-#
-#         return _m_check_rc
-#
-#     # Super simple case with just two task inside one stage
-#     with Flow("flow") as f:
-#         with Stage("stage") as s:
-#             task_1 = m.one()
-#             task_2 = m.two()
-#
-#             # One reference from the check_rc and commit
-#             check_rc(s, 2)([task_1, task_2])
-#
-#     assert f.run().successful
-#
-#     # Multiple tasks with interdependency inside one stage
-#     with Flow("flow") as f:
-#         with Stage("stage") as s:
-#             task_1 = m.one()
-#             task_2 = m.two()
-#             task_tuple = m.noop((task_1, task_2))
-#             # One reference from assert, noop, assert and commit
-#             task_tuple = check_rc(s, 4)(task_tuple)
-#             task_tuple = m.noop(task_tuple)
-#             # One reference from assert and commit
-#             check_rc(s, 2)(task_tuple)
-#
-#     assert f.run().successful
-#
-#     # Multiple tasks spread over multiple stages
-#     with Flow("flow") as f:
-#         with Stage("stage_1") as s1:
-#             task_1 = m.one()
-#             # One reference from assert, noop, assert, commit and downstream
-#             task_1 = check_rc(s1, 5)(task_1)
-#             task_1 = m.noop(task_1)
-#             # One reference from assert, commit and downstream
-#             check_rc(s1, 3)(task_1)
-#
-#         with Stage("stage_2") as s2:
-#             task_2 = m.two()
-#             task_2 = m.noop([task_2])
-#             check_rc(s2, 3)(task_2)
-#
-#         with Stage("stage_3") as s3:
-#             task_tuple = m.noop((task_1, task_2))
-#             # Check that s1 and s2 have been freed
-#             x = check_rc(s1, 0)(task_tuple)
-#             x = check_rc(s2, 0)(x)
-#             check_rc(s3, 2)(x)
-#
-#     assert f.run().successful
-#
-#
-# def test_nout_and_getitem():
-#     with Flow("flow") as f:
-#         with Stage("stage_0"):
-#             x = m.noop((0, 1))
-#             zero, one = m.create_tuple(x[0], x[1])
-#
-#             m.assert_equal(zero, 0)
-#             m.assert_equal(one, m.one())
-#
-#         with Stage("stage_1"):
-#             d = m.noop({"a": [0, 1, 2, 3], "b": [3, 2, 1, 0]})
-#
-#             a = d["a"]
-#             b = d["b"]
-#
-#             for i in range(4):
-#                 m.assert_equal(a[i], i)
-#                 m.assert_equal(a[i], b[3 - i])
-#
-#     assert f.run().successful
-#
-#
-# @pytest.mark.parametrize("imperative", [False, True])
-# def test_name_mangling_tables(imperative):
-#     @materialize
-#     def table_task_1():
-#         tbl = Table(pd.DataFrame({"x": [1]}), name="table_%%")
-#         return tbl.materialize() if imperative else tbl
-#
-#     @materialize
-#     def table_task_2():
-#         tbl = Table(pd.DataFrame({"x": [2]}), name="table_%%")
-#         return tbl.materialize() if imperative else tbl
-#
-#     with Flow() as f:
-#         with Stage("stage_1"):
-#             table_1 = table_task_1()
-#             table_2 = table_task_2()
-#
-#     with StageLockContext():
-#         result = f.run()
-#         assert result.get(table_1, as_type=pd.DataFrame)["x"][0] == 1
-#         assert result.get(table_2, as_type=pd.DataFrame)["x"][0] == 2
-#
-#
-# @pytest.mark.parametrize("imperative", [False, True])
-# def test_name_mangling_lazy_tables(imperative):
-#     @materialize(lazy=True)
-#     def lazy_task_1():
-#         tbl = Table(select_as(1, "x"), name="table_%%")
-#         return tbl.materialize() if imperative else tbl
-#
-#     @materialize(lazy=True)
-#     def lazy_task_2():
-#         tbl = Table(select_as(2, "x"), name="table_%%")
-#         return tbl.materialize() if imperative else tbl
-#
-#     with Flow() as f:
-#         with Stage("stage_1"):
-#             lazy_1 = lazy_task_1()
-#             lazy_2 = lazy_task_2()
-#
-#     with StageLockContext():
-#         result = f.run()
-#         assert result.get(lazy_1, as_type=pd.DataFrame)["x"][0] == 1
-#         assert result.get(lazy_2, as_type=pd.DataFrame)["x"][0] == 2
-#
-#
-# @pytest.mark.parametrize("imperative", [False, True])
-# def test_name_mangling_lazy_table_cache_fn(imperative):
-#     # Only the cache fn output of these two tasks is different
-#     @materialize(lazy=True, cache=lambda: 1, name="lazy_task")
-#     def lazy_task_1():
-#         tbl = Table(select_as(1, "x"))
-#         return tbl.materialize() if imperative else tbl
-#
-#     @materialize(lazy=True, cache=lambda: 2, name="lazy_task")
-#     def lazy_task_2():
-#         tbl = Table(select_as(2, "x"))
-#         return tbl.materialize() if imperative else tbl
-#
-#     with Flow() as f:
-#         with Stage("stage_1"):
-#             lazy_1 = lazy_task_1()
-#             lazy_2 = lazy_task_2()
-#
-#     with StageLockContext():
-#         result = f.run()
-#         assert result.get(lazy_1, as_type=pd.DataFrame)["x"][0] == 1
-#         assert result.get(lazy_2, as_type=pd.DataFrame)["x"][0] == 2
-#
-#
-# def test_run_flow_with_empty_stage():
-#     with Flow("f") as f:
-#         with Stage("stage_0"):
-#             pass
-#
-#     assert f.run().successful
-#
-#
-# @materialize(lazy=True, input_type=sa.Table)
-# def _check_nullable_task(tables):
-#     assert len(tables) == 18
-#     # This is dialect specific:
-#     # assert [c.nullable for c in tables[0].c] == [True, True, True]
-#     assert [c.nullable for c in tables[1].c] == [False, True, False]
-#     assert [c.nullable for c in tables[2].c] == [True, False, True]
-#     assert [c.nullable for c in tables[3].c] == [True, False, True]
-#     assert [c.nullable for c in tables[4].c] == [False, True, False]
-#     assert [c.nullable for c in tables[5].c] == [True, True, True]
-#     assert [c.nullable for c in tables[6].c] == [True, False, True]
-#     assert [c.nullable for c in tables[7].c] == [False, True, False]
-#     assert [c.nullable for c in tables[8].c] == [False, False, False]
-#     # assert [c.nullable for c in tables[9].c] == [True, True, True]
-#     assert [c.nullable for c in tables[10].c][1:] == [True, False]
-#     assert [c.nullable for c in tables[11].c][1:] == [False, True]
-#     assert [c.nullable for c in tables[12].c][1:] == [False, True]
-#     assert [c.nullable for c in tables[13].c][1:] == [True, False]
-#     assert [c.nullable for c in tables[14].c][1:] == [True, True]
-#     assert [c.nullable for c in tables[15].c][1:] == [False, True]
-#     assert [c.nullable for c in tables[16].c][1:] == [True, False]
-#     assert [c.nullable for c in tables[17].c][1:] == [False, False]
-#     return tables
-#
-#
-# def _test_nullable_lazy_get_flow():
-#     cols = sa.literal(1).label("x"), sa.literal(2).label("y"), sa.literal(3).
-#     label("z")
-#
-#     @materialize(lazy=True)
-#     def lazy_task_1():
-#         q = sa.select(*cols)
-#         tables = [
-#             Table(q),
-#             Table(q, nullable=["y"]),
-#             Table(q, nullable=["x", "z"]),
-#             Table(q, non_nullable=["y"]),
-#             Table(q, non_nullable=["x", "z"]),
-#             Table(q, nullable=["x", "y", "z"], non_nullable=[]),
-#             Table(q, nullable=["x", "z"], non_nullable=["y"]),
-#             Table(q, nullable=["y"], non_nullable=["x", "z"]),
-#             Table(q, nullable=[], non_nullable=["x", "y", "z"]),
-#             Table(q, primary_key=["x"]),
-#             Table(q, primary_key=["x"], nullable=["y"]),
-#             Table(q, primary_key=["x"], nullable=["x", "z"]),
-#             Table(q, primary_key=["x"], non_nullable=["y"]),
-#             Table(q, primary_key=["x"], non_nullable=["x", "z"]),
-#             Table(q, primary_key=["x"], nullable=["x", "y", "z"], non_nullable=[]),
-#             Table(q, primary_key=["x"], nullable=["x", "z"], non_nullable=["y"]),
-#             Table(q, primary_key=["x"], nullable=["y"], non_nullable=["x", "z"]),
-#             Table(q, primary_key=["x"], nullable=[], non_nullable=["x", "y", "z"]),
-#         ]
-#         return tables
-#
-#     with Flow() as f:
-#         with Stage("stage_1"):
-#             lazy_tables = lazy_task_1()
-#             _check_nullable_task(lazy_tables)
-#     return f, lazy_tables
-#
-#
-# def _test_nullable_get_flow():
-#     @materialize
-#     def task_1():
-#         df = pd.DataFrame({"x": [1], "y": [2], "z": [3]})
-#         tables = [
-#             Table(df),
-#             Table(df, nullable=["y"]),
-#             Table(df, nullable=["x", "z"]),
-#             Table(df, non_nullable=["y"]),
-#             Table(df, non_nullable=["x", "z"]),
-#             Table(df, nullable=["x", "y", "z"], non_nullable=[]),
-#             Table(df, nullable=["x", "z"], non_nullable=["y"]),
-#             Table(df, nullable=["y"], non_nullable=["x", "z"]),
-#             Table(df, nullable=[], non_nullable=["x", "y", "z"]),
-#             Table(df, primary_key=["x"]),
-#             Table(df, primary_key=["x"], nullable=["y"]),
-#             Table(df, primary_key=["x"], nullable=["x", "z"]),
-#             Table(df, primary_key=["x"], non_nullable=["y"]),
-#             Table(df, primary_key=["x"], non_nullable=["x", "z"]),
-#             Table(df, primary_key=["x"], nullable=["x", "y", "z"], non_nullable=[]),
-#             Table(df, primary_key=["x"], nullable=["x", "z"], non_nullable=["y"]),
-#             Table(df, primary_key=["x"], nullable=["y"], non_nullable=["x", "z"]),
-#             Table(df, primary_key=["x"], nullable=[], non_nullable=["x", "y", "z"]),
-#         ]
-#         return tables
-#
-#     with Flow() as f:
-#         with Stage("stage_1"):
-#             lazy_tables = task_1()
-#             _check_nullable_task(lazy_tables)
-#     return f, lazy_tables
-#
-#
-# @pytest.mark.parametrize(
-#     "_get_flow", [_test_nullable_get_flow, _test_nullable_lazy_get_flow]
-# )
-# def test_nullable(_get_flow):
-#     f, lazy_tables = _get_flow()
-#
-#     with StageLockContext():
-#         result = f.run()
-#         assert result.successful
-#         for tbl in lazy_tables:
-#             assert len(result.get(tbl, as_type=pd.DataFrame)) == 1
-#             assert result.get(tbl, as_type=pd.DataFrame)["x"][0] == 1
-#             assert result.get(tbl, as_type=pd.DataFrame)["y"][0] == 2
-#             assert result.get(tbl, as_type=pd.DataFrame)["z"][0] == 3
-#
-#
-# @skip_instances("duckdb")  # duckdb does not persist nullable flags over connections
-# @pytest.mark.parametrize(
-#     "_get_flow", [_test_nullable_get_flow, _test_nullable_lazy_get_flow]
-# )
-# def test_nullable_output(_get_flow):
-#     f, lazy_tables = _get_flow()
-#
-#     def get_nullable(idx):
-#         return [c.nullable for c in result.get(lazy_tables[idx], as_type=sa.Table).c]
-#
-#     with StageLockContext():
-#         result = f.run()
-#         assert result.successful
-#         # This is dialect specific:
-#         # assert get_nullable(0) == [True, True, True]
-#         assert get_nullable(1) == [False, True, False]
-#         assert get_nullable(2) == [True, False, True]
-#         assert get_nullable(3) == [True, False, True]
-#         assert get_nullable(4) == [False, True, False]
-#         assert get_nullable(5) == [True, True, True]
-#         assert get_nullable(6) == [True, False, True]
-#         assert get_nullable(7) == [False, True, False]
-#         assert get_nullable(8) == [False, False, False]
-#
-#
-# @pytest.mark.parametrize(
-#     "nullable, non_nullable, error",
-#     [
-#         (["a"], None, ValueError),
-#         (None, ["a"], ValueError),
-#         (["a", "x", "y", "z"], None, ValueError),
-#         (None, ["a", "x", "y", "z"], ValueError),
-#         (["x", "y", "z"], ["a"], ValueError),
-#         (["a"], ["x", "y", "z"], ValueError),
-#         (["x"], ["x"], ValueError),
-#         (["x"], ["y"], ValueError),
-#         (["x", "y"], ["y"], ValueError),
-#         ("x", None, TypeError),
-#         (None, "x", TypeError),
-#         (1, None, TypeError),
-#         (None, 2, TypeError),
-#     ],
-# )
-# def test_nullable_raises(nullable, non_nullable, error):
-#     cols = sa.literal(1).label("x"), sa.literal(2).label("y"), sa.literal(3).
-#     label("z")
-#
-#     @materialize(lazy=True)
-#     def lazy_task_1():
-#         q = sa.select(*cols)
-#         df = pd.DataFrame({"x": [1], "y": [2], "z": [3]})
-#         tables = [
-#             Table(q, nullable=nullable, non_nullable=non_nullable),
-#             Table(df, nullable=nullable, non_nullable=non_nullable),
-#             Table(q, primary_key=["x"], nullable=nullable, non_nullable=non_nullable),
-#             Table(df, primary_key=["x"], nullable=nullable,
-#             non_nullable=non_nullable),
-#         ]
-#         return tables
-#
-#     with Flow() as f:
-#         with Stage("stage_1"):
-#             lazy_task_1()
-#
-#     with pytest.raises(error):
-#         f.run()
-#
-#
-# @materialize(lazy=True)
-# def _lazy_task_1():
-#     return Table(select_as(1, "x"), name="t1", primary_key="x")
-#
-#
-# @materialize(lazy=True, nout=2)
-# def _lazy_task_2():
-#     return Table(select_as(1, "x"), name="t21", indexes=[["x"]]), Table(
-#         select_as(2, "x"), name="t22", primary_key=["x"]
-#     )
-#
-#
-# @materialize(lazy=True, input_type=sa.Table)
-# def _lazy_join(src1: sa.sql.expression.Alias, src2: sa.sql.expression.Alias):
-#     query = sa.select(src1.c.x, src2.c.x.label("x2")).select_from(
-#         src1.outerjoin(src2, src1.c.x == src2.c.x)
-#     )
-#     return Table(query, "t3_%%", indexes=[["x2"], ["x", "x2"]])
-#
-#
-# @materialize(version="1.0")
-# def _sql_task_1():
-#     return Table(select_as(1, "x"), name="t1", primary_key="x")
-#
-#
-# @materialize(version="1.0", nout=2)
-# def _sql_task_2():
-#     return (
-#         Table(select_as(1, "x"), name="t21", indexes=[["x"]]),
-#         Table(select_as(2, "x"), name="t22", primary_key=["x"]),
-#     )
-#
-#
-# @materialize(version="1.0", input_type=sa.Table)
-# def _sql_join(src1: sa.sql.expression.Alias, src2: sa.sql.expression.Alias):
-#     query = sa.select(src1.c.x, src2.c.x.label("x2")).select_from(
-#         src1.outerjoin(src2, src1.c.x == src2.c.x)
-#     )
-#     return Table(query, "t3_%%", indexes=[["x2"], ["x", "x2"]])
-#
-#
-# @materialize(version="1.0")
-# def _eager_task_1():
-#     df = pd.DataFrame(dict(x=[1]))
-#     return Table(df, name="t1", primary_key="x")
-#
-#
-# @materialize(version="1.0", nout=2)
-# def _eager_task_2():
-#     df1 = pd.DataFrame(dict(x=[1]))
-#     df2 = pd.DataFrame(dict(x=[2]))
-#     return (
-#         Table(df1, name="t21", indexes=[["x"]]),
-#         Table(df2, name="t22", primary_key=["x"]),
-#     )
-#
-#
-# @materialize(version="1.0", input_type=pd.DataFrame)
-# def _eager_join(src1: pd.DataFrame, src2: pd.DataFrame):
-#     src2["x2"] = src2["x"]
-#     join = src1.merge(src2, on="x", how="left")
-#     return Table(join, "t3_%%", indexes=[["x2"], ["x", "x2"]])
-#
-#
-# @pytest.mark.skip
-# @pytest.mark.parametrize(
-#     "task_1,task_2,noop,join",
-#     [
-#         # communicate with same kind
-#         (_lazy_task_1, _lazy_task_2, m.noop_lazy, _lazy_join),
-#         (_sql_task_1, _sql_task_2, m.noop_sql, _sql_join),
-#         (_eager_task_1, _eager_task_2, m.noop, _eager_join),
-#         # communicate to sql
-#         (_lazy_task_1, _lazy_task_2, m.noop_sql, _sql_join),
-#         (_eager_task_1, _eager_task_2, m.noop_sql, _sql_join),
-#         # communicate to lazy
-#         (_sql_task_1, _sql_task_2, m.noop_lazy, _lazy_join),
-#         (_eager_task_1, _eager_task_2, m.noop_lazy, _lazy_join),
-#         # communicate to eager
-#         (_lazy_task_1, _lazy_task_2, m.noop, _eager_join),
-#         (_sql_task_1, _sql_task_2, m.noop, _eager_join),
-#     ],
-# )
-# def test_task_and_stage_communication(task_1, task_2, noop, join):
-#     logger = structlog.get_logger("test_task_and_stage_communication")
-#     with Flow() as f:
-#         with Stage("stage_1"):
-#             t1 = task_1()
-#             t21, t22 = task_2()
-#             same_stage = noop(t22)
-#             same_stage2 = join(t1, t21)
-#         with Stage("stage_2"):
-#             next_stage = noop(t22)
-#             next_stage2 = join(t1, t21)
-#             next_same_stage = join(t1, next_stage)
-#
-#     for i in range(3):
-#         with StageLockContext():
-#             logger.info("## Running flow", iteration=i)
-#             result = f.run()
-#             logger.info("#    checking flow", iteration=i)
-#             assert result.successful
-#             assert result.get(t1, as_type=pd.DataFrame)["x"][0] == 1
-#             assert result.get(t21, as_type=pd.DataFrame)["x"][0] == 1
-#             assert result.get(t22, as_type=pd.DataFrame)["x"][0] == 2
-#             assert result.get(same_stage, as_type=pd.DataFrame)["x"][0] == 2
-#             assert result.get(same_stage2, as_type=pd.DataFrame)["x"][0] == 1
-#             assert result.get(same_stage2, as_type=pd.DataFrame)["x2"][0] == 1
-#             assert result.get(next_stage, as_type=pd.DataFrame)["x"][0] == 2
-#             assert result.get(next_stage2, as_type=pd.DataFrame)["x"][0] == 1
-#             assert result.get(next_stage2, as_type=pd.DataFrame)["x2"][0] == 1
-#             assert result.get(next_same_stage, as_type=pd.DataFrame)["x"][0] == 1
-#             assert result.get(next_same_stage, as_type=pd.DataFrame)["x2"
-#             ].isna().all()
+@with_instances("mssql")  # mssql can do cross-database queries
+def test_input_versions_other_instance_table():
+    run = 1
+    val = 12
+
+    @input_stage_versions(input_type=sa.Table, lazy=True, lock_source_stages=False)
+    def join_across_stage_versions(
+        tbls: dict[str, sa.Alias],
+        other_tbls: dict[str, sa.Alias],
+        other_cfg: ConfigContext,
+    ):
+        if run > 1:
+            # make a cross-database query to combine tables of both instances
+            other_database = other_cfg.store.table_store.engine.url.database
+            assert (
+                ConfigContext.get().store.table_store.engine.url.database
+                != other_database
+            )
+            assert tbls["x"].original.schema != other_tbls["x"].original.schema
+            other_tbls[
+                "x"
+            ].original.schema = f'{other_database}.{other_tbls["x"].original.schema}'
+            return Table(
+                sa.select(
+                    tbls["x"].outerjoin(
+                        other_tbls["x"], tbls["x"].c.a == other_tbls["x"].c.a
+                    )
+                ),
+                name="res",
+            )
+        else:
+            return Table(tbls["x"], name="res")
+
+    @input_stage_versions(
+        input_type=pd.DataFrame, ordering_barrier=False, lock_source_stages=False
+    )
+    def validate_stage(
+        tbls: dict[str, pd.DataFrame],
+        other_tbls: dict[str, pd.DataFrame],
+        other_cfg: ConfigContext,
+    ):
+        _ = other_cfg
+        if run > 1:
+            assert 1 <= len({k for k in tbls.keys() if not k.endswith("__copy")}) <= 2
+            assert (
+                1
+                <= len({k for k in other_tbls.keys() if not k.endswith("__copy")})
+                <= 3
+            )
+            x = tbls["x"]
+            y = other_tbls["x"]
+            pd.testing.assert_frame_equal(x, y)
+
+    @materialize(version="1.1")
+    def pd_dataframe(data: dict[str, list]):
+        return Table(pd.DataFrame(data), name="x")
+
+    def get_flow(other_cfg: ConfigContext):
+        with Flow("flow") as f:
+            with Stage("stage"):
+                x = pd_dataframe({"a": [val], "b": [24]})
+                res = join_across_stage_versions(other_cfg)
+                validate_stage(x, other_cfg)
+                m.assert_table_equal(x, x)
+                with GroupNode(ordering_barrier=True):
+                    validate_stage(config=other_cfg)
+                _ = m.noop(res)
+        return f
+
+    cfg = ConfigContext.get()
+    cfg2 = PipedagConfig.default.get("mssql_pytsql")
+
+    with StageLockContext():
+        f = get_flow(cfg2)
+        assert cfg.store.table_store.engine.url != cfg2.store.table_store.engine.url
+        assert f.run(config=cfg).successful
+        assert (
+            pd.read_sql_table(
+                "x",
+                schema=cfg.store.table_store.get_schema(f["stage"].name).get(),
+                con=cfg.store.table_store.engine,
+            ).iloc[0, 0]
+            == val
+        )
+        run += 1
+        f = get_flow(cfg)
+        assert f.run(config=cfg2).successful
+        assert (
+            pd.read_sql_table(
+                "x",
+                schema=cfg2.store.table_store.get_schema(f["stage"].name).get(),
+                con=cfg2.store.table_store.engine,
+            ).iloc[0, 0]
+            == val
+        )
+        run += 1
+        val = -5
+        f = get_flow(cfg)
+        with swallowing_raises(
+            AssertionError, match=r"\[left\]:  \[-5\]\n\[right\]: \[12\]"
+        ):
+            f.run(config=cfg2)
+        assert (
+            pd.read_sql_table(
+                "x",
+                schema=cfg2.store.table_store.get_schema(
+                    f["stage"].transaction_name
+                ).get(),
+                con=cfg2.store.table_store.engine,
+            ).iloc[0, 0]
+            == val
+        )
+
+
+@pytest.mark.skip(reason="TODO: fix locking of other instance")
+@with_instances("postgres")
+def test_input_versions_other_instance_locking():
+    run = 1
+    val = 12
+
+    @input_stage_versions(input_type=pd.DataFrame, lazy=True)
+    def join_across_stage_versions(
+        tbls: dict[str, pd.DataFrame],
+        other_tbls: dict[str, pd.DataFrame],
+        other_cfg: ConfigContext,
+    ):
+        _ = other_cfg
+        # other_tbls["x"] might be destoryed by a race condition since we can't keep
+        # locks between both runs because we lock the other instance again
+        if run > 1 and isinstance(other_tbls["x"], pd.DataFrame):
+            return Table(tbls["x"].merge(other_tbls["x"], on="a"), name="res")
+        else:
+            return Table(tbls["x"], name="res")
+
+    @input_stage_versions(input_type=pd.DataFrame, ordering_barrier=False)
+    def validate_stage(
+        tbls: dict[str, pd.DataFrame],
+        other_tbls: dict[str, pd.DataFrame],
+        other_cfg: ConfigContext,
+    ):
+        _ = other_cfg
+        # we cannot make assumptions since we did not lock other instance between the
+        # two runs
+        _ = other_tbls
+        if run > 1:
+            assert 1 <= len({k for k in tbls.keys() if not k.endswith("__copy")}) <= 2
+            x = tbls["x"]
+            assert x.iloc[0, 0] == val
+
+    @materialize(version="1.1")
+    def pd_dataframe(data: dict[str, list]):
+        return Table(pd.DataFrame(data), name="x")
+
+    def get_flow(other_cfg: ConfigContext):
+        with Flow("flow") as f:
+            with Stage("stage"):
+                x = pd_dataframe({"a": [val], "b": [24]})
+                res = join_across_stage_versions(other_cfg)
+                validate_stage(x, other_cfg)
+                m.assert_table_equal(x, x)
+                with GroupNode(ordering_barrier=True):
+                    validate_stage(config=other_cfg)
+                _ = m.noop(res)
+        return f
+
+    cfg = ConfigContext.get()
+    cfg2 = PipedagConfig.default.get("postgres_unlogged")
+
+    with StageLockContext():
+        f = get_flow(cfg2)
+        assert cfg.store.table_store.engine.url != cfg2.store.table_store.engine.url
+        assert f.run(config=cfg).successful
+        assert (
+            pd.read_sql_table(
+                "x",
+                schema=cfg.store.table_store.get_schema(f["stage"].name).get(),
+                con=cfg.store.table_store.engine,
+            ).iloc[0, 0]
+            == val
+        )
+
+    run += 1
+
+    with StageLockContext():
+        f = get_flow(cfg)
+        assert f.run(config=cfg2).successful
+        assert (
+            pd.read_sql_table(
+                "x",
+                schema=cfg2.store.table_store.get_schema(f["stage"].name).get(),
+                con=cfg2.store.table_store.engine,
+            ).iloc[0, 0]
+            == val
+        )
+
+    run += 1
+    val = -5
+
+    with StageLockContext():
+        f = get_flow(cfg)
+        with swallowing_raises(
+            AssertionError, match=r"\[left\]:  \[-5\]\n\[right\]: \[12\]"
+        ):
+            f.run(config=cfg2)
+        assert (
+            pd.read_sql_table(
+                "x",
+                schema=cfg2.store.table_store.get_schema(
+                    f["stage"].transaction_name
+                ).get(),
+                con=cfg2.store.table_store.engine,
+            ).iloc[0, 0]
+            == val
+        )
