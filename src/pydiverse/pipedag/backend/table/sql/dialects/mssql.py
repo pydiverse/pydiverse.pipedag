@@ -10,7 +10,6 @@ import sqlalchemy.dialects.mssql
 
 from pydiverse.pipedag.backend.table.sql.ddl import (
     AddIndex,
-    AddPrimaryKey,
     ChangeColumnTypes,
     CreateAlias,
     _mssql_update_definition,
@@ -79,16 +78,6 @@ class MSSqlTableStore(SQLTableStore):
     def _init_database(self):
         self._init_database_with_database("master", {"isolation_level": "AUTOCOMMIT"})
 
-    def add_primary_key(
-        self,
-        table_name: str,
-        schema: Schema,
-        key_columns: list[str],
-        *,
-        name: str | None = None,
-    ):
-        self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
-
     def add_index(
         self,
         table_name: str,
@@ -96,19 +85,6 @@ class MSSqlTableStore(SQLTableStore):
         index_columns: list[str],
         name: str | None = None,
     ):
-        sql_types = self.reflect_sql_types(index_columns, table_name, schema)
-        if any(
-            [
-                isinstance(_type, sa.String) and _type.length is None
-                for _type in sql_types
-            ]
-        ):
-            # impose some varchar(max) limit to allow use in primary key / index
-            self.execute(
-                ChangeColumnTypes(
-                    table_name, schema, index_columns, sql_types, cap_varchar_max=1024
-                )
-            )
         self.execute(AddIndex(table_name, schema, index_columns, name))
 
     def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
@@ -190,8 +166,32 @@ class MSSqlTableStore(SQLTableStore):
                         cap_varchar_max=1024,
                     )
                 )
-            self.add_table_primary_key(table, schema)
+                index_columns = set()  # type: set[str]
+                if table.indexes is not None:
+                    for index in table.indexes:
+                        index_columns |= set(index)
+                index_columns_list = list(index_columns)
+                sql_types = self.reflect_sql_types(
+                    index_columns_list, table.name, schema
+                )
+                index_str_max_columns = [
+                    col
+                    for _type, col in zip(sql_types, index_columns_list)
+                    if isinstance(_type, sa.String) and _type.length is None
+                ]
+                if len(index_str_max_columns) > 0:
+                    # impose some varchar(max) limit to allow use in primary key / index
+                    self.execute(
+                        ChangeColumnTypes(
+                            table.name,
+                            schema,
+                            index_str_max_columns,
+                            sql_types,
+                            cap_varchar_max=1024,
+                        )
+                    )
         if on_empty_table is None or not on_empty_table:
+            self.add_table_primary_key(table, schema)
             self.add_table_indexes(table, schema)
 
     def execute_raw_sql(self, raw_sql: RawSql):
