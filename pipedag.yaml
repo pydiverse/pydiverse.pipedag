@@ -22,6 +22,12 @@ table_store_connections:
       url: "duckdb:////tmp/pipedag/{instance_id}/db.duckdb"
       create_database_if_not_exists: true
 
+  snowflake:
+    args:
+      url: "snowflake://{$SNOWFLAKE_USER}:{$SNOWFLAKE_PASSWORD}@{$SNOWFLAKE_ACCOUNT}/pipedag/DBO?warehouse=pipedag&role=accountadmin"
+      schema_prefix: "{instance_id}_"
+      create_database_if_not_exists: true
+
 blob_store_connections:
   file:
     class: "pydiverse.pipedag.backend.blob.FileBlobStore"
@@ -84,6 +90,9 @@ instances:
         materialization_details:
           __any__:
             unlogged: true
+      hook_args:
+        pandas:
+          dtype_backend: "numpy"  # also test numpy backed pandas
     blob_store:
       blob_store_connection: no_blob
 
@@ -161,6 +170,16 @@ instances:
       args:
         hosts: "localhost:2181"
 
+  snowflake:
+    instance_id: pd_snowflake
+    table_store:
+      table_store_connection: snowflake
+    lock_manager:
+      class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
+      args:
+        hosts: "localhost:2181"
+
+
   ## Table Cache Instances
 
   local_table_cache:
@@ -174,6 +193,20 @@ instances:
   local_table_cache_inout:
     instance_id: local_table_cache_inout
     table_store:
+      local_table_cache:
+        store_input: true
+        store_output: true
+        use_stored_input_as_cache: true
+        class: "pydiverse.pipedag.backend.table.cache.ParquetTableCache"
+        args:
+          base_path: "/tmp/pipedag/table_cache"
+
+  local_table_cache_inout_numpy:
+    instance_id: local_table_cache_inout_numpy
+    table_store:
+      hook_args:
+        pandas:
+          dtype_backend: "numpy"
       local_table_cache:
         store_input: true
         store_output: true

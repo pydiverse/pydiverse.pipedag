@@ -110,9 +110,6 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         stage_name: str,
         as_type: type[pd.DataFrame],
     ) -> pd.DataFrame:
-        if PandasTableHook.pd_version < Version("2.0"):
-            return cls._retrieve(store, table, use_nullable_dtype=True)
-
         # Determine dtype backend for pandas >= 2.0
         # [this is similar to the PandasTableHook found in SQLTableStore]
 
@@ -126,8 +123,29 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         elif isinstance(as_type, dict):
             backend_str = as_type["backend"]
 
-        dtype_backend = {"arrow": "pyarrow", "numpy": "numpy_nullable"}
-        return cls._retrieve(store, table, dtype_backend=dtype_backend[backend_str])
+        if PandasTableHook.pd_version < Version("2.0"):
+            # for use_nullable_dtypes=False, returned types are mostly numpy backed
+            # extension dtypes
+            ret = cls._retrieve(
+                store, table, use_nullable_dtypes=backend_str != "arrow"
+            )
+            # use_nullable_dtypes=False may still return string[python] even though we
+            # expect and sometimes get string[pyarrow]
+            for col in ret.dtypes[ret.dtypes == "string[python]"].index:
+                ret[col] = ret[col].astype(pd.StringDtype("pyarrow"))
+        else:
+            dtype_backend_map = {"arrow": "pyarrow", "numpy": "numpy_nullable"}
+            ret = cls._retrieve(
+                store, table, dtype_backend=dtype_backend_map[backend_str]
+            )
+
+        # Prefer StringDtype("pyarrow") over ArrowDtype(pa.string()) for now.
+        # We need to check this choice with future versions of pandas/pyarrow.
+        for col in ret.dtypes[
+            (ret.dtypes == "large_string[pyarrow]") | (ret.dtypes == "string[pyarrow]")
+        ].index:
+            ret[col] = ret[col].astype(pd.StringDtype("pyarrow"))
+        return ret
 
     @classmethod
     def _retrieve(cls, store, table, **pandas_kwargs):

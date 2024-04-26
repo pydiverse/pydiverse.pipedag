@@ -92,7 +92,10 @@ def test_dtype_to_pandas_numpy():
 @pytest.mark.skipif("pd.__version__ < '2'")
 def test_dtype_to_pandas_pyarrow():
     def assert_conversion(type_: DType, expected):
-        assert type_.to_pandas(PandasDTypeBackend.ARROW) == pd.ArrowDtype(expected)
+        if isinstance(expected, pa.DataType):
+            assert type_.to_pandas(PandasDTypeBackend.ARROW) == pd.ArrowDtype(expected)
+        else:
+            assert type_.to_pandas(PandasDTypeBackend.ARROW) == expected
 
     assert_conversion(DType.INT64, pa.int64())
     assert_conversion(DType.INT32, pa.int32())
@@ -104,7 +107,7 @@ def test_dtype_to_pandas_pyarrow():
     assert_conversion(DType.UINT16, pa.uint16())
     assert_conversion(DType.UINT8, pa.uint8())
 
-    assert_conversion(DType.STRING, pa.string())
+    assert_conversion(DType.STRING, pd.StringDtype(storage="pyarrow"))
     assert_conversion(DType.BOOLEAN, pa.bool_())
 
     assert_conversion(DType.DATE, pa.date32())

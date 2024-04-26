@@ -10,6 +10,7 @@ from tests.fixtures.instances import with_instances
 @with_instances(
     "local_table_cache",
     "local_table_cache_inout",
+    "local_table_cache_inout_numpy",
     "local_table_store",
 )
 def test_local_table_cache(mocker):

@@ -39,7 +39,8 @@ def main():
         )
         with engine.connect() as conn:
             conn.execute(sa.text(f"CREATE SCHEMA IF NOT EXISTS {schema.get()}"))
-            conn.commit()
+            if sa.__version__ >= "2.0.0":
+                conn.commit()
         # We can do this also a bit shorter and with more debugging output:
         cfg.store.table_store.execute(f"CREATE SCHEMA IF NOT EXISTS {schema.get()}")
 

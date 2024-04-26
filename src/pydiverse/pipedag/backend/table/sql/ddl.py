@@ -867,6 +867,15 @@ def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     return f"RENAME TABLE {schema}.{from_table} TO {to_table}"
 
 
+@compiles(RenameTable, "snowflake")
+def visit_rename_table(rename_table: RenameTable, compiler, **kw):
+    _ = kw
+    from_table = compiler.preparer.quote(rename_table.from_name)
+    to_table = compiler.preparer.quote(rename_table.to_name)
+    schema = compiler.preparer.format_schema(rename_table.schema.get())
+    return f"ALTER TABLE {schema}.{from_table} RENAME TO {schema}.{to_table}"
+
+
 @compiles(DropTable)
 def visit_drop_table(drop: DropTable, compiler, **kw):
     return _visit_drop_anything(drop, "TABLE", compiler, **kw)

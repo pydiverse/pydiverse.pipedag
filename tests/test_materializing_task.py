@@ -14,7 +14,12 @@ from tests.util import tasks_library as m
 from tests.util import tasks_library_imperative as m2
 
 
-@with_instances("postgres", "local_table_cache", "local_table_cache_inout")
+@with_instances(
+    "postgres",
+    "local_table_cache",
+    "local_table_cache_inout",
+    "local_table_cache_inout_numpy",
+)
 @pytest.mark.parametrize("imperative", [False, True])
 def test_get_output_from_store(imperative):
     _m = m2 if imperative else m
@@ -119,7 +124,8 @@ def test_imperative_materialize_given_config():
     with engine.connect() as conn:
         conn.execute(sa.text("DROP SCHEMA IF EXISTS dummy_schema CASCADE"))
         conn.execute(sa.text("CREATE SCHEMA IF NOT EXISTS dummy_schema"))
-        conn.commit()
+        if sa.__version__ >= "2.0.0":
+            conn.commit()
 
     # test failure on materialization without schema
     with pytest.raises(ValueError, match="schema must be provided"):
