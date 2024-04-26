@@ -32,10 +32,10 @@ class BaseContext:
     _instance_state: dict[id, list[Token]] = {}
 
     def __enter__(self):
-        if id(self) not in self._instance_state:
-            self._instance_state[id(self)] = []
-        _tokens = self._instance_state[id(self)]
         with self._lock:
+            if id(self) not in self._instance_state:
+                self._instance_state[id(self)] = []
+            _tokens = self._instance_state[id(self)]
             token = self._context_var.set(self)
             _tokens.append(token)
         return self
