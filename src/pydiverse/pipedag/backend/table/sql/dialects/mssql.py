@@ -9,7 +9,6 @@ import sqlalchemy as sa
 import sqlalchemy.dialects.mssql
 
 from pydiverse.pipedag.backend.table.sql.ddl import (
-    AddIndex,
     ChangeColumnTypes,
     CreateAlias,
     _mssql_update_definition,
@@ -77,15 +76,6 @@ class MSSqlTableStore(SQLTableStore):
 
     def _init_database(self):
         self._init_database_with_database("master", {"isolation_level": "AUTOCOMMIT"})
-
-    def add_index(
-        self,
-        table_name: str,
-        schema: Schema,
-        index_columns: list[str],
-        name: str | None = None,
-    ):
-        self.execute(AddIndex(table_name, schema, index_columns, name))
 
     def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
         _ = is_sql
