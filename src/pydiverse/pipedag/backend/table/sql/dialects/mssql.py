@@ -93,6 +93,7 @@ class MSSqlTableStore(SQLTableStore):
             table.nullable is not None
             or table.non_nullable is not None
             or (table.primary_key is not None and len(table.primary_key) > 0)
+            or (table.indexes is not None and len(table.indexes) > 0)
         )
 
     def get_forced_nullability_columns(
