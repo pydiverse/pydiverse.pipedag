@@ -1,7 +1,8 @@
 # Changelog
 
-## 0.9.1 (2024-XX-XX)
+## 0.9.1 (2024-04-26)
 - Support Snowflake as a backend for `SQLTableStore`.
+- For mssql backend, moved primary key adding after filling complete table.
 - Make polars dematerialization robust against missing connectorx. Fall back to pandas if connectorx is not available.
 - Fix some bugs with pandas < 2 and sqlalchemy < 2 compatibility as well as pyarrow handling.
 - Use pd.StringDtype("pyarrow") instead of pd.ArrowDtype(pa.string()) for dtype "string[pyarrow]"
