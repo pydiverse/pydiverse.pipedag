@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 import sqlalchemy as sa
 
 from pydiverse.pipedag import (
@@ -182,7 +183,8 @@ def test_input_versions_blob():
 
 
 @with_instances("mssql")  # mssql can do cross-database queries
-def test_input_versions_other_instance_table():
+@pytest.mark.parametrize("per_user", [True, False])
+def test_input_versions_other_instance_table(per_user):
     run = 1
     val = 12
 
@@ -199,7 +201,6 @@ def test_input_versions_other_instance_table():
                 ConfigContext.get().store.table_store.engine.url.database
                 != other_database
             )
-            assert tbls["x"].original.schema != other_tbls["x"].original.schema
             other_tbls[
                 "x"
             ].original.schema = f'{other_database}.{other_tbls["x"].original.schema}'
@@ -251,7 +252,7 @@ def test_input_versions_other_instance_table():
         return f
 
     cfg = ConfigContext.get()
-    cfg2 = PipedagConfig.default.get("mssql_pytsql")
+    cfg2 = PipedagConfig.default.get("mssql_pytsql", per_user=per_user)
 
     with StageLockContext():
         f = get_flow(cfg2)
@@ -296,7 +297,8 @@ def test_input_versions_other_instance_table():
 
 
 @with_instances("postgres")
-def test_input_versions_other_instance_locking():
+@pytest.mark.parametrize("per_user", [True, False])
+def test_input_versions_other_instance_locking(per_user):
     run = 1
     val = 12
 
@@ -346,7 +348,7 @@ def test_input_versions_other_instance_locking():
         return f
 
     cfg = ConfigContext.get()
-    cfg2 = PipedagConfig.default.get("postgres_unlogged")
+    cfg2 = PipedagConfig.default.get("postgres_unlogged", per_user=per_user)
 
     with StageLockContext():
         f = get_flow(cfg2)
