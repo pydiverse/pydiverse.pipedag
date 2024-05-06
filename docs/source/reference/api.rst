@@ -7,6 +7,7 @@ Public
     "Flow",
     "Stage",
     "materialize",
+    "input_stage_versions",
     "AUTO_VERSION",
     "Table",
     "RawSql",
@@ -32,6 +33,8 @@ Public
     :special-members: __getitem__
 
 .. autodecorator:: materialize
+
+.. autodecorator:: input_stage_versions
 
 .. autodata:: AUTO_VERSION
 

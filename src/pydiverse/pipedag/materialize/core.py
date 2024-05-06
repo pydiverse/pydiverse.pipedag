@@ -29,7 +29,7 @@ from pydiverse.pipedag.util.hashing import stable_hash
 from pydiverse.pipedag.util.json import PipedagJSONEncoder
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag import Flow, Stage, VisualizationStyle
+    from pydiverse.pipedag import Flow, Stage
     from pydiverse.pipedag.backend.table.base import TableHook
     from pydiverse.pipedag.materialize.store import PipeDAGStore
 
@@ -998,8 +998,11 @@ def input_stage_versions(
     version: str | None = None,
     cache: Callable[[Any], Any] | None = None,
     lazy: bool = False,
+    group_node_tag: str | None = None,
     nout: int = 1,
-    ordering_barrier: bool | dict[str, str | VisualizationStyle] = True,
+    add_input_source: bool = False,
+    ordering_barrier: bool | dict[str, Any] = False,
+    call_context: Callable[[], Any] | None = None,
     include_views=True,
     lock_source_stages=True,
     pass_args: Iterable[str] = tuple(),
@@ -1022,7 +1025,9 @@ def input_stage_versions(
     lazy: bool = False,
     group_node_tag: str | None = None,
     nout: int = 1,
-    ordering_barrier: bool | dict[str, str | VisualizationStyle] = True,
+    add_input_source: bool = False,
+    ordering_barrier: bool | dict[str, Any] = False,
+    call_context: Callable[[], Any] | None = None,
     include_views=True,
     lock_source_stages=True,
     pass_args: Iterable[str] = tuple(),
@@ -1056,18 +1061,86 @@ def input_stage_versions(
     keyword arguments through to the decorated task.
 
     :param fn:
+        The function that gets executed by this task.
     :param name:
+        The name of this task.
+        If no `name` is provided, the name of `fn` is used instead.
     :param input_type:
+        The data type as which to retrieve table objects from the store.
+        All tables passed to this task get loaded from the table store and converted
+        to this type. See :doc:`Table Backends </table_backends>` for
+        more information.
     :param version:
+        The version of this task.
+        Unless the task is lazy, you always need to manually change this
+        version number when you change the implementation to ensure that the
+        task gets executed and the cache flushed.
+
+        If the `version` is ``None`` and the task isn't lazy, then the task always
+        gets executed, and all downstream tasks get invalidated.
     :param cache:
+        An explicit cache function used to determine cache validity of the task inputs.
+
+        This function gets called every time before the task gets executed.
+        It gets called with the same arguments as the task.
+
+        An explicit function for validating cache validity. If the output
+        of this function changes while the source parameters are the same (e.g.
+        the source is a filepath and `cache` loads data from this file), then the
+        cache will be deemed invalid and is not used.
     :param lazy:
+        Whether this task is lazy or not.
+
+        Unlike a normal task, lazy tasks always get executed. However, if a lazy
+        task produces a lazy table (e.g. a SQL query), the table store checks if
+        the same query has been executed before. If this is the case, then the
+        query doesn't get executed, and instead, the table gets copied from the cache.
+
+        This behaviour is very useful, because you don't need to manually bump
+        the `version` of a lazy task. This only works because for lazy tables
+        generating the query is very cheap compared to executing it.
     :param group_node_tag:
+        Set a tag that may add this task to a configuration based group node.
     :param nout:
+        The number of objects returned by the task.
+        If set, this allows unpacking and iterating over the results from the task.
+    :param add_input_source:
+        If true, Table and Blob objects are provided as tuple together with the
+        dematerialized object. ``task(a=tbl)`` will result in
+        ``a=(dematerialized_tbl, tbl)`` in the task.
     :param ordering_barrier:
+        If true, the task will be surrounded by a GroupNode(ordering_barrier=True).
+        If a dictionary is provided, it is surrounded by a
+        GroupNode(**ordering_barrier). This allows passing style, style_tag, and label
+        arguments.
+    :param call_context:
+        An optional context manager function that is opened before the task or its
+        optional cache function is called and closed afterward.
     :param include_views:
+        In case no explicit table references are given, if true, include views when
+        collecting all tables of both stage versions.
     :param lock_source_stages:
+        If true, lock the other stage version when a ConfigContext object is passed to
+        this task.
     :param pass_args
-    :return:
+        A list of named arguments that whould be passed from the call to the task
+        function. By default, no arguments are passed, and just tables are extracted.
+    Example
+    -------
+
+    ::
+
+        @input_stage_versions(lazy=True, input_type=sa.Table)
+        def validate_stage(
+            transaction: dict[str, sa.Alias],
+            other: dict[str, sa.Alias],
+        ):
+            compare_tables(transaction, other)
+
+        def get_flow():
+            with Flow() as f:
+                a = produce_a_table()
+                validate_stage()  # implicitly receives all tables written before
     """
     from pydiverse.pipedag import Stage
 
@@ -1079,7 +1152,9 @@ def input_stage_versions(
         lazy=lazy,
         group_node_tag=group_node_tag,
         nout=nout,
+        add_input_source=add_input_source,
         ordering_barrier=ordering_barrier,
+        call_context=call_context,
         include_views=include_views,
         lock_source_stages=lock_source_stages,
         pass_args=pass_args,
