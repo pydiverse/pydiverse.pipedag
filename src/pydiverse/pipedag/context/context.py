@@ -30,25 +30,34 @@ if TYPE_CHECKING:
 class BaseContext:
     _context_var: ClassVar[ContextVar]
     _lock: Lock = Lock()
-    _instance_state: dict[int, list[Token]] = {}
+    _thread_state: dict[int, list[Token]] = {}
+    _instance_state: dict[int, int] = {}
 
     def __enter__(self):
         with self._lock:
             _id = id(self) + (threading.get_ident() << 64)
-            if _id not in self._instance_state:
-                self._instance_state[_id] = []
-            _tokens = self._instance_state[_id]
+            if _id not in self._thread_state:
+                self._thread_state[_id] = []
+            _tokens = self._thread_state[_id]
             token = self._context_var.set(self)
             _tokens.append(token)
+            if id(self) not in self._instance_state:
+                self._instance_state[id(self)] = 0
+            # count threads that entered this context object
+            self._instance_state[id(self)] += 1
         return self
 
     def __exit__(self, *_):
         with self._lock:
             _id = id(self) + (threading.get_ident() << 64)
-            _tokens = self._instance_state[_id]
+            _tokens = self._thread_state[_id]
             self._context_var.reset(_tokens.pop())
             if len(_tokens) == 0:
-                del self._instance_state[_id]
+                del self._thread_state[_id]
+            self._instance_state[id(self)] -= 1
+            if self._instance_state[id(self)] == 0:
+                # in case of multi-threading, only close objects once
+                del self._instance_state[id(self)]
                 self._close()
 
     def _close(self):
