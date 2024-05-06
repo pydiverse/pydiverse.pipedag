@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import threading
 from collections.abc import Mapping
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
@@ -29,23 +30,25 @@ if TYPE_CHECKING:
 class BaseContext:
     _context_var: ClassVar[ContextVar]
     _lock: Lock = Lock()
-    _instance_state: dict[id, list[Token]] = {}
+    _instance_state: dict[int, list[Token]] = {}
 
     def __enter__(self):
         with self._lock:
-            if id(self) not in self._instance_state:
-                self._instance_state[id(self)] = []
-            _tokens = self._instance_state[id(self)]
+            _id = id(self) + (threading.get_ident() << 64)
+            if _id not in self._instance_state:
+                self._instance_state[_id] = []
+            _tokens = self._instance_state[_id]
             token = self._context_var.set(self)
             _tokens.append(token)
         return self
 
     def __exit__(self, *_):
         with self._lock:
-            _tokens = self._instance_state[id(self)]
+            _id = id(self) + (threading.get_ident() << 64)
+            _tokens = self._instance_state[_id]
             self._context_var.reset(_tokens.pop())
             if len(_tokens) == 0:
-                del self._instance_state[id(self)]
+                del self._instance_state[_id]
                 self._close()
 
     def _close(self):
