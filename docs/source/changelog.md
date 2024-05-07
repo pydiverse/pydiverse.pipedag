@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.2 (2024-XX-XX)
+## 0.9.2 (2024-05-07)
 - @input_stage_versions decorator allows specifying tasks which compare tables within the current stage transaction 
     schema and another version of that stage. This can be the currently active stage schema of the same pipeline 
     instance or from another instance. See: https://pydiversepipedag.readthedocs.io/en/latest/examples.html
