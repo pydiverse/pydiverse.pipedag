@@ -27,15 +27,17 @@ Please save the following file as pipedag.yaml or download the following [zip](m
 ```yaml
 name: data_pipeline
 table_store_connections:
+  postgres_instances:
+    args:
+      url: "postgresql://{username}:{password}@{host}:{port}/pipedag"
+      url_attrs_file: "{$POSTGRES_PASSWORD_CFG}"
+      # using one database for multiple instances enables queries across instances
+      schema_prefix: "{instance_id}_"
+
   postgres:
     args:
-      url: "postgresql://{$POSTGRES_USERNAME}:{$POSTGRES_PASSWORD}@127.0.0.1:6543/{instance_id}"
-
-  postgres2:
-    args:
       # Postgres: this can be used after running `docker-compose up`
-      url: "postgresql://{username}:{password}@{host}:{port}/{instance_id}"
-      url_attrs_file: "{$POSTGRES_PASSWORD_CFG}"
+      url: "postgresql://{$POSTGRES_USERNAME}:{$POSTGRES_PASSWORD}@127.0.0.1:6543/pipedag"
 
 blob_store_connections:
   file:
@@ -68,7 +70,7 @@ technical_setups:
       class: "pydiverse.pipedag.backend.table.SQLTableStore"
 
       # Postgres: this can be used after running `docker-compose up`
-      table_store_connection: postgres2
+      table_store_connection: postgres
 
       args:
         create_database_if_not_exists: True
@@ -98,13 +100,15 @@ instances:
 
   full:
     # Full dataset is using default database connection and schemas
-    instance_id: pipedag_full
+    instance_id: full
     table_store:
-      table_store_connection: postgres2
+      table_store_connection: postgres_instances
 
   midi:
     # Full dataset is using default database connection and schemas
-    instance_id: pipedag_midi
+    instance_id: midi
+    table_store:
+      table_store_connection: postgres_instances
     attrs:
       # copy filtered input from full instance
       copy_filtered_input: true
@@ -114,7 +118,9 @@ instances:
 
   mini:
     # Full dataset is using default database connection and schemas
-    instance_id: pipedag_mini
+    instance_id: mini
+    table_store:
+      table_store_connection: postgres_instances
     attrs:
       copy_filtered_input: true
       copy_source: full
@@ -134,7 +140,14 @@ from typing import Any
 import pandas as pd
 import sqlalchemy as sa
 
-from pydiverse.pipedag import Flow, Stage, Table, materialize, input_stage_versions, ConfigContext
+from pydiverse.pipedag import (
+    Flow,
+    Stage,
+    Table,
+    materialize,
+    input_stage_versions,
+    ConfigContext,
+)
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.util.structlog import setup_logging
@@ -163,7 +176,12 @@ def input_task():
 
 
 def has_copy_source_fresh_input(
-    tbls: dict[str, pd.DataFrame], other_tbls: dict[str, pd.DataFrame], source_cfg: ConfigContext, * , attrs: dict[str, Any], stage: Stage
+    tbls: dict[str, sa.sql.expression.Alias],
+    other_tbls: dict[str, sa.sql.expression.Alias],
+    source_cfg: ConfigContext,
+    *,
+    attrs: dict[str, Any],
+    stage: Stage,
 ):
     _ = tbls, other_tbls, attrs
     with source_cfg:
@@ -171,34 +189,30 @@ def has_copy_source_fresh_input(
     return _hash
 
 
-@input_stage_versions(input_type=pd.DataFrame, cache=has_copy_source_fresh_input, pass_args=["attrs", "stage"], version="1.0")
+@input_stage_versions(
+    input_type=sa.Table,
+    cache=has_copy_source_fresh_input,
+    pass_args=["attrs", "stage"],
+    lazy=True,
+)
 def copy_filtered_inputs(
-    tbls: dict[str, pd.DataFrame], source_tbls: dict[str, pd.DataFrame], source_cfg: ConfigContext, * , attrs: dict[str, Any], stage: Stage,
+    tbls: dict[str, sa.sql.expression.Alias],
+    source_tbls: dict[str, sa.sql.expression.Alias],
+    source_cfg: ConfigContext,
+    *,
+    attrs: dict[str, Any],
+    stage: Stage,
 ):
-    _ = source_cfg  # this would be needed for input_type=sa.Table
-    _ = tbls  # we expect this schema to be still empty, one could check for collisions
+    # we assue that tables can be copied within database engine just from different schema
+    _ = source_cfg, stage
+    # we expect this schema to be still empty, one could check for collisions
+    _ = tbls
     filter_cnt = attrs["copy_filter_cnt"]
-    ret = {name:Table(tbl.head(filter_cnt), name) for name, tbl in source_tbls.items()}
+    ret = {
+        name.lower(): Table(sa.select(tbl).limit(filter_cnt), name)
+        for name, tbl in source_tbls.items()
+    }
     return ret
-
-
-def _get_source_tbls(source, per_user, stage, pipedag_config):
-    source_cfg = pipedag_config.get(instance=source, per_user=per_user)
-    with source_cfg:
-        # This is just quick hack code to copy data from one pipeline instance to
-        # another in a filtered way. It justifies actually a complete pydiverse
-        # package called pydiverse.testdata. We want to achieve loose coupling by
-        # pipedag transporting uninterpreted attrs with user code feeding the
-        # attributes in testdata functionality
-        engine = source_cfg.store.table_store.engine
-        schema = source_cfg.store.table_store.get_schema(stage.name)
-        meta = sa.MetaData()
-        meta.reflect(bind=engine, schema=schema.name)
-        tbls = {
-            tbl.name: pd.read_sql_table(tbl.name, con=engine, schema=schema.name)
-            for tbl in meta.tables.values()
-        }
-    return tbls
 
 
 @materialize(input_type=pd.DataFrame, version="1.0")
@@ -213,9 +227,11 @@ def get_flow(attrs: dict[str, Any], pipedag_config):
             if not attrs["copy_filtered_input"]:
                 a, b = input_task()
             else:
-                other_cfg = pipedag_config.get(attrs["copy_source"], attrs["copy_per_user"])
+                other_cfg = pipedag_config.get(
+                    attrs["copy_source"], attrs["copy_per_user"]
+                )
                 tbls = copy_filtered_inputs(other_cfg, stage=stage, attrs=attrs)
-                a, b = tbls["a"], tbls["b"]
+                a, b = tbls["dfa"], tbls["dfb"]
             a2 = double_values(a)
 
         with Stage("stage_2"):
