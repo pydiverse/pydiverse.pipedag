@@ -165,3 +165,81 @@ The output shows that the second run has the missing column "c" in table "dfa":
   table column    value
 0   dfa      c  missing [__main__]
 ```
+
+It is also possible to use `@input_stage_versions` to compare against active schema of another pipeline instance. One 
+needs to pass the ConfigContext object for this instance to the `@input_stage_versions` task during wiring.
+
+```python
+import sqlalchemy as sa
+from pydiverse.pipedag import input_stage_versions, ConfigContext, PipedagConfig
+
+
+@input_stage_versions(input_type=sa.Table)
+def validate_stage1(tbls: dict[str, sa.Alias], other_tbls: dict[str, sa.Alias],
+                    other_cfg: ConfigContext):
+    # When accessing tables from other_tbls, in the most general case, one should do this by using other_cfg:
+    # `dfs = {name:pd.read_sql_table(tbl, con=other_cfg.store.table_store.engine) for name, tbl in other_tbls.items()}`
+    # It may be desirable to set up instances such the database can combine cross instance tables in one query. In case
+    # of SQL Server, it is possible to reference tables cross database when using 
+    # `sa.Table("name", sa.Metadata(), schema="<database>.<schama>")`. In other databases like postgres, one can run all
+    # pipeline instances with the same database name but use schema_prefix="{instance_id}_" in the config.
+    ...
+
+def get_flow(other_cfg: ConfigContext):
+    with Flow() as f:
+        with Stage("stage_1"):
+            lazy_1 = lazy_task_1()
+            a, b = eager_inputs()
+            lazy_2 = lazy_task_2(lazy_1, b)
+            col_diff = validate_stage1(other_cfg)
+    return f
+
+
+def main():
+    if __name__ == '__main__':
+        other_cfg = PipedagConfig.default.get("main_branch")
+    f = get_flow(other_cfg)
+    result = f.run()
+    assert result.successful
+```
+
+Sometimes it is easier to just handle a defined set of tables in an `@input_stage_versions` task. It does not matter 
+how exactly you pass the tables. The task always receives all mentioned tables in the dictionaries known from above. 
+Other inputs to the task passed during wiring are simply discared except for keyword arguments listed in pass_args 
+parameter.
+This works both with and without passing a config context of another pipeline instance.
+
+```python
+@input_stage_versions(input_type=sa.Table)
+def cmp_tables1(tbls: dict[str, sa.Alias], other_tbls: dict[str, sa.Alias]):
+    ...
+
+@input_stage_versions(input_type=sa.Table, pass_args=["pass_arg"])
+def cmp_tables2(tbls: dict[str, sa.Alias], other_tbls: dict[str, sa.Alias], pass_arg: str):
+    ...
+
+@input_stage_versions(input_type=sa.Table, pass_args=["pass_arg"])
+def cmp_tables3(tbls: dict[str, sa.Alias], other_tbls: dict[str, sa.Alias],
+                    other_cfg: ConfigContext, pass_arg: str):
+    ...
+
+def get_flow(other_cfg: ConfigContext):
+    with Flow() as f:
+        with Stage("stage_1"):
+            lazy_1 = lazy_task_1()
+            a, b = eager_inputs()
+            lazy_2 = lazy_task_2(lazy_1, b)
+            # there are many ways to call it like:
+            compare_tables1(a, will_be_ignored_arg=1)
+            compare_tables2(a, pass_arg="<str>", will_be_ignored_arg=1)
+            compare_tables3(a, other_cfg, pass_arg="<str>")
+            compare_tables1([a, lazy_1, b, lazy_2])
+            compare_tables2({a, lazy_1, b, lazy_2}, pass_arg="<str>")
+            compare_tables3({"a": a, "b": b}, pass_arg="<str>", cfg=other_cfg)
+            compare_tables1({"a": a, "b": b, "others": [lazy_1, lazy_2])
+    return f
+
+```
+
+Here is an example that uses `@input_stage_versions` for copying data between two pipeline instances:
+[](/examples/multi_instance_pipeline)

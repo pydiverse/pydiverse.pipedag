@@ -268,7 +268,7 @@ if __name__ == "__main__":
 The file [multi_instance_pipeline.zip](multi_instance_pipeline.zip) includes a slighly more sophisticated project setup
 even though it is still missing separate src and tests folders. Furthermore, it lacks proper configuration of pytest
 markers. However, it already configures mini/midi pipelines to source data from the full pipeline.
-See [best practices for configuring instances](best_practice_instances) for an even more realistic setup of pipeline
+See [best practices for configuring instances](/examples/best_practices_instances) for an even more realistic setup of pipeline
 instances distinguishing fresh and stable pipelines.
 
 `multi_instance_pipeline.zip` can be used as follows:

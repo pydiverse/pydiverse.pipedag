@@ -24,6 +24,7 @@ pydiverse.pipedag already has quite a rich set of features. So we like to provid
 /examples/imperative_materialization
 /examples/interactive_development
 /examples/group_and_visualize
+/examples/stage_validation
 /examples/realistic_pipeline
 /examples/multi_instance_pipeline
 /examples/raw_sql
