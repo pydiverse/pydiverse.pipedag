@@ -1001,7 +1001,7 @@ def input_stage_versions(
     group_node_tag: str | None = None,
     nout: int = 1,
     add_input_source: bool = False,
-    ordering_barrier: bool | dict[str, Any] = False,
+    ordering_barrier: bool | dict[str, Any] = True,
     call_context: Callable[[], Any] | None = None,
     include_views=True,
     lock_source_stages=True,
@@ -1026,7 +1026,7 @@ def input_stage_versions(
     group_node_tag: str | None = None,
     nout: int = 1,
     add_input_source: bool = False,
-    ordering_barrier: bool | dict[str, Any] = False,
+    ordering_barrier: bool | dict[str, Any] = True,
     call_context: Callable[[], Any] | None = None,
     include_views=True,
     lock_source_stages=True,
@@ -1113,6 +1113,7 @@ def input_stage_versions(
         If a dictionary is provided, it is surrounded by a
         GroupNode(**ordering_barrier). This allows passing style, style_tag, and label
         arguments.
+        Attention: In contrast to @materialize, the default value is True.
     :param call_context:
         An optional context manager function that is opened before the task or its
         optional cache function is called and closed afterward.

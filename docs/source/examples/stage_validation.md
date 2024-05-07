@@ -1,3 +1,16 @@
+# Stage Validation
+
+This [example](../examples.md) shows how to implement tasks that receive different versions of the tables in a stage. 
+One application of this is to validate all tables created in a stage with the possibility to compare them against the
+last successfully validated version of this stage (after schema swap). Another is to compare the tables against 
+reference runs of another pipeline instance. For example the main branch might be automatically tested with running the
+pipeline with one instance ID and all branches as well as interactive development might be tested with another instance 
+ID (could also be other user in a per-user instance). In this case, it might be interesting to always compare the 
+current development state against the most recent main branch run.
+
+Here is an example how this might look like:
+
+```python
 from __future__ import annotations
 
 import logging
@@ -138,3 +151,17 @@ def main():
 if __name__ == "__main__":
     setup_logging()  # you can setup the logging and/or structlog libraries as you wish
     main()
+```
+For SQLAlchemy >= 2.0, you can use sa.Alias instead of sa.sql.expression.Alias.
+
+Please note, that the validate_stage1 task is executed after all tasks in the stage that are called before it during 
+flow wiring:
+
+![Stage Validation Visualization](stage_validation.svg)
+
+The output shows that the second run has the missing column "c" in table "dfa":
+```
+2024-05-07 08:33:25.413851 [info     ] Column differences:
+  table column    value
+0   dfa      c  missing [__main__]
+```
