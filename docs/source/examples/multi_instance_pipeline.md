@@ -134,7 +134,7 @@ from typing import Any
 import pandas as pd
 import sqlalchemy as sa
 
-from pydiverse.pipedag import Flow, Stage, Table, materialize
+from pydiverse.pipedag import Flow, Stage, Table, materialize, input_stage_versions, ConfigContext
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.util.structlog import setup_logging
@@ -163,25 +163,22 @@ def input_task():
 
 
 def has_copy_source_fresh_input(
-    stage: Stage, attrs: dict[str, Any], pipedag_config: PipedagConfig
+    tbls: dict[str, pd.DataFrame], other_tbls: dict[str, pd.DataFrame], source_cfg: ConfigContext, * , attrs: dict[str, Any], stage: Stage
 ):
-    source = attrs["copy_source"]
-    per_user = attrs["copy_per_user"]
-    source_cfg = pipedag_config.get(instance=source, per_user=per_user)
+    _ = tbls, other_tbls, attrs
     with source_cfg:
         _hash = source_cfg.store.table_store.get_stage_hash(stage)
     return _hash
 
 
-@materialize(input_type=pd.DataFrame, cache=has_copy_source_fresh_input, version="1.0")
+@input_stage_versions(input_type=pd.DataFrame, cache=has_copy_source_fresh_input, pass_args=["attrs", "stage"], version="1.0")
 def copy_filtered_inputs(
-    stage: Stage, attrs: dict[str, Any], pipedag_config: PipedagConfig
+    tbls: dict[str, pd.DataFrame], source_tbls: dict[str, pd.DataFrame], source_cfg: ConfigContext, * , attrs: dict[str, Any], stage: Stage,
 ):
-    source = attrs["copy_source"]
-    per_user = attrs["copy_per_user"]
+    _ = source_cfg  # this would be needed for input_type=sa.Table
+    _ = tbls  # we expect this schema to be still empty, one could check for collisions
     filter_cnt = attrs["copy_filter_cnt"]
-    tbls = _get_source_tbls(source, per_user, stage, pipedag_config)
-    ret = [Table(tbl.head(filter_cnt), name) for name, tbl in tbls.items()]
+    ret = {name:Table(tbl.head(filter_cnt), name) for name, tbl in source_tbls.items()}
     return ret
 
 
@@ -209,13 +206,6 @@ def double_values(df: pd.DataFrame):
     return Table(df.transform(lambda x: x * 2))
 
 
-@materialize(nout=2, input_type=sa.Table, lazy=True)
-def extract_a_b(tbls: list[sa.Table]):
-    a = [tbl for tbl in tbls if tbl.original.name == "dfa"][0]
-    b = [tbl for tbl in tbls if tbl.original.name == "dfb"][0]
-    return a, b
-
-
 # noinspection PyTypeChecker
 def get_flow(attrs: dict[str, Any], pipedag_config):
     with Flow("test_instance_selection") as flow:
@@ -223,8 +213,9 @@ def get_flow(attrs: dict[str, Any], pipedag_config):
             if not attrs["copy_filtered_input"]:
                 a, b = input_task()
             else:
-                tbls = copy_filtered_inputs(stage, attrs, pipedag_config)
-                a, b = extract_a_b(tbls)
+                other_cfg = pipedag_config.get(attrs["copy_source"], attrs["copy_per_user"])
+                tbls = copy_filtered_inputs(other_cfg, stage=stage, attrs=attrs)
+                a, b = tbls["a"], tbls["b"]
             a2 = double_values(a)
 
         with Stage("stage_2"):
