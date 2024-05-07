@@ -82,7 +82,11 @@ class DatabaseLockManager(BaseLockManager):
         lock_schema: Schema | None = None,
         create_lock_schema: bool = True,
     ):
-        super().__init__()
+        super().__init__(
+            logger_kwargs=dict(
+                engine_url=engine.url, instance_id=instance_id, schema=lock_schema
+            )
+        )
 
         self.engine = engine
         self.instance_id = instance_id

@@ -28,6 +28,18 @@ class PipedagDB2Reflection:
         return list(aliases)
 
     @staticmethod
+    def get_all_objects(engine: sa.Engine, schema: str):
+        schema = engine.dialect.denormalize_name(schema)
+        query = f"""
+        SELECT TABNAME, TYPE
+        FROM SYSCAT.TABLES
+        WHERE TABSCHEMA = '{schema}'
+        """
+        with engine.connect() as conn:
+            result = conn.exec_driver_sql(query).all()
+        return {name: type_.strip() for name, type_ in result}
+
+    @staticmethod
     def resolve_alias(engine: sa.Engine, name: str, schema: str) -> tuple[str, str]:
         """Recursively resolves an alias
 

@@ -45,6 +45,7 @@ class Stage:
         name: str,
         materialization_details: str | None = None,
         group_node_tag: str | None = None,
+        force_committed=False,
     ):
         self._name = normalize_name(name)
         self._transaction_name = f"{self._name}__tmp"
@@ -61,7 +62,28 @@ class Stage:
         self.materialization_details = materialization_details
         self.group_node_tag = group_node_tag
 
+        self.force_committed = force_committed
         self._did_enter = False
+
+    def __lt__(self, other: Stage):
+        # Essentially stage name is all that matters and should be unique per flow.
+        # In case of comparing stages among different flows or pipeline instances,
+        # the caller needs to check whether those are different. The stage links to
+        # tasks which are somewhat bound to a flow, but it is unclear what behavior the
+        # caller wants from the comparison operators.
+        return self.name < other.name
+
+    def __eq__(self, other: Stage):
+        # Essentially stage name is all that matters and should be unique per flow.
+        # See __lt__ for more details.
+        if not isinstance(other, Stage):
+            return False
+        return self.name == other.name
+
+    def __hash__(self):
+        # Essentially stage name is all that matters and should be unique per flow.
+        # See __lt__ for more details.
+        return hash(self.name)
 
     @property
     def name(self) -> str:
@@ -93,6 +115,9 @@ class Stage:
 
     @property
     def did_commit(self) -> bool:
+        if self.force_committed:
+            return True
+
         from pydiverse.pipedag.context.run_context import RunContext, StageState
 
         return RunContext.get().get_stage_state(self) == StageState.COMMITTED

@@ -118,21 +118,28 @@ class RunContextServer(IPCServer):
         self.local_table_cache_lock = Lock()
 
         # LOCKING
-        self.lock_manager = config_ctx.create_lock_manager()
-        self.lock_handler = StageLockStateHandler(self.lock_manager)
-
         try:
             # If we are inside a StageLockContext, then we shouldn't release any
             # stage locks, instead they get released when StageLockContext.__exit__
             # gets called.
             stage_lock_context = StageLockContext.get()
-            stage_lock_context.lock_state_handlers.append(self.lock_handler)
+            if stage_lock_context.lock_state_handlers:
+                # reuse existing lock manager and handler
+                self.lock_handler = stage_lock_context.lock_state_handlers[0]
+                self.lock_manager = self.lock_handler.lock_manager
+            else:
+                self.lock_manager = config_ctx.create_lock_manager()
+                self.lock_handler = StageLockStateHandler(self.lock_manager)
+                stage_lock_context.lock_state_handlers.append(self.lock_handler)
             self.keep_stages_locked = True
         except LookupError:
             self.keep_stages_locked = False
+            self.lock_manager = config_ctx.create_lock_manager()
+            self.lock_handler = StageLockStateHandler(self.lock_manager)
 
     def __enter__(self):
         super().__enter__()
+        from pydiverse.pipedag.backend import LockState
 
         # INITIALIZE EVERYTHING
         with self.lock_manager("_pipedag_setup_"):
@@ -144,7 +151,10 @@ class RunContextServer(IPCServer):
             # only when it's needed (may result in deadlocks), the lock should
             # get acquired in the `PipeDAGStore.init_stage` function instead.
             for stage in self.stages:
-                self.lock_manager.acquire(stage)
+                # only lock stage if it is not already locked within current
+                # StageLockContext
+                if self.lock_manager.get_lock_state(stage.name) != LockState.LOCKED:
+                    self.lock_manager.acquire(stage.name)
 
         # INITIALIZE REFERENCE COUNTERS
         for stage in self.stages:
@@ -310,12 +320,12 @@ class RunContextServer(IPCServer):
 
     def acquire_stage_lock(self, stage_id: int):
         stage = self.stages[stage_id]
-        self.lock_manager.acquire(stage)
+        self.lock_manager.acquire(stage.name)
 
     def release_stage_lock(self, stage_id: int):
         if not self.keep_stages_locked:
             stage = self.stages[stage_id]
-            self.lock_manager.release(stage)
+            self.lock_manager.release(stage.name)
 
     def validate_stage_lock(self, stage_id: int):
         stage = self.stages[stage_id]
@@ -410,7 +420,7 @@ class RunContextServer(IPCServer):
 
         if not self.keep_stages_locked:
             for stage in stages_to_release:
-                self.lock_manager.release(stage)
+                self.lock_manager.release(stage.name)
 
     def get_task_states(self) -> list[int]:
         return [state.value for state in self.task_state]
@@ -737,7 +747,7 @@ class StageLockStateHandler(Disposable):
 
         did_log = False
         while True:
-            state = self.lock_manager.get_lock_state(stage)
+            state = self.lock_manager.get_lock_state(stage.name)
 
             if state == LockState.LOCKED:
                 return

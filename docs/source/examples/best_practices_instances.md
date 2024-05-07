@@ -38,3 +38,5 @@ For the full stable pipeline, it is important that the data is not changing. Thi
 option `cache_validation: mode:` to "assert_no_fresh_input" for this pipeline once the data is loaded and should be
 kept stable. On the one hand, this implies ignoring cache functions mentioned in @materialize() decorator and additionally,
 it fails in case a task changes that has a cache function and thus might bring in data from external sources.
+
+An example showing how to implement this can be found here: [](/examples/multi_instance_pipeline).

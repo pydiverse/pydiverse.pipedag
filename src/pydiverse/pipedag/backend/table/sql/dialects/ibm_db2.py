@@ -7,7 +7,6 @@ from typing import Any
 
 import pandas as pd
 import sqlalchemy as sa
-import sqlalchemy.exc
 
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateTableWithSuffix,
@@ -239,6 +238,9 @@ class IBMDB2TableStore(SQLTableStore):
             compression = []
         compression_suffix = " ".join(compression)
         return " ".join((table_space_suffix, compression_suffix))
+
+    def _get_all_objects_in_schema(self, schema: Schema) -> dict[str, Any]:
+        return PipedagDB2Reflection.get_all_objects(self.engine, schema.get())
 
 
 @IBMDB2TableStore.register_table(pd)

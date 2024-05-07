@@ -525,6 +525,13 @@ class Blob(Generic[T]):
     def name(self, value):
         self._name = normalize_name(value)
 
+    def copy_without_obj(self) -> Blob:
+        obj = self.obj
+        self.obj = None
+        self_copy = copy.deepcopy(self)
+        self.obj = obj
+        return self_copy
+
 
 class ExternalTableReference:
     """Reference to a user-created table.

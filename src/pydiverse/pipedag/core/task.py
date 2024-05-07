@@ -37,6 +37,7 @@ class UnboundTask:
         name: str | None = None,
         nout: int | None = None,
         group_node_tag: str | None = None,
+        call_context: Callable[[], Any] | None = None,
     ):
         if not callable(fn):
             raise TypeError("`fn` must be callable")
@@ -50,6 +51,7 @@ class UnboundTask:
         self.name = name
         self.nout = nout
         self.group_node_tag = group_node_tag
+        self.call_context = call_context
 
         self._bound_task_type = Task
         self._signature = inspect.signature(fn)
@@ -97,6 +99,7 @@ class Task:
         self.name = unbound_task.name
         self.nout = unbound_task.nout
         self.group_node_tag = unbound_task.group_node_tag
+        self.call_context = unbound_task.call_context
 
         self.logger = structlog.get_logger(logger_name=f"Task '{self.name}'", task=self)
 
@@ -207,7 +210,11 @@ class Task:
         kwargs = deep_map(kwargs, task_result_mapper)
 
         with TaskContext(task=self) as task_context:
-            result = self.fn(*args, **kwargs)
+            if hasattr(self, "call_context") and self.call_context:
+                with self.call_context():
+                    result = self.fn(*args, **kwargs)
+            else:
+                result = self.fn(*args, **kwargs)
 
         return result, task_context
 

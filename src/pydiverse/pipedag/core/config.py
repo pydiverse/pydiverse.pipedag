@@ -12,13 +12,7 @@ from typing import TYPE_CHECKING, Any
 import sqlalchemy as sa
 import structlog
 import yaml
-from box import Box
 
-from pydiverse.pipedag.context.context import (
-    CacheValidationMode,
-    GroupNodeConfig,
-    VisualizationConfig,
-)
 from pydiverse.pipedag.util.deep_merge import deep_merge
 
 if TYPE_CHECKING:
@@ -163,66 +157,6 @@ class PipedagConfig:
             },
         ).copy()
 
-        # check enums
-        # Alternative: could be a feature of __get_merged_config_dict
-        # in case default value is set to Enum
-        from pydiverse.pipedag.context.context import StageCommitTechnique
-
-        for parent_cfg, enum_name, enum_type in [
-            (config, "stage_commit_technique", StageCommitTechnique),
-            (config["cache_validation"], "mode", CacheValidationMode),
-        ]:
-            parent_cfg[enum_name] = parent_cfg[enum_name].strip().upper()
-            if not hasattr(enum_type, parent_cfg[enum_name]):
-                raise ValueError(
-                    f"Found unknown setting {enum_name}: '{parent_cfg[enum_name]}';"
-                    f" Expected one of: {', '.join([v.name for v in enum_type])}"
-                )
-        stage_commit_technique = getattr(
-            StageCommitTechnique, config["stage_commit_technique"]
-        )
-        cache_validation = copy.deepcopy(config["cache_validation"])
-        cache_validation["mode"] = getattr(
-            CacheValidationMode, config["cache_validation"]["mode"]
-        )
-
-        # parsing visualization dictionaries into objects (this could be generalized
-        # and possible an open source solution exists)
-        from pydiverse.pipedag import VisualizationStyle
-
-        if not isinstance(config.get("visualization", {}), dict):
-            raise ValueError(
-                "Config section 'visualization' must be a dictionary, "
-                f"found {type(config['visualization'])}"
-            )
-        visualization = {}
-        for key, value in config.get("visualization", {}).items():
-            self.parse_in_object(
-                key, value, VisualizationConfig, "visualization", inout=visualization
-            )
-            for field, structure, class_type in [
-                ("styles", visualization[key].styles, VisualizationStyle),
-                ("group_nodes", visualization[key].group_nodes, GroupNodeConfig),
-            ]:
-                if structure:
-                    for key2, value2 in structure.items():
-                        self.parse_in_object(
-                            key2,
-                            value2,
-                            class_type,
-                            f"visualization.{key}.{field}",
-                            inout=structure,
-                        )
-
-        if (
-            cache_validation["mode"] == CacheValidationMode.NORMAL
-            and cache_validation["disable_cache_function"]
-        ):
-            raise ValueError(
-                "cache_validation.disable_cache_function=True is not allowed in "
-                "combination with cache_validation.mode=NORMAL"
-            )
-
         # TODO: Delegate selecting where variables can be expanded to the
         #  corresponding classes.
         #    eg. SQLTableStore._expand_env_vars = ["url", "url_attrs_file"]
@@ -257,26 +191,7 @@ class PipedagConfig:
         # Finally, expand all normal variables
         config = self.__expand_variables(config)
 
-        # Construct final ConfigContext
-        config_context = ConfigContext(
-            config_dict=config,
-            pipedag_name=self.name,
-            flow_name=flow,
-            instance_name=instance,
-            fail_fast=config["fail_fast"],
-            strict_result_get_locking=config["strict_result_get_locking"],
-            instance_id=config["instance_id"],
-            stage_commit_technique=stage_commit_technique,
-            cache_validation=Box(cache_validation, frozen_box=True),
-            visualization=visualization,
-            network_interface=config["network_interface"],
-            disable_kroki=config.get("disable_kroki"),
-            kroki_url=config.get("kroki_url"),
-            attrs=Box(config["attrs"], frozen_box=True),
-            table_hook_args=Box(
-                config["table_store"].get("hook_args", {}), frozen_box=True
-            ),
-        )
+        config_context = ConfigContext.new(config, self.name, flow, instance)
 
         if "PYDIVERSE_PIPEDAG_PYTEST" not in os.environ:
             # If we're running test cases, this can be skipped to improve performance
@@ -297,53 +212,6 @@ class PipedagConfig:
                 ) from e
 
         return config_context
-
-    @staticmethod
-    def parse_in_object(
-        key: str,
-        value: dict[str, Any],
-        class_type: Any,
-        within: str,
-        *,
-        inout: dict[str, Any],
-    ):
-        structure = inout
-        if not isinstance(value, dict):
-            raise ValueError(
-                f"Config section '{key}' within '{within}' must be a dictionary, "
-                f"found {type(value)}"
-            )
-        members = set(class_type.__dataclass_fields__.keys())
-        if unexpected := set(value.keys()) - members:
-            raise ValueError(
-                f"Unexpected keys in section '{key}' within '{within}': "
-                f"{unexpected}; expected: '{', '.join(members)}'"
-            )
-        structure[key] = class_type(
-            **{m: copy.copy(value[m]) for m in members if m in value}
-        )
-        for m in value:
-            annotation = class_type.__annotations__[m]
-            if annotation.startswith("dict[") and not isinstance(value[m], dict):
-                raise ValueError(
-                    f"Expected dictionary for '{m}' within '{within}.{key}', "
-                    f"found {type(value[m])}"
-                )
-            if annotation.startswith("bool") and not isinstance(value[m], bool):
-                raise ValueError(
-                    f"Expected boolean for '{m}' within '{within}.{key}', "
-                    f"found {type(value[m])}"
-                )
-            if annotation.startswith("str") and not isinstance(value[m], str):
-                raise ValueError(
-                    f"Expected string for '{m}' within '{within}.{key}', "
-                    f"found {type(value[m])}"
-                )
-            if annotation.startswith("int") and not isinstance(value[m], int):
-                raise ValueError(
-                    f"Expected integer for '{m}' within '{within}.{key}', "
-                    f"found {type(value[m])}"
-                )
 
     def __get_merged_config_dict(self, instance, flow, default=None):
         search_paths = [

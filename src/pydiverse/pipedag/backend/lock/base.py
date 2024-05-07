@@ -8,7 +8,6 @@ from typing import Callable, Union
 
 import structlog
 
-from pydiverse.pipedag.core import Stage
 from pydiverse.pipedag.errors import LockError
 from pydiverse.pipedag.util import Disposable
 
@@ -45,7 +44,7 @@ class LockState(Enum):
     INVALID = 3
 
 
-Lockable = Union[Stage, str]  # noqa: UP007
+Lockable = Union[str]  # noqa: UP007
 LockStateListener = Callable[[Lockable, LockState, LockState], None]
 
 
@@ -57,8 +56,12 @@ class BaseLockManager(Disposable, ABC):
     same stage at the same time (which would lead to corrupted data).
     """
 
-    def __init__(self):
-        self.logger = structlog.get_logger(logger_name=type(self).__name__)
+    def __init__(self, logger_kwargs=None):
+        if logger_kwargs is None:
+            logger_kwargs = {}
+        self.logger = structlog.get_logger(
+            logger_name=type(self).__name__, **logger_kwargs
+        )
 
         self.state_listeners = set()
         self.lock_states = {}

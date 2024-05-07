@@ -8,6 +8,7 @@ pydiverse.pipedag already has quite a rich set of features. So we like to provid
 * [Imperative materialization / Materializing Subqueries](/examples/imperative_materialization)
 * [Interactive development](/examples/interactive_development)
 * [Grouping Tasks/Stages and visualization](/examples/group_and_visualize)
+* [Stage validation before schema swap](/examples/stage_validation)
 * [Slightly more realistic pipeline](/examples/realistic_pipeline)
 * [Introduction to vectorization principle with some example pipelines](https://github.com/Quantco/vectorization-tutorial/blob/main/README.md)
 * [Multiple instances: full, mini, midi](/examples/multi_instance_pipeline)
@@ -23,6 +24,7 @@ pydiverse.pipedag already has quite a rich set of features. So we like to provid
 /examples/imperative_materialization
 /examples/interactive_development
 /examples/group_and_visualize
+/examples/stage_validation
 /examples/realistic_pipeline
 /examples/multi_instance_pipeline
 /examples/raw_sql
