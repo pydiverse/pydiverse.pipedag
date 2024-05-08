@@ -144,6 +144,7 @@ def materialize(
     :param call_context:
         An optional context manager function that is opened before the task or its
         optional cache function is called and closed afterward.
+
     Example
     -------
 
@@ -1126,6 +1127,7 @@ def input_stage_versions(
     :param pass_args
         A list of named arguments that whould be passed from the call to the task
         function. By default, no arguments are passed, and just tables are extracted.
+
     Example
     -------
 
