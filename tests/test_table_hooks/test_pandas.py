@@ -332,75 +332,80 @@ class TestPandasAutoVersion:
 
 
 @with_instances("postgres")
-class TestPandasCustomHook:
-    def test_custom_upload(self):
-        @ConfigContext.get().store.table_store.register_table(pd)
-        class CustomPandasTableHook(PandasTableHook):
-            @classmethod
-            def upload_table(
-                cls,
-                df: pd.DataFrame,
-                name: str,
-                schema: str,
-                dtypes: dict[str, DType],
-                conn: sa.Connection,
-                early: bool,
-            ):
-                df["custom_upload"] = True
-                super().upload_table(df, name, schema, dtypes, conn, early)
+def test_custom_upload():
+    @ConfigContext.get().store.table_store.register_table(
+        pd, previous_hook_replace="PandasTableHook"
+    )
+    class CustomPandasTableHook(PandasTableHook):
+        @classmethod
+        def upload_table(
+            cls,
+            df: pd.DataFrame,
+            name: str,
+            schema: str,
+            dtypes: dict[str, DType],
+            conn: sa.Connection,
+            early: bool,
+        ):
+            df["custom_upload"] = True
+            super().upload_table(df, name, schema, dtypes, conn, early)
 
-        df = pd.DataFrame(
-            {
-                "int8": pd.array(Values.INT8, dtype="Int8"),
-            }
-        )
+    df = pd.DataFrame(
+        {
+            "int8": pd.array(Values.INT8, dtype="Int8"),
+        }
+    )
 
-        @materialize()
-        def numpy_input():
+    @materialize()
+    def numpy_input():
+        return df
+
+    @materialize(input_type=pd.DataFrame)
+    def verify_cutom(t):
+        assert "custom_upload" in t.columns
+
+    with Flow() as f:
+        with Stage("stage"):
+            t = numpy_input()
+            verify_cutom(t)
+
+    assert f.run().successful
+
+
+@with_instances("postgres")
+def test_custom_download():
+    @ConfigContext.get().store.table_store.register_table(
+        pd, previous_hook_replace="PandasTableHook"
+    )
+    class CustomPandasTableHook(PandasTableHook):
+        @classmethod
+        def download_table(
+            cls,
+            query: Any,
+            conn: sa.Connection,
+            dtypes: dict[str, DType] | None = None,
+        ):
+            df = super().download_table(query, conn, dtypes)
+            df["custom_download"] = True
             return df
 
-        @materialize(input_type=pd.DataFrame)
-        def verify_cutom(t):
-            assert "custom_upload" in t.columns
+    df = pd.DataFrame(
+        {
+            "int8": pd.array(Values.INT8, dtype="Int8"),
+        }
+    )
 
-        with Flow() as f:
-            with Stage("stage"):
-                t = numpy_input()
-                verify_cutom(t)
+    @materialize()
+    def numpy_input():
+        return df
 
-        assert f.run().successful
+    @materialize(input_type=pd.DataFrame)
+    def verify_cutom(t):
+        assert "custom_download" in t.columns
 
-    def test_custom_download(self):
-        @ConfigContext.get().store.table_store.register_table(pd)
-        class CustomPandasTableHook(PandasTableHook):
-            @classmethod
-            def download_table(
-                cls,
-                query: Any,
-                conn: sa.Connection,
-                dtypes: dict[str, DType] | None = None,
-            ):
-                df = super().download_table(query, conn, dtypes)
-                df["custom_download"] = True
-                return df
+    with Flow() as f:
+        with Stage("stage"):
+            t = numpy_input()
+            verify_cutom(t)
 
-        df = pd.DataFrame(
-            {
-                "int8": pd.array(Values.INT8, dtype="Int8"),
-            }
-        )
-
-        @materialize()
-        def numpy_input():
-            return df
-
-        @materialize(input_type=pd.DataFrame)
-        def verify_cutom(t):
-            assert "custom_download" in t.columns
-
-        with Flow() as f:
-            with Stage("stage"):
-                t = numpy_input()
-                verify_cutom(t)
-
-        assert f.run().successful
+    assert f.run().successful

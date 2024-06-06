@@ -38,7 +38,7 @@ class TableHookResolver:
     _hook_subclass_cache: dict[type, type[TableHook]] = {}
 
     @classmethod
-    def register_table(cls, *requirements: Any):
+    def register_table(cls, *requirements: Any, previous_hook_replace: str = None):
         """Decorator to register a `TableHook`
 
         Each table store should be able to handle tables of various different
@@ -60,7 +60,16 @@ class TableHookResolver:
 
         :param requirements: The requirements which must be satisfied to register
             the decorated class.
+        :param previous_hook_replace: Takes the name of a TableHook class (e.g. PandasTableHook).
+        If a name is provided the TableHook class is replaced by the newly registered hook.
+        If None the new hook is just added to the list of available hooks.
         """
+        if previous_hook_replace:
+            registered_hooks = [hook.__name__ for hook in cls._registered_table_hooks]
+            if previous_hook_replace not in registered_hooks:
+                raise ValueError(
+                    f"The TableHook named {previous_hook_replace} does not exist"
+                )
 
         # `cls` is very likely a subclass of TableHookResolver
         # -> Add the hook related attributes to subclass to allow registering
@@ -82,6 +91,12 @@ class TableHookResolver:
                 )(hook_cls)
 
             # Register the hook
+            if previous_hook_replace:
+                cls._registered_table_hooks = [
+                    hook
+                    for hook in cls._registered_table_hooks
+                    if hook.__name__ != previous_hook_replace
+                ]
             cls._registered_table_hooks.append(hook_cls)
             cls._m_hook_cache.clear()
             cls._r_hook_cache.clear()
