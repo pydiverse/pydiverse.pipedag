@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.3 ()
+- Added `upload_table()` and `download_table()` functions to the PandasTableHook to allow for easy 
+    customization of up and download behavior of pandas and polars tables from/to the table store.
+
 ## 0.9.2 (2024-05-07)
 - @input_stage_versions decorator allows specifying tasks which compare tables within the current stage transaction 
     schema and another version of that stage. This can be the currently active stage schema of the same pipeline 

@@ -235,6 +235,46 @@ class PandasTableHook(TableHook[SQLTableStore]):
     auto_version_support = AutoVersionSupport.TRACE
 
     @classmethod
+    def upload_table(
+        cls,
+        df: pd.DataFrame,
+        name: str,
+        schema: str,
+        dtypes: dict[str, DType],
+        conn: sa.Connection,
+        early: bool,
+    ):
+        """
+        Provide hook that allows to override the default
+        upload of pandas/polars tables to the tablestore.
+        """
+        df.to_sql(
+            name,
+            conn,
+            schema=schema,
+            index=False,
+            dtype=dtypes,
+            chunksize=100_000,
+            if_exists="append" if early else "fail",
+        )
+
+    @classmethod
+    def download_table(
+        cls, query: Any, conn: sa.Connection, dtypes: dict[str, DType] | None = None
+    ) -> pd.DataFrame:
+        """
+        Provide hook that allows to override the default
+        download of pandas/polars tables from the tablestore.
+        """
+        if PandasTableHook.pd_version >= Version("2.0"):
+            df = pd.read_sql(query, con=conn, dtype=dtypes)
+        else:
+            df = pd.read_sql(query, con=conn)
+            for col, dtype in dtypes.items():
+                df[col] = df[col].astype(dtype)
+        return df
+
+    @classmethod
     def can_materialize(cls, type_) -> bool:
         return issubclass(type_, pd.DataFrame)
 
@@ -342,15 +382,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
             with conn.begin():
                 if early:
                     store.lock_table(table, schema, conn)
-                df.to_sql(
-                    table.name,
-                    conn,
-                    schema=schema.get(),
-                    index=False,
-                    dtype=dtypes,
-                    chunksize=100_000,
-                    if_exists="append" if early else "fail",
-                )
+                cls.upload_table(df, table.name, schema.get(), dtypes, conn, early)
         store.add_indexes_and_set_nullable(
             table,
             schema,
@@ -472,14 +504,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         dtypes = {name: dtype.to_pandas(backend) for name, dtype in dtypes.items()}
 
         with store.engine.connect() as conn:
-            if PandasTableHook.pd_version >= Version("2.0"):
-                df = pd.read_sql(query, con=conn, dtype=dtypes)
-            else:
-                df = pd.read_sql(query, con=conn)
-                for col, dtype in dtypes.items():
-                    df[col] = df[col].astype(dtype)
-
-        return df
+            return cls.download_table(query, conn, dtypes)
 
     # Auto Version
 
@@ -568,7 +593,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         query = cls._compile_query(store, query)
         connection_uri = store.engine_url.render_as_string(hide_password=False)
         try:
-            return cls._execute_query(query, connection_uri)
+            return cls._execute_query(query, connection_uri, store)
         except (RuntimeError, ModuleNotFoundError) as e:
             logger = structlog.get_logger(logger_name=cls.__name__)
             logger.error(
@@ -577,7 +602,9 @@ class PolarsTableHook(TableHook[SQLTableStore]):
                 store.engine_url.render_as_string(hide_password=True),
                 e,
             )
-            pd_df = pd.read_sql(query, con=store.engine)
+            pandas_hook = store.get_hook_subclass(PandasTableHook)
+            with store.engine.connect() as conn:
+                pd_df = pandas_hook.download_table(query, conn)
             return polars.from_pandas(pd_df)
 
     @classmethod
@@ -599,7 +626,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         return str(query.compile(store.engine, compile_kwargs={"literal_binds": True}))
 
     @classmethod
-    def _execute_query(cls, query: str, connection_uri: str):
+    def _execute_query(cls, query: str, connection_uri: str, store: SQLTableStore):
         try:
             df = polars.read_database(query, connection_uri)
             return df
@@ -612,7 +639,9 @@ class PolarsTableHook(TableHook[SQLTableStore]):
                 engine.url.render_as_string(hide_password=True),
                 e,
             )
-            pd_df = pd.read_sql(query, con=engine)
+            pandas_hook = store.get_hook_subclass(PandasTableHook)
+            with engine as conn:
+                pd_df = pandas_hook.download_table(query, conn)
             engine.dispose()
             return polars.from_pandas(pd_df)
 
@@ -672,7 +701,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         query = polars_hook._compile_query(store, query)
         connection_uri = store.engine_url.render_as_string(hide_password=False)
 
-        df = polars_hook._execute_query(query, connection_uri)
+        df = polars_hook._execute_query(query, connection_uri, store)
 
         # Create lazy frame where each column is identified by:
         #     stage name, table name, column name

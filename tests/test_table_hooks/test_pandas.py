@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import string
+from typing import Any
 
 import pandas as pd
 import pyarrow as pa
@@ -11,6 +12,8 @@ from packaging.version import Version
 
 import tests.util.tasks_library as m
 from pydiverse.pipedag import *
+from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook
+from pydiverse.pipedag.backend.table.util import DType
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
@@ -326,3 +329,78 @@ class TestPandasAutoVersion:
         should_swap_inputs = True
         f.run()
         in_tables_spy.assert_called(2)
+
+
+@with_instances("postgres")
+class TestPandasCustomHook:
+    def test_custom_upload(self):
+        @ConfigContext.get().store.table_store.register_table(pd)
+        class CustomPandasTableHook(PandasTableHook):
+            @classmethod
+            def upload_table(
+                cls,
+                df: pd.DataFrame,
+                name: str,
+                schema: str,
+                dtypes: dict[str, DType],
+                conn: sa.Connection,
+                early: bool,
+            ):
+                df["custom_upload"] = True
+                super().upload_table(df, name, schema, dtypes, conn, early)
+
+        df = pd.DataFrame(
+            {
+                "int8": pd.array(Values.INT8, dtype="Int8"),
+            }
+        )
+
+        @materialize()
+        def numpy_input():
+            return df
+
+        @materialize(input_type=pd.DataFrame)
+        def verify_cutom(t):
+            assert "custom_upload" in t.columns
+
+        with Flow() as f:
+            with Stage("stage"):
+                t = numpy_input()
+                verify_cutom(t)
+
+        assert f.run().successful
+
+    def test_custom_download(self):
+        @ConfigContext.get().store.table_store.register_table(pd)
+        class CustomPandasTableHook(PandasTableHook):
+            @classmethod
+            def download_table(
+                cls,
+                query: Any,
+                conn: sa.Connection,
+                dtypes: dict[str, DType] | None = None,
+            ):
+                df = super().download_table(query, conn, dtypes)
+                df["custom_download"] = True
+                return df
+
+        df = pd.DataFrame(
+            {
+                "int8": pd.array(Values.INT8, dtype="Int8"),
+            }
+        )
+
+        @materialize()
+        def numpy_input():
+            return df
+
+        @materialize(input_type=pd.DataFrame)
+        def verify_cutom(t):
+            assert "custom_download" in t.columns
+
+        with Flow() as f:
+            with Stage("stage"):
+                t = numpy_input()
+                verify_cutom(t)
+
+        assert f.run().successful
