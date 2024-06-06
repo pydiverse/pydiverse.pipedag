@@ -60,8 +60,9 @@ class TableHookResolver:
 
         :param requirements: The requirements which must be satisfied to register
             the decorated class.
-        :param previous_hook_replace: Takes the name of a TableHook class (e.g. PandasTableHook).
-        If a name is provided the TableHook class is replaced by the newly registered hook.
+        :param previous_hook_replace: Takes the name of a TableHook class
+        (e.g. PandasTableHook). If a name is provided the TableHook class
+        is replaced by the newly registered hook.
         If None the new hook is just added to the list of available hooks.
         """
         if previous_hook_replace:
