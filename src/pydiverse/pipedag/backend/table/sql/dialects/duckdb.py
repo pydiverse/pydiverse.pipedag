@@ -119,7 +119,7 @@ except ImportError as e:
 @DuckDBTableStore.register_table(polars, duckdb)
 class PolarsTableHook(PolarsTableHook):
     @classmethod
-    def _execute_query(cls, query: str, connection_uri: str):
+    def _execute_query(cls, query: str, connection_uri: str, store: SQLTableStore):
         # Connectorx doesn't support duckdb.
         # Instead, we load it like this:  DuckDB -> PyArrow -> Polars
         connection_uri = connection_uri.replace("duckdb:///", "", 1)

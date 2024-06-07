@@ -96,7 +96,7 @@ except ImportError as e:
 # @SnowflakeTableStore.register_table(polars, snowflake)
 # class PolarsTableHook(PolarsTableHook):
 #     @classmethod
-#     def _execute_query(cls, query: str, connection_uri: str):
+#     def _execute_query(cls, query: str, connection_uri: str, store: SQLTableStore):
 #         # Connectorx doesn't support duckdb.
 #         # Instead, we load it like this:  Snowflake -> PyArrow -> Polars
 #         connection_uri = connection_uri.replace("snowflake:///", "", 1)
