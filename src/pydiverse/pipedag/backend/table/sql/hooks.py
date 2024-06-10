@@ -264,7 +264,8 @@ class PandasTableHook(TableHook[SQLTableStore]):
     ) -> pd.DataFrame:
         """
         Provide hook that allows to override the default
-        download of pandas/polars tables from the tablestore.
+        download of pandas tables from the tablestore.
+        Also serves as fallback for polars download.
         """
         if PandasTableHook.pd_version >= Version("2.0"):
             df = pd.read_sql(query, con=conn, dtype=dtypes)
@@ -547,6 +548,15 @@ except ImportError as e:
 @SQLTableStore.register_table(polars)
 class PolarsTableHook(TableHook[SQLTableStore]):
     @classmethod
+    def download_table(cls, query: Any, connection_uri: str) -> polars.DataFrame:
+        """
+        Provide hook that allows to override the default
+        download of polars tables from the tablestore.
+        """
+        df = polars.read_database(query, connection_uri)
+        return df
+
+    @classmethod
     def can_materialize(cls, type_) -> bool:
         # attention: tidypolars.Tibble is subclass of polars DataFrame
         return type_ == polars.DataFrame
@@ -628,7 +638,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
     @classmethod
     def _execute_query(cls, query: str, connection_uri: str, store: SQLTableStore):
         try:
-            df = polars.read_database(query, connection_uri)
+            df = cls.download_table(query, connection_uri)
             return df
         except (RuntimeError, ModuleNotFoundError) as e:
             logger = structlog.get_logger(logger_name=cls.__name__)

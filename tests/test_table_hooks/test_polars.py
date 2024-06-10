@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from pydiverse.pipedag import *
+from pydiverse.pipedag.backend.table.sql.hooks import PolarsTableHook
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
@@ -161,3 +164,40 @@ def test_auto_version_2(mocker):
     should_swap_inputs = True
     f.run()
     in_tables_spy.assert_called(2)
+
+
+def test_custom_download(self):
+    @ConfigContext.get().store.table_store.register_table(
+        pl, previous_hook_replace="PolarsTableHook"
+    )
+    class CustomPolarsDownloadTableHook(PolarsTableHook):
+        @classmethod
+        def download_table(
+            cls,
+            query: Any,
+            connection_uri: str,
+        ):
+            df = pl.read_database(query, connection_uri)
+            df["custom_download"] = True
+            return df
+
+    df = pl.DataFrame(
+        {
+            "col": [0, 1, 2, 3],
+        }
+    )
+
+    @materialize()
+    def numpy_input():
+        return df
+
+    @materialize(input_type=pl.DataFrame)
+    def verify_cutom(t):
+        assert "custom_download" in t.columns
+
+    with Flow() as f:
+        with Stage("stage"):
+            t = numpy_input()
+            verify_cutom(t)
+
+    assert f.run().successful

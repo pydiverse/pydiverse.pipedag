@@ -333,7 +333,6 @@ class TestPandasAutoVersion:
 
 @with_instances("postgres")
 class TestPandasCustomHook:
-    @with_instances("postgres")
     def test_custom_upload(self):
         @ConfigContext.get().store.table_store.register_table(
             pd, previous_hook_replace="PandasTableHook"
