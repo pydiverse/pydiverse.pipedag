@@ -9,7 +9,7 @@ from pydiverse.pipedag.backend.table.sql.hooks import PolarsTableHook
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
 from tests.util.spy import spy_task
 from tests.util.sql import get_config_with_table_store
 from tests.util.tasks_library import assert_table_equal
@@ -168,6 +168,7 @@ def test_auto_version_2(mocker):
     in_tables_spy.assert_called(2)
 
 
+@skip_instances("duckdb")
 def test_custom_download():
     class TestTableStore(ConfigContext.get().store.table_store.__class__):
         _dialect_name = DISABLE_DIALECT_REGISTRATION
@@ -184,6 +185,7 @@ def test_custom_download():
             query: Any,
             connection_uri: str,
         ):
+            # FYI: this fails for duckdb and thus we fall back to pandas hook
             df = pl.read_database(query, connection_uri)
             return df.with_columns(pl.lit(True).alias("custom_download"))
 
