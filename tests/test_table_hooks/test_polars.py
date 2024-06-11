@@ -6,6 +6,7 @@ import pytest
 
 from pydiverse.pipedag import *
 from pydiverse.pipedag.backend.table.sql.hooks import PolarsTableHook
+from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
@@ -169,6 +170,7 @@ def test_auto_version_2(mocker):
 
 def test_custom_download():
     class TestTableStore(ConfigContext.get().store.table_store.__class__):
+        _dialect_name = DISABLE_DIALECT_REGISTRATION
         # this subclass is just to make sure hooks of other tests are not affected
         pass
 

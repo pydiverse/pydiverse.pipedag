@@ -13,6 +13,7 @@ from packaging.version import Version
 import tests.util.tasks_library as m
 from pydiverse.pipedag import *
 from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook
+from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
 from pydiverse.pipedag.backend.table.util import DType
 
 # Parameterize all tests in this file with several instance_id configurations
@@ -336,6 +337,7 @@ class TestPandasAutoVersion:
 class TestPandasCustomHook:
     def test_custom_upload(self):
         class TestTableStore(ConfigContext.get().store.table_store.__class__):
+            _dialect_name = DISABLE_DIALECT_REGISTRATION
             # this subclass is just to make sure hooks of other tests are not affected
             pass
 
@@ -383,6 +385,7 @@ class TestPandasCustomHook:
 
     def test_custom_download(self):
         class TestTableStore(ConfigContext.get().store.table_store.__class__):
+            _dialect_name = DISABLE_DIALECT_REGISTRATION
             # this subclass is just to make sure hooks of other tests are not affected
             pass
 

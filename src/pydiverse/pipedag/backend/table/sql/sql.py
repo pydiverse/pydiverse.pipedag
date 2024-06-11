@@ -46,6 +46,8 @@ from pydiverse.pipedag.materialize.metadata import (
 )
 from pydiverse.pipedag.util.hashing import stable_hash
 
+DISABLE_DIALECT_REGISTRATION = "__DISABLE_DIALECT_REGISTRATION"
+
 
 class SQLTableStore(BaseTableStore):
     """Table store that materializes tables to a SQL database
@@ -332,11 +334,12 @@ class SQLTableStore(BaseTableStore):
                 f" But {cls.__name__}._dialect_name is None."
             )
 
-        if dialect_name in SQLTableStore.__registered_dialects:
-            warnings.warn(
-                f"Already registered a SQLTableStore for dialect {dialect_name}"
-            )
-        SQLTableStore.__registered_dialects[dialect_name] = cls
+        if dialect_name != DISABLE_DIALECT_REGISTRATION:
+            if dialect_name in SQLTableStore.__registered_dialects:
+                warnings.warn(
+                    f"Already registered a SQLTableStore for dialect {dialect_name}"
+                )
+            SQLTableStore.__registered_dialects[dialect_name] = cls
 
     def _metadata_pk(self, name: str, table_name: str):
         return sa.Column(name, sa.BigInteger(), primary_key=True)

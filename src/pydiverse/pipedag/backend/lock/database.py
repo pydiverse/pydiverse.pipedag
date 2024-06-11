@@ -17,6 +17,8 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
 from pydiverse.pipedag.errors import LockError
 from pydiverse.pipedag.materialize.container import Schema
 
+DISABLE_DIALECT_REGISTRATION = "__DISABLE_DIALECT_REGISTRATION"
+
 
 class DatabaseLockManager(BaseLockManager):
     """Lock manager based on database locking mechanisms
@@ -117,11 +119,13 @@ class DatabaseLockManager(BaseLockManager):
                 f"attribute. But {cls.__name__}._dialect_name is None."
             )
 
-        if dialect_name in DatabaseLockManager.__registered_dialects:
-            warnings.warn(
-                f"Already registered a DatabaseLockManager for dialect {dialect_name}"
-            )
-        DatabaseLockManager.__registered_dialects[dialect_name] = cls
+        if dialect_name != DISABLE_DIALECT_REGISTRATION:
+            if dialect_name in DatabaseLockManager.__registered_dialects:
+                warnings.warn(
+                    f"Already registered a DatabaseLockManager for dialect "
+                    f"{dialect_name}"
+                )
+            DatabaseLockManager.__registered_dialects[dialect_name] = cls
 
     def prepare(self):
         pass
