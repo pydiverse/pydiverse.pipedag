@@ -106,8 +106,7 @@ def assert_equal(x, y):
 @materialize(input_type=pd.DataFrame)
 def assert_table_equal(x, y, **kwargs):
     # This function explicitly has no version set to prevent it from getting cached
-    assert set(x.columns) == set(y.columns)
-    pd.testing.assert_frame_equal(x, y[x.columns], **kwargs)
+    pd.testing.assert_frame_equal(x, y, **kwargs)
 
 
 @materialize()

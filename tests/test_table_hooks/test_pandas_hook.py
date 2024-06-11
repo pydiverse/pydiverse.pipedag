@@ -18,6 +18,7 @@ from pydiverse.pipedag.backend.table.util import DType
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
 from tests.util.spy import spy_task
+from tests.util.sql import get_config_with_table_store
 
 # disable duckdb for now, since they have a bug in version 0.9.2 that needs fixing
 pytestmark = [with_instances(tuple(set(DATABASE_INSTANCES) - {"duckdb"}))]
@@ -334,9 +335,13 @@ class TestPandasAutoVersion:
 @with_instances("postgres")
 class TestPandasCustomHook:
     def test_custom_upload(self):
-        @ConfigContext.get().store.table_store.register_table(
-            pd, previous_hook_replace="PandasTableHook"
-        )
+        class TestTableStore(ConfigContext.get().store.table_store.__class__):
+            # this subclass is just to make sure hooks of other tests are not affected
+            pass
+
+        cfg = get_config_with_table_store(ConfigContext.get(), TestTableStore)
+
+        @TestTableStore.register_table(pd, previous_hook_replace=[PandasTableHook])
         class CustomPandasUploadTableHook(PandasTableHook):
             @classmethod
             def upload_table(
@@ -370,10 +375,16 @@ class TestPandasCustomHook:
                 t = numpy_input()
                 verify_cutom(t)
 
-        assert f.run().successful
+        assert f.run(config=cfg).successful
 
     def test_custom_download(self):
-        @ConfigContext.get().store.table_store.register_table(
+        class TestTableStore(ConfigContext.get().store.table_store.__class__):
+            # this subclass is just to make sure hooks of other tests are not affected
+            pass
+
+        cfg = get_config_with_table_store(ConfigContext.get(), TestTableStore)
+
+        @TestTableStore.register_table(
             pd, previous_hook_replace="CustomPandasUploadTableHook"
         )
         class CustomPandasDownloadTableHook(PandasTableHook):
@@ -407,4 +418,4 @@ class TestPandasCustomHook:
                 t = numpy_input()
                 verify_cutom(t)
 
-        assert f.run().successful
+        assert f.run(config=cfg).successful

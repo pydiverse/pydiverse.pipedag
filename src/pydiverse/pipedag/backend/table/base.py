@@ -38,7 +38,11 @@ class TableHookResolver:
     _hook_subclass_cache: dict[type, type[TableHook]] = {}
 
     @classmethod
-    def register_table(cls, *requirements: Any, previous_hook_replace: str = None):
+    def register_table(
+        cls,
+        *requirements: Any,
+        previous_hook_replace: list[type[TableHook]] | None = None,
+    ):
         """Decorator to register a `TableHook`
 
         Each table store should be able to handle tables of various different
@@ -65,12 +69,6 @@ class TableHookResolver:
         is replaced by the newly registered hook.
         If None the new hook is just added to the list of available hooks.
         """
-        if previous_hook_replace:
-            registered_hooks = [hook.__name__ for hook in cls._registered_table_hooks]
-            if previous_hook_replace not in registered_hooks:
-                raise ValueError(
-                    f"The TableHook named {previous_hook_replace} does not exist"
-                )
 
         # `cls` is very likely a subclass of TableHookResolver
         # -> Add the hook related attributes to subclass to allow registering
@@ -93,15 +91,20 @@ class TableHookResolver:
 
             # Register the hook
             if previous_hook_replace:
+                # we ignore previous_hook_repacements if they are not found because
+                # they might be registered in base class which has lower priority by
+                # design
+                # (attention: replace cls._registered_table_hooks since list instance
+                # may be shared with parent classes)
                 cls._registered_table_hooks = [
                     hook
                     for hook in cls._registered_table_hooks
-                    if hook.__name__ != previous_hook_replace
+                    if hook not in previous_hook_replace
                 ]
-            cls._registered_table_hooks.append(hook_cls)
-            cls._m_hook_cache.clear()
-            cls._r_hook_cache.clear()
-            cls._hook_subclass_cache.clear()
+            cls._registered_table_hooks = cls._registered_table_hooks + [hook_cls]
+            cls._m_hook_cache = {}
+            cls._r_hook_cache = {}
+            cls._hook_subclass_cache = {}
             return hook_cls
 
         return decorator
@@ -122,6 +125,12 @@ class TableHookResolver:
             if hook.can_materialize(type_):
                 self._m_hook_cache[type_] = hook
                 return hook
+
+        # perform recursive call within base class resolvers in order to avoid reliance
+        # on import order
+        # (hooks may be registered to base class after declaration of subclass)
+        if isinstance(self.__class__.__base__, TableHookResolver):
+            return self.__class__.__base__.get_m_table_hook(type_)
 
         raise TypeError(
             f"Can't materialize Table with underlying type {type_}. "
@@ -148,12 +157,20 @@ class TableHookResolver:
                 self._r_hook_cache[type_] = hook
                 return hook
 
+        # perform recursive call within base class resolvers in order to avoid reliance
+        # on import order
+        # (hooks may be registered to base class after declaration of subclass)
+        if isinstance(self.__class__.__base__, TableHookResolver):
+            hook = self.__class__.__base__.get_r_table_hook(type_)
+            self._r_hook_cache[type_] = hook
+            return hook
+
         raise TypeError(
             f"Can't retrieve Table as type {type_}. "
             + self.__hook_unmet_requirements_message()
         )
 
-    def get_hook_subclass(self, type_: type[T]) -> type[T]:
+    def get_hook_subclass(self: Self, type_: type[T]) -> type[T]:
         """Finds a table hook that is a subclass of the provided type"""
         if type_ in self._hook_subclass_cache:
             return self._hook_subclass_cache[type_]
@@ -180,6 +197,14 @@ class TableHookResolver:
         if min_subclass:
             self._hook_subclass_cache[type_] = min_subclass
             return min_subclass
+
+        # perform recursive call within base class resolvers in order to avoid reliance
+        # on import order
+        # (hooks may be registered to base class after declaration of subclass)
+        if isinstance(self.__class__.__base__, TableHookResolver):
+            subclass = self.__class__.__base__.get_hook_subclass(type_)
+            self._hook_subclass_cache[type_] = subclass
+            return subclass
 
         raise RuntimeError
 

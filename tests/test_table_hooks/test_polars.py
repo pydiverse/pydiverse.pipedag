@@ -10,6 +10,7 @@ from pydiverse.pipedag.backend.table.sql.hooks import PolarsTableHook
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
 from tests.util.spy import spy_task
+from tests.util.sql import get_config_with_table_store
 from tests.util.tasks_library import assert_table_equal
 
 pytestmark = [
@@ -166,10 +167,14 @@ def test_auto_version_2(mocker):
     in_tables_spy.assert_called(2)
 
 
-def test_custom_download(self):
-    @ConfigContext.get().store.table_store.register_table(
-        pl, previous_hook_replace="PolarsTableHook"
-    )
+def test_custom_download():
+    class TestTableStore(ConfigContext.get().store.table_store.__class__):
+        # this subclass is just to make sure hooks of other tests are not affected
+        pass
+
+    cfg = get_config_with_table_store(ConfigContext.get(), TestTableStore)
+
+    @TestTableStore.register_table(pl, previous_hook_replace="PolarsTableHook")
     class CustomPolarsDownloadTableHook(PolarsTableHook):
         @classmethod
         def download_table(
@@ -178,8 +183,7 @@ def test_custom_download(self):
             connection_uri: str,
         ):
             df = pl.read_database(query, connection_uri)
-            df["custom_download"] = True
-            return df
+            return df.with_columns(pl.lit(True).alias("custom_download"))
 
     df = pl.DataFrame(
         {
@@ -189,7 +193,7 @@ def test_custom_download(self):
 
     @materialize()
     def numpy_input():
-        return df
+        return Table(df)
 
     @materialize(input_type=pl.DataFrame)
     def verify_cutom(t):
@@ -200,4 +204,4 @@ def test_custom_download(self):
             t = numpy_input()
             verify_cutom(t)
 
-    assert f.run().successful
+    assert f.run(config=cfg).successful
