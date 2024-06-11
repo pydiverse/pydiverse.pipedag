@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+
 import sqlalchemy as sa
 
 from pydiverse.pipedag.backend import BaseTableStore
@@ -37,7 +39,7 @@ def get_config_with_table_store(
     instance = base_cfg.instance_name
     flow = base_cfg.flow_name
     cfg = ConfigContext.new(
-        base_cfg._config_dict, base_cfg.pipedag_name, flow, instance
+        copy.deepcopy(base_cfg._config_dict), base_cfg.pipedag_name, flow, instance
     )
     cfg._config_dict["table_store"]["class"] = table_store_class
     # this actually instantiates the table store
