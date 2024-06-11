@@ -32,14 +32,43 @@ if TYPE_CHECKING:
 
 
 class TableHookResolver:
-    _registered_table_hooks: list[type[TableHook]] = []
-    _m_hook_cache: dict[type, type[TableHook]] = {}
-    _r_hook_cache: dict[type, type[TableHook]] = {}
-    _hook_subclass_cache: dict[type, type[TableHook]] = {}
+    class ClassState:
+        def __init__(self):
+            self.registered_table_hooks: list[type[TableHook]] = []
+            self.m_hook_cache: dict[type, type[TableHook]] = {}
+            self.r_hook_cache: dict[type, type[TableHook]] = {}
+            self.hook_subclass_cache: dict[type, type[TableHook]] = {}
+
+        def add_hook(self, hook_cls, replace_hooks: list[type[TableHook]] | None):
+            # we ignore if replace_hooks are not found since they might be found in
+            # base class with lower lookup priority
+            if replace_hooks:
+                self.registered_table_hooks = [
+                    x for x in self.registered_table_hooks if x not in replace_hooks
+                ]
+            self.registered_table_hooks.append(hook_cls)
+
+        def __repr__(self):
+            return "ClassState=" + str(
+                {
+                    x: getattr(self, x)
+                    for x in dir(self)
+                    if not x.startswith("_") and x != "add_hook"
+                }
+            )
+
+    _states: dict[int, ClassState] = {}
+
+    @classmethod
+    def _resolver_state(cls: TableHookResolver):
+        state = cls._states.get(id(cls))
+        if state is None:
+            state = cls._states[id(cls)] = cls.ClassState()
+        return state
 
     @classmethod
     def register_table(
-        cls,
+        cls: TableHookResolver,
         *requirements: Any,
         replace_hooks: list[type[TableHook]] | None = None,
     ):
@@ -70,15 +99,6 @@ class TableHookResolver:
         If None the new hook is just added to the list of available hooks.
         """
 
-        # `cls` is very likely a subclass of TableHookResolver
-        # -> Add the hook related attributes to subclass to allow registering
-        #    new hooks without interfering with the superclass.
-        if "_registered_table_hooks" not in cls.__dict__:
-            cls._registered_table_hooks = []
-            cls._m_hook_cache = {}
-            cls._r_hook_cache = {}
-            cls._hook_subclass_cache = {}
-
         def decorator(hook_cls):
             if not all(requirements):
                 cls.__hooks_with_unmet_requirements.append(
@@ -89,48 +109,27 @@ class TableHookResolver:
                     Exception(f"Not all requirements met for {hook_cls.__name__}"),
                 )(hook_cls)
 
-            # Register the hook
-            if replace_hooks:
-                # we ignore replace_hooks if they are not found because
-                # they might be registered in base class which has lower priority by
-                # design
-                # (attention: replace cls._registered_table_hooks since list instance
-                # may be shared with parent classes)
-                cls._registered_table_hooks = [
-                    hook
-                    for hook in cls._registered_table_hooks
-                    if hook not in replace_hooks
-                ]
-            cls._registered_table_hooks = cls._registered_table_hooks + [hook_cls]
-            cls._m_hook_cache = {}
-            cls._r_hook_cache = {}
-            cls._hook_subclass_cache = {}
+            cls._resolver_state().add_hook(hook_cls, replace_hooks)
             return hook_cls
 
         return decorator
 
-    def __registered_tables(self) -> Iterable[type[TableHook]]:
+    def __all_registered_table_hooks(self) -> Iterable[type[TableHook]]:
         # Walk up the hierarchy of super classes and return each registered
         # table hook in reverse order
         for cls in type(self).__mro__:
-            if "_registered_table_hooks" in cls.__dict__:
-                yield from cls._registered_table_hooks[::-1]  # noqa
+            if issubclass(cls, TableHookResolver):
+                yield from cls._resolver_state().registered_table_hooks[::-1]  # noqa
 
     def get_m_table_hook(self: Self, type_: type[T]) -> type[TableHook[Self]]:
         """Get a table hook that can materialize the specified type"""
-        if type_ in self._m_hook_cache:
-            return self._m_hook_cache[type_]
+        if type_ in self._resolver_state().m_hook_cache:
+            return self._resolver_state().m_hook_cache[type_]
 
-        for hook in self.__registered_tables():
+        for hook in self.__all_registered_table_hooks():
             if hook.can_materialize(type_):
-                self._m_hook_cache[type_] = hook
+                self._resolver_state().m_hook_cache[type_] = hook
                 return hook
-
-        # perform recursive call within base class resolvers in order to avoid reliance
-        # on import order
-        # (hooks may be registered to base class after declaration of subclass)
-        if isinstance(self.__class__.__base__, TableHookResolver):
-            return self.__class__.__base__.get_m_table_hook(type_)
 
         raise TypeError(
             f"Can't materialize Table with underlying type {type_}. "
@@ -149,21 +148,13 @@ class TableHookResolver:
         if type_ is None:
             raise ValueError("type_ argument can't be None")
 
-        if type_ in self._r_hook_cache:
-            return self._r_hook_cache[type_]
+        if type_ in self._resolver_state().r_hook_cache:
+            return self._resolver_state().r_hook_cache[type_]
 
-        for hook in self.__registered_tables():
+        for hook in self.__all_registered_table_hooks():
             if hook.can_retrieve(type_):
-                self._r_hook_cache[type_] = hook
+                self._resolver_state().r_hook_cache[type_] = hook
                 return hook
-
-        # perform recursive call within base class resolvers in order to avoid reliance
-        # on import order
-        # (hooks may be registered to base class after declaration of subclass)
-        if isinstance(self.__class__.__base__, TableHookResolver):
-            hook = self.__class__.__base__.get_r_table_hook(type_)
-            self._r_hook_cache[type_] = hook
-            return hook
 
         raise TypeError(
             f"Can't retrieve Table as type {type_}. "
@@ -172,15 +163,15 @@ class TableHookResolver:
 
     def get_hook_subclass(self: Self, type_: type[T]) -> type[T]:
         """Finds a table hook that is a subclass of the provided type"""
-        if type_ in self._hook_subclass_cache:
-            return self._hook_subclass_cache[type_]
+        if type_ in self._resolver_state().hook_subclass_cache:
+            return self._resolver_state().hook_subclass_cache[type_]
 
         min_distance = sys.maxsize
         min_subclass = None
 
         for cls in type(self).__mro__:
-            if "_registered_table_hooks" in cls.__dict__:
-                for hook in cls._registered_table_hooks[::-1]:  # noqa
+            if issubclass(cls, TableHookResolver):
+                for hook in cls._resolver_state().registered_table_hooks[::-1]:  # noqa
                     if issubclass(hook, type_):
                         # Calculate distance between superclass and child class
                         try:
@@ -195,16 +186,8 @@ class TableHookResolver:
                     break
 
         if min_subclass:
-            self._hook_subclass_cache[type_] = min_subclass
+            self._resolver_state().hook_subclass_cache[type_] = min_subclass
             return min_subclass
-
-        # perform recursive call within base class resolvers in order to avoid reliance
-        # on import order
-        # (hooks may be registered to base class after declaration of subclass)
-        if isinstance(self.__class__.__base__, TableHookResolver):
-            subclass = self.__class__.__base__.get_hook_subclass(type_)
-            self._hook_subclass_cache[type_] = subclass
-            return subclass
 
         raise RuntimeError
 

@@ -339,7 +339,11 @@ class TestPandasCustomHook:
             # this subclass is just to make sure hooks of other tests are not affected
             pass
 
-        cfg = get_config_with_table_store(ConfigContext.get(), TestTableStore)
+        class TestTableStore2(TestTableStore):
+            # this tests that the delegation to parent hooks works
+            pass
+
+        cfg = get_config_with_table_store(ConfigContext.get(), TestTableStore2)
 
         @TestTableStore.register_table(pd, replace_hooks=[PandasTableHook])
         class CustomPandasUploadTableHook(PandasTableHook):
