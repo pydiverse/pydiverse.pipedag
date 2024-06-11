@@ -341,7 +341,7 @@ class TestPandasCustomHook:
 
         cfg = get_config_with_table_store(ConfigContext.get(), TestTableStore)
 
-        @TestTableStore.register_table(pd, previous_hook_replace=[PandasTableHook])
+        @TestTableStore.register_table(pd, replace_hooks=[PandasTableHook])
         class CustomPandasUploadTableHook(PandasTableHook):
             @classmethod
             def upload_table(
@@ -384,9 +384,7 @@ class TestPandasCustomHook:
 
         cfg = get_config_with_table_store(ConfigContext.get(), TestTableStore)
 
-        @TestTableStore.register_table(
-            pd, previous_hook_replace="CustomPandasUploadTableHook"
-        )
+        @TestTableStore.register_table(pd, replace_hooks="CustomPandasUploadTableHook")
         class CustomPandasDownloadTableHook(PandasTableHook):
             @classmethod
             def download_table(

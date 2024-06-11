@@ -174,7 +174,7 @@ def test_custom_download():
 
     cfg = get_config_with_table_store(ConfigContext.get(), TestTableStore)
 
-    @TestTableStore.register_table(pl, previous_hook_replace="PolarsTableHook")
+    @TestTableStore.register_table(pl, replace_hooks=[PolarsTableHook])
     class CustomPolarsDownloadTableHook(PolarsTableHook):
         @classmethod
         def download_table(

@@ -41,7 +41,7 @@ class TableHookResolver:
     def register_table(
         cls,
         *requirements: Any,
-        previous_hook_replace: list[type[TableHook]] | None = None,
+        replace_hooks: list[type[TableHook]] | None = None,
     ):
         """Decorator to register a `TableHook`
 
@@ -64,7 +64,7 @@ class TableHookResolver:
 
         :param requirements: The requirements which must be satisfied to register
             the decorated class.
-        :param previous_hook_replace: Takes the name of a TableHook class
+        :param replace_hooks: Takes the name of a TableHook class
         (e.g. PandasTableHook). If a name is provided the TableHook class
         is replaced by the newly registered hook.
         If None the new hook is just added to the list of available hooks.
@@ -90,8 +90,8 @@ class TableHookResolver:
                 )(hook_cls)
 
             # Register the hook
-            if previous_hook_replace:
-                # we ignore previous_hook_repacements if they are not found because
+            if replace_hooks:
+                # we ignore replace_hooks if they are not found because
                 # they might be registered in base class which has lower priority by
                 # design
                 # (attention: replace cls._registered_table_hooks since list instance
@@ -99,7 +99,7 @@ class TableHookResolver:
                 cls._registered_table_hooks = [
                     hook
                     for hook in cls._registered_table_hooks
-                    if hook not in previous_hook_replace
+                    if hook not in replace_hooks
                 ]
             cls._registered_table_hooks = cls._registered_table_hooks + [hook_cls]
             cls._m_hook_cache = {}
