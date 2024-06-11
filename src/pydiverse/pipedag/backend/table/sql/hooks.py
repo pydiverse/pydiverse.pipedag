@@ -650,7 +650,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
                 e,
             )
             pandas_hook = store.get_hook_subclass(PandasTableHook)
-            with engine as conn:
+            with engine.connect() as conn:
                 pd_df = pandas_hook.download_table(query, conn)
             engine.dispose()
             return polars.from_pandas(pd_df)

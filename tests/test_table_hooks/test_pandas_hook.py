@@ -285,7 +285,7 @@ def test_pandas_table_hook_postgres_null_string():
     assert df["strNA"][0] == ""
     assert pd.isna(df["strNA"][1])
     assert (
-        df["strNA"][2] == "\\N"
+        df["strNA"].fillna("X")[2] == "\\N"
     ), "This is a known issue that the string '\\N' is considered NA"
 
 
