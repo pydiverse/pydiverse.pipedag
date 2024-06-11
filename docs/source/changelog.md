@@ -1,8 +1,11 @@
 # Changelog
 
-## 0.9.3 ()
+## 0.9.3 (2024-06-11)
 - Added `upload_table()` and `download_table()` functions to the PandasTableHook to allow for easy 
     customization of up and download behavior of pandas and polars tables from/to the table store.
+- More robust way of looking up hooks independent of import order. Subclasses of table stores don't 
+    copy registered hooks in the moment of declaration. When registering a hook it is possible now, to 
+    specify the hooks that are replaced by a new registration.
 
 ## 0.9.2 (2024-05-07)
 - @input_stage_versions decorator allows specifying tasks which compare tables within the current stage transaction 

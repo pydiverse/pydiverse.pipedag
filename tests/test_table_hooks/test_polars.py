@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from pydiverse.pipedag import *
+from pydiverse.pipedag.backend.table.sql.hooks import PolarsTableHook
+from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
 from tests.util.spy import spy_task
+from tests.util.sql import get_config_with_table_store
 from tests.util.tasks_library import assert_table_equal
 
 pytestmark = [
@@ -161,3 +166,46 @@ def test_auto_version_2(mocker):
     should_swap_inputs = True
     f.run()
     in_tables_spy.assert_called(2)
+
+
+@skip_instances("duckdb")
+def test_custom_download():
+    class TestTableStore(ConfigContext.get().store.table_store.__class__):
+        _dialect_name = DISABLE_DIALECT_REGISTRATION
+        # this subclass is just to make sure hooks of other tests are not affected
+        pass
+
+    cfg = get_config_with_table_store(ConfigContext.get(), TestTableStore)
+
+    @TestTableStore.register_table(pl, replace_hooks=[PolarsTableHook])
+    class CustomPolarsDownloadTableHook(PolarsTableHook):
+        @classmethod
+        def download_table(
+            cls,
+            query: Any,
+            connection_uri: str,
+        ):
+            # FYI: this fails for duckdb and thus we fall back to pandas hook
+            df = pl.read_database(query, connection_uri)
+            return df.with_columns(pl.lit(True).alias("custom_download"))
+
+    df = pl.DataFrame(
+        {
+            "col": [0, 1, 2, 3],
+        }
+    )
+
+    @materialize()
+    def numpy_input():
+        return Table(df)
+
+    @materialize(input_type=pl.DataFrame)
+    def verify_cutom(t):
+        assert "custom_download" in t.columns
+
+    with Flow() as f:
+        with Stage("stage"):
+            t = numpy_input()
+            verify_cutom(t)
+
+    assert f.run(config=cfg).successful

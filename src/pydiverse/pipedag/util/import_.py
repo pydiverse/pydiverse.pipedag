@@ -112,7 +112,11 @@ def load_object(config_dict: dict, move_keys_into_args: Collection[str] | None =
             "section that supports multiple backends\n"
             f"config section: {config_dict}"
         )
-    cls = import_object(config_dict["class"])
+    if isinstance(config_dict["class"], type):
+        # it may be useful in tests to just pass in a dynamically created class
+        cls = config_dict["class"]
+    else:
+        cls = import_object(config_dict["class"])
 
     args = config_dict.get("args", {}) or {}
     if not isinstance(args, dict):

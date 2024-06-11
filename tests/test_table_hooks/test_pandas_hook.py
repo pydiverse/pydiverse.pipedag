@@ -13,11 +13,13 @@ from packaging.version import Version
 import tests.util.tasks_library as m
 from pydiverse.pipedag import *
 from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook
+from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
 from pydiverse.pipedag.backend.table.util import DType
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
 from tests.util.spy import spy_task
+from tests.util.sql import get_config_with_table_store
 
 # disable duckdb for now, since they have a bug in version 0.9.2 that needs fixing
 pytestmark = [with_instances(tuple(set(DATABASE_INSTANCES) - {"duckdb"}))]
@@ -334,8 +336,19 @@ class TestPandasAutoVersion:
 @with_instances("postgres")
 class TestPandasCustomHook:
     def test_custom_upload(self):
-        @ConfigContext.get().store.table_store.register_table(pd)
-        class CustomPandasTableHook(PandasTableHook):
+        class TestTableStore(ConfigContext.get().store.table_store.__class__):
+            _dialect_name = DISABLE_DIALECT_REGISTRATION
+            # this subclass is just to make sure hooks of other tests are not affected
+            pass
+
+        class TestTableStore2(TestTableStore):
+            # this tests that the delegation to parent hooks works
+            pass
+
+        cfg = get_config_with_table_store(ConfigContext.get(), TestTableStore2)
+
+        @TestTableStore.register_table(pd, replace_hooks=[PandasTableHook])
+        class CustomPandasUploadTableHook(PandasTableHook):
             @classmethod
             def upload_table(
                 cls,
@@ -368,11 +381,18 @@ class TestPandasCustomHook:
                 t = numpy_input()
                 verify_cutom(t)
 
-        assert f.run().successful
+        assert f.run(config=cfg).successful
 
     def test_custom_download(self):
-        @ConfigContext.get().store.table_store.register_table(pd)
-        class CustomPandasTableHook(PandasTableHook):
+        class TestTableStore(ConfigContext.get().store.table_store.__class__):
+            _dialect_name = DISABLE_DIALECT_REGISTRATION
+            # this subclass is just to make sure hooks of other tests are not affected
+            pass
+
+        cfg = get_config_with_table_store(ConfigContext.get(), TestTableStore)
+
+        @TestTableStore.register_table(pd, replace_hooks=[PandasTableHook])
+        class CustomPandasDownloadTableHook(PandasTableHook):
             @classmethod
             def download_table(
                 cls,
@@ -403,4 +423,4 @@ class TestPandasCustomHook:
                 t = numpy_input()
                 verify_cutom(t)
 
-        assert f.run().successful
+        assert f.run(config=cfg).successful
