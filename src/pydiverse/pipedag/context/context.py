@@ -240,6 +240,12 @@ class ConfigContext(BaseAttrsContext):
         # Load objects referenced in config
         try:
             table_store_config = self._config_dict["table_store"]
+            # Attention: See SQLTableStore.__new__ for how this call may instantiate
+            # a subclass of table_store_config["class"] depending on engine URL.
+            # For testing, we also allow setting table_store_config["class"] to an
+            # actual class. In case you want to create a table store that does not
+            # replace the default derived class for a specific dialect, set
+            # `_dialect_name = DISABLE_DIALECT_REGISTRATION`.
             table_store = load_object(table_store_config)
         except Exception as e:
             raise RuntimeError("Failed loading table_store") from e

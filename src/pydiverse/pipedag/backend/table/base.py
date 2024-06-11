@@ -93,10 +93,16 @@ class TableHookResolver:
 
         :param requirements: The requirements which must be satisfied to register
             the decorated class.
-        :param replace_hooks: Takes the name of a TableHook class
-        (e.g. PandasTableHook). If a name is provided the TableHook class
-        is replaced by the newly registered hook.
-        If None the new hook is just added to the list of available hooks.
+        :param replace_hooks: Takes a list of TableHook classes (e.g. PandasTableHook)
+            that should be replaced by the decorated class.
+            If None, the new hook is just added to the list of available hooks.
+
+            Details: specifying replace_hooks helps also implicitly because the
+            mentioned hooks must have been imported/registered before. If they were
+            registered on a base class of the hook resolver (i.e. table store) of this
+            call, they will be ignored but hooks registered on subclasses take
+            precedence anyway. Please make sure not provide replace hooks registered to
+            subclasses of this call's hook resolver. This will fail.
         """
 
         def decorator(hook_cls):
