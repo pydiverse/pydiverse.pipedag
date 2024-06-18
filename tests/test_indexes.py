@@ -36,5 +36,6 @@ def test_materialize_table_with_indexes(task):
             x = task()
 
             m.assert_table_equal(x, x)
+            m.check_pk_length(x)
 
     assert f.run().successful

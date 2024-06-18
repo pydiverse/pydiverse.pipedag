@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.9.4 (XXX)
+- Primary key and index identifiers are now automatically truncated at 63 characters to avoid issues with some database systems.
+
 ## 0.9.3 (2024-06-11)
 - Added `upload_table()` and `download_table()` functions to the PandasTableHook to allow for easy 
     customization of up and download behavior of pandas and polars tables from/to the table store.
