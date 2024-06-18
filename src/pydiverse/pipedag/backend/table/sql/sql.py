@@ -182,6 +182,11 @@ class SQLTableStore(BaseTableStore):
         The number of seconds to wait before giving up on getting a connection from
         the pool. This may be relevant in case the connection pool is saturated
         with concurrent operations each working with one or more database connections.
+    :param ignore_position_hashes:
+        If ``True``, the position hashes of tasks are not checked
+        when retrieving the inputs of a task from the cache.
+        This can prevent caching errors when evaluating subgraphs.
+        For this to work a task may never be used more than once per stage.
     """
 
     METADATA_SCHEMA = "pipedag_metadata"
@@ -223,6 +228,7 @@ class SQLTableStore(BaseTableStore):
         max_concurrent_copy_operations: int = 5,
         sqlalchemy_pool_size: int = 12,
         sqlalchemy_pool_timeout: int = 300,
+        ignore_position_hashes: bool = False,
     ):
         super().__init__()
 
@@ -237,6 +243,7 @@ class SQLTableStore(BaseTableStore):
         self.max_concurrent_copy_operations = max_concurrent_copy_operations
         self.sqlalchemy_pool_size = sqlalchemy_pool_size
         self.squalchemy_pool_timeout = sqlalchemy_pool_timeout
+        self.ignore_position_hashes = ignore_position_hashes
 
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
         self.engine_url = sa.engine.make_url(engine_url)
@@ -1389,18 +1396,23 @@ class SQLTableStore(BaseTableStore):
         )
 
     def retrieve_all_task_metadata(self, task: MaterializingTask) -> list[TaskMetadata]:
+        if self.ignore_position_hashes:
+            match_condition = sa.and_(
+                self.tasks_table.c.name == task.name,
+                self.tasks_table.c.stage == task.stage.name,
+            )
+        else:
+            match_condition = sa.and_(
+                self.tasks_table.c.name == task.name,
+                self.tasks_table.c.stage == task.stage.name,
+                self.tasks_table.c.position_hash == task.position_hash,
+            )
         with self.engine_connect() as conn:
             results = (
-                conn.execute(
-                    self.tasks_table.select()
-                    .where(self.tasks_table.c.name == task.name)
-                    .where(self.tasks_table.c.stage == task.stage.name)
-                    .where(self.tasks_table.c.position_hash == task.position_hash)
-                )
+                conn.execute(self.tasks_table.select().where(match_condition))
                 .mappings()
                 .all()
             )
-
         return [
             TaskMetadata(
                 name=result.name,
