@@ -295,3 +295,18 @@ def test_run_specific_stage_with_table_blob():
     f.run(s2)
     f.run(s3)
     f.run(s1, s3)
+
+
+@with_instances("postgres_ignore_position_hashes")
+def test_ignore_position_hashes():
+    with Flow() as f:
+        with Stage("subflow_s1"):
+            x1 = m.create_tuple(1, 1)
+            x2 = m.create_tuple(x1, x1)
+
+        with Stage("subflow_s2") as s2:
+            _ = m.create_tuple(x1, x2)
+
+    f.run()
+    # check that retrieval from cache works
+    f.run(s2)
