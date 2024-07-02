@@ -6,7 +6,8 @@ import sqlalchemy as sa
 import structlog
 
 from pydiverse.pipedag import ConfigContext, Flow, Stage, Table, materialize
-from pydiverse.pipedag.context import RunContext, StageLockContext
+from pydiverse.pipedag.context import FinalTaskState, RunContext, StageLockContext
+from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.core.config import PipedagConfig
 
 # Parameterize all tests in this file with several instance_id configurations
@@ -147,6 +148,32 @@ def test_debug_materialize_table_twice(imperative):
 
     with pytest.raises(RuntimeError, match="interactive debugging"):
         assert f.run().successful
+
+
+@with_instances("postgres")
+def test_imperative_minimal_example():
+    with Flow("flow") as f:
+        with Stage("input"):
+            input = m.simple_dataframe()
+        with Stage("stage"):
+            _ = m.complex_imperative_materialize(input)
+
+    result1 = f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+
+    result2 = f.run()
+
+    print("Run 1:")
+    for task in f.tasks:
+        print(f"{task.name}: {result1.task_states.get(task)}")
+
+    print("Run 2:")
+    for task in f.tasks:
+        print(f"{task.name}: {result2.task_states.get(task)}")
+
+    # Expectation: In Run 2 all tasks should be cached
+    for task in f.tasks:
+        if not task.name.startswith("Commit"):
+            assert result2.task_states.get(task) == FinalTaskState.CACHE_VALID
 
 
 @with_instances("postgres")
