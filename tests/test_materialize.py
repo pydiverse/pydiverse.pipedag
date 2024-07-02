@@ -154,9 +154,9 @@ def test_debug_materialize_table_twice(imperative):
 def test_imperative_minimal_example():
     with Flow("flow") as f:
         with Stage("input"):
-            input = m.simple_dataframe()
+            in_ = m.simple_dataframe()
         with Stage("stage"):
-            _ = m.complex_imperative_materialize(input)
+            _ = m.complex_imperative_materialize(in_)
 
     result1 = f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
 

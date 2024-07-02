@@ -216,15 +216,15 @@ def simple_dataframe_debug_materialize_twice():
     return res
 
 
-def complex_imperative_materialize(input: Table):
-    @materialize(lazy=True, input_type=sa.Table)
-    def _temp_res1(input: sa.Table):
-        query = sa.select("*").select_from(input)
+def complex_imperative_materialize(in_: Table):
+    @materialize(lazy=True, in__type=sa.Table)
+    def _temp_res1(in_: sa.Table):
+        query = sa.select("*").select_from(in_)
         return Table(query)
 
-    @materialize(lazy=True, input_type=sa.Table)
-    def _temp_res2(input: sa.Table):
-        query1 = sa.select("*").select_from(input)
+    @materialize(lazy=True, in__type=sa.Table)
+    def _temp_res2(in_: sa.Table):
+        query1 = sa.select("*").select_from(in_)
         t1 = Table(query1).materialize()
 
         query2 = sa.select("*").select_from(t1)
@@ -233,13 +233,13 @@ def complex_imperative_materialize(input: Table):
         query3 = sa.select("*").select_from(t2)
         return Table(query3)
 
-    @materialize(lazy=True, input_type=sa.Table)
+    @materialize(lazy=True, in__type=sa.Table)
     def _temp_res3(_temp_res1: sa.Table, _temp_res2: sa.Table):
         _ = _temp_res2
         query = sa.select("*").select_from(_temp_res1)
         return Table(query)
 
-    temp_res1 = _temp_res1(input)
+    temp_res1 = _temp_res1(in_)
     temp_res2 = _temp_res2(temp_res1)
     return _temp_res3(temp_res1, temp_res2)
 
