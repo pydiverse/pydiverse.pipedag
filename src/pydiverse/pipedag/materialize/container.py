@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Iterable
+from functools import total_ordering
 from typing import TYPE_CHECKING, Any, Generic
 
 import sqlalchemy as sa
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
     from pydiverse.pipedag.materialize.core import MaterializingTask
 
 
+@total_ordering
 class Table(Generic[T]):
     """Container for storing Tables.
 
@@ -307,6 +309,24 @@ class Table(Generic[T]):
         state = self.__dict__.copy()
         state["obj"] = None
         return state
+
+    def __lt__(self, other):
+        if self.stage is not None or other.stage is not None:
+            if self.stage < other.stage:
+                return True
+            if self.stage > other.stage:
+                return False
+        return self.name < other.name
+
+    def __eq__(self, other: Table):
+        if not isinstance(other, Table):
+            return False
+        return self.name == other.name and (
+            self.stage == other.stage or (self.stage is None and other.stage is None)
+        )
+
+    def __hash__(self):
+        return hash(self.name) if self.stage is None else hash((self.name, self.stage))
 
 
 class RawSql:

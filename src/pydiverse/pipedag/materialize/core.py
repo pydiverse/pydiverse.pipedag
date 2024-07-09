@@ -766,7 +766,7 @@ class MaterializationWrapper:
                         "The table has already been imperatively materialized."
                     )
                 table.assumed_dependencies = (
-                    list(state.assumed_dependencies)
+                    list(sorted(state.assumed_dependencies))
                     if len(state.assumed_dependencies) > 0
                     else []
                 )
@@ -819,7 +819,9 @@ class MaterializationWrapper:
                     # materialized
                     if len(state.assumed_dependencies) > 0:
                         if x.assumed_dependencies is None:
-                            x.assumed_dependencies = list(state.assumed_dependencies)
+                            x.assumed_dependencies = list(
+                                sorted(state.assumed_dependencies)
+                            )
                 return x
 
             result = deep_map(result, result_finalization_mutator)
