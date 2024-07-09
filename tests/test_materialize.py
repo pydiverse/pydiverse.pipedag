@@ -159,7 +159,7 @@ def test_imperative_minimal_example():
         with Stage("stage"):
             _ = m.complex_imperative_materialize(in_)
 
-    trace_hook = PrintTraceHook()
+    trace_hook = PrintTraceHook()  # can be used to debug caching issues
     result1 = f.run(
         cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID,
         trace_hook=trace_hook,
