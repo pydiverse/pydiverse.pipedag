@@ -17,9 +17,9 @@ from pydiverse.pipedag.context import (
     RunContextServer,
 )
 from pydiverse.pipedag.context.context import CacheValidationMode
+from pydiverse.pipedag.context.trace_hook import TraceHook
 from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.core.group_node import BarrierTask, VisualizationStyle
-from pydiverse.pipedag.context.trace_hook import TraceHook
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 
 if TYPE_CHECKING:

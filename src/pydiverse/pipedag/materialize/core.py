@@ -665,7 +665,9 @@ class MaterializationWrapper:
                         cache_fn_hash=cache_fn_hash,
                     )
                     TaskContext.get().is_cache_valid = True
-                    RunContext.get().trace_hook.task_cache_status(task, input_hash, cache_fn_hash, cache_metadata, cached_output)
+                    RunContext.get().trace_hook.task_cache_status(
+                        task, input_hash, cache_fn_hash, cache_metadata, cached_output
+                    )
                     return cached_output
                 except CacheError as e:
                     task.logger.info(
@@ -676,7 +678,9 @@ class MaterializationWrapper:
                         cause=str(e),
                     )
                     TaskContext.get().is_cache_valid = False
-                    RunContext.get().trace_hook.task_cache_status(task, input_hash, cache_fn_hash, cache_valid=False)
+                    RunContext.get().trace_hook.task_cache_status(
+                        task, input_hash, cache_fn_hash, cache_valid=False
+                    )
 
             if not task.lazy:
                 if assert_no_fresh_input and task.cache is not None:
@@ -706,7 +710,9 @@ class MaterializationWrapper:
                             task, input_hash, ""
                         )
                         cache_fn_hash = cache_metadata.cache_fn_hash
-                        RunContext.get().trace_hook.task_cache_status(task, input_hash, cache_fn_hash, cache_metadata, lazy=True)
+                        RunContext.get().trace_hook.task_cache_status(
+                            task, input_hash, cache_fn_hash, cache_metadata, lazy=True
+                        )
                     except CacheError as e:
                         task.logger.info(
                             "Failed to retrieve lazy task from cache",

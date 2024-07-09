@@ -160,7 +160,10 @@ def test_imperative_minimal_example():
             _ = m.complex_imperative_materialize(in_)
 
     trace_hook = PrintTraceHook()
-    result1 = f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID, trace_hook=trace_hook)
+    result1 = f.run(
+        cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID,
+        trace_hook=trace_hook,
+    )
 
     result2 = f.run(trace_hook=trace_hook)
 

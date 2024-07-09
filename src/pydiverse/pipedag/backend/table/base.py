@@ -401,7 +401,14 @@ class BaseTableStore(TableHookResolver, Disposable):
             metadata = self.retrieve_lazy_table_metadata(
                 query_hash, task_cache_info.cache_key, table.stage
             )
-            RunContext.get().trace_hook.query_cache_status(task, table, task_cache_info, query_hash, query_str, cache_metadata=metadata)
+            RunContext.get().trace_hook.query_cache_status(
+                task,
+                table,
+                task_cache_info,
+                query_hash,
+                query_str,
+                cache_metadata=metadata,
+            )
             self.copy_lazy_table_to_transaction(metadata, table)
             self.logger.info(f"Lazy cache of table '{table.name}' found")
         except CacheError as e:
@@ -411,7 +418,9 @@ class BaseTableStore(TableHookResolver, Disposable):
                 "Cache miss", table=table.name, stage=table.stage.name, cause=str(e)
             )
             TaskContext.get().is_cache_valid = False
-            RunContext.get().trace_hook.query_cache_status(task, table, task_cache_info, query_hash, query_str, cache_valid=False)
+            RunContext.get().trace_hook.query_cache_status(
+                task, table, task_cache_info, query_hash, query_str, cache_valid=False
+            )
             if task_cache_info.assert_no_materialization:
                 raise AssertionError(
                     "cache_validation.mode=ASSERT_NO_FRESH_INPUT is a "
