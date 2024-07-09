@@ -86,7 +86,7 @@ def setup_logging(
             structlog.dev.set_exc_info,
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(timestamp_format),
-            PipedagConsoleRenderer(render_keys=["query", "table_obj"]),
+            PipedagConsoleRenderer(render_keys=["query", "table_obj", "task", "table", "detail"]),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(log_level),
         logger_factory=structlog.PrintLoggerFactory(log_stream),

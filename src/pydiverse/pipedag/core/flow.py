@@ -19,6 +19,7 @@ from pydiverse.pipedag.context import (
 from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.core.group_node import BarrierTask, VisualizationStyle
+from pydiverse.pipedag.context.trace_hook import TraceHook
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 
 if TYPE_CHECKING:
@@ -250,6 +251,7 @@ class Flow:
         *components: Task | TaskGetItem | Stage,
         config: ConfigContext = None,
         orchestration_engine: OrchestrationEngine = None,
+        trace_hook: TraceHook = None,
         fail_fast: bool | None = None,
         cache_validation_mode: CacheValidationMode | None = None,
         disable_cache_function: bool | None = None,
@@ -362,13 +364,18 @@ class Flow:
                 f"cache_validation_mode=NORMAL: {config.cache_validation}"
             )
 
-        with config, RunContextServer(subflow):
+        if trace_hook is None:
+            trace_hook = TraceHook()
+
+        with config, RunContextServer(subflow, trace_hook):
             if orchestration_engine is None:
                 orchestration_engine = config.create_orchestration_engine()
             result = orchestration_engine.run(subflow, **kwargs)
 
             visualization_url = result.visualize_url()
             self.logger.info("Flow visualization", url=visualization_url)
+
+        trace_hook.run_complete(result)
 
         if not result.successful and config.fail_fast:
             raise result.exception or Exception("Flow run failed")

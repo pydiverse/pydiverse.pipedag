@@ -8,6 +8,7 @@ import structlog
 from pydiverse.pipedag import ConfigContext, Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import FinalTaskState, RunContext, StageLockContext
 from pydiverse.pipedag.context.context import CacheValidationMode
+from pydiverse.pipedag.context.trace_hook import PrintTraceHook
 from pydiverse.pipedag.core.config import PipedagConfig
 
 # Parameterize all tests in this file with several instance_id configurations
@@ -158,9 +159,10 @@ def test_imperative_minimal_example():
         with Stage("stage"):
             _ = m.complex_imperative_materialize(in_)
 
-    result1 = f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+    trace_hook = PrintTraceHook()
+    result1 = f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID, trace_hook=trace_hook)
 
-    result2 = f.run()
+    result2 = f.run(trace_hook=trace_hook)
 
     print("Run 1:")
     for task in f.tasks:
