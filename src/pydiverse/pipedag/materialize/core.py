@@ -665,7 +665,7 @@ class MaterializationWrapper:
                         cache_fn_hash=cache_fn_hash,
                     )
                     TaskContext.get().is_cache_valid = True
-                    RunContext.get().trace_hook.task_cache_status(
+                    run_context.trace_hook.task_cache_status(
                         task, input_hash, cache_fn_hash, cache_metadata, cached_output
                     )
                     return cached_output
@@ -678,7 +678,7 @@ class MaterializationWrapper:
                         cause=str(e),
                     )
                     TaskContext.get().is_cache_valid = False
-                    RunContext.get().trace_hook.task_cache_status(
+                    run_context.trace_hook.task_cache_status(
                         task, input_hash, cache_fn_hash, cache_valid=False
                     )
 
@@ -710,7 +710,7 @@ class MaterializationWrapper:
                             task, input_hash, ""
                         )
                         cache_fn_hash = cache_metadata.cache_fn_hash
-                        RunContext.get().trace_hook.task_cache_status(
+                        run_context.trace_hook.task_cache_status(
                             task, input_hash, cache_fn_hash, cache_metadata, lazy=True
                         )
                     except CacheError as e:
@@ -799,7 +799,9 @@ class MaterializationWrapper:
                         return get_return_obj(return_as_type)
 
             task_context.imperative_materialize_callback = imperative_materialize
+            run_context.trace_hook.task_pre_call(task)
             result = self.fn(*args, **kwargs)
+            run_context.trace_hook.task_post_call(task)
             task_context.imperative_materialize_callback = None
             if task.debug_tainted:
                 raise RuntimeError(
@@ -842,6 +844,7 @@ class MaterializationWrapper:
             result = deep_map(result, obj_del_mutator)
             run_context.store_task_memo(task, memo_cache_key, result)
             self.value = result
+            run_context.trace_hook.task_complete(task, result)
 
             return result
 

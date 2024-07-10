@@ -105,7 +105,7 @@ class TraceHook:
         """
         pass
 
-    def task_complete(self, task: Task):
+    def task_complete(self, task: Task, result: Result):
         """
         Called after task completion.
 
@@ -139,15 +139,25 @@ class TraceHook:
         """
         pass
 
-    def cache_pre_transfer(self):
+    def cache_init_transfer(self, task: Task, table: Table):
         """
-        Called before transferring cache data to transaction schema.
+        Called when preparing transfer from cached table to transactions schema.
         """
         pass
 
-    def cache_post_transfer(self):
+    def cache_pre_transfer(self, table: Table):
         """
-        Called after transferring cache data to transaction schema.
+        Called before transferring cached table to transaction schema.
+
+        This function may be called in context of another thread or process.
+        """
+        pass
+
+    def cache_post_transfer(self, table: Table):
+        """
+        Called after transferring cached table to transaction schema.
+
+        This function may be called in context of another thread or process.
         """
         pass
 
@@ -173,7 +183,7 @@ class PrintTraceHook(TraceHook):
 
     def stage_post_init(self, stage_id: int, success: bool):
         self.logger.debug(
-            "stage_init",
+            "stage_post_init",
             stage_id=stage_id,
             stage=list(self.run_context.flow.stages.values())[stage_id],
             success=success,
@@ -188,6 +198,9 @@ class PrintTraceHook(TraceHook):
 
     def stage_post_commit(self, stage_id: int, success: bool):
         self.logger.debug("stage_post_commit", stage_id=stage_id, success=success)
+
+    def task_begin(self, task: Task):
+        self.logger.debug("task_begin", task=task)
 
     def task_cache_status(
         self,
@@ -214,10 +227,10 @@ class PrintTraceHook(TraceHook):
         self.logger.debug("task_pre_call", task=task)
 
     def task_post_call(self, task: Task):
-        self.logger.debug("task_complete", task=task)
+        self.logger.debug("task_post_call", task=task)
 
-    def task_complete(self, task: Task):
-        self.logger.debug("task_complete", task=task)
+    def task_complete(self, task: Task, result: Result):
+        self.logger.debug("task_complete", task=task, result=result)
 
     def query_cache_status(
         self,
@@ -243,3 +256,12 @@ class PrintTraceHook(TraceHook):
 
     def query_complete(self, task: Task, table: Table):
         self.logger.debug("query_complete", task=task, table=table)
+
+    def cache_init_transfer(self, task: Task, table: Table):
+        self.logger.debug("cache_init_transfer", task=task, table=table)
+
+    def cache_pre_transfer(self, table: Table):
+        self.logger.debug("cache_pre_transfer", table=table)
+
+    def cache_post_transfer(self, table: Table):
+        self.logger.debug("cache_post_transfer", table=table)

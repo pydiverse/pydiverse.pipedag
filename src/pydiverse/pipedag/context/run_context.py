@@ -385,8 +385,9 @@ class RunContextServer(IPCServer):
             fn = getattr(store.table_store, op.fn_name)
             assert callable(fn)
 
+            run_context = self.__context_proxy
             future = self.deferred_thread_pool.submit(
-                _call_with_args, fn, op.args, op.kwargs
+                _call_with_args, fn, run_context, op.args, op.kwargs
             )
             self.deferred_ts_ops_futures[stage_id].append(future)
 
@@ -538,8 +539,9 @@ class RunContextServer(IPCServer):
         return True
 
 
-def _call_with_args(fn, args, kwargs):
-    fn(*args, **kwargs)
+def _call_with_args(fn, run_context, args, kwargs):
+    with run_context:
+        fn(*args, **kwargs)
 
 
 class RunContext(BaseContext):

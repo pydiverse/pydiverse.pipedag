@@ -409,6 +409,7 @@ class BaseTableStore(TableHookResolver, Disposable):
                 query_str,
                 cache_metadata=metadata,
             )
+            RunContext.get().trace_hook.cache_init_transfer(task, table)
             self.copy_lazy_table_to_transaction(metadata, table)
             self.logger.info(f"Lazy cache of table '{table.name}' found")
         except CacheError as e:
