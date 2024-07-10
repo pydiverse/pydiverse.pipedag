@@ -238,7 +238,7 @@ class RunContextServer(IPCServer):
             StageState.INITIALIZING,
             StageState.READY,
         )
-        self.trace_hook.stage_init(stage_id, success)
+        self.trace_hook.stage_post_init(stage_id, success)
 
     def enter_commit_stage(self, stage_id: int):
         self.trace_hook.stage_pre_commit(stage_id)
