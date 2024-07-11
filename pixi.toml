@@ -29,6 +29,7 @@ filelock = ">=3.7.1"
 kazoo = ">=2.8.0"
 
 [feature.dask.dependencies]
+# is also used by computation tracer when running all tests
 dask = ">=2022.1.0"
 
 [feature.prefect.dependencies]
@@ -107,15 +108,15 @@ sqlalchemy = ">=1.4.39, <2"
 sqlalchemy = ">=2"
 
 [environments]
-default = ["py311", "dev", "zookeeper", "pd2", "sa2"]
+default = ["py311", "dev", "zookeeper", "pd2", "sa2", "dask"]
 all-tests = ["py312", "all-tests", "dev", "filelock", "zookeeper", "dask", "prefect", "pd2", "sa2", "ibm-db", "snowflake"]
 docs = ["docs"]
-py39 = ["py39", "dev", "zookeeper", "pd2", "sa2"]
-py310 = ["py310", "dev", "zookeeper", "pd2", "sa2"]
-py311 = ["py311", "dev", "zookeeper", "pd2", "sa2"]
-py312 = ["py312", "dev", "zookeeper", "pd2", "sa2"]
-py39pdsa1 = ["py39", "dev", "zookeeper", "pd1", "sa1"]
-py311pdsa1 = ["py311", "dev", "zookeeper", "pd1", "sa1", "snowflake"]
+py39 = ["py39", "dev", "zookeeper", "pd2", "sa2", "dask"]
+py310 = ["py310", "dev", "zookeeper", "pd2", "sa2", "dask"]
+py311 = ["py311", "dev", "zookeeper", "pd2", "sa2", "dask"]
+py312 = ["py312", "dev", "zookeeper", "pd2", "sa2", "dask"]
+py39pdsa1 = ["py39", "dev", "zookeeper", "pd1", "sa1", "dask"]
+py311pdsa1 = ["py311", "dev", "zookeeper", "pd1", "sa1", "dask", "snowflake"]
 py39all = ["py39", "dev", "zookeeper", "all-tests", "filelock", "dask", "prefect", "pd2", "sa2", "ibm-db", "snowflake", "tidypolars"]
 py310all = ["py310", "dev", "zookeeper", "all-tests", "filelock", "dask", "prefect", "pd2", "sa2", "ibm-db", "snowflake", "tidypolars"]
 py311all = ["py311", "dev", "zookeeper", "all-tests", "filelock", "dask", "prefect", "pd2", "sa2", "ibm-db-linux", "snowflake"]
