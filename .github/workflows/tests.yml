@@ -51,6 +51,7 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/test
         with:
+          environment: py312
           arguments: --workers 4
 
   postgres_test:
