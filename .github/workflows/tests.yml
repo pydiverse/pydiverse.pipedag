@@ -34,7 +34,7 @@ jobs:
         uses: pre-commit/action@v3.0.1
 
   smoke_test:
-    name: 'Smoke Test - Python 3.11 - postgres'
+    name: 'Smoke Test - Python 3.12 - postgres'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -43,7 +43,7 @@ jobs:
       - name: Setup Environment
         uses: ./.github/actions/setup
         with:
-          python-version: 3.11
+          environments: py312
           docker-services: |
             postgres
             zoo
@@ -54,22 +54,21 @@ jobs:
           arguments: --workers 4
 
   postgres_test:
-    name: "Postgres Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    name: "Postgres Tests"  # - ${{ matrix.os }} / ${{ matrix.environment }}"
     needs: [smoke_test]
     runs-on: ${{ matrix.os }}-latest
     timeout-minutes: 10
     strategy:
       matrix:
         os: [Ubuntu]
-        python-version: ['3.9', '3.10', '3.11']
+        environment: ["py39", "py310", "py311"]
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Environment
         uses: ./.github/actions/setup
         with:
-          python-version: ${{ matrix.python-version }}
-          poetry-flags: --all-extras --with=tests
+          environments: ${{ matrix.environment }}
           docker-services: |
             postgres
             zoo
@@ -77,42 +76,43 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/test
         with:
+          environment: ${{ matrix.environment }}
           arguments: --workers 4 --polars --ibis --pdtransform
 
   duckdb_test:
-    name: "DuckDB Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    name: "DuckDB Tests"  # - ${{ matrix.os }} / ${{ matrix.python-version }}"
     needs: [smoke_test]
     runs-on: ${{ matrix.os }}-latest
     timeout-minutes: 15
     strategy:
       matrix:
         os: [Ubuntu]
-        python-version: ['3.9', '3.11']
+        environment: ["py39", "py312"]
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Environment
         uses: ./.github/actions/setup
         with:
-          python-version: ${{ matrix.python-version }}
-          poetry-flags: --all-extras --with=tests
+          environments: ${{ matrix.environment }}
           docker-services: |
             zoo
 
       - name: Run Tests
         uses: ./.github/actions/test
         with:
+          environment: ${{ matrix.environment }}
           arguments: --workers 4 --duckdb -m duckdb --polars --ibis --pdtransform
 
   db2_test:
-    name: "DB2 Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    name: "DB2 Tests"  # - ${{ matrix.os }} / ${{ matrix.python-version }}"
     needs: [smoke_test]
     runs-on: ${{ matrix.os }}-latest
     timeout-minutes: 15
     strategy:
       matrix:
         os: [Ubuntu]
-        python-version: ['3.11']
+        environment: ['py311']
     services:
       ibm_db2:
         image: icr.io/db2_community/db2
@@ -131,8 +131,7 @@ jobs:
       - name: Setup Environment
         uses: ./.github/actions/setup
         with:
-          python-version: ${{ matrix.python-version }}
-          poetry-flags: --all-extras --with=tests
+          environments: ${{ matrix.environment }}
           docker-services: |
             zoo
 
@@ -146,26 +145,26 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/test
         with:
+          environment: ${{ matrix.environment }}
           # --polars and --ibis not supported
           arguments: --workers 4 --ibm_db2 -m ibm_db2 --pdtransform
 
   mssql_test:
-    name: "MSSql Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    name: "MSSql Tests"  # - ${{ matrix.os }} / ${{ matrix.python-version }}"
     needs: [smoke_test]
     runs-on: ${{ matrix.os }}-latest
     timeout-minutes: 15
     strategy:
       matrix:
         os: [Ubuntu]
-        python-version: ['3.9', '3.11']
+        environment: ['py39', 'py311']
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Environment
         uses: ./.github/actions/setup
         with:
-          python-version: ${{ matrix.python-version }}
-          poetry-flags: --all-extras --with=tests
+          environments: ${{ matrix.environment }}
           docker-services: |
             mssql
             zoo
@@ -176,25 +175,25 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/test
         with:
+          environment: ${{ matrix.environment }}
           arguments: --workers 4 --mssql -m mssql --polars --ibis --pdtransform
 
   orchestration_tests:
-    name: "Orchestration Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    name: "Orchestration Tests"  # - ${{ matrix.os }} / ${{ matrix.python-version }}"
     needs: [ smoke_test ]
     runs-on: ${{ matrix.os }}-latest
     timeout-minutes: 10
     strategy:
       matrix:
         os: [ Ubuntu ]
-        python-version: [ '3.11' ]
+        environment: [ 'py312' ]
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Environment
         uses: ./.github/actions/setup
         with:
-          python-version: ${{ matrix.python-version }}
-          poetry-flags: --all-extras --with=tests
+          environments: ${{ matrix.environment }}
           docker-services: |
             postgres
             zoo
@@ -202,6 +201,7 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/test
         with:
+          environment: ${{ matrix.environment }}
           arguments: --workers 4 --dask --prefect -m "dask or prefect"
 
   snowflake_test:
@@ -212,16 +212,14 @@ jobs:
     strategy:
       matrix:
         os: [Ubuntu]
-        python-version: ['3.11']
+        python-version: ['py311pdsa1']
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Environment
         uses: ./.github/actions/setup
         with:
-          python-version: ${{ matrix.python-version }}
-          poetry-flags: --all-extras --with=tests
-          pip-install: "'SQLAlchemy<2' 'pandas<2' snowflake-sqlalchemy"
+          environments: ${{ matrix.environment }}
           docker-services: |
             postgres
             zoo
@@ -229,4 +227,5 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/test
         with:
+          environment: ${{ matrix.environment }}
           arguments: --workers 4 --polars --ibis --pdtransform

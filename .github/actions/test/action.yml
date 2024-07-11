@@ -1,5 +1,8 @@
 name: "Run Tests"
 inputs:
+  environment:
+    description: 'Pixi environment'
+    required: true
   arguments:
     description: 'Pytest arguments'
     required: false
@@ -10,5 +13,5 @@ runs:
     - name: Test
       shell: bash
       run: |
-        poetry run pytest tests -ra ${DEBUG:+-v} ${{ inputs.arguments }}
+        pixi run -e ${{ inputs.environment }} pytest tests -ra ${DEBUG:+-v} ${{ inputs.arguments }}
 

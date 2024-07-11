@@ -1,48 +1,24 @@
 name: "Setup Environment"
 description: "Setup Environment for Testing"
 inputs:
-  python-version:
+  environments:
+    description: 'Pixi environments'
     required: true
-  poetry-flags:
-    description: 'Poetry flags'
-    required: false
-    default: ''
-  pip-install:
-    description: 'Pip install flags'
-    required: false
-    default: ''
   docker-compose-file:
+    description: 'Docker compose file'
     required: false
     default: './docker-compose.yaml'
   docker-services:
+    description: 'Docker services'
     required: false
 
 runs:
   using: composite
   steps:
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
+    - name: Setup Pixi
+      uses: prefix-dev/setup-pixi@v0.8.1
       with:
-        virtualenvs-create: true
-        virtualenvs-in-project: true
-        installer-parallel: true
-
-    - name: Set up Python ${{ inputs.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ inputs.python-version }}
-        cache: 'poetry'
-
-    - name: Install dependencies
-      shell: bash
-      run: poetry install -vv ${{ inputs.poetry-flags }} --no-interaction
-
-    - name: Install additional pip dependencies
-      shell: bash
-      run: |
-        if test x != x"${{ inputs.pip-install }}"; then
-          poetry run pip install ${{ inputs.pip-install }}
-        fi
+          environments: ${{ inputs.environments }}
 
     - name: Start Docker Compose
       uses: isbang/compose-action@v2.0.0
