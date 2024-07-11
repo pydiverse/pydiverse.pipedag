@@ -9,23 +9,23 @@ jobs:
   release:
     name: 'Build and Release on PyPi'
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    environment: pypi
     steps:
       - name: Checkout branch
         uses: actions/checkout@v4
 
       - name: Setup Environment
         uses: ./.github/actions/setup
-        with:
-          python-version: '3.11'
-      
+
       - name: Build
-        run: poetry build
+        run: pixi exec hatch build
 
       - name: Check distributions
         run: ls -la dist
 
-      - name: Publish to PyPI
-        env:
-          POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_TOKEN }}
-        run: poetry publish
+      - name: Publish package on PyPi
+        uses: pypa/gh-action-pypi-publish@ec4db0b4ddc65acdf4bff5fa45ac92d78b56bdf0
 

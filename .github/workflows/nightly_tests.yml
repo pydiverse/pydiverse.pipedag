@@ -21,23 +21,23 @@ jobs:
         shell: bash
         run: "test -z $(git rev-list --after=\"24 hours\" ${{ github.sha }}) && echo \"::set-output name=should-run::false\""
 
-  tox_test:
-    name: "Tox - ${{ matrix.os }} / ${{ matrix.python-version }}"
+  library_version_test:
+    name: "Library Version Test"  # - ${{ matrix.os }} / ${{ matrix.python-version }}"
     runs-on: ${{ matrix.os }}-latest
     needs: check
     if: ${{ needs.check.outputs.should-run != 'false' }}
     timeout-minutes: 90
     strategy:
       matrix:
-        os: [ Ubuntu ]
-        python-version: [ '3.11' ]
+        os: [ Ubuntu, macOS, Windows ]
+        environment: ['py312', 'py311', 'py39', 'py39pdsa1']
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Environment
         uses: ./.github/actions/setup
         with:
-          python-version: ${{ matrix.python-version }}
+          environments: ${{ matrix.environment }}
           docker-services: |
             postgres
             zoo
@@ -45,4 +45,4 @@ jobs:
       - name: Run Tests
         shell: bash
         run: |
-          poetry run -- tox -- --workers 4 -s
+          pixi run -e ${{ matrix.environment }} pytest --workers 4

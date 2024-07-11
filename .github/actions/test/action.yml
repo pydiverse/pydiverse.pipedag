@@ -13,5 +13,5 @@ runs:
     - name: Test
       shell: bash
       run: |
-        pixi run -e ${{ inputs.environment }} pytest tests -ra ${DEBUG:+-v} ${{ inputs.arguments }}
+        pixi run -e ${{ inputs.environment }} pytest tests -ra ${DEBUG:+-v} --color=yes ${{ inputs.arguments }}
 
