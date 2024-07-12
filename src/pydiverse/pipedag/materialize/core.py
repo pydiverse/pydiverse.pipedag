@@ -665,6 +665,9 @@ class MaterializationWrapper:
                         cache_fn_hash=cache_fn_hash,
                     )
                     TaskContext.get().is_cache_valid = True
+                    run_context.trace_hook.task_cache_status(
+                        task, input_hash, cache_fn_hash, cache_metadata, cached_output
+                    )
                     return cached_output
                 except CacheError as e:
                     task.logger.info(
@@ -675,6 +678,9 @@ class MaterializationWrapper:
                         cause=str(e),
                     )
                     TaskContext.get().is_cache_valid = False
+                    run_context.trace_hook.task_cache_status(
+                        task, input_hash, cache_fn_hash, cache_valid=False
+                    )
 
             if not task.lazy:
                 if assert_no_fresh_input and task.cache is not None:
@@ -704,6 +710,9 @@ class MaterializationWrapper:
                             task, input_hash, ""
                         )
                         cache_fn_hash = cache_metadata.cache_fn_hash
+                        run_context.trace_hook.task_cache_status(
+                            task, input_hash, cache_fn_hash, cache_metadata, lazy=True
+                        )
                     except CacheError as e:
                         task.logger.info(
                             "Failed to retrieve lazy task from cache",
@@ -757,7 +766,7 @@ class MaterializationWrapper:
                         "The table has already been imperatively materialized."
                     )
                 table.assumed_dependencies = (
-                    list(state.assumed_dependencies)
+                    list(sorted(state.assumed_dependencies))
                     if len(state.assumed_dependencies) > 0
                     else []
                 )
@@ -790,7 +799,9 @@ class MaterializationWrapper:
                         return get_return_obj(return_as_type)
 
             task_context.imperative_materialize_callback = imperative_materialize
+            run_context.trace_hook.task_pre_call(task)
             result = self.fn(*args, **kwargs)
+            run_context.trace_hook.task_post_call(task)
             task_context.imperative_materialize_callback = None
             if task.debug_tainted:
                 raise RuntimeError(
@@ -810,7 +821,9 @@ class MaterializationWrapper:
                     # materialized
                     if len(state.assumed_dependencies) > 0:
                         if x.assumed_dependencies is None:
-                            x.assumed_dependencies = list(state.assumed_dependencies)
+                            x.assumed_dependencies = list(
+                                sorted(state.assumed_dependencies)
+                            )
                 return x
 
             result = deep_map(result, result_finalization_mutator)
@@ -831,6 +844,7 @@ class MaterializationWrapper:
             result = deep_map(result, obj_del_mutator)
             run_context.store_task_memo(task, memo_cache_key, result)
             self.value = result
+            run_context.trace_hook.task_complete(task, result)
 
             return result
 
