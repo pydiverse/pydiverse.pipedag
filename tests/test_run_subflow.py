@@ -309,4 +309,4 @@ def test_ignore_position_hashes():
 
     f.run()
     # check that retrieval from cache works
-    f.run(s2)
+    f.run(s2, ignore_position_hashes=True)

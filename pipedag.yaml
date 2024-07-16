@@ -96,13 +96,6 @@ instances:
     blob_store:
       blob_store_connection: no_blob
 
-  postgres_ignore_position_hashes:
-    instance_id: pd_postgres_ignore_position_hashes
-    table_store:
-      table_store_connection: postgres
-      args:
-          ignore_position_hashes: true
-
   mssql:
     instance_id: pd_mssql
     table_store:

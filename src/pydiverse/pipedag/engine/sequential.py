@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 class SequentialEngine(OrchestrationEngine):
     """Most basic orchestration engine that just executes all tasks sequentially."""
 
-    def run(self, flow: Subflow, **run_kwargs):
+    def run(self, flow: Subflow, ignore_position_hashes: bool, **run_kwargs):
         run_context = RunContext.get()
         config_context = ConfigContext.get()
 
@@ -33,6 +33,7 @@ class SequentialEngine(OrchestrationEngine):
                             },
                             run_context=run_context,
                             config_context=config_context,
+                            ignore_position_hashes=ignore_position_hashes,
                         )
                     else:
                         failed_tasks.add(task)

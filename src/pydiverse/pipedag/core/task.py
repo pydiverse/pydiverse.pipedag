@@ -167,6 +167,7 @@ class Task:
         inputs: dict[int, Any],
         run_context: RunContext = None,
         config_context: ConfigContext = None,
+        ignore_position_hashes: bool=False
     ):
         # Hand over run context if using multiprocessing
         if run_context is None:

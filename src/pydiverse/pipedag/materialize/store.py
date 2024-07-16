@@ -505,7 +505,7 @@ class PipeDAGStore(Disposable):
         )
 
     def retrieve_most_recent_task_output_from_cache(
-        self, task: MaterializingTask
+        self, task: MaterializingTask, ignore_position_hashes:bool
     ) -> (Materializable, TaskMetadata):
         """
         Retrieves the cached output from the most recent execution of a task.
@@ -522,7 +522,7 @@ class PipeDAGStore(Disposable):
         # This returns all metadata objects with the same name, stage, AND position
         # hash as `task`. We utilize the position hash to identify a specific
         # task instance, if the same task appears multiple times in a stage.
-        metadata = self.table_store.retrieve_all_task_metadata(task)
+        metadata = self.table_store.retrieve_all_task_metadata(task, ignore_position_hashes=ignore_position_hashes)
 
         if not metadata:
             raise CacheError(

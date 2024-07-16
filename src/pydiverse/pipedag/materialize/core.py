@@ -462,7 +462,7 @@ class MaterializingTask(Task):
         """
         return MaterializingTaskGetItem(self, self, item)
 
-    def run(self, inputs: dict[int, Any], **kwargs):
+    def run(self, inputs: dict[int, Any], ignore_position_hashes: bool, **kwargs):
         # When running only a subset of an entire flow, not all inputs
         # get calculated during flow execution. As a consequence, we must load
         # those inputs from the cache.
@@ -478,7 +478,7 @@ class MaterializingTask(Task):
 
             store = ConfigContext.get().store
             cached_output, metadata = store.retrieve_most_recent_task_output_from_cache(
-                in_task
+                in_task, ignore_position_hashes
             )
 
             cached_output = deep_map(cached_output, replace_stage_with_pseudo_stage)
@@ -1505,7 +1505,7 @@ def input_stage_versions(
 
 
 def _get_output_from_store(
-    task: MaterializingTask | MaterializingTaskGetItem, as_type: type
+    task: MaterializingTask | MaterializingTaskGetItem, as_type: type, ignore_position_hashes: bool = False
 ) -> Any:
     """Helper to retrieve task output from store"""
     from pydiverse.pipedag.context.run_context import DematerializeRunContext
@@ -1515,7 +1515,7 @@ def _get_output_from_store(
 
     store = ConfigContext.get().store
     with DematerializeRunContext(root_task.flow):
-        cached_output, _ = store.retrieve_most_recent_task_output_from_cache(root_task)
+        cached_output, _ = store.retrieve_most_recent_task_output_from_cache(root_task, ignore_position_hashes=ignore_position_hashes)
         return dematerialize_output_from_store(store, task, cached_output, as_type)
 
 
