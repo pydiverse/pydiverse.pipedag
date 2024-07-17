@@ -45,7 +45,7 @@ class DaskEngine(OrchestrationEngine):
 
         self.dask_compute_kwargs.update(dask_compute_kwargs)
 
-    def run(self, flow: Subflow, **run_kwargs):
+    def run(self, flow: Subflow, ignore_position_hashes: bool, **run_kwargs):
         run_context = RunContext.get()
         config_context = ConfigContext.get()
 
