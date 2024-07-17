@@ -1505,7 +1505,9 @@ def input_stage_versions(
 
 
 def _get_output_from_store(
-    task: MaterializingTask | MaterializingTaskGetItem, as_type: type, ignore_position_hashes: bool = False
+    task: MaterializingTask | MaterializingTaskGetItem,
+    as_type: type,
+    ignore_position_hashes: bool = False,
 ) -> Any:
     """Helper to retrieve task output from store"""
     from pydiverse.pipedag.context.run_context import DematerializeRunContext
@@ -1515,7 +1517,9 @@ def _get_output_from_store(
 
     store = ConfigContext.get().store
     with DematerializeRunContext(root_task.flow):
-        cached_output, _ = store.retrieve_most_recent_task_output_from_cache(root_task, ignore_position_hashes=ignore_position_hashes)
+        cached_output, _ = store.retrieve_most_recent_task_output_from_cache(
+            root_task, ignore_position_hashes=ignore_position_hashes
+        )
         return dematerialize_output_from_store(store, task, cached_output, as_type)
 
 
