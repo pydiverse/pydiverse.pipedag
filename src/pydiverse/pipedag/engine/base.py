@@ -13,7 +13,9 @@ class OrchestrationEngine(Disposable, ABC):
     """Flow orchestration engine base class"""
 
     @abstractmethod
-    def run(self, flow: Subflow, ignore_position_hashes: bool, **kwargs) -> Result:
+    def run(
+        self, flow: Subflow, ignore_position_hashes: bool = False, **kwargs
+    ) -> Result:
         """Execute a flow
 
         :param flow: the pipedag flow to execute

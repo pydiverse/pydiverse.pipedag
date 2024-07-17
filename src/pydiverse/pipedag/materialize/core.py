@@ -462,7 +462,9 @@ class MaterializingTask(Task):
         """
         return MaterializingTaskGetItem(self, self, item)
 
-    def run(self, inputs: dict[int, Any], ignore_position_hashes: bool, **kwargs):
+    def run(
+        self, inputs: dict[int, Any], ignore_position_hashes: bool = False, **kwargs
+    ):
         # When running only a subset of an entire flow, not all inputs
         # get calculated during flow execution. As a consequence, we must load
         # those inputs from the cache.

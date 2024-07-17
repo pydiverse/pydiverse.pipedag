@@ -618,7 +618,7 @@ class BaseTableStore(TableHookResolver, Disposable):
 
     @abstractmethod
     def retrieve_all_task_metadata(
-        self, task: MaterializingTask, ignore_position_hashes: bool
+        self, task: MaterializingTask, ignore_position_hashes: bool = False
     ) -> list[TaskMetadata]:
         """Retrieves all metadata objects associated with a task from the store
 

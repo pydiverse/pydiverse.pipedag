@@ -505,7 +505,7 @@ class PipeDAGStore(Disposable):
         )
 
     def retrieve_most_recent_task_output_from_cache(
-        self, task: MaterializingTask, ignore_position_hashes: bool
+        self, task: MaterializingTask, ignore_position_hashes: bool = False
     ) -> (Materializable, TaskMetadata):
         """
         Retrieves the cached output from the most recent execution of a task.

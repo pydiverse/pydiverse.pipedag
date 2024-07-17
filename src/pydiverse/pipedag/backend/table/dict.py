@@ -98,7 +98,7 @@ class DictTableStore(BaseTableStore):
             ) from None
 
     def retrieve_all_task_metadata(
-        self, task: MaterializingTask, ignore_position_hashes: bool
+        self, task: MaterializingTask, ignore_position_hashes: bool = False
     ) -> list[TaskMetadata]:
         task_metadata = []
         for m in (

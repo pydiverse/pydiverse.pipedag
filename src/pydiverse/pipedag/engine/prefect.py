@@ -87,7 +87,7 @@ class PrefectOneEngine(OrchestrationEngine):
 
         return flow, tasks
 
-    def run(self, flow: Subflow, ignore_position_hashes: bool, **run_kwargs):
+    def run(self, flow: Subflow, ignore_position_hashes: bool = False, **run_kwargs):
         _ = ignore_position_hashes
         prefect_flow, tasks_map = self.construct_prefect_flow(flow)
         result = prefect_flow.run(**run_kwargs)
@@ -176,7 +176,7 @@ class PrefectTwoEngine(OrchestrationEngine):
 
         return pipedag_flow
 
-    def run(self, flow: Subflow, ignore_position_hashes: bool, **kwargs):
+    def run(self, flow: Subflow, ignore_position_hashes: bool = False, **kwargs):
         _ = ignore_position_hashes
         if kwargs:
             raise TypeError(f"{type(self).__name__}.run doesn't take kwargs.")
