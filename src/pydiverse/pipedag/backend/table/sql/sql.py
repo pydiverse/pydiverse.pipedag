@@ -1396,7 +1396,7 @@ class SQLTableStore(BaseTableStore):
             self.tasks_table.c.stage == task.stage.name,
         )
 
-        if not self.ignore_position_hashes:
+        if not ignore_position_hashes:
             match_condition = match_condition & (
                 self.tasks_table.c.position_hash == task.position_hash
             )

@@ -308,5 +308,5 @@ def test_ignore_position_hashes():
             _ = m.create_tuple(x1, x2)
 
     f.run()
-    # check that retrieval from cache works
+    # check that subflow evaluation works with ignore_position_hashes
     f.run(s2, ignore_position_hashes=True)

@@ -486,7 +486,9 @@ class MaterializingTask(Task):
 
         return super().run(inputs, **kwargs)
 
-    def get_output_from_store(self, as_type: type = None) -> Any:
+    def get_output_from_store(
+        self, as_type: type = None, ignore_position_hashes: bool = False
+    ) -> Any:
         """Retrieves the output of the task from the cache.
 
         No guarantees are made regarding whether the returned values are still
@@ -513,7 +515,9 @@ class MaterializingTask(Task):
             df_x = x.get_output_from_store(as_type=pd.DataFrame)
 
         """
-        return _get_output_from_store(self, as_type)
+        return _get_output_from_store(
+            self, as_type, ignore_position_hashes=ignore_position_hashes
+        )
 
 
 class MaterializingTaskGetItem(TaskGetItem):
@@ -538,12 +542,16 @@ class MaterializingTaskGetItem(TaskGetItem):
         """
         return super().__getitem__(item)
 
-    def get_output_from_store(self, as_type: type = None) -> Any:
+    def get_output_from_store(
+        self, as_type: type = None, ignore_position_hashes: bool = False
+    ) -> Any:
         """
         Same as :py:meth:`MaterializingTask.get_output_from_store()`,
         except that it only loads the required subset of the output.
         """
-        return _get_output_from_store(self, as_type)
+        return _get_output_from_store(
+            self, as_type, ignore_position_hashes=ignore_position_hashes
+        )
 
 
 class MaterializationWrapper:

@@ -49,10 +49,26 @@ def test_get_output_from_store(imperative):
             result.get(dataframes, as_type=pd.DataFrame)[1],
         )
 
+        pd.testing.assert_frame_equal(
+            df1.get_output_from_store(
+                as_type=pd.DataFrame, ignore_position_hashes=True
+            ),
+            result.get(df1, as_type=pd.DataFrame, ignore_position_hashes=True),
+        )
+
         # Call on MaterializingTaskGetItem
         pd.testing.assert_frame_equal(
             dataframes[0].get_output_from_store(as_type=pd.DataFrame),
             dataframes.get_output_from_store(as_type=pd.DataFrame)[0],
+        )
+
+        pd.testing.assert_frame_equal(
+            dataframes[0].get_output_from_store(
+                as_type=pd.DataFrame, ignore_position_hashes=True
+            ),
+            dataframes.get_output_from_store(
+                as_type=pd.DataFrame, ignore_position_hashes=True
+            )[0],
         )
 
 
