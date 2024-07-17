@@ -296,7 +296,7 @@ class Flow:
         :param ignore_position_hashes:
             If ``True``, the position hashes of tasks are not checked
             when retrieving the inputs of a task from the cache.
-            This can prevent caching errors when evaluating subgraphs.
+            This simplifies execution of subgraphs if you don't care whether inputs to that subgraph are cache invalid. This allows multiple modifications in the Graph before the next run updating the cache.
             For this to work a task may never be used more than once per stage.
         :param kwargs:
             Other keyword arguments that get passed on directly to the
