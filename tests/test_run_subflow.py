@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import pytest
+
 from pydiverse.pipedag import Flow, Stage, Task, materialize
 from pydiverse.pipedag.context import FinalTaskState
 from pydiverse.pipedag.context.context import CacheValidationMode
+from pydiverse.pipedag.errors import CacheError
 from tests.fixtures.instances import with_instances
 from tests.util import select_as
 from tests.util import tasks_library as m
@@ -297,7 +300,7 @@ def test_run_specific_stage_with_table_blob():
     f.run(s1, s3)
 
 
-@with_instances("postgres_ignore_position_hashes")
+@with_instances("postgres")
 def test_ignore_position_hashes():
     with Flow() as f:
         with Stage("subflow_s1"):
@@ -306,7 +309,20 @@ def test_ignore_position_hashes():
 
         with Stage("subflow_s2") as s2:
             _ = m.create_tuple(x1, x2)
-
     f.run()
-    # check that subflow evaluation works with ignore_position_hashes
+
+    # modify flow
+    with Flow() as f:
+        with Stage("subflow_s1"):
+            x1 = m.create_tuple(1, 1)
+            x2 = m.create_tuple(2, 2)
+
+        with Stage("subflow_s2") as s2:
+            _ = m.create_tuple(x1, x2)
+
+    # as x2 was modified the subflow evaluation should raise a CacheError
+    # because an x2 is not found with the correct position hash
+    with pytest.raises(CacheError):
+        f.run(s2)
+    # ignoring the position hash of x2 should make this runnable
     f.run(s2, ignore_position_hashes=True)

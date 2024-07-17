@@ -49,11 +49,14 @@ def test_get_output_from_store(imperative):
             result.get(dataframes, as_type=pd.DataFrame)[1],
         )
 
+        # since df1 and df2 are outputs from tasks with the same name (pd_dataframe)
+        # ignoring the position hash when retrieving
+        # should just return the output from the latest call
         pd.testing.assert_frame_equal(
             df1.get_output_from_store(
                 as_type=pd.DataFrame, ignore_position_hashes=True
             ),
-            result.get(df1, as_type=pd.DataFrame),
+            result.get(df2, as_type=pd.DataFrame),
         )
 
         # Call on MaterializingTaskGetItem
