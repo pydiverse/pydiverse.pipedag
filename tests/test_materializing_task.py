@@ -53,7 +53,7 @@ def test_get_output_from_store(imperative):
             df1.get_output_from_store(
                 as_type=pd.DataFrame, ignore_position_hashes=True
             ),
-            result.get(df1, as_type=pd.DataFrame, ignore_position_hashes=True),
+            result.get(df1, as_type=pd.DataFrame),
         )
 
         # Call on MaterializingTaskGetItem
