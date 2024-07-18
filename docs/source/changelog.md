@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.4 (XXX)
+## 0.9.4 (2024-07-18)
 - Primary key and index identifiers are now automatically truncated to 63 characters to avoid issues with some database systems.
 - Added `ignore_position_hashes` option to `flow.run()` and `get_output_from_store()`. 
     If `True`, the position hashes of tasks are not checked when retrieving the inputs of a task from the cache.
