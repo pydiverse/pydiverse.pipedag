@@ -6,6 +6,7 @@
     If `True`, the position hashes of tasks are not checked when retrieving the inputs of a task from the cache.
     This can prevent caching errors when evaluating subgraphs. 
     For this to work a task may never be used more than once per stage.
+- Fixed a bug related to imperative materialization
 
 ## 0.9.3 (2024-06-11)
 - Added `upload_table()` and `download_table()` functions to the PandasTableHook to allow for easy 
