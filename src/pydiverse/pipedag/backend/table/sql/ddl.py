@@ -41,6 +41,7 @@ __all__ = [
 from sqlalchemy.sql.type_api import TypeEngine
 
 from pydiverse.pipedag import Schema
+from pydiverse.pipedag.util.hashing import stable_hash
 
 # Postgres truncates identifiers at 63 characters
 # MSSQL does not allow identifiers longer than 128 characters
@@ -270,17 +271,22 @@ class DropFunction(DDLElement):
         self.if_exists = if_exists
 
 
-def truncate_key(prefix, table_name, columns, max_length):
-    pre = prefix + table_name.lower() + "_"
-    pk = pre + columns
+def truncate_key(key_type, table_name, columns, max_length):
+    # table_name + columns
+    pk = key_type + table_name.lower() + "_" + columns
+
     if len(pk) > max_length:
-        col_hash = str(hash(table_name.lower() + columns))
-        col_hash_trunc = col_hash[: max_length - len(pre)]
-        pk = pre + col_hash_trunc
-    if len(pk) > max_length:
-        pk = (
-            prefix + str(hash(table_name.lower() + columns))[: max_length - len(prefix)]
-        )
+        # try hash + full table name
+        pk_hash = str(stable_hash(table_name.lower() + columns))
+        pk = key_type + table_name.lower() + "_" + pk_hash
+        if len(pk) > max_length:
+            # hash + truncated table name
+            pk = (
+                key_type
+                + pk_hash
+                + "_"
+                + table_name.lower()[: max_length - len(key_type + pk_hash)]
+            )
     return pk
 
 
