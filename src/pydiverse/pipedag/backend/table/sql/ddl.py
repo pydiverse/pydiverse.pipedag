@@ -41,6 +41,12 @@ __all__ = [
 from sqlalchemy.sql.type_api import TypeEngine
 
 from pydiverse.pipedag import Schema
+from pydiverse.pipedag.util.hashing import stable_hash
+
+# Postgres truncates identifiers at 63 characters
+# MSSQL does not allow identifiers longer than 128 characters
+MAX_LENGTH_PK = 63
+MAX_LENGTH_INDEX = 63
 
 
 class CreateSchema(DDLElement):
@@ -265,6 +271,25 @@ class DropFunction(DDLElement):
         self.if_exists = if_exists
 
 
+def truncate_key(key_type, table_name, columns, max_length):
+    # table_name + columns
+    pk = key_type + table_name.lower() + "_" + columns
+
+    if len(pk) > max_length:
+        # try hash + full table name
+        pk_hash = str(stable_hash(table_name.lower() + columns))
+        pk = key_type + table_name.lower() + "_" + pk_hash
+        if len(pk) > max_length:
+            # hash + truncated table name
+            pk = (
+                key_type
+                + pk_hash
+                + "_"
+                + table_name.lower()[: max_length - len(key_type + pk_hash)]
+            )
+    return pk
+
+
 class AddPrimaryKey(DDLElement):
     def __init__(
         self,
@@ -283,7 +308,7 @@ class AddPrimaryKey(DDLElement):
         if self._name:
             return self._name
         columns = "_".join(c.lower() for c in self.key)
-        return "pk_" + columns + "_" + self.table_name.lower()
+        return truncate_key("pk_", self.table_name, columns, MAX_LENGTH_PK)
 
 
 class AddIndex(DDLElement):
@@ -303,8 +328,9 @@ class AddIndex(DDLElement):
     def name(self) -> str:
         if self._name:
             return self._name
+
         columns = "_".join(c.lower() for c in self.index)
-        return "idx_" + columns + "_" + self.table_name.lower()
+        return truncate_key("idx_", self.table_name, columns, MAX_LENGTH_INDEX)
 
 
 class ChangeColumnTypes(DDLElement):

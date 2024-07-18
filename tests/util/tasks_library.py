@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import pandas as pd
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 from pydiverse.pipedag import Blob, RawSql, Table, materialize
+from pydiverse.pipedag.backend.table.sql.ddl import MAX_LENGTH_PK
 from pydiverse.pipedag.context import TaskContext
 from pydiverse.pipedag.debug import materialize_table
 from tests.util import select_as
@@ -424,3 +426,11 @@ def exception(x, r: bool):
 
 def get_task_logger():
     return TaskContext.get().task.logger
+
+
+@materialize(input_type=sa.Table)
+def check_pk_length(x: sa.Table):
+    pks = inspect(x).primary_key
+    if isinstance(pks, list):
+        pk_name = pks[0].name
+        assert len(pk_name) <= MAX_LENGTH_PK

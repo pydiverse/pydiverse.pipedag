@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.4 (XXX)
+- Primary key and index identifiers are now automatically truncated to 63 characters to avoid issues with some database systems.
+- Added `ignore_position_hashes` option to `flow.run()` and `get_output_from_store()`. 
+    If `True`, the position hashes of tasks are not checked when retrieving the inputs of a task from the cache.
+    This can prevent caching errors when evaluating subgraphs. 
+    For this to work a task may never be used more than once per stage.
+
 ## 0.9.3 (2024-06-11)
 - Added `upload_table()` and `download_table()` functions to the PandasTableHook to allow for easy 
     customization of up and download behavior of pandas and polars tables from/to the table store.

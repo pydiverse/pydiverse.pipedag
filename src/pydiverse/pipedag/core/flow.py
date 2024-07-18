@@ -256,6 +256,7 @@ class Flow:
         cache_validation_mode: CacheValidationMode | None = None,
         disable_cache_function: bool | None = None,
         ignore_task_version: bool | None = None,
+        ignore_position_hashes: bool = False,
         **kwargs,
     ) -> Result:
         """Execute the flow.
@@ -294,6 +295,16 @@ class Flow:
             Override the ignore_task_version setting from the config.
             See :doc:`/reference/config` :ref:`section-cache_validation` for more
             information.
+        :param ignore_position_hashes:
+            If ``True``, the position hashes of tasks are not checked
+            when retrieving the inputs of a task from the cache.
+            This simplifies execution of subgraphs if you don't care whether inputs to
+            that subgraph are cache invalid. This allows multiple modifications in the
+            Graph before the next run updating the cache.
+            Attention: This may break automatic cache invalidation.
+            And for this to work, any task producing an input
+            for the chosen subgraph may never be used more
+            than once per stage.
         :param kwargs:
             Other keyword arguments that get passed on directly to the
             ``run()`` method of the orchestration engine. Consequently, these
@@ -324,7 +335,12 @@ class Flow:
             flow.run(task_1, task_4)
 
         """
-
+        self.logger.warn(
+            "Using ignore_position_hashes=True! "
+            "This may break automatic cache invalidation. "
+            "And for this to work, any task producing an "
+            "input for the chosen subgraph may never be used more than once per stage."
+        )
         subflow = self.get_subflow(*components)
 
         # Get the ConfigContext to use
@@ -370,7 +386,7 @@ class Flow:
         with config, RunContextServer(subflow, trace_hook):
             if orchestration_engine is None:
                 orchestration_engine = config.create_orchestration_engine()
-            result = orchestration_engine.run(subflow, **kwargs)
+            result = orchestration_engine.run(subflow, ignore_position_hashes, **kwargs)
 
             visualization_url = result.visualize_url()
             self.logger.info("Flow visualization", url=visualization_url)
