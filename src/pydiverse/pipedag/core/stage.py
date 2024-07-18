@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from functools import total_ordering
 from typing import TYPE_CHECKING
 
 import structlog
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
     from pydiverse.pipedag import Flow, GroupNode
 
 
+@total_ordering
 class Stage:
     """A stage represents a collection of related tasks.
 

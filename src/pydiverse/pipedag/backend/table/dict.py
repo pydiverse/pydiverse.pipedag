@@ -6,6 +6,7 @@ import pandas as pd
 
 from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
+from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.errors import CacheError, StageError
 from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import LazyTableMetadata, TaskMetadata
@@ -68,8 +69,10 @@ class DictTableStore(BaseTableStore):
             )
 
         try:
+            RunContext.get().trace_hook.cache_pre_transfer(table)
             t = self.store[stage.name][metadata.name]
             self.store[stage.transaction_name][metadata.name] = t
+            RunContext.get().trace_hook.cache_post_transfer(table)
         except KeyError:
             raise CacheError(
                 f"No table with name '{metadata.name}' found in '{stage.name}' stage"

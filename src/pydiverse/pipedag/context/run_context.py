@@ -24,6 +24,7 @@ from pydiverse.pipedag.context.context import (
     ConfigContext,
     StageLockContext,
 )
+from pydiverse.pipedag.context.trace_hook import TraceHook
 from pydiverse.pipedag.errors import LockError, RemoteProcessError, StageError
 from pydiverse.pipedag.util import Disposable
 from pydiverse.pipedag.util.ipc import IPCServer
@@ -66,7 +67,7 @@ class RunContextServer(IPCServer):
     and deserialization in case of multi-node execution of tasks in pipedag graph.
     """
 
-    def __init__(self, subflow: Subflow):
+    def __init__(self, subflow: Subflow, trace_hook: TraceHook):
         config_ctx = ConfigContext.get()
         interface = config_ctx.network_interface
 
@@ -78,6 +79,7 @@ class RunContextServer(IPCServer):
 
         self.flow = subflow.flow
         self.subflow = subflow
+        self.trace_hook = trace_hook
         self.config_ctx = config_ctx
         self.run_id = uuid.uuid4().hex[:20]
 
@@ -136,6 +138,7 @@ class RunContextServer(IPCServer):
             self.keep_stages_locked = False
             self.lock_manager = config_ctx.create_lock_manager()
             self.lock_handler = StageLockStateHandler(self.lock_manager)
+        self.trace_hook.run_init_context_server(self)
 
     def __enter__(self):
         super().__enter__()
@@ -235,8 +238,11 @@ class RunContextServer(IPCServer):
             StageState.INITIALIZING,
             StageState.READY,
         )
+        self.trace_hook.stage_post_init(stage_id, success)
 
     def enter_commit_stage(self, stage_id: int):
+        self.trace_hook.stage_pre_commit(stage_id)
+
         self._await_deferred_ts_ops(stage_id)
         if self.has_stage_changed(stage_id):
             self._trigger_deferred_ts_ops(
@@ -262,6 +268,7 @@ class RunContextServer(IPCServer):
             StageState.COMMITTING,
             StageState.COMMITTED,
         )
+        self.trace_hook.stage_post_commit(stage_id, success)
 
     def _enter_stage_state_transition(
         self,
@@ -378,8 +385,9 @@ class RunContextServer(IPCServer):
             fn = getattr(store.table_store, op.fn_name)
             assert callable(fn)
 
+            run_context = self.__context_proxy
             future = self.deferred_thread_pool.submit(
-                _call_with_args, fn, op.args, op.kwargs
+                _call_with_args, fn, run_context, op.args, op.kwargs
             )
             self.deferred_ts_ops_futures[stage_id].append(future)
 
@@ -531,8 +539,9 @@ class RunContextServer(IPCServer):
         return True
 
 
-def _call_with_args(fn, args, kwargs):
-    fn(*args, **kwargs)
+def _call_with_args(fn, run_context, args, kwargs):
+    with run_context:
+        fn(*args, **kwargs)
 
 
 class RunContext(BaseContext):
@@ -542,6 +551,8 @@ class RunContext(BaseContext):
         self.client = server.get_client()
         self.flow = server.flow
         self.run_id = server.run_id
+        self.trace_hook = server.trace_hook
+        self.trace_hook.run_init_context(self)
 
     def _request(self, op: str, *args):
         error, result = self.client.request([op, args])
