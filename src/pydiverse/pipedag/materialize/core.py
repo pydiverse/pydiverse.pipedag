@@ -462,7 +462,9 @@ class MaterializingTask(Task):
         """
         return MaterializingTaskGetItem(self, self, item)
 
-    def run(self, inputs: dict[int, Any], **kwargs):
+    def run(
+        self, inputs: dict[int, Any], ignore_position_hashes: bool = False, **kwargs
+    ):
         # When running only a subset of an entire flow, not all inputs
         # get calculated during flow execution. As a consequence, we must load
         # those inputs from the cache.
@@ -478,7 +480,7 @@ class MaterializingTask(Task):
 
             store = ConfigContext.get().store
             cached_output, metadata = store.retrieve_most_recent_task_output_from_cache(
-                in_task
+                in_task, ignore_position_hashes
             )
 
             cached_output = deep_map(cached_output, replace_stage_with_pseudo_stage)
@@ -486,7 +488,9 @@ class MaterializingTask(Task):
 
         return super().run(inputs, **kwargs)
 
-    def get_output_from_store(self, as_type: type = None) -> Any:
+    def get_output_from_store(
+        self, as_type: type = None, ignore_position_hashes: bool = False
+    ) -> Any:
         """Retrieves the output of the task from the cache.
 
         No guarantees are made regarding whether the returned values are still
@@ -495,6 +499,16 @@ class MaterializingTask(Task):
         :param as_type: The type as which tables produced by this task should
             be dematerialized. If no type is specified, the input type of
             the task is used.
+        :param ignore_position_hashes:
+            If ``True``, the position hashes of tasks are not checked
+            when retrieving the inputs of a task from the cache.
+            This simplifies execution of subgraphs if you don't care whether inputs to
+            that subgraph are cache invalid. This allows multiple modifications in the
+            Graph before the next run updating the cache.
+            Attention: This may break automatic cache invalidation.
+            And for this to work, any task producing an input
+            for the chosen subgraph may never be used more
+            than once per stage.
         :return: The output of the task.
         :raise CacheError: if no outputs for this task could be found in the store.
 
@@ -513,7 +527,9 @@ class MaterializingTask(Task):
             df_x = x.get_output_from_store(as_type=pd.DataFrame)
 
         """
-        return _get_output_from_store(self, as_type)
+        return _get_output_from_store(
+            self, as_type, ignore_position_hashes=ignore_position_hashes
+        )
 
 
 class MaterializingTaskGetItem(TaskGetItem):
@@ -538,12 +554,16 @@ class MaterializingTaskGetItem(TaskGetItem):
         """
         return super().__getitem__(item)
 
-    def get_output_from_store(self, as_type: type = None) -> Any:
+    def get_output_from_store(
+        self, as_type: type = None, ignore_position_hashes: bool = False
+    ) -> Any:
         """
         Same as :py:meth:`MaterializingTask.get_output_from_store()`,
         except that it only loads the required subset of the output.
         """
-        return _get_output_from_store(self, as_type)
+        return _get_output_from_store(
+            self, as_type, ignore_position_hashes=ignore_position_hashes
+        )
 
 
 class MaterializationWrapper:
@@ -1505,7 +1525,9 @@ def input_stage_versions(
 
 
 def _get_output_from_store(
-    task: MaterializingTask | MaterializingTaskGetItem, as_type: type
+    task: MaterializingTask | MaterializingTaskGetItem,
+    as_type: type,
+    ignore_position_hashes: bool = False,
 ) -> Any:
     """Helper to retrieve task output from store"""
     from pydiverse.pipedag.context.run_context import DematerializeRunContext
@@ -1515,7 +1537,9 @@ def _get_output_from_store(
 
     store = ConfigContext.get().store
     with DematerializeRunContext(root_task.flow):
-        cached_output, _ = store.retrieve_most_recent_task_output_from_cache(root_task)
+        cached_output, _ = store.retrieve_most_recent_task_output_from_cache(
+            root_task, ignore_position_hashes=ignore_position_hashes
+        )
         return dematerialize_output_from_store(store, task, cached_output, as_type)
 
 

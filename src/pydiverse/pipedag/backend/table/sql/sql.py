@@ -1388,19 +1388,24 @@ class SQLTableStore(BaseTableStore):
             output_json=result.output_json,
         )
 
-    def retrieve_all_task_metadata(self, task: MaterializingTask) -> list[TaskMetadata]:
+    def retrieve_all_task_metadata(
+        self, task: MaterializingTask, ignore_position_hashes: bool = False
+    ) -> list[TaskMetadata]:
+        match_condition = sa.and_(
+            self.tasks_table.c.name == task.name,
+            self.tasks_table.c.stage == task.stage.name,
+        )
+
+        if not ignore_position_hashes:
+            match_condition = match_condition & (
+                self.tasks_table.c.position_hash == task.position_hash
+            )
         with self.engine_connect() as conn:
             results = (
-                conn.execute(
-                    self.tasks_table.select()
-                    .where(self.tasks_table.c.name == task.name)
-                    .where(self.tasks_table.c.stage == task.stage.name)
-                    .where(self.tasks_table.c.position_hash == task.position_hash)
-                )
+                conn.execute(self.tasks_table.select().where(match_condition))
                 .mappings()
                 .all()
             )
-
         return [
             TaskMetadata(
                 name=result.name,
