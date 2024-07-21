@@ -597,8 +597,16 @@ def test_nullable(_get_flow):
             assert result.get(tbl, as_type=pd.DataFrame)["x"][0] == 1
             assert result.get(tbl, as_type=pd.DataFrame)["y"][0] == 2
             assert result.get(tbl, as_type=pd.DataFrame)["z"][0] == 3
-        # check that there are 9 tables with one primary key column each by checking the sum of all primary key columns
-        assert sum(col.primary_key for i in range(18) for col in result.get(tables[i], as_type=sa.Table).original.c) == 9
+        # check that there are 9 tables with one primary key column each by checking
+        # the sum of all primary key columns
+        assert (
+            sum(
+                col.primary_key
+                for i in range(18)
+                for col in result.get(tables[i], as_type=sa.Table).original.c
+            )
+            == 9
+        )
 
 
 @skip_instances("duckdb")  # duckdb does not persist nullable flags over connections
