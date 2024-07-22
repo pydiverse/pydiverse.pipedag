@@ -167,3 +167,8 @@ class PandasTableHook(PandasTableHook):
             dbapi_conn.commit()
         finally:
             dbapi_conn.close()
+        store.add_indexes_and_set_nullable(
+            table,
+            schema,
+            on_empty_table=False,
+        )

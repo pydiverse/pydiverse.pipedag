@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.9.5 (2024-07-22)
+- Fixed a bug in primary key generation when materializing pandas dataframe to postgres database
+
 ## 0.9.4 (2024-07-18)
 - Primary key and index identifiers are now automatically truncated to 63 characters to avoid issues with some database systems.
 - Added `ignore_position_hashes` option to `flow.run()` and `get_output_from_store()`. 
