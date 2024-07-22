@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.5 (2024-07-DD)
+## 0.9.5 (2024-07-22)
 - Fixed a bug in primary key generation when materializing pandas dataframe to postgres database
 
 ## 0.9.4 (2024-07-18)
