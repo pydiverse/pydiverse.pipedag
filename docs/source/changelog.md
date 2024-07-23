@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.6 (2024-MM-DD)
+- Support ExternalTableReference creation at flow wiring time. A pipedag `Table(ExternalTableReference(...))` object can
+    be passed as a parameter into any task instead of any other pipedag table reference.
+
 ## 0.9.5 (2024-07-22)
 - Fixed a bug in primary key generation when materializing pandas dataframe to postgres database
 

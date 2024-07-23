@@ -242,13 +242,14 @@ class TableHookResolver:
             )
 
         hook = self.get_r_table_hook(as_type)
+        stage_name = table.stage.current_name if table.stage is not None else None
         try:
             if for_auto_versioning:
                 return hook.retrieve_for_auto_versioning_lazy(
-                    self, table, table.stage.current_name, as_type
+                    self, table, stage_name, as_type
                 )
 
-            return hook.retrieve(self, table, table.stage.current_name, as_type)
+            return hook.retrieve(self, table, stage_name, as_type)
         except Exception as e:
             raise RuntimeError(f"Failed to retrieve table '{table}'") from e
 
@@ -786,7 +787,7 @@ class TableHook(Generic[TableHookResolverT], ABC):
         cls,
         store: TableHookResolverT,
         table: Table,
-        stage_name: str,
+        stage_name: str | None,
         as_type: type[T] | tuple | dict[str, Any],
     ) -> T:
         """Retrieve a table from the store

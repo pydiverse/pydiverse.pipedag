@@ -118,7 +118,9 @@ class PipeDAGStore(Disposable):
             ctx = RunContext.get()
 
         if isinstance(item, Table):
-            ctx.validate_stage_lock(item.stage)
+            # item.stage can be None for ExternalTableReference
+            if item.stage is not None:
+                ctx.validate_stage_lock(item.stage)
             obj = self.table_store.retrieve_table_obj(
                 item,
                 as_type=as_type,

@@ -1531,7 +1531,7 @@ class SQLTableStore(BaseTableStore):
             task_hash=result.task_hash,
         )
 
-    def resolve_alias(self, table: Table, stage_name: str) -> tuple[str, str]:
+    def resolve_alias(self, table: Table, stage_name: str | None) -> tuple[str, str]:
         """
         Convert Table objects to string table name and schema.
 
