@@ -62,7 +62,7 @@ jobs:
     strategy:
       matrix:
         os: [Ubuntu]
-        environment: ["py39", "py310", "py311"]
+        environment: ["py39all", "py310all", "py311all"]
     steps:
       - uses: actions/checkout@v4
 
@@ -88,7 +88,7 @@ jobs:
     strategy:
       matrix:
         os: [Ubuntu]
-        environment: ["py39", "py312"]
+        environment: ["py39all", "py312all"]
     steps:
       - uses: actions/checkout@v4
 
@@ -113,7 +113,7 @@ jobs:
     strategy:
       matrix:
         os: [Ubuntu]
-        environment: ['py311']
+        environment: ['py311all']
     services:
       ibm_db2:
         image: icr.io/db2_community/db2
@@ -158,7 +158,7 @@ jobs:
     strategy:
       matrix:
         os: [Ubuntu]
-        environment: ['py39', 'py311']
+        environment: ['py39all', 'py311all']
     steps:
       - uses: actions/checkout@v4
 
@@ -187,7 +187,7 @@ jobs:
     strategy:
       matrix:
         os: [ Ubuntu ]
-        environment: [ 'py312' ]
+        environment: [ 'py312all' ]
     steps:
       - uses: actions/checkout@v4
 
@@ -213,7 +213,7 @@ jobs:
     strategy:
       matrix:
         os: [Ubuntu]
-        python-version: ['py311pdsa1']
+        environment: ['py311pdsa1all']
     steps:
       - uses: actions/checkout@v4
 
