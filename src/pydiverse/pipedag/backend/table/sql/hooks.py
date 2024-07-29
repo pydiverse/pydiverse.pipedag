@@ -553,7 +553,13 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         Provide hook that allows to override the default
         download of polars tables from the tablestore.
         """
-        df = polars.read_database(query, connection_uri)
+        # TODO: consider using arrow_odbc or adbc-driver-postgresql together with:
+        # Cursor.fetchallarrow()
+
+        # This implementation requires connectorx which does not work for duckdb.
+        # For conda-forge connectorx currently has python<3.9 dependency.
+        # Attention: In case this call fails, we simply fall-back to pandas hook.
+        df = polars.read_database_uri(query, connection_uri)
         return df
 
     @classmethod
