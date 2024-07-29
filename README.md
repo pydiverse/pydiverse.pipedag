@@ -13,23 +13,23 @@ comment on existing issues to extend them to your needs or to add solution ideas
 
 ## Preparing installation
 
-To install the package locally in development mode, you first have to install
-[Poetry](https://python-poetry.org/docs/#installation).
+To install the package locally in development mode, you will need to install
+[pixi](https://pixi.sh/latest/). For those who haven't used pixi before, it is a
+poetry style dependency management tool based on conda/micromamba/conda-forge package 
+ecosystem. The conda-forge repository has well maintained packages for Linux, MacOS, 
+and Windows supporting both ARM and X86 architectures. Especially, installing 
+psycopg2 in a portable way got much easier with pixi. In addition, pixi is really 
+strong in creating lock files for reproducible environments (including system libraries) 
+with many essential features missing in alternative tools like poetry (see [pixi.toml](pixi.toml)).
 
-When installing poetry using conda (I know this sounds odd), it is recommended to install
-also compilers, so source packages can be built on `poetry install`. Since we use psycopg2,
-it also helps to install psycopg2 in conda to have pg_config available:
+Docker is used to test against Postgres, MS SQL Server, and DB2 database targets. The bulk of 
+unit tests requires a Postgres test database to be up and running which can be started with 
+docker-compose. Pixi can also help you install docker-compose if it is not already part of your
+docker (or alternative container runtime) installation:
 
 ```bash
-conda create -n poetry -c conda-forge poetry compilers cmake make psycopg2 docker-compose
-conda activate poetry  # only needed for poetry install
-```
-
-On OSX, a way to install pg_config (needed for source building psycopg2 by `poetry install`) is
-
-```bash
-brew install postgresql
-```
+pixi global install docker-compose
+``` 
 
 On OS X with `arm64` architecture, an `x86_64` toolchain is required for DB2 development:
 - Ensure that Rosetta 2 is installed:
@@ -51,60 +51,54 @@ arch -x86_64 /usr/local/bin/brew install gcc
 
 ## Installation
 
-> Currently, development on pipedag is not possible with Windows. The current setup of installing prefect and running
-> tests with docker (to spin up Postgres and Zookeeper) fail in poetry dependency resolution. It would be a nice
-> contribution to find drop-in replacements for both that run as simple python dependency without docker and moving
-> docker based tests to github actions (multi-DB target tests will be moved to cloud anyways).
+> Currently, development on pipedag is not tested with Windows. Installing packages with pixi
+> should work. If you are interested in contributing with Windows, please submit an 
+> [issue](https://github.com/pydiverse/pydiverse.pipedag/issues) 
+> and we will try to help you with initial setup problems.
 
-After that, install pydiverse pipedag like this:
+To install pydiverse pipedag try this:
 
 ```bash
 git clone https://github.com/pydiverse/pydiverse.pipedag.git
 cd pydiverse.pipedag
 
 # Create the environment, activate it and install the pre-commit hooks
-poetry install --all-extras
-poetry shell
-pre-commit install
+pixi install  # see pixi.toml for more environments
+pixi run pre-commit install
 ```
+
+You can also use alternative environments as you find them in [pixi.toml](pixi.toml):
+```bash
+pixi install -e py312
+pixi run -e py312 pre-commit install
+```
+
+Please, bear in mind, that we currently still want to be python 3.9 compatible while
+always supporting the newest python version available on conda-forge. 
+
+When using Pycharm, you might find it useful that we install a `conda` executable stub you can
+use for creating a conda interpreters: `<pydiverse.pipedag checkout>/.pixi/envs/default/libexec/conda`
 
 ## Testing
 
-After installation, you should be able to run:
+Most tests are based on a Postgres container running. You can launch it with a working docker-compose setup via:
+```bash
+docker-compose down; docker-compose up
+```
+The down command helps ensure a clean state within the databases launched.
+
+After installation and launching docker container in the background, you should be able to run:
 
 ```bash
-poetry run pytest --workers 4
+pixi run pytest --workers 4
 ```
 
-To be able to run all tests (for different databases or table types), you have to install the test dependency group:
+You can peak in [pytest.ini](pytest.ini) and [github actions](.github/workflows/tests.yml) 
+to see different parameters to launch more tests.
 
 ```bash
-poetry install --with=tests
+pixi run pytest --workers=auto --mssql --ibm_db2 --duckdb --snowflake --pdtransform --ibis --polars --dask --prefect
 ```
-
-## Pre-commit install with conda and python 3.9
-
-We currently have some pre-commit hooks bound to python=3.9. So pre-commit install may fail when running with
-python=3.10 python environment. However, the pre-commit environment does not need to be the same as the environment
-used for testing pipedag code. When using conda, you may try:
-
-```bash
-conda create -n python39 -c conda-forge python=3.9 pre-commit
-conda activate python39
-pre-commit install
-```
-
-## Testing
-
-To facilitate easy testing, we provide a Docker Compose file to start all required servers.
-Just run `docker compose up` in the root directory of the project to start everything, and then run `pytest` in a new
-tab.
-
-You can inspect the contents of the PipeDAT Postgres database at `postgresql://postgres:pipedag@127.0.0.1/pipedag`.
-To reset the state of the docker containers you can run `docker compose down`.
-This might be necessary if the database cache gets corrupted.
-
-To run tests in parallel, pass the `--workers auto` flag to pytest.
 
 ## Testing db2 functionality
 
@@ -123,7 +117,7 @@ instead.
 
 Then check `docker logs db2server | grep -i completed` until you see `(*) Setup has completed.`.
 
-Afterwards you can run `pytest --ibm_db2`.
+Afterwards you can run `pixi run pytest --ibm_db2`.
 
 ## Example
 
@@ -263,7 +257,7 @@ and in another terminal
 
 ```bash
 cd example_postgres
-poetry run python run_pipeline.py
+pixi run python run_pipeline.py
 ```
 
 Finally, you may connect to your localhost postgres database `pipedag_default` and
@@ -288,17 +282,18 @@ select * from stage_2.task_2_out;
 
 ## Troubleshooting
 
-### Installing mssql odbc driver for linux
+### Installing mssql odbc driver for MacOS and Linux
 
-Installing with
-instructions [here](https://docs.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server)
-worked.
-But `odbcinst -j` revealed that it installed the configuration in `/etc/unixODBC/*`. But conda installed pyodbc brings
+Install via Microsoft's
+instructions for [Linux](https://docs.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server)
+or [MacOS](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos).
+
+In one Linux installation case, `odbcinst -j` revealed that it installed the configuration in `/etc/unixODBC/*`. But conda installed pyodbc brings
 its own `odbcinst` executable and that shows odbc config files are expected in `/etc/*`. Symlinks were enough to fix the
 problem. Try `python -c 'import pyodbc;print(pyodbc.drivers())'` and see whether you get more than an empty list.
 Furthermore, make sure you use 127.0.0.1 instead of localhost. It seems that /etc/hosts is ignored.
 
-On `arm64` OS X with an `x86_64` environment it is necessary to compile `pyodbc` using
+On `arm64` OS X with an `x86_64` environment it might be necessary to compile `pyodbc` using
 ```bash
 arch -x86_64 /usr/local/bin/brew install unixodbc
 LDFLAGS="$LDFLAGS -L/usr/local/lib"

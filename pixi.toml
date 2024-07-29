@@ -108,7 +108,7 @@ sqlalchemy = ">=1.4.39, <2"
 sqlalchemy = ">=2"
 
 [environments]
-default = ["py311", "dev", "zookeeper", "pd2", "sa2", "dask"]
+default = ["py312", "all-tests", "dev", "filelock", "zookeeper", "dask", "prefect", "pd2", "sa2", "ibm-db", "snowflake"]
 all-tests = ["py312", "all-tests", "dev", "filelock", "zookeeper", "dask", "prefect", "pd2", "sa2", "ibm-db", "snowflake"]
 docs = ["docs"]
 py39 = ["py39", "dev", "zookeeper", "pd2", "sa2", "dask"]
