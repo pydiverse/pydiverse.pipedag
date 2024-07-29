@@ -586,16 +586,28 @@ def _test_nullable_get_flow():
     "_get_flow", [_test_nullable_get_flow, _test_nullable_lazy_get_flow]
 )
 def test_nullable(_get_flow):
-    f, lazy_tables = _get_flow()
+    f, tables = _get_flow()
 
     with StageLockContext():
         result = f.run()
         assert result.successful
-        for tbl in lazy_tables:
+        for i in range(18):  # unfortunately, 'for tbl in tables' does not work
+            tbl = tables[i]
             assert len(result.get(tbl, as_type=pd.DataFrame)) == 1
             assert result.get(tbl, as_type=pd.DataFrame)["x"][0] == 1
             assert result.get(tbl, as_type=pd.DataFrame)["y"][0] == 2
             assert result.get(tbl, as_type=pd.DataFrame)["z"][0] == 3
+        # check that there are 9 tables with one primary key column each by checking
+        # the sum of all primary key columns
+        if ConfigContext.get().store.table_store.engine.dialect.name != "duckdb":
+            assert (
+                sum(
+                    col.primary_key
+                    for i in range(18)
+                    for col in result.get(tables[i], as_type=sa.Table).original.c
+                )
+                == 9
+            )
 
 
 @skip_instances("duckdb")  # duckdb does not persist nullable flags over connections
@@ -603,10 +615,10 @@ def test_nullable(_get_flow):
     "_get_flow", [_test_nullable_get_flow, _test_nullable_lazy_get_flow]
 )
 def test_nullable_output(_get_flow):
-    f, lazy_tables = _get_flow()
+    f, tables = _get_flow()
 
     def get_nullable(idx):
-        return [c.nullable for c in result.get(lazy_tables[idx], as_type=sa.Table).c]
+        return [c.nullable for c in result.get(tables[idx], as_type=sa.Table).c]
 
     with StageLockContext():
         result = f.run()

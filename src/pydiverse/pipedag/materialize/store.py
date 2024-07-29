@@ -505,7 +505,7 @@ class PipeDAGStore(Disposable):
         )
 
     def retrieve_most_recent_task_output_from_cache(
-        self, task: MaterializingTask
+        self, task: MaterializingTask, ignore_position_hashes: bool = False
     ) -> (Materializable, TaskMetadata):
         """
         Retrieves the cached output from the most recent execution of a task.
@@ -515,6 +515,16 @@ class PipeDAGStore(Disposable):
 
         :param task: The materializing task for which to retrieve
             the cached output.
+        :param ignore_position_hashes:
+            If ``True``, the position hashes of tasks are not checked
+            when retrieving the inputs of a task from the cache.
+            This simplifies execution of subgraphs if you don't care whether inputs to
+            that subgraph are cache invalid. This allows multiple modifications in the
+            Graph before the next run updating the cache.
+            Attention: This may break automatic cache invalidation.
+            And for this to work, any task producing an input
+            for the chosen subgraph may never be used more
+            than once per stage.
         :return: The output from the task as well as the corresponding metadata.
         :raises CacheError: if no matching task exists in the cache
         """
@@ -522,7 +532,9 @@ class PipeDAGStore(Disposable):
         # This returns all metadata objects with the same name, stage, AND position
         # hash as `task`. We utilize the position hash to identify a specific
         # task instance, if the same task appears multiple times in a stage.
-        metadata = self.table_store.retrieve_all_task_metadata(task)
+        metadata = self.table_store.retrieve_all_task_metadata(
+            task, ignore_position_hashes=ignore_position_hashes
+        )
 
         if not metadata:
             raise CacheError(
