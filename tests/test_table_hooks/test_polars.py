@@ -9,7 +9,7 @@ from pydiverse.pipedag.backend.table.sql.hooks import PolarsTableHook
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
+from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
 from tests.util.spy import spy_task
 from tests.util.sql import get_config_with_table_store
 from tests.util.tasks_library import assert_table_equal
@@ -168,7 +168,6 @@ def test_auto_version_2(mocker):
     in_tables_spy.assert_called(2)
 
 
-@skip_instances("duckdb")
 def test_custom_download():
     class TestTableStore(ConfigContext.get().store.table_store.__class__):
         _dialect_name = DISABLE_DIALECT_REGISTRATION
@@ -185,27 +184,33 @@ def test_custom_download():
             query: Any,
             connection_uri: str,
         ):
-            # FYI: this fails for duckdb and thus we fall back to pandas hook
-            df = pl.read_database(query, connection_uri)
-            return df.with_columns(pl.lit(True).alias("custom_download"))
+            # to simplify this test with various dependencies and platforms, it is
+            # easier to use pandas:
+            import pandas as pd
 
-    df = pl.DataFrame(
-        {
-            "col": [0, 1, 2, 3],
-        }
-    )
+            pandas_df = pd.read_sql(query, con=connection_uri)
+            # # pl.read_database_uri fails for duckdb and osx
+            # # (conda-forge connectorx for osx depends on python<3.9)
+            # df = pl.read_database_uri(query, connection_uri)
+            df = pl.from_pandas(pandas_df)
+            return df.with_columns(pl.lit(True).alias("custom_download"))
 
     @materialize()
     def numpy_input():
+        df = pl.DataFrame(
+            {
+                "col": [0, 1, 2, 3],
+            }
+        )
         return Table(df)
 
     @materialize(input_type=pl.DataFrame)
-    def verify_cutom(t):
+    def verify_custom(t):
         assert "custom_download" in t.columns
 
     with Flow() as f:
         with Stage("stage"):
             t = numpy_input()
-            verify_cutom(t)
+            verify_custom(t)
 
     assert f.run(config=cfg).successful
