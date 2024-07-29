@@ -42,6 +42,9 @@ class ComputationTracer:
 
     def __enter__(self):
         self._monkey_patch()
+        # clear trace already filled during patching (modules may issue calls during
+        # initialization)
+        self.trace = []
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
