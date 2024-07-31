@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.9.6 (2024-XX-XX)
+- Fixed bug that caused a crash when retrieving a polars dataframe from SQL using polars >= 1
+
 ## 0.9.5 (2024-07-22)
 - Fixed a bug in primary key generation when materializing pandas dataframe to postgres database
 
