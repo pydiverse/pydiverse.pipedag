@@ -745,7 +745,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         """
         if not isinstance(obj, polars.LazyFrame):
             raise TypeError("Expected LazyFrame")
-        return obj.serialize()
+        return str(obj.serialize())
 
 
 try:
