@@ -229,4 +229,4 @@ jobs:
         uses: ./.github/actions/test
         with:
           environment: ${{ matrix.environment }}
-          arguments: --workers 4 --polars --ibis --pdtransform
+          arguments: --workers 4 --polars --ibis --pdtransform --snowflake

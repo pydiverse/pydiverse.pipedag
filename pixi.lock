@@ -34476,6 +34476,7 @@ packages:
   - python >=3.10,<3.11.0a0
   - python_abi 3.10.* *_cp310
   license: Apache-2.0
+  license_family: APACHE
   size: 26241
   timestamp: 1722487691904
 - kind: conda
@@ -34497,6 +34498,7 @@ packages:
   - python >=3.10,<3.11.0a0
   - python_abi 3.10.* *_cp310
   license: Apache-2.0
+  license_family: APACHE
   size: 25900
   timestamp: 1722487507047
 - kind: conda
@@ -34518,6 +34520,7 @@ packages:
   - python >=3.10,<3.11.0a0
   - python_abi 3.10.* *_cp310
   license: Apache-2.0
+  license_family: APACHE
   size: 25840
   timestamp: 1722487409708
 - kind: conda
@@ -34539,6 +34542,7 @@ packages:
   - python >=3.10,<3.11.0a0
   - python_abi 3.10.* *_cp310
   license: Apache-2.0
+  license_family: APACHE
   size: 25704
   timestamp: 1722487597970
 - kind: conda
@@ -34560,6 +34564,7 @@ packages:
   - python >=3.11,<3.12.0a0
   - python_abi 3.11.* *_cp311
   license: Apache-2.0
+  license_family: APACHE
   size: 26291
   timestamp: 1722488628941
 - kind: conda
@@ -34581,6 +34586,7 @@ packages:
   - python >=3.11,<3.12.0a0
   - python_abi 3.11.* *_cp311
   license: Apache-2.0
+  license_family: APACHE
   size: 25881
   timestamp: 1722487614290
 - kind: conda
@@ -34602,6 +34608,7 @@ packages:
   - python >=3.11,<3.12.0a0
   - python_abi 3.11.* *_cp311
   license: Apache-2.0
+  license_family: APACHE
   size: 25719
   timestamp: 1722487909182
 - kind: conda
@@ -34623,6 +34630,7 @@ packages:
   - python >=3.11,<3.12.0a0
   - python_abi 3.11.* *_cp311
   license: Apache-2.0
+  license_family: APACHE
   size: 25901
   timestamp: 1722487480901
 - kind: conda
@@ -34644,6 +34652,7 @@ packages:
   - python >=3.12,<3.13.0a0
   - python_abi 3.12.* *_cp312
   license: Apache-2.0
+  license_family: APACHE
   size: 25826
   timestamp: 1722487375945
 - kind: conda
@@ -34665,6 +34674,7 @@ packages:
   - python >=3.12,<3.13.0a0
   - python_abi 3.12.* *_cp312
   license: Apache-2.0
+  license_family: APACHE
   size: 26280
   timestamp: 1722489225383
 - kind: conda
@@ -34686,6 +34696,7 @@ packages:
   - python >=3.12,<3.13.0a0
   - python_abi 3.12.* *_cp312
   license: Apache-2.0
+  license_family: APACHE
   size: 25693
   timestamp: 1722487649034
 - kind: conda
@@ -34707,6 +34718,7 @@ packages:
   - python >=3.12,<3.13.0a0
   - python_abi 3.12.* *_cp312
   license: Apache-2.0
+  license_family: APACHE
   size: 25928
   timestamp: 1722487521448
 - kind: conda
@@ -34728,6 +34740,7 @@ packages:
   - python >=3.9,<3.10.0a0
   - python_abi 3.9.* *_cp39
   license: Apache-2.0
+  license_family: APACHE
   size: 25881
   timestamp: 1722487486447
 - kind: conda
@@ -34749,6 +34762,7 @@ packages:
   - python >=3.9,<3.10.0a0
   - python_abi 3.9.* *_cp39
   license: Apache-2.0
+  license_family: APACHE
   size: 25833
   timestamp: 1722487376403
 - kind: conda
@@ -34770,6 +34784,7 @@ packages:
   - python >=3.9,<3.10.0a0
   - python_abi 3.9.* *_cp39
   license: Apache-2.0
+  license_family: APACHE
   size: 26257
   timestamp: 1722487788270
 - kind: conda
@@ -34791,6 +34806,7 @@ packages:
   - python >=3.9,<3.10.0a0
   - python_abi 3.9.* *_cp39
   license: Apache-2.0
+  license_family: APACHE
   size: 25707
   timestamp: 1722487793795
 - kind: conda
@@ -34814,6 +34830,7 @@ packages:
   constrains:
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 3535868
   timestamp: 1722487627492
 - kind: conda
@@ -34836,6 +34853,7 @@ packages:
   constrains:
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 4016506
   timestamp: 1722487367861
 - kind: conda
@@ -34859,6 +34877,7 @@ packages:
   constrains:
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 4533686
   timestamp: 1722487241782
 - kind: conda
@@ -34882,6 +34901,7 @@ packages:
   constrains:
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 3969249
   timestamp: 1722487444945
 - kind: conda
@@ -34904,6 +34924,7 @@ packages:
   constrains:
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 4139975
   timestamp: 1722487425649
 - kind: conda
@@ -34927,6 +34948,7 @@ packages:
   constrains:
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 4651660
   timestamp: 1722487374774
 - kind: conda
@@ -34950,6 +34972,7 @@ packages:
   constrains:
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 3591992
   timestamp: 1722487975106
 - kind: conda
@@ -34973,6 +34996,7 @@ packages:
   constrains:
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 4032162
   timestamp: 1722487567114
 - kind: conda
@@ -34995,6 +35019,7 @@ packages:
   constrains:
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 4095434
   timestamp: 1722487335874
 - kind: conda
@@ -35018,6 +35043,7 @@ packages:
   constrains:
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 3503799
   timestamp: 1722488098978
 - kind: conda
@@ -35041,6 +35067,7 @@ packages:
   constrains:
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 4645745
   timestamp: 1722487499158
 - kind: conda
@@ -35064,6 +35091,7 @@ packages:
   constrains:
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 3977905
   timestamp: 1722487471071
 - kind: conda
@@ -35087,6 +35115,7 @@ packages:
   constrains:
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 4577490
   timestamp: 1722487603204
 - kind: conda
@@ -35110,6 +35139,7 @@ packages:
   constrains:
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 3509605
   timestamp: 1722487710113
 - kind: conda
@@ -35133,6 +35163,7 @@ packages:
   constrains:
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 3934889
   timestamp: 1722487439210
 - kind: conda
@@ -35155,6 +35186,7 @@ packages:
   constrains:
   - apache-arrow-proc =*=cpu
   license: Apache-2.0
+  license_family: APACHE
   size: 4040743
   timestamp: 1722487334933
 - kind: conda
