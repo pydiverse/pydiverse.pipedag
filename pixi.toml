@@ -33,9 +33,7 @@ kazoo = ">=2.8.0"
 dask = ">=2022.1.0"
 
 [feature.prefect.dependencies]
-prefect = ">=2.6"
-pytz = ">=2023.3"
-pytzdata = ">=2020.1"
+prefect = ">=2.13.5"
 
 [feature.snowflake.dependencies]
 snowflake-sqlalchemy = ">=1.6.1"
