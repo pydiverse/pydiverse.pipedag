@@ -2,17 +2,11 @@ from __future__ import annotations
 
 import io
 import pickle
-import sys
 from io import BytesIO
 
 import dask
-import pytest
 import structlog
 from _pytest.capture import EncodedFile
-
-# Attention: Running dask tests within pytest (without option -s) fails on python 3.12
-# because dask_patch.py cannot successfully make EncodedFile pickleable by adding
-# __getstate__ and __setstate__ methods. Let's see what the future of python brings.
 
 
 class A(io.TextIOWrapper):
@@ -20,19 +14,15 @@ class A(io.TextIOWrapper):
         return "a"
 
     def __reduce__(self):
-        return None
+        return A, (BytesIO(b"hello"),)
 
     def __reduce_ex__(self, protocol):
         _ = protocol
-        return None
+        return self.__reduce__()
 
 
 def test_that_io_wrapper_is_pickleable():
-    if sys.version_info >= (3, 12):
-        with pytest.raises(TypeError, match="cannot pickle 'A' instances"):
-            pickle.dumps(A(BytesIO(b"hello")))
-    else:
-        pickle.dumps(A(BytesIO(b"hello")))
+    pickle.dumps(A(BytesIO(b"hello")))
 
 
 def test_that_encoded_file_is_picklable():
