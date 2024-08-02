@@ -14,9 +14,9 @@ on:
 
 env:
   DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
-  SNOWFLAKE_ACCOUNT: ${{ variables.SNOWFLAKE_ACCOUNT }}
-  SNOWFLAKE_USER: ${{ variables.SNOWFLAKE_USER }}
   SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+  SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+  SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
 
 jobs:
   lint:
