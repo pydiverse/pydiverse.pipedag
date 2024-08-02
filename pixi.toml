@@ -65,6 +65,10 @@ pyodbc = ">=4.0.35"
 pytsql = ">=1.1.4"
 
 # IBM DB2
+[feature.ibm-db-all.dependencies]
+ibm_db = ">=3.1.1"
+ibm_db_sa = ">=0.3.8"
+
 [feature.ibm-db.target.linux.dependencies]
 # ibm_db is not on conda-forge for osx
 ibm_db = ">=3.1.4"
@@ -92,6 +96,10 @@ sphinx-copybutton = ">=0.5.2"
 docs = "cd docs && make html "
 readthedocs = "rm -rf $READTHEDOCS_OUTPUT/html && cp -r docs/build/html $READTHEDOCS_OUTPUT/html"
 
+[feature.release.dependencies]
+hatch = ">=1.12.0"
+twine = ">=5.1.1"
+
 [feature.py39.dependencies]
 python = "3.9.*"
 [feature.py310.dependencies]
@@ -108,20 +116,29 @@ pandas = ">=2"
 sqlalchemy = ">=1.4.39, <2"
 [feature.sa2.dependencies]
 sqlalchemy = ">=2"
+[feature.connectorx-noarm.target.linux.dependencies]
+connectorx = ">=0.3.3"
+[feature.connectorx-noarm.target.win.dependencies]
+connectorx = ">=0.3.3"
+[feature.connectorx-noarm.target.osx-64.dependencies]
+connectorx = ">=0.3.3"
 
 [environments]
 default = ["py312", "all-tests", "dev", "filelock", "zookeeper", "dask", "prefect", "pd2", "sa2", "ibm-db", "snowflake"]
 all-tests = ["py312", "all-tests", "dev", "filelock", "zookeeper", "dask", "prefect", "pd2", "sa2", "ibm-db", "snowflake"]
 docs = ["docs"]
+release = {features=["release"], no-default-feature=true}
 py39 = ["py39", "dev", "zookeeper", "pd2", "sa2", "dask"]
 py310 = ["py310", "dev", "zookeeper", "pd2", "sa2", "dask"]
 py311 = ["py311", "dev", "zookeeper", "pd2", "sa2", "dask"]
 py312 = ["py312", "dev", "zookeeper", "pd2", "sa2", "dask"]
-py39pdsa1 = ["py39", "dev", "zookeeper", "pd1", "sa1", "dask"]
-py311pdsa1 = ["py311", "dev", "zookeeper", "pd1", "sa1", "dask", "snowflake"]
+py39pdsa1 = ["py39", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx-noarm"]
+py311pdsa1 = ["py311", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx-noarm"]
+py312pdsa1 = ["py39", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx-noarm"]
 py39all = ["py39", "dev", "zookeeper", "all-tests", "filelock", "dask", "prefect", "pd2", "sa2", "ibm-db", "snowflake", "tidypolars"]
 py310all = ["py310", "dev", "zookeeper", "all-tests", "filelock", "dask", "prefect", "pd2", "sa2", "ibm-db", "snowflake", "tidypolars"]
 py311all = ["py311", "dev", "zookeeper", "all-tests", "filelock", "dask", "prefect", "pd2", "sa2", "ibm-db-linux", "snowflake"]
 py312all = ["py312", "dev", "zookeeper", "all-tests", "filelock", "dask", "prefect", "pd2", "sa2", "ibm-db", "snowflake"]
-py39pdsa1all = ["py39", "dev", "zookeeper", "pd1", "sa1", "all-tests", "filelock",  "dask", "prefect", "ibm-db", "snowflake", "tidypolars"]
-py311pdsa1all = ["py311", "dev", "zookeeper", "pd1", "sa1", "all-tests", "filelock",  "dask", "prefect", "ibm-db-linux", "snowflake"]
+py39pdsa1all = ["py39", "dev", "zookeeper", "pd1", "sa1", "connectorx-noarm", "all-tests", "filelock",  "dask", "prefect", "ibm-db", "snowflake", "tidypolars"]
+py311pdsa1all = ["py311", "dev", "zookeeper", "pd1", "sa1", "connectorx-noarm", "all-tests", "filelock",  "dask", "prefect", "ibm-db-linux", "snowflake"]
+py310ibmosx = ["py310", "dev", "zookeeper", "pd2", "sa2", "dask", "ibm-db-all"]
