@@ -208,7 +208,7 @@ jobs:
           arguments: --workers 4 --dask --prefect -m "dask or prefect"
 
   pandas1_sqlalchemy1_test:
-    name: "Snowflake Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    name: "Pandas 1.x and SQLAlchemy 1.x Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
     needs: [smoke_test]
     runs-on: ${{ matrix.os }}-latest
     timeout-minutes: 10
@@ -237,7 +237,7 @@ jobs:
     name: "Snowflake Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
     needs: [smoke_test]
     runs-on: ${{ matrix.os }}-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     strategy:
       matrix:
         os: [Ubuntu]
@@ -257,4 +257,4 @@ jobs:
         uses: ./.github/actions/test
         with:
           environment: ${{ matrix.environment }}
-          arguments: --workers 4 --polars --ibis --pdtransform --snowflake
+          arguments: --workers 4 --polars --ibis --pdtransform --snowflake -s
