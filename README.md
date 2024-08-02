@@ -304,8 +304,8 @@ pip install --no-cache --pre --no-binary :all: pyodbc
 
 ## Packaging and publishing to pypi and conda-forge using github actions
 
-- `poetry version prerelease` or `poetry version patch`
-- set correct release date in changelog.md
+- bump version number in [pyproject.toml](pyproject.toml)
+- set correct release date in [changelog.md](docs/source/changelog.md)
 - push increased version number to `main` branch
 - tag commit with `git tag <version>`, e.g. `git tag 0.7.0`
 - `git push --tags`
@@ -318,17 +318,18 @@ https://www.digitalocean.com/community/tutorials/how-to-publish-python-packages-
 Packages are first released on test.pypi.org:
 
 - see https://stackoverflow.com/questions/68882603/using-python-poetry-to-publish-to-test-pypi-org
-- `poetry version prerelease` or `poetry version patch`
+- bump version number in [pyproject.toml](pyproject.toml) (check consistency with [changelog.md](docs/source/changelog.md))
 - push increased version number to `main` branch
-- `poetry build`
-- `poetry publish -r test-pypi`
+- `pixi run -e release hatch build`
+- `pixi run -e release twine upload --repository testpypi dist/*`
 - verify with https://test.pypi.org/search/?q=pydiverse.pipedag
 
 Finally, they are published via:
 
 - `git tag `\<version>
 - `git push --tags`
-- `poetry publish`
+- `pixi run -e release hatch build`
+- `pixi run -e release twine upload --repository pypi dist/*`
 
 ## Publishing package on conda-forge manually
 
