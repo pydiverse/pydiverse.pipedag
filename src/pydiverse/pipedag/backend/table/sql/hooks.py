@@ -271,8 +271,9 @@ class PandasTableHook(TableHook[SQLTableStore]):
             df = pd.read_sql(query, con=conn, dtype=dtypes)
         else:
             df = pd.read_sql(query, con=conn)
-            for col, dtype in dtypes.items():
-                df[col] = df[col].astype(dtype)
+            if dtypes is not None:
+                for col, dtype in dtypes.items():
+                    df[col] = df[col].astype(dtype)
         return df
 
     @classmethod
