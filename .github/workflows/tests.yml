@@ -207,11 +207,37 @@ jobs:
           environment: ${{ matrix.environment }}
           arguments: --workers 4 --dask --prefect -m "dask or prefect"
 
-  snowflake_test:
+  pandas1_sqlalchemy1_test:
     name: "Snowflake Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
     needs: [smoke_test]
     runs-on: ${{ matrix.os }}-latest
     timeout-minutes: 10
+    strategy:
+      matrix:
+        os: [Ubuntu]
+        environment: ['py39pdsa1all', 'py311pdsa1all']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+        with:
+          environments: ${{ matrix.environment }}
+          docker-services: |
+            postgres
+            zoo
+
+      - name: Run Tests
+        uses: ./.github/actions/test
+        with:
+          environment: ${{ matrix.environment }}
+          arguments: --workers 4 --polars --ibis --pdtransform
+
+  snowflake_test:
+    name: "Snowflake Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    needs: [smoke_test]
+    runs-on: ${{ matrix.os }}-latest
+    timeout-minutes: 15
     strategy:
       matrix:
         os: [Ubuntu]
