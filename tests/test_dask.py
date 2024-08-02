@@ -19,8 +19,12 @@ class A(io.TextIOWrapper):
     def __getstate__(self):
         return "a"
 
-    def __setstate__(self, x):
-        pass
+    def __reduce__(self):
+        return None
+
+    def __reduce_ex__(self, protocol):
+        _ = protocol
+        return None
 
 
 def test_that_io_wrapper_is_pickleable():
@@ -32,11 +36,7 @@ def test_that_io_wrapper_is_pickleable():
 
 
 def test_that_encoded_file_is_picklable():
-    if sys.version_info >= (3, 12):
-        with pytest.raises(TypeError, match="cannot pickle 'EncodedFile' instances"):
-            pickle.dumps(EncodedFile(BytesIO(b"hello"), "utf-8"))
-    else:
-        pickle.dumps(EncodedFile(BytesIO(b"hello"), "utf-8"))
+    pickle.dumps(EncodedFile(BytesIO(b"hello"), "utf-8"))
 
 
 def test_dask_structlog_configuration_does_not_prevent_pickling():
@@ -62,8 +62,4 @@ def test_dask_structlog_configuration_does_not_prevent_pickling():
         "chunksize": 1,
     }
 
-    if sys.version_info >= (3, 12):
-        with pytest.raises(TypeError, match="cannot pickle 'EncodedFile' instances"):
-            dask.compute(results, **kw)
-    else:
-        dask.compute(results, **kw)
+    dask.compute(results, **kw)
