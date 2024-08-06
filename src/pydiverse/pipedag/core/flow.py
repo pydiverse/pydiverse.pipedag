@@ -335,12 +335,13 @@ class Flow:
             flow.run(task_1, task_4)
 
         """
-        self.logger.warn(
-            "Using ignore_position_hashes=True! "
-            "This may break automatic cache invalidation. "
-            "And for this to work, any task producing an "
-            "input for the chosen subgraph may never be used more than once per stage."
-        )
+        if ignore_position_hashes:
+            self.logger.warn(
+                "Using ignore_position_hashes=True! "
+                "This may break automatic cache invalidation. "
+                "And for this to work, any task producing an input "
+                "for the chosen subgraph may never be used more than once per stage."
+            )
         subflow = self.get_subflow(*components)
 
         # Get the ConfigContext to use
