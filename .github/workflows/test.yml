@@ -1,0 +1,49 @@
+on:
+  workflow_call:
+    inputs:
+      name:
+        required: true
+        type: string
+      os:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+      docker-services:
+        required: false
+        type: string
+      pytest-arguments:
+        required: false
+        type: string
+
+jobs:
+  test:
+    name: ${{ inputs.name }}
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          environments: ${{ inputs.environment }}
+
+      - name: Start Docker Compose
+        if: ${{ inputs.docker-services != '' }}
+        uses: isbang/compose-action@e5813a5909aca4ae36058edae58f6e52b9c971f8
+        with:
+          compose-file: docker-compose.yaml
+          services: ${{ inputs.docker-services }}
+
+      - name: Wait for Docker Servers
+        if: ${{ inputs.docker-services != '' }}
+        run: |
+          until bash ./.github/scripts/docker_compose_ready.sh; do
+            sleep 1
+          done
+
+      - name: Run tests
+        run: |
+          pixi run -e ${{ inputs.environment }} pytest tests -ra ${RUNNER_DEBUG:+-v} --color=yes ${{ inputs.pytest-arguments }}
