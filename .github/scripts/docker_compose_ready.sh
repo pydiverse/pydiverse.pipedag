@@ -22,4 +22,3 @@ fi
 if [[ "$running_services" =~ "zoo" ]]; then
 	echo ruok | nc localhost 2181 > /dev/null
 fi
-

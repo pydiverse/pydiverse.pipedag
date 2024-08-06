@@ -21,6 +21,7 @@ services:
     ports:
       - "2181:2181"
   ibm_db2:
+    platform: linux/x86_64
     image: icr.io/db2_community/db2
     privileged: true
     environment:
