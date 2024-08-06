@@ -189,8 +189,8 @@ def test_custom_download():
             import pandas as pd
 
             pandas_df = pd.read_sql(query, con=connection_uri)
-            # # pl.read_database_uri fails for duckdb and osx
-            # # (conda-forge connectorx for osx depends on python<3.9)
+            # # pl.read_database_uri fails for duckdb and osx-arm64
+            # # (newer conda-forge builds for connectorx for osx-arm64 are broken)
             # df = pl.read_database_uri(query, connection_uri)
             df = pl.from_pandas(pandas_df)
             return df.with_columns(pl.lit(True).alias("custom_download"))
