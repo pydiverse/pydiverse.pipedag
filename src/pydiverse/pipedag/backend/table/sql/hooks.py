@@ -553,7 +553,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         Provide hook that allows to override the default
         download of polars tables from the tablestore.
         """
-        df = polars.read_database(query, connection_uri)
+        df = polars.read_database_uri(query, connection_uri)
         return df
 
     @classmethod

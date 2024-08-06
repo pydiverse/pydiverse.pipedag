@@ -186,7 +186,7 @@ def test_custom_download():
             connection_uri: str,
         ):
             # FYI: this fails for duckdb and thus we fall back to pandas hook
-            df = pl.read_database(query, connection_uri)
+            df = pl.read_database_uri(query, connection_uri)
             return df.with_columns(pl.lit(True).alias("custom_download"))
 
     df = pl.DataFrame(
