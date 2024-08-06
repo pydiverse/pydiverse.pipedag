@@ -51,7 +51,7 @@ def json_default(o):
             )  # [json_default(t) for t in o.assumed_dependencies]
         return {
             TYPE_KEY: Type.TABLE,
-            "stage": o.stage.name,
+            "stage": o.stage.name if o.stage is not None else None,
             "name": o.name,
             "primary_key": o.primary_key,
             "indexes": o.indexes,
@@ -124,7 +124,9 @@ def json_object_hook(d: dict):
 
     type_ = Type(d[TYPE_KEY])
 
-    def get_stage(name: str):
+    def get_stage(name: str | None):
+        if name is None:
+            return None
         stages = RunContext.get().flow.stages
         return stages[name]
 

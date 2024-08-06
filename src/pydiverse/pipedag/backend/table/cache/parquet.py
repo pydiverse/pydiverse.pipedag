@@ -107,7 +107,7 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         cls,
         store: ParquetTableCache,
         table: Table,
-        stage_name: str,
+        stage_name: str | None,
         as_type: type[pd.DataFrame],
     ) -> pd.DataFrame:
         # Determine dtype backend for pandas >= 2.0
@@ -181,7 +181,7 @@ class PolarsTableHook(TableHook[ParquetTableCache]):
         cls,
         store: ParquetTableCache,
         table: Table,
-        stage_name: str,
+        stage_name: str | None,
         as_type: type,
     ):
         path = store.get_table_path(table, ".parquet")
@@ -229,7 +229,7 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
         cls,
         store: ParquetTableCache,
         table: Table,
-        stage_name: str,
+        stage_name: str | None,
         as_type: type,
     ):
         from pydiverse.transform.eager import PandasTableImpl

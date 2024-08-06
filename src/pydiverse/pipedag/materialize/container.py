@@ -592,6 +592,13 @@ class ExternalTableReference:
         @materialize(cache=my_cache_fun)
         def task():
             return Table(ExternalTableReference("name_of_table", "schema"))
+
+    The ExternalTableReference object can also be created at flow wiring time::
+
+        with Flow() as f:
+            with Stage("stage") as s:
+                tbl = Table(ExternalTableReference("name_of_table", "schema"))
+                _ = some_task(tbl)
     """
 
     def __init__(self, name: str, schema: str, shared_lock_allowed: bool = False):
