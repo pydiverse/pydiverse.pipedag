@@ -140,7 +140,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         cls,
         store: SQLTableStore,
         table: Table,
-        stage_name: str,
+        stage_name: str | None,
         as_type: type[sa.Table],
     ) -> sa.sql.expression.Selectable:
         table_name, schema = store.resolve_alias(table, stage_name)
@@ -396,7 +396,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         cls,
         store: SQLTableStore,
         table: Table,
-        stage_name: str,
+        stage_name: str | None,
         as_type: type[pd.DataFrame] | tuple | dict,
     ) -> pd.DataFrame:
         # Config
@@ -431,7 +431,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         cls,
         store: SQLTableStore,
         table: Table,
-        stage_name: str,
+        stage_name: str | None,
         backend: PandasDTypeBackend,
     ) -> tuple[Any, dict[str, DType]]:
         table_name, schema = store.resolve_alias(table, stage_name)
@@ -596,7 +596,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         cls,
         store: SQLTableStore,
         table: Table,
-        stage_name: str,
+        stage_name: str | None,
         as_type: type[polars.DataFrame],
     ) -> polars.DataFrame:
         query = cls._read_db_query(store, table, stage_name)
@@ -623,7 +623,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         return super().auto_table(obj)
 
     @classmethod
-    def _read_db_query(cls, store: SQLTableStore, table: Table, stage_name: str):
+    def _read_db_query(cls, store: SQLTableStore, table: Table, stage_name: str | None):
         table_name, schema = store.resolve_alias(table, stage_name)
 
         t = sa.table(table_name, schema=schema)
@@ -682,7 +682,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         cls,
         store: SQLTableStore,
         table: Table,
-        stage_name: str,
+        stage_name: str | None,
         as_type: type[polars.DataFrame],
     ) -> polars.LazyFrame:
         polars_hook = store.get_hook_subclass(PolarsTableHook)
@@ -773,7 +773,7 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         cls,
         store: SQLTableStore,
         table: Table,
-        stage_name: str,
+        stage_name: str | None,
         as_type: type[tidypolars.Tibble],
     ) -> tidypolars.Tibble:
         polars_hook = store.get_hook_subclass(PolarsTableHook)
@@ -841,7 +841,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         cls,
         store: SQLTableStore,
         table: Table,
-        stage_name: str,
+        stage_name: str | None,
         as_type: type[T],
     ) -> T:
         from pydiverse.transform.eager import PandasTableImpl
@@ -925,7 +925,7 @@ class IbisTableHook(TableHook[SQLTableStore]):
         cls,
         store: SQLTableStore,
         table: Table,
-        stage_name: str,
+        stage_name: str | None,
         as_type: type[ibis.api.Table],
     ) -> ibis.api.Table:
         conn = cls.conn(store)

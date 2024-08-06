@@ -1,6 +1,8 @@
 # Changelog
 
-## 0.9.6 (2024-XX-XX)
+## 0.9.6 (2024-MM-DD)
+- Support ExternalTableReference creation at flow wiring time. A pipedag `Table(ExternalTableReference(...))` object can
+    be passed as a parameter into any task instead of any other pipedag table reference.
 - Fixed bug that caused a crash when retrieving a polars dataframe from SQL using polars >= 1
 
 ## 0.9.5 (2024-07-22)
