@@ -21,7 +21,7 @@ jobs:
         uses: ./.github/actions/setup
 
       - name: Build
-        run: pixi exec hatch build
+        run: pixi run -e release hatch build
 
       - name: Check distributions
         run: ls -la dist
