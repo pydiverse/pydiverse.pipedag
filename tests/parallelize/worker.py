@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from abc import ABC
 from multiprocessing import Queue
 
 import pytest
 from _pytest.config import Config
+from _pytest.terminal import TerminalReporter
 
 
 def start_worker(
@@ -12,6 +14,17 @@ def start_worker(
     option_dict["plugins"].append("no:terminal")
     config = Config.fromdictargs(option_dict, args)
     config.args = args
+
+    from typing import TextIO
+
+    class DontPrint(TextIO, ABC):
+        def write(*_):
+            pass
+
+    # register dummy terminal reporter since it is needed by pytest even with
+    # plugins:"no:terminal" option
+    terminal_reporter = TerminalReporter(config, DontPrint())
+    config.pluginmanager.register(terminal_reporter, "terminalreporter")
 
     # Remove workers option to prevent triggering main plugin
     config.option.workers = None
