@@ -15,6 +15,9 @@ if [[ "$running_services" =~ "mssql" ]]; then
 	docker compose logs mssql 2>&1 | grep "SQL Server is now ready for client connections" > /dev/null
 fi
 
+if [[ "$running_services" =~ "ibm_db2" ]]; then
+	docker compose logs ibm_db2 2>&1 | grep "Setup has completed" > /dev/null
+fi
 
 if [[ "$running_services" =~ "zoo" ]]; then
 	echo ruok | nc localhost 2181 > /dev/null

@@ -86,7 +86,7 @@ jobs:
 
   db2_test:
     name: DB2 Tests
-    needs: [smoke_test]
+    # needs: [smoke_test]
     strategy:
       matrix:
         os:
@@ -105,7 +105,7 @@ jobs:
 
   mssql_test:
     name: MSSql Tests
-    needs: [smoke_test]
+    # needs: [smoke_test]
     strategy:
       matrix:
         os:
@@ -162,7 +162,7 @@ jobs:
 
   snowflake_test:
     name: Snowflake Tests
-    needs: [smoke_test]
+    # needs: [smoke_test]
     strategy:
       matrix:
         os:
