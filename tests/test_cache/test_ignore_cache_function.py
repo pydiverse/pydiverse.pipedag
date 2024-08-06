@@ -5,7 +5,7 @@ import sqlalchemy as sa
 
 from pydiverse.pipedag import Blob, Flow, Stage, Table
 from pydiverse.pipedag.context import StageLockContext
-from pydiverse.pipedag.context.context import CacheValidationMode
+from pydiverse.pipedag.context.context import CacheValidationMode, ConfigContext
 from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import materialize
 
@@ -265,6 +265,10 @@ def test_blob(mocker):
         child_spy.assert_called_once()
 
 
+def ref(tbl):
+    return f"{tbl.original.schema}.{tbl.original.name}"
+
+
 # TODO: Determine exactly why this test only works with postgres
 @skip_instances(
     "mssql",
@@ -283,16 +287,18 @@ def test_raw_sql(mocker):
 
     @materialize(lazy=True, cache=cache)
     def raw_sql_task(stage):
+        store = ConfigContext.get().store.table_store
+        schema = store.get_schema(stage.transaction_name).get()
         return RawSql(
             f"""
-            CREATE TABLE {stage.transaction_name}.raw_table AS
+            CREATE TABLE {schema}.raw_table AS
             SELECT {raw_value} as x
             """
         )
 
     @materialize(version="1.0", input_type=sa.Table)
-    def child_task(x):
-        return Table(sa.text(f"SELECT * FROM {x.stage.transaction_name}.raw_table"))
+    def child_task(raw_sql):
+        return Table(sa.text(f"SELECT * FROM {ref(raw_sql['raw_table'])}"))
 
     with Flow() as flow:
         with Stage("raw_sql_stage") as stage:
