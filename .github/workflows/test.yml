@@ -1,9 +1,6 @@
 on:
   workflow_call:
     inputs:
-      name:
-        required: true
-        type: string
       os:
         required: true
         type: string
@@ -19,7 +16,7 @@ on:
 
 jobs:
   test:
-    name: ${{ inputs.name }}
+    name: pytest
     runs-on: ${{ inputs.os }}
     timeout-minutes: 10
     steps:

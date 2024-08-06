@@ -35,6 +35,7 @@ jobs:
         uses: pre-commit/action@v3.0.1
 
   smoke_test:
+    name: Smoke Test
     strategy:
       matrix:
         os:
@@ -43,128 +44,66 @@ jobs:
           - py312
     uses: ./.github/workflows/test.yml
     with:
-      name: Smoke Test
       os: ${{ matrix.os }}
       environment: ${{ matrix.environment }}
       docker-services: |
         postgres
         zoo
 
-    # name: 'Smoke Test - Python 3.12 - postgres'
-    # runs-on: ubuntu-latest
-    # timeout-minutes: 10
-    # steps:
-    #   - uses: actions/checkout@v4
+  postgres_test:
+    name: Postgres Tests
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        environment:
+          - py39all
+          - py310all
+          - py311all
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      docker-services: |
+        postgres
+        zoo
+      pytest-arguments: --polars --ibis --pdtransform
 
-    #   - name: Setup Environment
-    #     uses: ./.github/actions/setup
-    #     with:
-    #       environments: py312
-    #       docker-services: |
-    #         postgres
-    #         zoo
 
-    #   - name: Run Tests
-    #     uses: ./.github/actions/test
-    #     with:
-    #       environment: py312
-    #       arguments: --workers 4
+  duckdb_test:
+    name: DuckDB Tests
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        environment:
+          - py39all
+          - py312all
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      docker-services: |
+        zoo
+      pytest-arguments: --duckdb -m duckdb --polars --ibis --pdtransform
 
-  # postgres_test:
-  #   name: "Postgres Tests"  # - ${{ matrix.os }} / ${{ matrix.environment }}"
-  #   needs: [smoke_test]
-  #   runs-on: ${{ matrix.os }}-latest
-  #   timeout-minutes: 10
-  #   strategy:
-  #     matrix:
-  #       os: [Ubuntu]
-  #       environment: ["py39all", "py310all", "py311all"]
-  #   steps:
-  #     - uses: actions/checkout@v4
-
-  #     - name: Setup Environment
-  #       uses: ./.github/actions/setup
-  #       with:
-  #         environments: ${{ matrix.environment }}
-  #         docker-services: |
-  #           postgres
-  #           zoo
-
-  #     - name: Run Tests
-  #       uses: ./.github/actions/test
-  #       with:
-  #         environment: ${{ matrix.environment }}
-  #         arguments: --workers 4 --polars --ibis --pdtransform
-
-  # duckdb_test:
-  #   name: "DuckDB Tests"  # - ${{ matrix.os }} / ${{ matrix.python-version }}"
-  #   needs: [smoke_test]
-  #   runs-on: ${{ matrix.os }}-latest
-  #   timeout-minutes: 15
-  #   strategy:
-  #     matrix:
-  #       os: [Ubuntu]
-  #       environment: ["py39all", "py312all"]
-  #   steps:
-  #     - uses: actions/checkout@v4
-
-  #     - name: Setup Environment
-  #       uses: ./.github/actions/setup
-  #       with:
-  #         environments: ${{ matrix.environment }}
-  #         docker-services: |
-  #           zoo
-
-  #     - name: Run Tests
-  #       uses: ./.github/actions/test
-  #       with:
-  #         environment: ${{ matrix.environment }}
-  #         arguments: --workers 4 --duckdb -m duckdb --polars --ibis --pdtransform
-
-  # db2_test:
-  #   name: "DB2 Tests"  # - ${{ matrix.os }} / ${{ matrix.python-version }}"
-  #   needs: [smoke_test]
-  #   runs-on: ${{ matrix.os }}-latest
-  #   timeout-minutes: 15
-  #   strategy:
-  #     matrix:
-  #       os: [Ubuntu]
-  #       environment: ['py311all']
-  #   services:
-  #     ibm_db2:
-  #       image: icr.io/db2_community/db2
-  #       env:
-  #         LICENSE: accept
-  #         DB2INSTANCE: db2inst1
-  #         DB2INST1_PASSWORD: password
-  #         DBNAME: testdb
-  #         UPDATEAVAIL: "NO"
-  #       options: --privileged
-  #       ports:
-  #         - 50000:50000
-  #   steps:
-  #     - uses: actions/checkout@v4
-
-  #     - name: Setup Environment
-  #       uses: ./.github/actions/setup
-  #       with:
-  #         environments: ${{ matrix.environment }}
-  #         docker-services: |
-  #           zoo
-
-  #     - name: Wait for DB/2
-  #       timeout-minutes: 2
-  #       run: |
-  #         until docker logs "${{ job.services.ibm_db2.id }}" 2>&1 | grep -q "Setup has completed"; do 
-  #           sleep 1
-  #         done
-
-  #     - name: Run Tests
-  #       uses: ./.github/actions/test
-  #       with:
-  #         environment: ${{ matrix.environment }}
-  #         # --polars and --ibis not supported
-  #         arguments: --workers 4 --ibm_db2 -m ibm_db2 --pdtransform
+  db2_test:
+    name: DB2 Tests
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        environment:
+          - py311all
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      docker-services: |
+        zoo
+        ibm_db2
+      # --polars and --ibis not supported
+      pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform
 
   # mssql_test:
   #   name: "MSSql Tests"  # - ${{ matrix.os }} / ${{ matrix.python-version }}"
