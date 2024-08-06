@@ -78,6 +78,7 @@ always supporting the newest python version available on conda-forge.
 
 When using Pycharm, you might find it useful that we install a `conda` executable stub you can
 use for creating a conda interpreters: `<pydiverse.pipedag checkout>/.pixi/envs/default/libexec/conda`
+For more information, see [here](https://pixi.sh/latest/ide_integration/pycharm/).
 
 ## Testing
 
