@@ -13,6 +13,13 @@ on:
       pytest-arguments:
         required: false
         type: string
+    secrets:
+      SNOWFLAKE_PASSWORD:
+        required: false
+      SNOWFLAKE_ACCOUNT:
+        required: false
+      SNOWFLAKE_USER:
+        required: false
 
 jobs:
   test:
@@ -34,6 +41,10 @@ jobs:
           compose-file: docker-compose.yaml
           services: ${{ inputs.docker-services }}
 
+      - name: Install Microsoft ODBC
+        if: ${{ contains(inputs.docker-services, 'mssql') }}
+        run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+
       - name: Wait for Docker Servers
         if: ${{ inputs.docker-services != '' }}
         run: |
@@ -42,5 +53,9 @@ jobs:
           done
 
       - name: Run tests
+        env:
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}        
         run: |
           pixi run -e ${{ inputs.environment }} pytest tests -ra ${RUNNER_DEBUG:+-v} --color=yes ${{ inputs.pytest-arguments }}

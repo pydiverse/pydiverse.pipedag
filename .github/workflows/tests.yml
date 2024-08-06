@@ -12,11 +12,6 @@ on:
     branches:
       - '**'
 
-env:
-  SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-  SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-  SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-
 jobs:
   lint:
     name: Pre-commit Checks
@@ -118,8 +113,6 @@ jobs:
         environment:
           - py39all
           - py311all
-  #     - name: Install Microsoft ODBC
-  #       run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
 
     uses: ./.github/workflows/test.yml
     with:
@@ -177,6 +170,10 @@ jobs:
         environment:
           - py311pdsa1all
     uses: ./.github/workflows/test.yml
+    secrets:
+      SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
     with:
       os: ${{ matrix.os }}
       environment: ${{ matrix.environment }}
