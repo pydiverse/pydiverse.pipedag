@@ -16,7 +16,7 @@ comment on existing issues to extend them to your needs or to add solution ideas
 To install the package locally in development mode, you will need to install
 [pixi](https://pixi.sh/latest/). For those who haven't used pixi before, it is a
 poetry style dependency management tool based on conda/micromamba/conda-forge package 
-ecosystem. The conda-forge repository has well maintained packages for Linux, MacOS, 
+ecosystem. The conda-forge repository has well maintained packages for Linux, macOS, 
 and Windows supporting both ARM and X86 architectures. Especially, installing 
 psycopg2 in a portable way got much easier with pixi. In addition, pixi is really 
 strong in creating lock files for reproducible environments (including system libraries) 
