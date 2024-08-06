@@ -283,7 +283,7 @@ select * from stage_2.task_2_out;
 
 ## Troubleshooting
 
-### Installing mssql odbc driver for MacOS and Linux
+### Installing mssql odbc driver for macOS and Linux
 
 Install via Microsoft's
 instructions for [Linux](https://docs.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server)
