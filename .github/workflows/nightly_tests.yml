@@ -14,61 +14,58 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: "check if latest commit is within 24 hrs"
+      - name: check if latest commit is within 24 hrs
         id: should-run
         continue-on-error: true
         if: ${{ github.event_name == 'schedule' }}
-        shell: bash
-        run: "test -z $(git rev-list --after=\"24 hours\" ${{ github.sha }}) && echo \"::set-output name=should-run::false\""
+        run: test -z $(git rev-list --after=\"24 hours\" ${{ github.sha }}) && echo \"::set-output name=should-run::false\"
 
   os_test:
-    name: "OS Test"  # - ${{ matrix.os }} / ${{ matrix.python-version }}"
-    runs-on: ${{ matrix.os }}-latest
-    needs: check
+    name: OS Test
+    needs: [check]
     if: ${{ needs.check.outputs.should-run != 'false' }}
-    timeout-minutes: 90
     strategy:
       matrix:
-        os: [ Ubuntu, macOS, Windows ]
-        environment: ['py312', 'py311', 'py39', 'py39pdsa1']
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Environment
-        uses: ./.github/actions/setup
-        with:
-          environments: ${{ matrix.environment }}
-          docker-services: |
-            postgres
-            zoo
-
-      - name: Run Tests
-        shell: bash
-        run: |
-          pixi run -e ${{ matrix.environment }} pytest --workers 4
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+        environment:
+          - py312
+          - py311
+          - py39
+          - py39pdsa1
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      docker-services: |
+        postgres
+        zoo
+      pytest-arguments: --mssql -m mssql --polars --ibis --pdtransform
 
   library_version_test:
-    name: "Library Version Test"  # - ${{ matrix.os }} / ${{ matrix.python-version }}"
-    runs-on: ${{ matrix.os }}-latest
-    needs: check
+    name: Library Version Test
+    needs: [check]
     if: ${{ needs.check.outputs.should-run != 'false' }}
-    timeout-minutes: 90
     strategy:
       matrix:
-        os: [ Ubuntu ]
-        environment: ['py312all', 'py311all', 'py310all' 'py39all', 'py39pdsa1all', 'py311pdsa1all']
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Environment
-        uses: ./.github/actions/setup
-        with:
-          environments: ${{ matrix.environment }}
-          docker-services: |
-            postgres
-            zoo
-
-      - name: Run Tests
-        shell: bash
-        run: |
-          pixi run -e ${{ matrix.environment }} pytest --workers 4 --mssql --ibm_db2 --snowflake --polars --pdtransform
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+        environment:
+          - py312all
+          - py311all
+          - py310all
+          - py39all
+          - py39pdsa1all
+          - py311pdsa1all
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      docker-services: |
+        postgres
+        zoo
+      pytest-arguments: --mssql --ibm_db2 --snowflake --polars --pdtransform

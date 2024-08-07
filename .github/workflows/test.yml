@@ -58,4 +58,4 @@ jobs:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}        
         run: |
-          pixi run -e ${{ inputs.environment }} pytest tests -ra ${RUNNER_DEBUG:+-v} --color=yes ${{ inputs.pytest-arguments }}
+          pixi run -e ${{ inputs.environment }} pytest tests -ra ${RUNNER_DEBUG:+-v} --color=yes --workers=4 ${{ inputs.pytest-arguments }}
