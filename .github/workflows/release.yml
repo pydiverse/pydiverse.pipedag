@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    name: 'Build and Release on PyPi'
+    name: Build Package
     runs-on: ubuntu-latest
     steps:
       - name: Checkout branch
@@ -34,7 +34,7 @@ jobs:
           path: dist/*
 
   release:
-    name: Publish package
+    name: Publish Package
     if: startsWith(github.ref, 'refs/tags/')
     needs: [build]
     runs-on: ubuntu-latest
