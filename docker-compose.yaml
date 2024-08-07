@@ -31,4 +31,4 @@ services:
       DBNAME: testdb
       UPDATEAVAIL: NO
     ports:
-      - 5000:5000
+      - 50000:50000
