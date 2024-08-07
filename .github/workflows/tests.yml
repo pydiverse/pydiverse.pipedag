@@ -12,6 +12,11 @@ on:
     branches:
       - '**'
 
+# Automatically stop old builds on the same branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.number }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     name: Pre-commit Checks
