@@ -262,9 +262,7 @@ select * from stage_2.task_2_out;
 
 For IBM DB2 on macOS, there are only drivers for the `x86_64` architecture, not on `aarch64` 
 (see [this tracking issue](https://ibm-data-and-ai.ideas.ibm.com/ideas/DB2CON-I-92)). For this reason, you need to have 
-Rosetta 2 installed and create the conda environment in `x86_64` mode: 
-
-[//]: # "todo: add docs when they are [available](https://github.com/prefix-dev/pixi/issues/1763)"
+Rosetta 2 installed and create the conda environment in `x86_64` mode (see [here](https://pixi.sh/dev/reference/project_configuration/#platforms) for more info about this).
 
 ```bash
 softwareupdate --install-rosetta
