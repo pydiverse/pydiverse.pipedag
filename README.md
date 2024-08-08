@@ -29,24 +29,6 @@ docker (or alternative container runtime) installation:
 
 ```bash
 pixi global install docker-compose
-``` 
-
-On OS X with `arm64` architecture, an `x86_64` toolchain is required for DB2 development:
-- Ensure that Rosetta 2 is installed:
-```bash
-softwareupdate --install-rosetta
-```
-- Create the conda environment in `x86_64` mode:
-```bash
-conda create -n poetry
-conda activate poetry
-conda config --env --set subdir osx-64 
-conda install -c conda-forge poetry compilers cmake make psycopg2 docker-compose python=3.11
-```
-- Install homebrew for  `x86_64`  and use it to install gcc. We need this because ibm_db depends on `libstdc++.6.dylib`:
-```bash
-arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-arch -x86_64 /usr/local/bin/brew install gcc
 ```
 
 ## Installation
@@ -68,13 +50,14 @@ pixi run pre-commit install
 ```
 
 You can also use alternative environments as you find them in [pixi.toml](pixi.toml):
+
 ```bash
 pixi install -e py312
 pixi run -e py312 pre-commit install
 ```
 
 Please, bear in mind, that we currently still want to be python 3.9 compatible while
-always supporting the newest python version available on conda-forge. 
+always supporting the newest python version available on conda-forge.
 
 When using Pycharm, you might find it useful that we install a `conda` executable stub you can
 use for creating a conda interpreters: `<pydiverse.pipedag checkout>/.pixi/envs/default/libexec/conda`
@@ -83,9 +66,11 @@ For more information, see [here](https://pixi.sh/latest/ide_integration/pycharm/
 ## Testing
 
 Most tests are based on a Postgres container running. You can launch it with a working docker-compose setup via:
+
 ```bash
 docker-compose down; docker-compose up
 ```
+
 The down command helps ensure a clean state within the databases launched.
 
 After installation and launching docker container in the background, you should be able to run:
@@ -101,24 +86,30 @@ to see different parameters to launch more tests.
 pixi run pytest --workers=auto --mssql --ibm_db2 --duckdb --snowflake --pdtransform --ibis --polars --dask --prefect
 ```
 
-## Testing db2 functionality
+### IBM DB2 development on macOS
 
-For running @pytest.mark.ibm_db2 tests, you need to spin up a docker container without `docker compose` since it needs
-the `--priviledged` option which `docker compose` does not offer.
+For IBM DB2 on macOS, there are only drivers for the `x86_64` architecture, not on `aarch64` (see [this tracking issue](https://ibm-data-and-ai.ideas.ibm.com/ideas/DB2CON-I-92)).
+For this reason, you need to have Rosetta 2 installed and create the conda environment in `x86_64` mode (todo: add docs when they are [available](https://github.com/prefix-dev/pixi/issues/1763)).
 
 ```bash
-docker run -h db2server --name db2server --restart=always --detach --privileged=true -p 50000:50000 --env-file docker_db2.env_list -v /Docker:/database icr.io/db2_community/db2
+softwareupdate --install-rosetta
 ```
 
-On OS X we need to use
+Unfortunately, the `ibm_db` package is not available on conda-forge because the shipped library `libdb2.dylib` is compiled with GCC and not compatible with clang-based conda-forge installations (see [ibmdb/db2drivers #3](https://github.com/ibmdb/db2drivers/issues/3)).
+Thus, we need to install GCC via homebrew in addition to the conda environment:
+
 ```bash
-docker run -h db2server  --platform linux/amd64 --name db2server --restart=always --detach --privileged=true -p 50000:50000 --env-file docker_db2.env_list --env IS_OSXFS=true --env PERSISTENT_HOME=false -v /Users/`whoami`/Docker:/database icr.io/db2_community/db2
+# on Apple Silicon
+arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+arch -x86_64 /usr/local/bin/brew install gcc
+
+# on Intel
+brew install gcc
 ```
-instead.
 
-Then check `docker logs db2server | grep -i completed` until you see `(*) Setup has completed.`.
-
-Afterwards you can run `pixi run pytest --ibm_db2`.
+> [!NOTE]
+> Because of these reasons, the IBM DB2 drivers are only available in the `py312ibm` environment.
+> You can run tests using `pixi run -e py312ibm pytest --ibm_db2`.
 
 ## Example
 
@@ -226,6 +217,7 @@ if __name__ == "__main__":
     setup_logging()  # you can setup the logging and/or structlog libraries as you wish
     main()
 ```
+
 Attention: sa.Alias only exists for SQLAlchemy >= 2.0. Use sa.Table or sa.sql.expression.Alias for older versions.
 
 The `with tempfile.TemporaryDirectory()` is only needed to have an OS independent temporary directory available.
@@ -298,15 +290,6 @@ Same happened for MacOS. The driver was installed in `/opt/homebrew/etc/odbcinst
 
 Furthermore, make sure you use 127.0.0.1 instead of localhost. It seems that /etc/hosts is ignored.
 
-On `arm64` OS X with an `x86_64` environment it might be necessary to compile `pyodbc` using
-```bash
-arch -x86_64 /usr/local/bin/brew install unixodbc
-LDFLAGS="$LDFLAGS -L/usr/local/lib"
-CPPFLAGS="$CPPFLAGS -I/usr/local/include"
-pip uninstall pyodbc
-pip install --no-cache --pre --no-binary :all: pyodbc
-```
-
 ## Packaging and publishing to pypi and conda-forge using github actions
 
 - bump version number in [pyproject.toml](pyproject.toml)
@@ -331,7 +314,7 @@ Packages are first released on test.pypi.org:
 
 Finally, they are published via:
 
-- `git tag `\<version>
+- `git tag <version>`
 - `git push --tags`
 - `pixi run -e release hatch build`
 - `pixi run -e release twine upload --repository pypi dist/*`

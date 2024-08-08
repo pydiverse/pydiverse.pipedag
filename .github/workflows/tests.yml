@@ -97,7 +97,7 @@ jobs:
         os:
           - ubuntu-latest
         environment:
-          - py311all
+          - py312ibm
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
@@ -106,7 +106,7 @@ jobs:
         zoo
         ibm_db2
       # --polars and --ibis not supported
-      pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform -k test_change_bound_argument
+      pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform
 
   mssql_test:
     name: MSSql Tests
