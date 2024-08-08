@@ -60,8 +60,16 @@ Please, bear in mind, that we currently still want to be python 3.9 compatible w
 always supporting the newest python version available on conda-forge.
 
 When using Pycharm, you might find it useful that we install a `conda` executable stub you can
-use for creating a conda interpreters: `<pydiverse.pipedag checkout>/.pixi/envs/default/libexec/conda`
+use for creating conda interpreters: `<pydiverse.pipedag checkout>/.pixi/envs/default/libexec/conda`
 For more information, see [here](https://pixi.sh/latest/ide_integration/pycharm/).
+
+> [!NOTE]
+> The following warning is expected when running `pixi` commands that solve all environments for the first time 
+> in your checkout
+> ```
+> WARN osx-arm64 (Apple Silicon) is not supported by the pixi.toml, falling back to osx-64 (emulated with Rosetta)
+> ```
+> It actually just applies to the `py39ibm` and `py312ibm` environments used for running IBM DB2 tests.
 
 ## Testing
 
@@ -83,38 +91,10 @@ You can peak in [pytest.ini](pytest.ini) and [github actions](.github/workflows/
 to see different parameters to launch more tests.
 
 ```bash
-pixi run pytest --workers=auto --mssql --ibm_db2 --duckdb --snowflake --pdtransform --ibis --polars --dask --prefect
+pixi run pytest --workers=auto --mssql --duckdb --snowflake --pdtransform --ibis --polars --dask --prefect
 ```
 
-### IBM DB2 development on macOS
-
-For IBM DB2 on macOS, there are only drivers for the `x86_64` architecture, not on `aarch64` (see [this tracking issue](https://ibm-data-and-ai.ideas.ibm.com/ideas/DB2CON-I-92)).
-For this reason, you need to have Rosetta 2 installed and create the conda environment in `x86_64` mode (todo: add docs when they are [available](https://github.com/prefix-dev/pixi/issues/1763)).
-
-```bash
-softwareupdate --install-rosetta
-```
-
-Unfortunately, the `ibm_db` package is not available on conda-forge because the shipped library `libdb2.dylib` is compiled with GCC and not compatible with clang-based conda-forge installations (see [ibmdb/db2drivers #3](https://github.com/ibmdb/db2drivers/issues/3)).
-Thus, we need to install GCC via homebrew in addition to the conda environment:
-
-```bash
-# on Apple Silicon
-arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-arch -x86_64 /usr/local/bin/brew install gcc
-
-# on Intel
-brew install gcc
-```
-
-> [!NOTE]
-> Because of these reasons, the IBM DB2 drivers are only available in the `py312ibm` abd `py39ibm` environments.
-> You can run tests using `pixi run -e py312ibm pytest --ibm_db2`.
->
-> Note that the following warning is expected when running IBM DB2 tests on Apple Silicon
-> ```
-> WARN osx-arm64 (Apple Silicon) is not supported by the pixi.toml, falling back to osx-64 (emulated with Rosetta)
-> ```
+for `--ibm_db2`, see the [IBM DB2 development on macOS](#ibm-db2-development-on-macos) section. 
 
 ## Example
 
@@ -278,6 +258,40 @@ psql --username=sa --dbname=pipedag_default
 select * from stage_2.task_2_out;
 ```
 
+### IBM DB2 development on macOS
+
+For IBM DB2 on macOS, there are only drivers for the `x86_64` architecture, not on `aarch64` 
+(see [this tracking issue](https://ibm-data-and-ai.ideas.ibm.com/ideas/DB2CON-I-92)). For this reason, you need to have 
+Rosetta 2 installed and create the conda environment in `x86_64` mode: 
+
+[//]: # "todo: add docs when they are [available](https://github.com/prefix-dev/pixi/issues/1763)"
+
+```bash
+softwareupdate --install-rosetta
+```
+
+Unfortunately, the `ibm_db` package is not available on conda-forge because the shipped library 
+`libdb2.dylib` is compiled with GCC and not compatible with clang-based conda-forge installations 
+(see [ibmdb/db2drivers #3](https://github.com/ibmdb/db2drivers/issues/3)).
+Thus, we need to install GCC via homebrew in addition to the conda environment.
+
+On Apple Silicon (M1/M2/M3/...), you need to install homebrew+gcc using Rosetta (Rosetta uses /usr/local by default):
+```bash
+# 
+arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+arch -x86_64 /usr/local/bin/brew install gcc
+```
+
+On Intel based Macs:
+```bash
+brew install gcc
+```
+
+> [!NOTE]
+> Because of these reasons, the IBM DB2 drivers are only available in the `py312ibm` and `py39ibm` 
+> environments.
+> You can run tests using `pixi run -e py312ibm pytest --ibm_db2`.
+
 ## Troubleshooting
 
 ### Installing mssql odbc driver for macOS and Linux
@@ -286,9 +300,10 @@ Install via Microsoft's
 instructions for [Linux](https://docs.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server)
 or [macOS](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos).
 
-In one Linux installation case, `odbcinst -j` revealed that it installed the configuration in `/etc/unixODBC/*`. But conda installed pyodbc brings
-its own `odbcinst` executable and that shows odbc config files are expected in `/etc/*`. Symlinks were enough to fix the
-problem. Try `python -c 'import pyodbc;print(pyodbc.drivers())'` and see whether you get more than an empty list.
+In one Linux installation case, `odbcinst -j` revealed that it installed the configuration in `/etc/unixODBC/*`. 
+But conda installed pyodbc brings its own `odbcinst` executable and that shows odbc config files are expected in 
+`/etc/*`. Symlinks were enough to fix the problem. Try `pixi run python -c 'import pyodbc;print(pyodbc.drivers())'` 
+and see whether you get more than an empty list.
 
 Same happened for MacOS. The driver was installed in `/opt/homebrew/etc/odbcinst.ini` but pyodbc expected it in 
 `/etc/odbcinst.ini`. This can also be solved by `sudo ln -s /opt/homebrew/etc/odbcinst.ini /etc/odbcinst.ini`.
@@ -303,14 +318,13 @@ Furthermore, make sure you use 127.0.0.1 instead of localhost. It seems that /et
 - tag commit with `git tag <version>`, e.g. `git tag 0.7.0`
 - `git push --tags`
 
-## Packaging and publishing to Pypi manually
+The package should appear on https://pypi.org/project/pydiverse-pipedag/ in a timely manner. It is normal that it takes
+a few hours until the new package version is available on https://conda-forge.org/packages/.
 
-For publishing with poetry to pypi, see:
-https://www.digitalocean.com/community/tutorials/how-to-publish-python-packages-to-pypi-using-poetry-on-ubuntu-22-04
+### Packaging and publishing to Pypi manually
 
 Packages are first released on test.pypi.org:
 
-- see https://stackoverflow.com/questions/68882603/using-python-poetry-to-publish-to-test-pypi-org
 - bump version number in [pyproject.toml](pyproject.toml) (check consistency with [changelog.md](docs/source/changelog.md))
 - push increased version number to `main` branch
 - `pixi run -e release hatch build`
@@ -321,13 +335,15 @@ Finally, they are published via:
 
 - `git tag <version>`
 - `git push --tags`
+- Attention: Please, only continue here, if automatic publishing fails for some reason!
 - `pixi run -e release hatch build`
 - `pixi run -e release twine upload --repository pypi dist/*`
 
-## Publishing package on conda-forge manually
+### Publishing package on conda-forge manually
 
 Conda-forge packages are updated via:
 
+- Attention: Please, only continue here, if automatic conda-forge publishing fails for longer than 24h!
 - https://github.com/conda-forge/pydiverse-pipedag-feedstock#updating-pydiverse-pipedag-feedstock
 - update `recipe/meta.yaml`
 - test meta.yaml in pipedag repo: `conda-build build ../pydiverse-pipedag-feedstock/recipe/meta.yaml`
