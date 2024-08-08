@@ -75,9 +75,9 @@ platforms = ["linux-64", "osx-64", "win-64"]
 ibm-db = ">=3.1.4"
 [feature.ibm-db.target.linux.dependencies]
 ibm_db = ">=3.1.4"
-ibm_db_sa = ">=0.3.8"
 [feature.ibm-db.target.win.dependencies]
 ibm_db = ">=3.1.4"
+[feature.ibm-db.dependencies]
 ibm_db_sa = ">=0.3.8"
 
 [feature.docs.dependencies]
