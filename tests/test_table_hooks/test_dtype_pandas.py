@@ -40,7 +40,7 @@ def test_dtype_from_pandas():
     assert_conversion(np.float64, DType.FLOAT64)
     assert_conversion(np.float32, DType.FLOAT32)
 
-    assert_conversion(np.string_, DType.STRING)
+    assert_conversion(np.bytes_, DType.STRING)
     assert_conversion(np.bool_, DType.BOOLEAN)
 
     assert_conversion(np.datetime64, DType.DATETIME)

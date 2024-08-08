@@ -18,6 +18,7 @@ class Operation(Enum):
     DELITEM = 22
     CALL = 50
     GET = 60
+    BOOL = 70
 
     def __repr__(self):
         return self.name
@@ -41,6 +42,9 @@ class ComputationTracer:
 
     def __enter__(self):
         self._monkey_patch()
+        # clear trace already filled during patching (modules may issue calls during
+        # initialization)
+        self.trace = []
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -80,7 +84,13 @@ class ComputationTracer:
         ...
 
     def trace_hash(self) -> str:
-        from dask.base import tokenize
+        try:
+            from dask.base import tokenize
+        except ModuleNotFoundError:
+            raise ModuleNotFoundError(
+                "module dask is required to use @materialize(version=AUTO_VERSION)"
+                " or computation_tracing."
+            ) from None
 
         return tokenize(self.trace)
 
@@ -126,7 +136,8 @@ class ComputationTracerProxy:
         return tracer._get_proxy((Operation.GET, instance, self))
 
     def __bool__(self):
-        raise RuntimeError("Can't convert a ComputationTracerProxy to a boolean")
+        tracer = _get_tracer(self)
+        return tracer._get_proxy((Operation.BOOL, self))
 
     def __iter__(self):
         raise RuntimeError("__iter__ is not supported by ComputationTracerProxy")

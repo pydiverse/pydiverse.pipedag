@@ -1,17 +1,17 @@
-# Patch pytest EncodedFile (from pytest-capture plugin) to be pickleable
 from __future__ import annotations
 
-# https://github.com/mariusvniekerk/pytest-dask/blob/master/pytest_dask/serde_patch.py
 from io import BytesIO
 
+# Patch pytest EncodedFile (from pytest-capture plugin) to be pickleable
+# https://github.com/mariusvniekerk/pytest-dask/blob/master/pytest_dask/serde_patch.py
 from _pytest.capture import EncodedFile
 
 
 def apply_getsetstate(cls):
     def inner(ref):
         cls.__getstate__ = ref.__getstate__
-        cls.__setstate__ = ref.__setstate__
-
+        cls.__reduce__ = ref.__reduce__
+        cls.__reduce_ex__ = ref.__reduce_ex__
         return cls
 
     return inner
@@ -27,8 +27,10 @@ class _EncodedFile:
         self.buffer.seek(current_position, 0)
         return {"value": value, "encoding": self.encoding}
 
-    def __setstate__(self, state):
-        assert isinstance(self, EncodedFile)
-        self.encoding = state["encoding"]
-        buffer = BytesIO(state["value"])
-        self.buffer = buffer
+    def __reduce__(self):
+        state = self.__getstate__()
+        return self.__class__, (BytesIO(state["value"]), state["encoding"])
+
+    def __reduce_ex__(self, protocol):
+        _ = protocol
+        return self.__reduce__()

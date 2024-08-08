@@ -271,8 +271,9 @@ class PandasTableHook(TableHook[SQLTableStore]):
             df = pd.read_sql(query, con=conn, dtype=dtypes)
         else:
             df = pd.read_sql(query, con=conn)
-            for col, dtype in dtypes.items():
-                df[col] = df[col].astype(dtype)
+            if dtypes is not None:
+                for col, dtype in dtypes.items():
+                    df[col] = df[col].astype(dtype)
         return df
 
     @classmethod
@@ -553,6 +554,12 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         Provide hook that allows to override the default
         download of polars tables from the tablestore.
         """
+        # TODO: consider using arrow_odbc or adbc-driver-postgresql together with:
+        # Cursor.fetchallarrow()
+
+        # This implementation requires connectorx which does not work for duckdb
+        # and osx-arm64.
+        # Attention: In case this call fails, we simply fall-back to pandas hook.
         df = polars.read_database_uri(query, connection_uri)
         return df
 
@@ -739,7 +746,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         """
         if not isinstance(obj, polars.LazyFrame):
             raise TypeError("Expected LazyFrame")
-        return obj.serialize()
+        return str(obj.serialize())
 
 
 try:
