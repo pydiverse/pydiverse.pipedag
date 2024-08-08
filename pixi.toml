@@ -138,4 +138,5 @@ py311all = ["py311", "dev", "zookeeper", "all-tests", "filelock", "dask", "prefe
 py312all = ["py312", "dev", "zookeeper", "all-tests", "filelock", "dask", "prefect", "pd2", "sa2", "snowflake"]
 py39pdsa1all = ["py39", "dev", "zookeeper", "pd1", "sa1", "connectorx-noarm", "all-tests", "filelock",  "dask", "prefect", "snowflake", "tidypolars"]
 py311pdsa1all = ["py311", "dev", "zookeeper", "pd1", "sa1", "connectorx-noarm", "all-tests", "filelock",  "dask", "prefect", "snowflake"]
-py312ibm = ["py310", "dev", "zookeeper", "pd2", "sa2", "dask", "ibm-db"]
+py39ibm = ["py39", "dev", "zookeeper", "pd2", "sa2", "dask", "ibm-db"]
+py312ibm = ["py312", "dev", "zookeeper", "pd2", "sa2", "dask", "ibm-db"]

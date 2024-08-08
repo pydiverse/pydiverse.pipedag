@@ -97,6 +97,7 @@ jobs:
         os:
           - ubuntu-latest
         environment:
+          - py39ibm
           - py312ibm
     uses: ./.github/workflows/test.yml
     with:
