@@ -108,8 +108,13 @@ brew install gcc
 ```
 
 > [!NOTE]
-> Because of these reasons, the IBM DB2 drivers are only available in the `py312ibm` environment.
+> Because of these reasons, the IBM DB2 drivers are only available in the `py312ibm` abd `py39ibm` environments.
 > You can run tests using `pixi run -e py312ibm pytest --ibm_db2`.
+>
+> Note that the following warning is expected when running IBM DB2 tests on Apple Silicon
+> ```
+> WARN osx-arm64 (Apple Silicon) is not supported by the pixi.toml, falling back to osx-64 (emulated with Rosetta)
+> ```
 
 ## Example
 
