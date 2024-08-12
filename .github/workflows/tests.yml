@@ -183,6 +183,7 @@ jobs:
       os: ${{ matrix.os }}
       environment: ${{ matrix.environment }}
       workers: 32  # tests are often waiting on snowflake
+      timeout-minutes: 40
       docker-services: |
         postgres
         zoo

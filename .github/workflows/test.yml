@@ -16,6 +16,9 @@ on:
       workers:
         default: 4
         type: number
+      timeout-minutes:
+        default: 10
+        type: number
     secrets:
       SNOWFLAKE_PASSWORD:
         required: false
@@ -28,7 +31,7 @@ jobs:
   test:
     name: pytest
     runs-on: ${{ inputs.os }}
-    timeout-minutes: 20
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     steps:
       - uses: actions/checkout@v4
 
