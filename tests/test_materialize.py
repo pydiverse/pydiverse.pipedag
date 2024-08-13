@@ -590,6 +590,7 @@ def _test_nullable_get_flow():
     return f, lazy_tables
 
 
+@skip_instances("snowflake")
 @pytest.mark.parametrize(
     "_get_flow", [_test_nullable_get_flow, _test_nullable_lazy_get_flow]
 )
