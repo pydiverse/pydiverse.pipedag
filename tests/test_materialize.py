@@ -619,7 +619,8 @@ def test_nullable(_get_flow):
             )
 
 
-@skip_instances("duckdb")  # duckdb does not persist nullable flags over connections
+# duckdb does not persist nullable flags over connections; snowflake is slow
+@skip_instances("duckdb", "snowflake")
 @pytest.mark.parametrize(
     "_get_flow", [_test_nullable_get_flow, _test_nullable_lazy_get_flow]
 )
