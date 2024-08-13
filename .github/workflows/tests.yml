@@ -61,6 +61,7 @@ jobs:
           - py39all
           - py310all
           - py311all
+          - py312all
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
@@ -87,7 +88,7 @@ jobs:
       environment: ${{ matrix.environment }}
       docker-services: |
         zoo
-      pytest-arguments: --duckdb -m duckdb --polars --ibis --pdtransform
+      pytest-arguments: --duckdb -m duckdb --polars --ibis --pdtransform --no-postgres
 
   db2_test:
     name: DB2 Tests
@@ -107,7 +108,7 @@ jobs:
         zoo
         ibm_db2
       # --polars and --ibis not supported
-      pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform
+      pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform --no-postgres
 
   mssql_test:
     name: MSSql Tests
@@ -126,7 +127,7 @@ jobs:
       docker-services: |
         mssql
         zoo
-      pytest-arguments: --mssql -m mssql --polars --ibis --pdtransform
+      pytest-arguments: --mssql -m mssql --polars --ibis --pdtransform --no-postgres
 
   orchestration_test:
     name: Orchestration Tests
@@ -182,9 +183,9 @@ jobs:
     with:
       os: ${{ matrix.os }}
       environment: ${{ matrix.environment }}
-      workers: 32  # tests are often waiting on snowflake
+      workers: 1  # tests are often waiting on snowflake
       timeout-minutes: 40
       docker-services: |
         postgres
         zoo
-      pytest-arguments: --polars --ibis --pdtransform --snowflake
+      pytest-arguments: --polars --ibis --pdtransform --snowflake --no-postgres
