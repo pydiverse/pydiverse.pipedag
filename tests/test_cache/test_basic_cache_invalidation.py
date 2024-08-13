@@ -27,7 +27,8 @@ try:
 except ImportError:
     pl = None
 
-pytestmark = [with_instances(ALL_INSTANCES)]
+# snowflake tests are too slow, possibly they could move to nightly tests
+pytestmark = [with_instances(tuple(set(ALL_INSTANCES) - {"snowflake"}))]
 
 
 # Test Basic Cache Invalidation Behaviour

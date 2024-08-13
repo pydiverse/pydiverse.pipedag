@@ -15,7 +15,8 @@ from tests.util import select_as
 from tests.util import tasks_library as m
 from tests.util.spy import spy_task
 
-pytestmark = [with_instances(ALL_INSTANCES)]
+# snowflake tests are too slow, possibly they could move to nightly tests
+pytestmark = [with_instances(tuple(set(ALL_INSTANCES) - {"snowflake"}))]
 
 
 # Test that running a flow that contains a task with an invalid cache function
