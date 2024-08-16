@@ -441,9 +441,16 @@ class SQLTableStore(BaseTableStore):
             self.logger.info("Executing sql", query=pretty_query_str)
 
         if isinstance(query, str):
-            return conn.execute(sa.text(query))
+            ret = conn.execute(sa.text(query))
         else:
-            return conn.execute(query)
+            ret = conn.execute(query)
+        if conn.dialect.name == "snowflake":
+            self.logger.debug(
+                "Sleep shortly to ensure consistency with quick snowflake requests"
+            )
+            time.sleep(0.5)
+            self.logger.debug("done")
+        return ret
 
     def execute(
         self,
