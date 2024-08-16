@@ -423,11 +423,6 @@ class SQLTableStore(BaseTableStore):
     def _execute(
         self, query, conn: sa.engine.Connection, truncate_printed_select=False
     ):
-        if conn.dialect.name == "snowflake":
-            self.logger.debug(
-                "Sleep shortly to ensure consistency with quick snowflake requests"
-            )
-            time.sleep(0.5)
         if self.print_sql:
             if isinstance(query, str):
                 query_str = query
@@ -444,12 +439,6 @@ class SQLTableStore(BaseTableStore):
             ret = conn.execute(sa.text(query))
         else:
             ret = conn.execute(query)
-        if conn.dialect.name == "snowflake":
-            self.logger.debug(
-                "Sleep shortly to ensure consistency with quick snowflake requests"
-            )
-            time.sleep(0.5)
-            self.logger.debug("done")
         return ret
 
     def execute(
