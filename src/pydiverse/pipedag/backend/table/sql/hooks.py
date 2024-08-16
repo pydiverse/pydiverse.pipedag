@@ -134,6 +134,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
             ]
             store.execute(statements)
             store.add_indexes_and_set_nullable(table, schema)
+        store.optional_pause_for_db_transactionality("table_create")
 
     @classmethod
     def retrieve(
@@ -391,6 +392,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
             on_empty_table=False if early else None,
             table_cols=df.columns,
         )
+        store.optional_pause_for_db_transactionality("table_create")
 
     @classmethod
     def retrieve(

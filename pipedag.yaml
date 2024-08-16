@@ -172,7 +172,6 @@ instances:
 
   snowflake:
     instance_id: pd_snowflake
-    stage_commit_technique: READ_VIEWS
     table_store:
       table_store_connection: snowflake
     lock_manager:
