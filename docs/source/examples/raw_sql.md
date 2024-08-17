@@ -25,7 +25,7 @@ import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, materialize
 from pydiverse.pipedag.context import ConfigContext, StageLockContext
-from pydiverse.pipedag.materialize.container import RawSql
+from pydiverse.pipedag.container.container import RawSql
 from tests.fixtures.instances import with_instances
 
 """
@@ -38,13 +38,13 @@ they can be gradually converted from text SQL to programmatically created SQL (p
 
 @materialize(input_type=sa.Table, lazy=True)
 def tsql(
-    name: str,
-    script_directory: Path,
-    *,
-    out_stage: Stage | None = None,
-    in_sql=None,
-    helper_sql=None,
-    depend=None,
+        name: str,
+        script_directory: Path,
+        *,
+        out_stage: Stage | None = None,
+        in_sql=None,
+        helper_sql=None,
+        depend=None,
 ):
     _ = depend  # only relevant for adding additional task dependency
     script_path = script_directory / name
@@ -56,7 +56,7 @@ def tsql(
 
 
 def raw_sql_bind_schema(
-    sql, prefix: str, stage: Stage | RawSql | None, *, transaction=False
+        sql, prefix: str, stage: Stage | RawSql | None, *, transaction=False
 ):
     if isinstance(stage, RawSql):
         stage = stage.stage

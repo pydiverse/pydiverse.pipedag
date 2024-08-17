@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 import structlog
 
+from pydiverse.pipedag.container.container import ExternalTableReference, Table
 from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext, TaskContext
 from pydiverse.pipedag.context.run_context import FinalTaskState
 from pydiverse.pipedag.errors import StageError
@@ -168,7 +169,13 @@ class Task:
         run_context: RunContext = None,
         config_context: ConfigContext = None,
         ignore_position_hashes: bool = False,
+        link=None,
     ):
+        if link:
+            self.logger.info("Linked task")
+            result = Table(ExternalTableReference(link[1], link[0]))
+            self.did_finish(FinalTaskState.COMPLETED)
+            return result
         # Hand over run context if using multiprocessing
         if run_context is None:
             run_context = RunContext.get()

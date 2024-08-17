@@ -13,7 +13,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateTableAsSelect,
     DropTable,
 )
-from pydiverse.pipedag.materialize.container import ExternalTableReference, Schema
+from pydiverse.pipedag.container.container import ExternalTableReference, Schema
 from tests.fixtures.instances import with_instances
 from tests.util.sql import sql_table_expr
 from tests.util.tasks_library import (

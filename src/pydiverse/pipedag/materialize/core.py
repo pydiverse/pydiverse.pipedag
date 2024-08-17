@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, overload
 import sqlalchemy as sa
 
 from pydiverse.pipedag._typing import CallableT
+from pydiverse.pipedag.container.container import Blob, RawSql, Table
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.context.context import (
     CacheValidationMode,
@@ -19,7 +20,6 @@ from pydiverse.pipedag.context.context import (
 from pydiverse.pipedag.core.task import Task, TaskGetItem, UnboundTask
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.cache import TaskCacheInfo, task_cache_key
-from pydiverse.pipedag.materialize.container import Blob, RawSql, Table
 from pydiverse.pipedag.util import deep_map
 from pydiverse.pipedag.util.computation_tracing import (
     ComputationTraceRef,

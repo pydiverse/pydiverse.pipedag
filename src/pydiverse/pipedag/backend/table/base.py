@@ -12,10 +12,10 @@ from typing_extensions import Self
 
 from pydiverse.pipedag import ConfigContext
 from pydiverse.pipedag._typing import T, TableHookResolverT
+from pydiverse.pipedag.container.container import RawSql, Table
 from pydiverse.pipedag.context import RunContext, TaskContext
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.cache import TaskCacheInfo, lazy_table_cache_key
-from pydiverse.pipedag.materialize.container import RawSql, Table
 from pydiverse.pipedag.materialize.metadata import (
     LazyTableMetadata,
     RawSqlMetadata,

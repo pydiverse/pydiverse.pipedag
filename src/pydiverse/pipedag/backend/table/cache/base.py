@@ -7,8 +7,8 @@ import structlog
 from pydiverse.pipedag import Stage
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.table.base import TableHookResolver
+from pydiverse.pipedag.container.container import Table
 from pydiverse.pipedag.context import RunContext
-from pydiverse.pipedag.materialize.container import Table
 from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.util import Disposable
 

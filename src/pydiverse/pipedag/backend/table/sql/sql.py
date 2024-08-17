@@ -29,6 +29,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     RenameTable,
     split_ddl_statement,
 )
+from pydiverse.pipedag.container.container import RawSql, Schema
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.context.context import (
     CacheValidationMode,
@@ -37,7 +38,6 @@ from pydiverse.pipedag.context.context import (
 )
 from pydiverse.pipedag.context.run_context import DeferredTableStoreOp
 from pydiverse.pipedag.errors import CacheError
-from pydiverse.pipedag.materialize.container import RawSql, Schema
 from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import (
     LazyTableMetadata,

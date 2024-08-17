@@ -5,9 +5,9 @@ import pytest
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Blob, ConfigContext, Flow, Stage, Table
+from pydiverse.pipedag.container.container import RawSql
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.context.context import CacheValidationMode
-from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import (
     AUTO_VERSION,
     input_stage_versions,

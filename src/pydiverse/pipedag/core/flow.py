@@ -257,6 +257,7 @@ class Flow:
         disable_cache_function: bool | None = None,
         ignore_task_version: bool | None = None,
         ignore_position_hashes: bool = False,
+        links: dict[(str, str), (str, str)] | None = None,
         **kwargs,
     ) -> Result:
         """Execute the flow.
@@ -387,7 +388,9 @@ class Flow:
         with config, RunContextServer(subflow, trace_hook):
             if orchestration_engine is None:
                 orchestration_engine = config.create_orchestration_engine()
-            result = orchestration_engine.run(subflow, ignore_position_hashes, **kwargs)
+            result = orchestration_engine.run(
+                subflow, ignore_position_hashes, links, **kwargs
+            )
 
             visualization_url = result.visualize_url()
             self.logger.info("Flow visualization", url=visualization_url)

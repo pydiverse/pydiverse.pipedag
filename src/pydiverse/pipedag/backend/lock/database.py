@@ -14,8 +14,8 @@ from pydiverse.pipedag.backend.lock.base import BaseLockManager, Lockable, LockS
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateSchema,
 )
+from pydiverse.pipedag.container.container import Schema
 from pydiverse.pipedag.errors import LockError
-from pydiverse.pipedag.materialize.container import Schema
 
 DISABLE_DIALECT_REGISTRATION = "__DISABLE_DIALECT_REGISTRATION"
 

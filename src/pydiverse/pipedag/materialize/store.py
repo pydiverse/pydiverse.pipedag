@@ -7,13 +7,13 @@ import structlog
 
 from pydiverse.pipedag import Blob, Stage, Table, backend
 from pydiverse.pipedag._typing import Materializable, T
+from pydiverse.pipedag.container.container import RawSql
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.core.task import Task, TaskGetItem
 from pydiverse.pipedag.errors import CacheError, DuplicateNameError, StageError
 from pydiverse.pipedag.materialize.cache import TaskCacheInfo
-from pydiverse.pipedag.materialize.container import RawSql
 from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import TaskMetadata
 from pydiverse.pipedag.util import Disposable, deep_map

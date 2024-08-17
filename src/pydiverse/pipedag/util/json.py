@@ -14,9 +14,9 @@ from functools import cache
 from pathlib import Path
 
 from pydiverse.pipedag import ConfigContext, Stage
+from pydiverse.pipedag.container.container import Blob, RawSql, Table
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.core.config import PipedagConfig
-from pydiverse.pipedag.materialize.container import Blob, RawSql, Table
 
 TYPE_KEY = "__pipedag_type__"
 
