@@ -45,7 +45,15 @@ class DaskEngine(OrchestrationEngine):
 
         self.dask_compute_kwargs.update(dask_compute_kwargs)
 
-    def run(self, flow: Subflow, ignore_position_hashes: bool = False, **run_kwargs):
+    def run(
+        self,
+        flow: Subflow,
+        ignore_position_hashes: bool = False,
+        task_links: dict[(str, str, str), (str, str)] | None = None,
+        **run_kwargs,
+    ):
+        _ = ignore_position_hashes
+        _ = task_links
         run_context = RunContext.get()
         config_context = ConfigContext.get()
 

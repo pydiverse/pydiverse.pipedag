@@ -169,11 +169,14 @@ class Task:
         run_context: RunContext = None,
         config_context: ConfigContext = None,
         ignore_position_hashes: bool = False,
-        link=None,
+        task_link: tuple[str, str] | None = None,
     ):
-        if link:
-            self.logger.info("Linked task")
-            result = Table(ExternalTableReference(link[1], link[0]))
+        if task_link:
+            self.logger.info(
+                f"Linking task {self.name}"
+                f" to external table {task_link[0]}.{task_link[1]}"
+            )
+            result = Table(ExternalTableReference(task_link[1], task_link[0]))
             self.did_finish(FinalTaskState.COMPLETED)
             return result
         # Hand over run context if using multiprocessing

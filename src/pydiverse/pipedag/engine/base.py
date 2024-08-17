@@ -14,7 +14,11 @@ class OrchestrationEngine(Disposable, ABC):
 
     @abstractmethod
     def run(
-        self, flow: Subflow, ignore_position_hashes: bool = False, links=None, **kwargs
+        self,
+        flow: Subflow,
+        ignore_position_hashes: bool = False,
+        task_links: dict[(str, str, str), (str, str)] | None = None,
+        **kwargs,
     ) -> Result:
         """Execute a flow
 
