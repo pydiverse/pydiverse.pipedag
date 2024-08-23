@@ -17,7 +17,7 @@ class OrchestrationEngine(Disposable, ABC):
         self,
         flow: Subflow,
         ignore_position_hashes: bool = False,
-        task_links: dict[(str, str, str), (str, str)] | None = None,
+        inputs=None,
         **kwargs,
     ) -> Result:
         """Execute a flow

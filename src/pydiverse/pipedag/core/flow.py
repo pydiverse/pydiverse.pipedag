@@ -257,7 +257,7 @@ class Flow:
         disable_cache_function: bool | None = None,
         ignore_task_version: bool | None = None,
         ignore_position_hashes: bool = False,
-        task_links: dict[(str, str, str), (str, str)] | None = None,
+        inputs=None,
         **kwargs,
     ) -> Result:
         """Execute the flow.
@@ -307,16 +307,13 @@ class Flow:
             for the chosen subgraph may never be used more
             than once per stage.
             NOTE: This is only supported for the SequentialEngine and SQLTablestore
-        :param task_links:
+        :param inputs:
             Provide a mapping from tasks to external tables in the form of a dictionary.
             The format is:
-            (stage_name, task_name, position_hash) -> (schema_name, table_name).
+            task -> ExternalTableReference.
             Every task that is listed in this mapping
             will not be executed but instead the output,
-            will be read from the external table (using ExternalTableReference).
-            The position_hash can be set to None,
-            in this case all tasks in the stage with the given name
-            will be linked.
+            will be read from the external reference.
             NOTE: This is only supported for the SequentialEngine and SQLTablestore
         :param kwargs:
             Other keyword arguments that get passed on directly to the
@@ -401,7 +398,7 @@ class Flow:
             if orchestration_engine is None:
                 orchestration_engine = config.create_orchestration_engine()
             result = orchestration_engine.run(
-                subflow, ignore_position_hashes, task_links, **kwargs
+                subflow, ignore_position_hashes, inputs, **kwargs
             )
 
             visualization_url = result.visualize_url()

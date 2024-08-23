@@ -17,7 +17,7 @@ class SequentialEngine(OrchestrationEngine):
         self,
         flow: Subflow,
         ignore_position_hashes: bool = False,
-        task_links: dict[(str, str, str), (str, str)] | None = None,
+        inputs=None,
         **run_kwargs,
     ):
         run_context = RunContext.get()
@@ -31,19 +31,6 @@ class SequentialEngine(OrchestrationEngine):
             for task in flow.get_tasks():
                 try:
                     if not (set(task.input_tasks) & failed_tasks):
-                        position_hash = (
-                            task.position_hash
-                            if hasattr(task, "position_hash")
-                            else None
-                        )
-                        task_link = (
-                            None
-                            if not task_links
-                            else task_links.get(
-                                (task.stage.name, task.name, position_hash), None
-                            )
-                            or task_links.get((task.stage.name, task.name, None), None)
-                        )
                         results[task] = task.run(
                             inputs={
                                 in_id: results[in_t]
@@ -53,7 +40,7 @@ class SequentialEngine(OrchestrationEngine):
                             run_context=run_context,
                             config_context=config_context,
                             ignore_position_hashes=ignore_position_hashes,
-                            task_link=task_link,
+                            override=inputs.get(task) if inputs else None,
                         )
                     else:
                         failed_tasks.add(task)

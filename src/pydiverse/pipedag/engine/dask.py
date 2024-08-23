@@ -49,11 +49,14 @@ class DaskEngine(OrchestrationEngine):
         self,
         flow: Subflow,
         ignore_position_hashes: bool = False,
-        task_links: dict[(str, str, str), (str, str)] | None = None,
+        inputs=None,
         **run_kwargs,
     ):
         _ = ignore_position_hashes
-        _ = task_links
+        if inputs:
+            raise NotImplementedError(
+                "The inputs argument is currently not supported for the Dask engine."
+            )
         run_context = RunContext.get()
         config_context = ConfigContext.get()
 

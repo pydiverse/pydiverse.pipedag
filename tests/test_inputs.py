@@ -66,10 +66,10 @@ def test_smoke_links():
         # Linked execution. Body of duplicate_table_reference should not be executed,
         # instead output is referenced from the linked table
         result = f.run(
-            task_links={
-                ("sql_table_linked", "duplicate_table_reference", None): (
-                    "external_schema",
+            inputs={
+                table: ExternalTableReference(
                     "external_table",
+                    schema="external_schema",
                 )
             }
         )

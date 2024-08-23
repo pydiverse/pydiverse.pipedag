@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 import structlog
 
-from pydiverse.pipedag.container.container import ExternalTableReference, Table
+from pydiverse.pipedag.container.container import Table
 from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext, TaskContext
 from pydiverse.pipedag.context.run_context import FinalTaskState
 from pydiverse.pipedag.errors import StageError
@@ -169,14 +169,14 @@ class Task:
         run_context: RunContext = None,
         config_context: ConfigContext = None,
         ignore_position_hashes: bool = False,
-        task_link: tuple[str, str] | None = None,
+        override=None,
     ):
-        if task_link:
+        if override:
             self.logger.info(
-                f"Linking task {self.name}"
-                f" to external table {task_link[0]}.{task_link[1]}"
+                f"Overriding output of task {self.name}"
+                f" with table {override.schema}.{override.name}"
             )
-            result = Table(ExternalTableReference(task_link[1], task_link[0]))
+            result = Table(override)
             self.did_finish(FinalTaskState.COMPLETED)
             return result
         # Hand over run context if using multiprocessing

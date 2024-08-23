@@ -91,11 +91,14 @@ class PrefectOneEngine(OrchestrationEngine):
         self,
         flow: Subflow,
         ignore_position_hashes: bool = False,
-        task_links: dict[(str, str, str), (str, str)] | None = None,
+        inputs=None,
         **run_kwargs,
     ):
         _ = ignore_position_hashes
-        _ = task_links
+        if inputs:
+            raise NotImplementedError(
+                "The inputs argument is currently not supported for the prefect engine."
+            )
         prefect_flow, tasks_map = self.construct_prefect_flow(flow)
         result = prefect_flow.run(**run_kwargs)
 
@@ -187,7 +190,7 @@ class PrefectTwoEngine(OrchestrationEngine):
         self,
         flow: Subflow,
         ignore_position_hashes: bool = False,
-        task_links: dict[(str, str, str), (str, str)] | None = None,
+        task_links=None,
         **kwargs,
     ):
         _ = ignore_position_hashes
