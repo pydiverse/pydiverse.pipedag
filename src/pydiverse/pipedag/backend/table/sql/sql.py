@@ -52,136 +52,138 @@ DISABLE_DIALECT_REGISTRATION = "__DISABLE_DIALECT_REGISTRATION"
 class SQLTableStore(BaseTableStore):
     """Table store that materializes tables to a SQL database
 
-    Uses schema swapping for transactions:
-    Creates a schema for each stage and a temporary schema for each
-    transaction. If all tasks inside a stage succeed, swaps the schemas by
-    renaming them.
+        Uses schema swapping for transactions:
+        Creates a schema for each stage and a temporary schema for each
+        transaction. If all tasks inside a stage succeed, swaps the schemas by
+        renaming them.
 
-    The correct dialect specific subclass of ``SQLTableStore`` gets initialized when
-    based on the dialect found in the provided engine url during initialization.
+        The correct dialect specific subclass of ``SQLTableStore`` gets initialized when
+        based on the dialect found in the provided engine url during initialization.
 
-    .. rubric:: Supported Tables
+        .. rubric:: Supported Tables
 
-    The `SQLTableStore` can materialize (that is, store task output)
-    and dematerialize (that is, retrieve task input) the following Table types:
+        The `SQLTableStore` can materialize (that is, store task output)
+        and dematerialize (that is, retrieve task input) the following Table types:
 
-    .. list-table::
-       :widths: 30, 30, 30
-       :header-rows: 1
-       :stub-columns: 1
+        .. list-table::
+           :widths: 30, 30, 30
+           :header-rows: 1
+           :stub-columns: 1
 
-       * - Framework
-         - Materialization
-         - Dematerialization
+           * - Framework
+             - Materialization
+             - Dematerialization
 
-       * - SQLAlchemy
-         - | :py:class:`sa.sql.expression.Selectable
-                        <sqlalchemy.sql.expression.Selectable>`
-           | :py:class:`sa.sql.expression.TextClause
-                        <sqlalchemy.sql.expression.TextClause>`
-         - :py:class:`sa.Table <sqlalchemy.schema.Table>`
+           * - SQLAlchemy
+             - | :py:class:`sa.sql.expression.Selectable
+                            <sqlalchemy.sql.expression.Selectable>`
+               | :py:class:`sa.sql.expression.TextClause
+                            <sqlalchemy.sql.expression.TextClause>`
+             - :py:class:`sa.Table <sqlalchemy.schema.Table>`
 
-       * - Pandas
-         - :py:class:`pd.DataFrame <pandas.DataFrame>`
-         - :py:class:`pd.DataFrame <pandas.DataFrame>`
+           * - Pandas
+             - :py:class:`pd.DataFrame <pandas.DataFrame>`
+             - :py:class:`pd.DataFrame <pandas.DataFrame>`
 
-       * - Polars
-         - | :external+pl:doc:`pl.DataFrame <reference/dataframe/index>`
-           | :external+pl:doc:`pl.LazyFrame <reference/lazyframe/index>`
-         - | :external+pl:doc:`pl.DataFrame <reference/dataframe/index>`
-           | :external+pl:doc:`pl.LazyFrame <reference/lazyframe/index>`
+           * - Polars
+             - | :external+pl:doc:`pl.DataFrame <reference/dataframe/index>`
+               | :external+pl:doc:`pl.LazyFrame <reference/lazyframe/index>`
+             - | :external+pl:doc:`pl.DataFrame <reference/dataframe/index>`
+               | :external+pl:doc:`pl.LazyFrame <reference/lazyframe/index>`
 
-       * - tidypolars
-         - :py:class:`tp.Tibble <tidypolars.tibble.Tibble>`
-         - :py:class:`tp.Tibble <tidypolars.tibble.Tibble>`
+           * - tidypolars
+             - :py:class:`tp.Tibble <tidypolars.tibble.Tibble>`
+             - :py:class:`tp.Tibble <tidypolars.tibble.Tibble>`
 
-       * - Ibis
-         - :py:class:`ibis.api.Table <ibis.expr.types.relations.Table>`
-         - :py:class:`ibis.api.Table <ibis.expr.types.relations.Table>`
+           * - Ibis
+             - :py:class:`ibis.api.Table <ibis.expr.types.relations.Table>`
+             - :py:class:`ibis.api.Table <ibis.expr.types.relations.Table>`
 
-       * - pydiverse.transform
-         - ``pdt.Table``
-         - | ``pdt.eager.PandasTableImpl``
-           | ``pdt.lazy.SQLTableImpl``
+           * - pydiverse.transform
+             - ``pdt.Table``
+             - | ``pdt.eager.PolarsEager
+    ``
+               | ``pdt.lazy.SQLTableImpl``
 
-       * - pydiverse.pipedag table reference
-         - :py:class:`~.ExternalTableReference` (no materialization)
-         - Can be read with all dematerialization methods above
+           * - pydiverse.pipedag table reference
+             - :py:class:`~.ExternalTableReference` (no materialization)
+             - Can be read with all dematerialization methods above
 
-    :param url:
-        The :external+sa:ref:`SQLAlchemy engine url <database_urls>`
-        used to connect to the database.
+        :param url:
+            The :external+sa:ref:`SQLAlchemy engine url <database_urls>`
+            used to connect to the database.
 
-        This URL may contain placeholders like ``{name}`` or ``{instance_id}``
-        (additional ones can be defined in the ``url_attrs_file``) or
-        environment variables like ``{$USER}`` which get substituted with their
-        respective values.
+            This URL may contain placeholders like ``{name}`` or ``{instance_id}``
+            (additional ones can be defined in the ``url_attrs_file``) or
+            environment variables like ``{$USER}`` which get substituted with their
+            respective values.
 
-        Attention: passwords including special characters like ``@`` or ``:`` need
-        to be URL encoded.
+            Attention: passwords including special characters like ``@`` or ``:`` need
+            to be URL encoded.
 
-    :param url_attrs_file:
-        Filename of a yaml file which is read shortly before rendering the final
-        engine URL and which is used to replace custom placeholders in ``url``.
+        :param url_attrs_file:
+            Filename of a yaml file which is read shortly before rendering the final
+            engine URL and which is used to replace custom placeholders in ``url``.
 
-        Just like ``url``, this value may also contain placeholders and environment
-        variables which get substituted.
+            Just like ``url``, this value may also contain placeholders and environment
+            variables which get substituted.
 
-    :param create_database_if_not_exists:
-        If the engine url references a database name that doesn't yet exists,
-        then setting this value to ``True`` tells pipedag to create the database
-        before trying to open a connection to it.
+        :param create_database_if_not_exists:
+            If the engine url references a database name that doesn't yet exists,
+            then setting this value to ``True`` tells pipedag to create the database
+            before trying to open a connection to it.
 
-    :param schema_prefix:
-        A prefix that gets placed in front of all schema names created by pipedag.
+        :param schema_prefix:
+            A prefix that gets placed in front of all schema names created by pipedag.
 
-    :param schema_suffix:
-        A suffix that gets placed behind of all schema names created by pipedag.
+        :param schema_suffix:
+            A suffix that gets placed behind of all schema names created by pipedag.
 
-    :param avoid_drop_create_schema:
-        If ``True``, no ``CREATE SCHEMA`` or ``DROP SCHEMA`` statements get issued.
-        This is mostly relevant for databases that support automatic schema
-        creation like IBM DB2.
+        :param avoid_drop_create_schema:
+            If ``True``, no ``CREATE SCHEMA`` or ``DROP SCHEMA`` statements get issued.
+            This is mostly relevant for databases that support automatic schema
+            creation like IBM DB2.
 
-    :param print_materialize:
-        If ``True``, all tables that get materialized get logged.
+        :param print_materialize:
+            If ``True``, all tables that get materialized get logged.
 
-    :param print_sql:
-        If ``True``, all executed SQL statements get logged.
+        :param print_sql:
+            If ``True``, all executed SQL statements get logged.
 
-    :param no_db_locking:
-        Speed up database by telling it we will not rely on it's locking mechanisms.
-        Currently not implemented.
+        :param no_db_locking:
+            Speed up database by telling it we will not rely on it's locking mechanisms.
+            Currently not implemented.
 
-    :param strict_materialization_details:
-        If ``True``: raise an exception if
-            - the argument ``materialization_details`` is given even though the
-              table store does not support it.
-            - a table references a ``materialization_details`` tag that is not defined
-              in the config.
-        If ``False``: Log an error instead of raising an exception
+        :param strict_materialization_details:
+            If ``True``: raise an exception if
+                - the argument ``materialization_details`` is given even though the
+                  table store does not support it.
+                - a table references a ``materialization_details`` tag that is not
+                  defined in the config.
+            If ``False``: Log an error instead of raising an exception
 
-    :param materialization_details:
-        A dictionary with each entry describing a tag for materialization details of
-        the table store. See subclasses of :py:class:`BaseMaterializationDetails
-         <pydiverse.pipedag.materialize.details.BaseMaterializationDetails>`
-        for details.
-    :param default_materialization_details:
-        The materialization_details that will be used if materialization_details
-        is not specified on table level. If not set, the ``__any__`` tag (if specified)
-        will be used.
-    :param max_concurrent_copy_operations:
-        In case of a partially cache-valid stage, we need to copy tables from the
-        cache schema to the new transaction schema. This parameter specifies the
-        maximum number of workers we use for concurrently copying tables.
-    :param sqlalchemy_pool_size:
-        The number of connections to keep open inside the connection pool.
-        It is recommended to choose a larger number than
-        ``max_concurrent_copy_operations`` to avoid running into pool_timeout.
-    :param sqlalchemy_pool_timeout:
-        The number of seconds to wait before giving up on getting a connection from
-        the pool. This may be relevant in case the connection pool is saturated
-        with concurrent operations each working with one or more database connections.
+        :param materialization_details:
+            A dictionary with each entry describing a tag for materialization details of
+            the table store. See subclasses of :py:class:`BaseMaterializationDetails
+             <pydiverse.pipedag.materialize.details.BaseMaterializationDetails>`
+            for details.
+        :param default_materialization_details:
+            The materialization_details that will be used if materialization_details
+            is not specified on table level. If not set, the ``__any__`` tag (if
+            specified) will be used.
+        :param max_concurrent_copy_operations:
+            In case of a partially cache-valid stage, we need to copy tables from the
+            cache schema to the new transaction schema. This parameter specifies the
+            maximum number of workers we use for concurrently copying tables.
+        :param sqlalchemy_pool_size:
+            The number of connections to keep open inside the connection pool.
+            It is recommended to choose a larger number than
+            ``max_concurrent_copy_operations`` to avoid running into pool_timeout.
+        :param sqlalchemy_pool_timeout:
+            The number of seconds to wait before giving up on getting a connection from
+            the pool. This may be relevant in case the connection pool is saturated
+            with concurrent operations each working with one or more database
+            connections.
     """
 
     METADATA_SCHEMA = "pipedag_metadata"

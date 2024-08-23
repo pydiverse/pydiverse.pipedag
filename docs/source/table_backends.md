@@ -47,7 +47,8 @@ decorator out-of-the-box:
 
 - `sqlalchemy.Table` (see [https://www.sqlalchemy.org/](https://www.sqlalchemy.org/); recommended with `lazy=True`;
   can also be used for composing handwritten SQL strings)
-- `pydiverse.transform.eager.PandasTableImpl` (see
+- `pydiverse.transform.eager.PolarsEager
+` (see
   [https://pydiversetransform.readthedocs.io/en/latest/](https://pydiversetransform.readthedocs.io/en/latest/);
   recommended with manual version bumping and `version="X.Y.Z"`)
 - `pydiverse.transform.lazy.SQLTableImpl` (

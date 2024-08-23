@@ -177,9 +177,9 @@ class PydiverseTransformTableHook(TableHook[DictTableStore]):
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        from pydiverse.transform.eager import PandasTableImpl
+        from pydiverse.transform.polars.polars_table import PolarsEager
 
-        return issubclass(type_, PandasTableImpl)
+        return issubclass(type_, PolarsEager)
 
     @classmethod
     def materialize(
@@ -196,10 +196,10 @@ class PydiverseTransformTableHook(TableHook[DictTableStore]):
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type):
-        from pydiverse.transform.eager import PandasTableImpl
+        from pydiverse.transform.polars.polars_table import PolarsEager
 
         df = PandasTableHook.retrieve(store, table, stage_name, pd.DataFrame)
-        return pdt.Table(PandasTableImpl(table.name, df))
+        return pdt.Table(PolarsEager(table.name, df))
 
     @classmethod
     def auto_table(cls, obj: pdt.Table):

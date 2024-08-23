@@ -36,8 +36,8 @@ from pydiverse.transform.core.verbs import (
     select,
     build_query,
 )
-from pydiverse.transform.eager import PandasTableImpl
-from pydiverse.transform.lazy import SQLTableImpl
+from pydiverse.transform.polars.polars_table import PolarsEager
+from pydiverse.transform.sql.sql_table import SQLTableImpl
 
 
 @pdt.verb
@@ -111,7 +111,8 @@ def lazy_features(a: pdt.Table, src_tbls: list[pdt.Table]):
     )
 
 
-@materialize(input_type=PandasTableImpl, version="2.3.5")
+@materialize(input_type=PolarsEager
+, version="2.3.5")
 def eager_features(a: pdt.Table, src_tbls: list[pdt.Table]):
     named_tbls = get_named_tables(src_tbls)
     c = named_tbls["c"]
@@ -182,11 +183,13 @@ def predict(model: xgboost.Booster, test_set: pdt.Table):
     predict_col = model.predict(dx)
 
     return pdt.Table(
-        PandasTableImpl("prediction", pd.DataFrame({"prediction": predict_col}))
+        PolarsEager
+("prediction", pd.DataFrame({"prediction": predict_col}))
     ).prediction
 
 
-@materialize(input_type=PandasTableImpl, version="3.4.5")
+@materialize(input_type=PolarsEager
+, version="3.4.5")
 def model_evaluation(model: xgboost.Booster, test_set: pdt.Table):
     prediction = predict(model, test_set)  # produces an aligned vector with input
     return (

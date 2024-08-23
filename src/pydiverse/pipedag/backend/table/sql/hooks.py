@@ -816,26 +816,26 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        from pydiverse.transform.eager import PandasTableImpl
-        from pydiverse.transform.lazy import SQLTableImpl
+        from pydiverse.transform.polars.polars_table import PolarsEager
+        from pydiverse.transform.sql.sql_table import SQLTableImpl
 
-        return issubclass(type_, (PandasTableImpl, SQLTableImpl))
+        return issubclass(type_, (PolarsEager, SQLTableImpl))
 
     @classmethod
     def retrieve_as_reference(cls, type_) -> bool:
-        from pydiverse.transform.lazy import SQLTableImpl
+        from pydiverse.transform.sql.sql_table import SQLTableImpl
 
         return issubclass(type_, SQLTableImpl)
 
     @classmethod
     def materialize(cls, store, table: Table[pdt.Table], stage_name):
         from pydiverse.transform.core.verbs import collect
-        from pydiverse.transform.eager import PandasTableImpl
-        from pydiverse.transform.lazy import SQLTableImpl
+        from pydiverse.transform.polars.polars_table import PolarsEager
+        from pydiverse.transform.sql.sql_table import SQLTableImpl
 
         t = table.obj
         table = table.copy_without_obj()
-        if isinstance(t._impl, PandasTableImpl):
+        if isinstance(t._impl, PolarsEager):
             table.obj = t >> collect()
             hook = store.get_hook_subclass(PandasTableHook)
             return hook.materialize(store, table, stage_name)
@@ -853,13 +853,13 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         stage_name: str | None,
         as_type: type[T],
     ) -> T:
-        from pydiverse.transform.eager import PandasTableImpl
-        from pydiverse.transform.lazy import SQLTableImpl
+        from pydiverse.transform.polars.polars_table import PolarsEager
+        from pydiverse.transform.sql.sql_table import SQLTableImpl
 
-        if issubclass(as_type, PandasTableImpl):
+        if issubclass(as_type, PolarsEager):
             hook = store.get_hook_subclass(PandasTableHook)
             df = hook.retrieve(store, table, stage_name, pd.DataFrame)
-            return pdt.Table(PandasTableImpl(table.name, df))
+            return pdt.Table(PolarsEager(table.name, df))
         if issubclass(as_type, SQLTableImpl):
             hook = store.get_hook_subclass(SQLAlchemyTableHook)
             sa_tbl = hook.retrieve(store, table, stage_name, sa.Table)
