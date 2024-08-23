@@ -171,14 +171,6 @@ class Task:
         ignore_position_hashes: bool = False,
         override=None,
     ):
-        if override:
-            self.logger.info(
-                f"Overriding output of task {self.name}"
-                f" with table {override.schema}.{override.name}"
-            )
-            result = Table(override)
-            self.did_finish(FinalTaskState.COMPLETED)
-            return result
         # Hand over run context if using multiprocessing
         if run_context is None:
             run_context = RunContext.get()
@@ -187,7 +179,7 @@ class Task:
 
         with run_context, config_context:
             try:
-                result, task_context = self._run(inputs)
+                result, task_context = self._run(inputs, override)
             except Exception as e:
                 if config_context._swallow_exceptions:
                     # PIPEDAG INTERNAL
@@ -203,7 +195,7 @@ class Task:
                     self.did_finish(FinalTaskState.COMPLETED)
                 return result
 
-    def _run(self, inputs: [int, Any]) -> tuple[Any, TaskContext]:
+    def _run(self, inputs: [int, Any], override=None) -> tuple[Any, TaskContext]:
         args = self._bound_args.args
         kwargs = self._bound_args.kwargs
 
@@ -220,12 +212,23 @@ class Task:
         args = deep_map(args, task_result_mapper)
         kwargs = deep_map(kwargs, task_result_mapper)
 
+        if override is not None:
+            self.logger.info(
+                f"Overriding output of task {self.name}"
+                f" with table {override.schema}.{override.name}"
+            )
         with TaskContext(task=self) as task_context:
             if hasattr(self, "call_context") and self.call_context:
                 with self.call_context():
-                    result = self.fn(*args, **kwargs)
+                    if override is not None:
+                        result = Table(override)
+                    else:
+                        result = self.fn(*args, **kwargs)
             else:
-                result = self.fn(*args, **kwargs)
+                if override is not None:
+                    result = Table(override)
+                else:
+                    result = self.fn(*args, **kwargs)
 
         return result, task_context
 

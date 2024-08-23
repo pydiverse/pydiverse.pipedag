@@ -308,13 +308,14 @@ class Flow:
             than once per stage.
             NOTE: This is only supported for the SequentialEngine and SQLTablestore
         :param inputs:
-            Provide a mapping from tasks to external tables in the form of a dictionary.
-            The format is:
-            task -> ExternalTableReference.
+            Optionally provide the outputs for a subset of tasks.
+            The format is expected as
+            dict[task, ExternalTableReference].
             Every task that is listed in this mapping
             will not be executed but instead the output,
             will be read from the external reference.
-            NOTE: This is only supported for the SequentialEngine and SQLTablestore
+            NOTE: This is only supported for the SequentialEngine
+            and SQLTablestore at the moment
         :param kwargs:
             Other keyword arguments that get passed on directly to the
             ``run()`` method of the orchestration engine. Consequently, these

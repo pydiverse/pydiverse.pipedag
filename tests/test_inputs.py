@@ -16,7 +16,7 @@ from pydiverse.pipedag.container.container import ExternalTableReference, Schema
 from tests.util.sql import sql_table_expr
 
 
-def test_smoke_links():
+def test_external_table_inputs():
     @materialize(version="1.1")
     def make_external_table():
         table_store = ConfigContext.get().store.table_store
