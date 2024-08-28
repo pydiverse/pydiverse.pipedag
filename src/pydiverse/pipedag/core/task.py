@@ -211,25 +211,19 @@ class Task:
 
         args = deep_map(args, task_result_mapper)
         kwargs = deep_map(kwargs, task_result_mapper)
-
         if override is not None:
             self.logger.info(
                 f"Overriding output of task {self.name}"
                 f" with table {override.schema}.{override.name}"
             )
-        with TaskContext(task=self) as task_context:
-            if hasattr(self, "call_context") and self.call_context:
-                with self.call_context():
-                    if override is not None:
-                        result = Table(override)
-                    else:
+            result = Table(override)
+        else:
+            with TaskContext(task=self) as task_context:
+                if hasattr(self, "call_context") and self.call_context:
+                    with self.call_context():
                         result = self.fn(*args, **kwargs)
-            else:
-                if override is not None:
-                    result = Table(override)
                 else:
                     result = self.fn(*args, **kwargs)
-
         return result, task_context
 
     def __compute_position_hash(self) -> str:
