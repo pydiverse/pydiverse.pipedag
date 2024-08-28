@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 import structlog
 
-from pydiverse.pipedag.container.container import Table
+from pydiverse.pipedag.container import Table
 from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext, TaskContext
 from pydiverse.pipedag.context.run_context import FinalTaskState
 from pydiverse.pipedag.errors import StageError

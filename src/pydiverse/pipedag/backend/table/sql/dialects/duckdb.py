@@ -14,7 +14,7 @@ from pydiverse.pipedag.backend.table.sql.hooks import (
 )
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import DType
-from pydiverse.pipedag.container.container import Schema
+from pydiverse.pipedag.container import Schema
 from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
 
 try:

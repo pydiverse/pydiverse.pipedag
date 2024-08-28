@@ -7,7 +7,7 @@ import pytest
 import sqlalchemy as sa
 
 from pydiverse.pipedag import ConfigContext, Flow, Stage, StageLockContext, Table
-from pydiverse.pipedag.container.container import Schema
+from pydiverse.pipedag.container import Schema
 from pydiverse.pipedag.core.config import PipedagConfig, create_basic_pipedag_config
 from tests.fixtures.instances import with_instances
 from tests.util import tasks_library as m

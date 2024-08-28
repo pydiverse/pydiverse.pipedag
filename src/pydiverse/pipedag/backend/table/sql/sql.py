@@ -29,7 +29,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     RenameTable,
     split_ddl_statement,
 )
-from pydiverse.pipedag.container.container import RawSql, Schema
+from pydiverse.pipedag.container import RawSql, Schema
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.context.context import (
     CacheValidationMode,

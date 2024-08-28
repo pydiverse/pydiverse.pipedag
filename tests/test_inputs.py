@@ -10,7 +10,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     DropTable,
     InsertIntoSelect,
 )
-from pydiverse.pipedag.container.container import ExternalTableReference, Schema
+from pydiverse.pipedag.container import ExternalTableReference, Schema
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.util.sql import sql_table_expr

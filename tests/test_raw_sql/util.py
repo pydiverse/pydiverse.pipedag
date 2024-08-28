@@ -5,7 +5,7 @@ from pathlib import Path
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Stage, materialize
-from pydiverse.pipedag.container.container import RawSql
+from pydiverse.pipedag.container import RawSql
 from pydiverse.pipedag.context import ConfigContext, TaskContext
 
 
