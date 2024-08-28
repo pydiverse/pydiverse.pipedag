@@ -10,6 +10,7 @@ import networkx as nx
 import pydot
 import structlog
 
+from pydiverse.pipedag import ExternalTableReference
 from pydiverse.pipedag.context import (
     ConfigContext,
     DAGContext,
@@ -257,7 +258,7 @@ class Flow:
         disable_cache_function: bool | None = None,
         ignore_task_version: bool | None = None,
         ignore_position_hashes: bool = False,
-        inputs=None,
+        inputs: dict[Task | TaskGetItem, ExternalTableReference] | None = None,
         **kwargs,
     ) -> Result:
         """Execute the flow.
@@ -310,7 +311,7 @@ class Flow:
         :param inputs:
             Optionally provide the outputs for a subset of tasks.
             The format is expected as
-            dict[task, ExternalTableReference].
+            dict[Task|TaskGetItem, ExternalTableReference].
             Every task that is listed in this mapping
             will not be executed but instead the output,
             will be read from the external reference.

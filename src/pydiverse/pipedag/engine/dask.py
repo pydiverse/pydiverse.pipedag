@@ -6,8 +6,10 @@ from typing import TYPE_CHECKING
 
 import structlog
 
+from pydiverse.pipedag import ExternalTableReference
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.core import Result
+from pydiverse.pipedag.core.task import TaskGetItem
 from pydiverse.pipedag.engine.base import OrchestrationEngine
 from pydiverse.pipedag.util import requires
 
@@ -49,7 +51,7 @@ class DaskEngine(OrchestrationEngine):
         self,
         flow: Subflow,
         ignore_position_hashes: bool = False,
-        inputs=None,
+        inputs: dict[Task | TaskGetItem, ExternalTableReference] | None = None,
         **run_kwargs,
     ):
         _ = ignore_position_hashes

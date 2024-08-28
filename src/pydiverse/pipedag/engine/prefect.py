@@ -7,8 +7,10 @@ import structlog
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
+from pydiverse.pipedag import ExternalTableReference
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.core.result import Result
+from pydiverse.pipedag.core.task import TaskGetItem
 from pydiverse.pipedag.engine.base import OrchestrationEngine
 from pydiverse.pipedag.util import requires
 
@@ -91,7 +93,7 @@ class PrefectOneEngine(OrchestrationEngine):
         self,
         flow: Subflow,
         ignore_position_hashes: bool = False,
-        inputs=None,
+        inputs: dict[Task | TaskGetItem, ExternalTableReference] | None = None,
         **run_kwargs,
     ):
         _ = ignore_position_hashes
@@ -190,7 +192,7 @@ class PrefectTwoEngine(OrchestrationEngine):
         self,
         flow: Subflow,
         ignore_position_hashes: bool = False,
-        inputs=None,
+        inputs: dict[Task | TaskGetItem, ExternalTableReference] | None = None,
         **kwargs,
     ):
         _ = ignore_position_hashes
