@@ -190,11 +190,11 @@ class PrefectTwoEngine(OrchestrationEngine):
         self,
         flow: Subflow,
         ignore_position_hashes: bool = False,
-        task_links=None,
+        inputs=None,
         **kwargs,
     ):
         _ = ignore_position_hashes
-        _ = task_links
+        _ = inputs
         if kwargs:
             raise TypeError(f"{type(self).__name__}.run doesn't take kwargs.")
         prefect_flow = self.construct_prefect_flow(flow)
