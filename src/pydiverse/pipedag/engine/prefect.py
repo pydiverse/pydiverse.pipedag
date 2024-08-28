@@ -7,7 +7,7 @@ import structlog
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
-from pydiverse.pipedag import ExternalTableReference
+from pydiverse.pipedag import ExternalTableReference, Table
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.core.result import Result
 from pydiverse.pipedag.core.task import TaskGetItem
@@ -49,7 +49,13 @@ class PrefectOneEngine(OrchestrationEngine):
         self.flow_kwargs = flow_kwargs or {}
         self.logger = structlog.get_logger(stage=self)
 
-    def construct_prefect_flow(self, f: Subflow):
+    def construct_prefect_flow(
+        self,
+        f: Subflow,
+        inputs: dict[Task | TaskGetItem, ExternalTableReference] | None = None,
+    ):
+        inputs = inputs if inputs is not None else {}
+
         run_context = RunContext.get()
         config_context = ConfigContext.get()
 
@@ -65,13 +71,26 @@ class PrefectOneEngine(OrchestrationEngine):
             task = prefect.task(name=t.name)(t.run)
             tasks[t] = task
 
+            # if desired input is passed in inputs use it,
+            # otherwise try to get it from results
+            task_inputs = {
+                **{
+                    in_id: Table(inputs[in_t])
+                    for in_id, in_t in t.input_tasks.items()
+                    if in_t in inputs
+                },
+                **{
+                    in_id: tasks[in_t]
+                    for in_id, in_t in t.input_tasks.items()
+                    if in_t not in inputs
+                },
+            }
+
             flow.add_task(task)
             flow.set_dependencies(
                 task,
                 keyword_tasks=dict(
-                    inputs={
-                        in_id: tasks[in_t] for in_id, in_t in t.input_tasks.items()
-                    },
+                    inputs=task_inputs,
                     run_context=run_context,
                     config_context=config_context,
                 ),
@@ -97,11 +116,7 @@ class PrefectOneEngine(OrchestrationEngine):
         **run_kwargs,
     ):
         _ = ignore_position_hashes
-        if inputs:
-            raise NotImplementedError(
-                "The inputs argument is currently not supported for the prefect engine."
-            )
-        prefect_flow, tasks_map = self.construct_prefect_flow(flow)
+        prefect_flow, tasks_map = self.construct_prefect_flow(flow, inputs)
         result = prefect_flow.run(**run_kwargs)
 
         # Compute task_values
@@ -152,8 +167,14 @@ class PrefectTwoEngine(OrchestrationEngine):
     def __init__(self, flow_kwargs: dict[str, Any] = None):
         self.flow_kwargs = flow_kwargs or {}
 
-    def construct_prefect_flow(self, f: Subflow) -> prefect.Flow:
+    def construct_prefect_flow(
+        self,
+        f: Subflow,
+        inputs: dict[Task | TaskGetItem, ExternalTableReference] | None = None,
+    ) -> prefect.Flow:
         from pydiverse.pipedag.materialize.core import MaterializingTask
+
+        inputs = inputs if inputs is not None else {}
 
         run_context = RunContext.get()
         config_context = ConfigContext.get()
@@ -176,9 +197,20 @@ class PrefectTwoEngine(OrchestrationEngine):
                 task = prefect.task(**task_kwargs)(t.run)
 
                 parents = [futures[p] for p in f.get_parent_tasks(t)]
-                inputs = {in_id: futures[in_t] for in_id, in_t in t.input_tasks.items()}
+                task_inputs = {
+                    **{
+                        in_id: Table(inputs[in_t])
+                        for in_id, in_t in t.input_tasks.items()
+                        if in_t in inputs
+                    },
+                    **{
+                        in_id: futures[in_t]
+                        for in_id, in_t in t.input_tasks.items()
+                        if in_t not in inputs
+                    },
+                }
                 futures[t] = task.submit(
-                    inputs=inputs,
+                    inputs=task_inputs,
                     run_context=run_context,
                     config_context=config_context,
                     wait_for=parents,
@@ -196,10 +228,9 @@ class PrefectTwoEngine(OrchestrationEngine):
         **kwargs,
     ):
         _ = ignore_position_hashes
-        _ = inputs
         if kwargs:
             raise TypeError(f"{type(self).__name__}.run doesn't take kwargs.")
-        prefect_flow = self.construct_prefect_flow(flow)
+        prefect_flow = self.construct_prefect_flow(flow, inputs)
         result = prefect_flow(return_state=True)
 
         # Compute task_values

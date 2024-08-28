@@ -315,8 +315,7 @@ class Flow:
             Every task that is listed in this mapping
             will not be executed but instead the output,
             will be read from the external reference.
-            NOTE: This is only supported for the SequentialEngine
-            and SQLTablestore at the moment
+            NOTE: This is only supported when using the SQLTablestore at the moment
         :param kwargs:
             Other keyword arguments that get passed on directly to the
             ``run()`` method of the orchestration engine. Consequently, these
