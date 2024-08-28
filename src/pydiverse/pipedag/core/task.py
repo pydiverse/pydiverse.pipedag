@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any, Callable
 
 import structlog
 
-from pydiverse.pipedag.container import Table
 from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext, TaskContext
 from pydiverse.pipedag.context.run_context import FinalTaskState
 from pydiverse.pipedag.errors import StageError
@@ -169,7 +168,6 @@ class Task:
         run_context: RunContext = None,
         config_context: ConfigContext = None,
         ignore_position_hashes: bool = False,
-        override=None,
     ):
         # Hand over run context if using multiprocessing
         if run_context is None:
@@ -179,7 +177,7 @@ class Task:
 
         with run_context, config_context:
             try:
-                result, task_context = self._run(inputs, override)
+                result, task_context = self._run(inputs)
             except Exception as e:
                 if config_context._swallow_exceptions:
                     # PIPEDAG INTERNAL
@@ -195,7 +193,7 @@ class Task:
                     self.did_finish(FinalTaskState.COMPLETED)
                 return result
 
-    def _run(self, inputs: [int, Any], override=None) -> tuple[Any, TaskContext]:
+    def _run(self, inputs: [int, Any]) -> tuple[Any, TaskContext]:
         args = self._bound_args.args
         kwargs = self._bound_args.kwargs
 
@@ -211,19 +209,13 @@ class Task:
 
         args = deep_map(args, task_result_mapper)
         kwargs = deep_map(kwargs, task_result_mapper)
-        if override is not None:
-            self.logger.info(
-                f"Overriding output of task {self.name}"
-                f" with table {override.schema}.{override.name}"
-            )
-            result = Table(override)
-        else:
-            with TaskContext(task=self) as task_context:
-                if hasattr(self, "call_context") and self.call_context:
-                    with self.call_context():
-                        result = self.fn(*args, **kwargs)
-                else:
+
+        with TaskContext(task=self) as task_context:
+            if hasattr(self, "call_context") and self.call_context:
+                with self.call_context():
                     result = self.fn(*args, **kwargs)
+            else:
+                result = self.fn(*args, **kwargs)
         return result, task_context
 
     def __compute_position_hash(self) -> str:

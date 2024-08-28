@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from pydiverse.pipedag import Table
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.core.result import Result
 from pydiverse.pipedag.engine.base import OrchestrationEngine
@@ -26,21 +27,32 @@ class SequentialEngine(OrchestrationEngine):
         failed_tasks = set()  # type: set[Task]
         results = {}
         exception = None
+        inputs = inputs if inputs is not None else {}
 
         try:
             for task in flow.get_tasks():
                 try:
                     if not (set(task.input_tasks) & failed_tasks):
-                        results[task] = task.run(
-                            inputs={
+                        # if desired input is passed in inputs use it,
+                        # otherwise try to get it from results
+                        task_inputs = {
+                            **{
+                                in_id: Table(inputs[in_t])
+                                for in_id, in_t in task.input_tasks.items()
+                                if in_t in inputs
+                            },
+                            **{
                                 in_id: results[in_t]
                                 for in_id, in_t in task.input_tasks.items()
-                                if in_t in results
+                                if in_t in results and in_t not in inputs
                             },
+                        }
+
+                        results[task] = task.run(
+                            inputs=task_inputs,
                             run_context=run_context,
                             config_context=config_context,
                             ignore_position_hashes=ignore_position_hashes,
-                            override=inputs.get(task) if inputs else None,
                         )
                     else:
                         failed_tasks.add(task)

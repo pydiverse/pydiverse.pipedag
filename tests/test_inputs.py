@@ -45,9 +45,8 @@ def test_external_table_inputs():
         return Table(pd.DataFrame())
 
     @materialize(input_type=pd.DataFrame)
-    def consume(table: pd.DataFrame):
-        _ = table
-        return None
+    def identity(table: pd.DataFrame):
+        return table
 
     with Flow() as f:
         with Stage("sql_table_origin"):
@@ -55,12 +54,12 @@ def test_external_table_inputs():
 
         with Stage("sql_table_linked"):
             table = duplicate_table_reference()
-            _ = consume(table)
+            output = identity(table)
 
     with StageLockContext():
         # Normal execution. duplicate_table_reference should return an empty table
         result = f.run()
-        assert result.get(table, as_type=pd.DataFrame).shape[0] == 0
+        assert result.get(output, as_type=pd.DataFrame).shape[0] == 0
 
     with StageLockContext():
         # Linked execution. Body of duplicate_table_reference should not be executed,
@@ -73,4 +72,4 @@ def test_external_table_inputs():
                 )
             }
         )
-        assert result.get(table, as_type=pd.DataFrame).shape[0] == 4
+        assert result.get(output, as_type=pd.DataFrame).shape[0] == 4
