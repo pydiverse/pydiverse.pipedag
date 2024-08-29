@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from pydiverse.pipedag import ExternalTableReference, Table, Task
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.core.result import Result
+from pydiverse.pipedag.core.task import TaskGetItem
 from pydiverse.pipedag.engine.base import OrchestrationEngine
 
 if TYPE_CHECKING:
@@ -13,24 +15,42 @@ if TYPE_CHECKING:
 class SequentialEngine(OrchestrationEngine):
     """Most basic orchestration engine that just executes all tasks sequentially."""
 
-    def run(self, flow: Subflow, ignore_position_hashes: bool = False, **run_kwargs):
+    def run(
+        self,
+        flow: Subflow,
+        ignore_position_hashes: bool = False,
+        inputs: dict[Task | TaskGetItem, ExternalTableReference] | None = None,
+        **run_kwargs,
+    ):
         run_context = RunContext.get()
         config_context = ConfigContext.get()
 
         failed_tasks = set()  # type: set[Task]
         results = {}
         exception = None
+        inputs = inputs if inputs is not None else {}
 
         try:
             for task in flow.get_tasks():
                 try:
                     if not (set(task.input_tasks) & failed_tasks):
-                        results[task] = task.run(
-                            inputs={
+                        # if desired input is passed in inputs use it,
+                        # otherwise try to get it from results
+                        task_inputs = {
+                            **{
+                                in_id: Table(inputs[in_t])
+                                for in_id, in_t in task.input_tasks.items()
+                                if in_t in inputs
+                            },
+                            **{
                                 in_id: results[in_t]
                                 for in_id, in_t in task.input_tasks.items()
-                                if in_t in results
+                                if in_t in results and in_t not in inputs
                             },
+                        }
+
+                        results[task] = task.run(
+                            inputs=task_inputs,
                             run_context=run_context,
                             config_context=config_context,
                             ignore_position_hashes=ignore_position_hashes,

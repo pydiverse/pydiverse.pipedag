@@ -6,8 +6,10 @@ from typing import TYPE_CHECKING
 
 import structlog
 
+from pydiverse.pipedag import ExternalTableReference, Table
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.core import Result
+from pydiverse.pipedag.core.task import TaskGetItem
 from pydiverse.pipedag.engine.base import OrchestrationEngine
 from pydiverse.pipedag.util import requires
 
@@ -45,7 +47,15 @@ class DaskEngine(OrchestrationEngine):
 
         self.dask_compute_kwargs.update(dask_compute_kwargs)
 
-    def run(self, flow: Subflow, ignore_position_hashes: bool = False, **run_kwargs):
+    def run(
+        self,
+        flow: Subflow,
+        ignore_position_hashes: bool = False,
+        inputs: dict[Task | TaskGetItem, ExternalTableReference] | None = None,
+        **run_kwargs,
+    ):
+        inputs = inputs if inputs is not None else {}
+        _ = ignore_position_hashes
         run_context = RunContext.get()
         config_context = ConfigContext.get()
 
@@ -72,13 +82,24 @@ class DaskEngine(OrchestrationEngine):
             return dask.delayed(run, pure=False)
 
         for task in flow.get_tasks():
+            task_inputs = {
+                **{
+                    in_id: Table(inputs[in_t])
+                    for in_id, in_t in task.input_tasks.items()
+                    if in_t in inputs
+                },
+                **{
+                    in_id: results[in_t]
+                    for in_id, in_t in task.input_tasks.items()
+                    if in_t not in inputs
+                },
+            }
+
             results[task] = bind_run(task)(
                 parent_futures=[
                     results[parent] for parent in flow.get_parent_tasks(task)
                 ],
-                inputs={
-                    in_id: results[in_t] for in_id, in_t in task.input_tasks.items()
-                },
+                inputs=task_inputs,
                 run_context=run_context,
                 config_context=config_context,
             )

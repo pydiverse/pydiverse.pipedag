@@ -5,6 +5,8 @@
     be passed as a parameter into any task instead of any other pipedag table reference.
 - Fixed bug that caused a crash when retrieving a polars dataframe from SQL using polars >= 1
 - Fix warning about `ignore_position_hashes` being printed even if the flag was not set.
+- Added support for `inputs` argument for `flow.run()` allowing to pass `ExternalTableReference`
+    objects to the flow that override the outputs of selected tasks.
 
 ## 0.9.5 (2024-07-22)
 - Fixed a bug in primary key generation when materializing pandas dataframe to postgres database

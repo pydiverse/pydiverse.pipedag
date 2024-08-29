@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from pydiverse.pipedag import AUTO_VERSION, Blob, Flow, Stage, Table
-from pydiverse.pipedag.materialize.container import RawSql
+from pydiverse.pipedag.container import RawSql
 from pydiverse.pipedag.materialize.core import materialize
 from tests.fixtures.instances import with_instances
 from tests.util import swallowing_raises

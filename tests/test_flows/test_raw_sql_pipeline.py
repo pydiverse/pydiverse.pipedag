@@ -5,8 +5,8 @@ from pathlib import Path
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, materialize
+from pydiverse.pipedag.container import RawSql
 from pydiverse.pipedag.context import ConfigContext, StageLockContext
-from pydiverse.pipedag.materialize.container import RawSql
 from tests.fixtures.instances import with_instances
 
 """
