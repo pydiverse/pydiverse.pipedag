@@ -216,7 +216,6 @@ class Task:
                     result = self.fn(*args, **kwargs)
             else:
                 result = self.fn(*args, **kwargs)
-
         return result, task_context
 
     def __compute_position_hash(self) -> str:

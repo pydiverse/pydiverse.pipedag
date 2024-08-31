@@ -10,6 +10,7 @@ import networkx as nx
 import pydot
 import structlog
 
+from pydiverse.pipedag import ExternalTableReference
 from pydiverse.pipedag.context import (
     ConfigContext,
     DAGContext,
@@ -257,6 +258,7 @@ class Flow:
         disable_cache_function: bool | None = None,
         ignore_task_version: bool | None = None,
         ignore_position_hashes: bool = False,
+        inputs: dict[Task | TaskGetItem, ExternalTableReference] | None = None,
         **kwargs,
     ) -> Result:
         """Execute the flow.
@@ -305,6 +307,15 @@ class Flow:
             And for this to work, any task producing an input
             for the chosen subgraph may never be used more
             than once per stage.
+            NOTE: This is only supported for the SequentialEngine and SQLTablestore
+        :param inputs:
+            Optionally provide the outputs for a subset of tasks.
+            The format is expected as
+            dict[Task|TaskGetItem, ExternalTableReference].
+            Every task that is listed in this mapping
+            will not be executed but instead the output,
+            will be read from the external reference.
+            NOTE: This is only supported when using the SQLTablestore at the moment
         :param kwargs:
             Other keyword arguments that get passed on directly to the
             ``run()`` method of the orchestration engine. Consequently, these
@@ -387,7 +398,9 @@ class Flow:
         with config, RunContextServer(subflow, trace_hook):
             if orchestration_engine is None:
                 orchestration_engine = config.create_orchestration_engine()
-            result = orchestration_engine.run(subflow, ignore_position_hashes, **kwargs)
+            result = orchestration_engine.run(
+                subflow, ignore_position_hashes, inputs, **kwargs
+            )
 
             visualization_url = result.visualize_url()
             self.logger.info("Flow visualization", url=visualization_url)

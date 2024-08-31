@@ -17,8 +17,7 @@ from pydiverse.pipedag.backend.table.sql.hooks import IbisTableHook, PandasTable
 from pydiverse.pipedag.backend.table.sql.reflection import PipedagMSSqlReflection
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import DType
-from pydiverse.pipedag.materialize import Table
-from pydiverse.pipedag.materialize.container import RawSql, Schema
+from pydiverse.pipedag.container import RawSql, Schema, Table
 
 
 class MSSqlTableStore(SQLTableStore):

@@ -26,9 +26,8 @@ from pydiverse.pipedag.backend.table.util import (
     DType,
     PandasDTypeBackend,
 )
+from pydiverse.pipedag.container import ExternalTableReference, Schema, Table
 from pydiverse.pipedag.context import TaskContext
-from pydiverse.pipedag.materialize import Table
-from pydiverse.pipedag.materialize.container import ExternalTableReference, Schema
 from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
 from pydiverse.pipedag.util.computation_tracing import ComputationTracer
 

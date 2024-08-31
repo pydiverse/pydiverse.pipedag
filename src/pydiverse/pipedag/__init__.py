@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from .container import (
+    Blob,
+    ExternalTableReference,
+    RawSql,
+    Schema,
+    Table,
+)
 from .context import ConfigContext, StageLockContext
 from .core import (
     Flow,
@@ -11,11 +18,6 @@ from .core import (
     VisualizationStyle,
 )
 from .materialize import (
-    Blob,
-    ExternalTableReference,
-    RawSql,
-    Schema,
-    Table,
     input_stage_versions,
     materialize,
 )
