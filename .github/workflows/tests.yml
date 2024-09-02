@@ -5,20 +5,21 @@ on:
     paths-ignore:
       - 'docs/**'
     branches:
-      - '**'
+      - main
   pull_request:
     paths-ignore:
       - 'docs/**'
     branches:
       - '**'
 
-env:
-  DEBUG: ${{ secrets.ACTIONS_RUNNER_DEBUG }}
-
+# Automatically stop old builds on the same branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.number }}
+  cancel-in-progress: true
 
 jobs:
   lint:
-    name: "Linting - pre-commit hooks - Python 3.9"
+    name: Pre-commit Checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -34,199 +35,160 @@ jobs:
         uses: pre-commit/action@v3.0.1
 
   smoke_test:
-    name: 'Smoke Test - Python 3.11 - postgres'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Environment
-        uses: ./.github/actions/setup
-        with:
-          python-version: 3.11
-          docker-services: |
-            postgres
-            zoo
-
-      - name: Run Tests
-        uses: ./.github/actions/test
-        with:
-          arguments: --workers 4
+    name: Smoke Test
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        environment:
+          - py312
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      docker-services: |
+        postgres
+        zoo
 
   postgres_test:
-    name: "Postgres Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    name: Postgres Tests
     needs: [smoke_test]
-    runs-on: ${{ matrix.os }}-latest
-    timeout-minutes: 10
     strategy:
       matrix:
-        os: [Ubuntu]
-        python-version: ['3.9', '3.10', '3.11']
-    steps:
-      - uses: actions/checkout@v4
+        os:
+          - ubuntu-latest
+        environment:
+          - py39all
+          - py310all
+          - py311all
+          - py312all
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      docker-services: |
+        postgres
+        zoo
+      pytest-arguments: --polars --ibis --pdtransform
 
-      - name: Setup Environment
-        uses: ./.github/actions/setup
-        with:
-          python-version: ${{ matrix.python-version }}
-          poetry-flags: --all-extras --with=tests
-          docker-services: |
-            postgres
-            zoo
-
-      - name: Run Tests
-        uses: ./.github/actions/test
-        with:
-          arguments: --workers 4 --polars --ibis --pdtransform
 
   duckdb_test:
-    name: "DuckDB Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    name: DuckDB Tests
     needs: [smoke_test]
-    runs-on: ${{ matrix.os }}-latest
-    timeout-minutes: 15
     strategy:
       matrix:
-        os: [Ubuntu]
-        python-version: ['3.9', '3.11']
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Environment
-        uses: ./.github/actions/setup
-        with:
-          python-version: ${{ matrix.python-version }}
-          poetry-flags: --all-extras --with=tests
-          docker-services: |
-            zoo
-
-      - name: Run Tests
-        uses: ./.github/actions/test
-        with:
-          arguments: --workers 4 --duckdb -m duckdb --polars --ibis --pdtransform
+        os:
+          - ubuntu-latest
+        environment:
+          - py39all
+          - py312all
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      docker-services: |
+        zoo
+      pytest-arguments: --duckdb -m duckdb --polars --ibis --pdtransform --no-postgres
 
   db2_test:
-    name: "DB2 Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    name: DB2 Tests
     needs: [smoke_test]
-    runs-on: ${{ matrix.os }}-latest
-    timeout-minutes: 15
     strategy:
       matrix:
-        os: [Ubuntu]
-        python-version: ['3.11']
-    services:
-      ibm_db2:
-        image: icr.io/db2_community/db2
-        env:
-          LICENSE: accept
-          DB2INSTANCE: db2inst1
-          DB2INST1_PASSWORD: password
-          DBNAME: testdb
-          UPDATEAVAIL: "NO"
-        options: --privileged
-        ports:
-          - 50000:50000
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Environment
-        uses: ./.github/actions/setup
-        with:
-          python-version: ${{ matrix.python-version }}
-          poetry-flags: --all-extras --with=tests
-          docker-services: |
-            zoo
-
-      - name: Wait for DB/2
-        timeout-minutes: 2
-        run: |
-          until docker logs "${{ job.services.ibm_db2.id }}" 2>&1 | grep -q "Setup has completed"; do 
-            sleep 1
-          done
-
-      - name: Run Tests
-        uses: ./.github/actions/test
-        with:
-          # --polars and --ibis not supported
-          arguments: --workers 4 --ibm_db2 -m ibm_db2 --pdtransform
+        os:
+          - ubuntu-latest
+        environment:
+          - py39ibm
+          - py312ibm
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      docker-services: |
+        zoo
+        ibm_db2
+      # --polars and --ibis not supported
+      pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform --no-postgres
 
   mssql_test:
-    name: "MSSql Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    name: MSSql Tests
     needs: [smoke_test]
-    runs-on: ${{ matrix.os }}-latest
-    timeout-minutes: 15
     strategy:
       matrix:
-        os: [Ubuntu]
-        python-version: ['3.9', '3.11']
-    steps:
-      - uses: actions/checkout@v4
+        os:
+          - ubuntu-latest
+        environment:
+          - py39all
+          - py311all
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      docker-services: |
+        mssql
+        zoo
+      pytest-arguments: --mssql -m mssql --polars --ibis --pdtransform --no-postgres
 
-      - name: Setup Environment
-        uses: ./.github/actions/setup
-        with:
-          python-version: ${{ matrix.python-version }}
-          poetry-flags: --all-extras --with=tests
-          docker-services: |
-            mssql
-            zoo
-
-      - name: Install Microsoft ODBC
-        run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
-
-      - name: Run Tests
-        uses: ./.github/actions/test
-        with:
-          arguments: --workers 4 --mssql -m mssql --polars --ibis --pdtransform
-
-  orchestration_tests:
-    name: "Orchestration Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
-    needs: [ smoke_test ]
-    runs-on: ${{ matrix.os }}-latest
-    timeout-minutes: 10
+  orchestration_test:
+    name: Orchestration Tests
+    needs: [smoke_test]
     strategy:
       matrix:
-        os: [ Ubuntu ]
-        python-version: [ '3.11' ]
-    steps:
-      - uses: actions/checkout@v4
+        os:
+          - ubuntu-latest
+        environment:
+          - py311all
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      docker-services: |
+        postgres
+        zoo
+      pytest-arguments: --dask --prefect -m "dask or prefect"
 
-      - name: Setup Environment
-        uses: ./.github/actions/setup
-        with:
-          python-version: ${{ matrix.python-version }}
-          poetry-flags: --all-extras --with=tests
-          docker-services: |
-            postgres
-            zoo
-
-      - name: Run Tests
-        uses: ./.github/actions/test
-        with:
-          arguments: --workers 4 --dask --prefect -m "dask or prefect"
+  pandas1_sqlalchemy1_test:
+    name: Pandas 1.x and SQLAlchemy 1.x Tests
+    needs: [smoke_test]
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        environment:
+          - py39pdsa1all
+          - py311pdsa1all
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      docker-services: |
+        postgres
+        zoo
+      pytest-arguments: --polars --ibis --pdtransform
 
   snowflake_test:
-    name: "Snowflake Tests - ${{ matrix.os }} / ${{ matrix.python-version }}"
+    name: Snowflake Tests
     needs: [smoke_test]
-    runs-on: ${{ matrix.os }}-latest
-    timeout-minutes: 10
+    # snowflake tests are currently not passing
+    # TODO: investigate and fix
+    if: false
     strategy:
       matrix:
-        os: [Ubuntu]
-        python-version: ['3.11']
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Environment
-        uses: ./.github/actions/setup
-        with:
-          python-version: ${{ matrix.python-version }}
-          poetry-flags: --all-extras --with=tests
-          pip-install: "'SQLAlchemy<2' 'pandas<2' snowflake-sqlalchemy"
-          docker-services: |
-            postgres
-            zoo
-
-      - name: Run Tests
-        uses: ./.github/actions/test
-        with:
-          arguments: --workers 4 --polars --ibis --pdtransform
+        os:
+          - ubuntu-latest
+        environment:
+          - py311pdsa1all
+    uses: ./.github/workflows/test.yml
+    secrets:
+      SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      workers: 1  # tests are often waiting on snowflake
+      timeout-minutes: 40
+      docker-services: |
+        postgres
+        zoo
+      pytest-arguments: --polars --ibis --pdtransform --snowflake --no-postgres

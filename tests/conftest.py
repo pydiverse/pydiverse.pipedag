@@ -87,6 +87,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc):
 
 
 supported_options = [
+    "postgres",  # see default_options
     "snowflake",
     "mssql",
     "ibm_db2",
@@ -98,6 +99,8 @@ supported_options = [
     "prefect",
 ]
 
+default_options = ["postgres"]
+
 
 def pytest_addoption(parser):
     for opt in supported_options:
@@ -107,11 +110,22 @@ def pytest_addoption(parser):
             default=False,
             help=f"run test that require {opt}",
         )
+        if opt in default_options:
+            # it seems the pytest parser is not automatically offering --no-flag
+            parser.addoption(
+                "--no-" + opt,
+                action="store_true",
+                default=False,
+                help=f"run test that require {opt}",
+            )
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items):
     for opt in supported_options:
-        if not config.getoption("--" + opt):
+        if not (
+            config.getoption("--" + opt)
+            or (opt in default_options and not config.getoption("--no-" + opt))
+        ):
             skip = pytest.mark.skip(reason=f"{opt} not selected")
             for item in items:
                 if opt in item.keywords:

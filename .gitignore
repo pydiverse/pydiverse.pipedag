@@ -123,3 +123,6 @@ mlruns
 
 # baseline update files
 *.updated.json
+
+# pixi
+.pixi

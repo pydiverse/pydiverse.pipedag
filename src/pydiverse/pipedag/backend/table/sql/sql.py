@@ -6,7 +6,7 @@ import time
 import warnings
 from collections.abc import Iterable
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, Literal
 
 import sqlalchemy as sa
 import sqlalchemy.exc
@@ -436,9 +436,10 @@ class SQLTableStore(BaseTableStore):
             self.logger.info("Executing sql", query=pretty_query_str)
 
         if isinstance(query, str):
-            return conn.execute(sa.text(query))
+            ret = conn.execute(sa.text(query))
         else:
-            return conn.execute(query)
+            ret = conn.execute(query)
+        return ret
 
     def execute(
         self,
@@ -877,6 +878,22 @@ class SQLTableStore(BaseTableStore):
             return self._init_stage_read_views(stage)
         raise ValueError(f"Invalid stage commit technique: {stage_commit_technique}")
 
+    def optional_pause_for_db_transactionality(
+        self,
+        prev_action: Literal[
+            "table_drop",
+            "table_create",
+            "schema_drop",
+            "schema_create",
+            "schema_rename",
+        ],
+    ):
+        _ = type
+        # Some backends have transactionality problems with very quick
+        # DROP/CREATE or RENAME activities for both schemas and tables
+        # which happen in testing.
+        pass
+
     def _init_stage_schema_swap(self, stage: Stage):
         schema = self.get_schema(stage.name)
         transaction_schema = self.get_schema(stage.transaction_name)
@@ -892,10 +909,13 @@ class SQLTableStore(BaseTableStore):
                 self.execute(
                     DropSchemaContent(transaction_schema, self.engine), conn=conn
                 )
+                self.optional_pause_for_db_transactionality("table_drop")
             else:
                 self.execute(cs_base, conn=conn)
                 self.execute(ds_trans, conn=conn)
+                self.optional_pause_for_db_transactionality("schema_drop")
                 self.execute(cs_trans, conn=conn)
+                self.optional_pause_for_db_transactionality("schema_create")
 
             if not self.disable_caching:
                 for table in [
@@ -973,13 +993,17 @@ class SQLTableStore(BaseTableStore):
                 ),
                 conn=conn,
             )
+            self.optional_pause_for_db_transactionality("schema_drop")
             self.execute(RenameSchema(schema, tmp_schema, self.engine), conn=conn)
+            self.optional_pause_for_db_transactionality("schema_rename")
             self.execute(
                 RenameSchema(transaction_schema, schema, self.engine), conn=conn
             )
+            self.optional_pause_for_db_transactionality("schema_rename")
             self.execute(
                 RenameSchema(tmp_schema, transaction_schema, self.engine), conn=conn
             )
+            self.optional_pause_for_db_transactionality("schema_rename")
 
             self._commit_stage_update_metadata(stage, conn=conn)
 
@@ -990,6 +1014,7 @@ class SQLTableStore(BaseTableStore):
         with self.engine_connect() as conn:
             # Clear contents of destination schema
             self.execute(DropSchemaContent(dest_schema, self.engine), conn=conn)
+            self.optional_pause_for_db_transactionality("table_drop")
 
             # Create aliases for all tables in transaction schema
             inspector = sa.inspect(self.engine)

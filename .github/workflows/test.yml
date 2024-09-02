@@ -1,0 +1,67 @@
+on:
+  workflow_call:
+    inputs:
+      os:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+      docker-services:
+        required: false
+        type: string
+      pytest-arguments:
+        required: false
+        type: string
+      workers:
+        default: 4
+        type: number
+      timeout-minutes:
+        default: 10
+        type: number
+    secrets:
+      SNOWFLAKE_PASSWORD:
+        required: false
+      SNOWFLAKE_ACCOUNT:
+        required: false
+      SNOWFLAKE_USER:
+        required: false
+
+jobs:
+  test:
+    name: pytest
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          environments: ${{ inputs.environment }}
+
+      - name: Start Docker Compose
+        if: ${{ inputs.docker-services != '' }}
+        uses: isbang/compose-action@e5813a5909aca4ae36058edae58f6e52b9c971f8
+        with:
+          compose-file: docker-compose.yaml
+          services: ${{ inputs.docker-services }}
+
+      - name: Install Microsoft ODBC
+        if: ${{ contains(inputs.docker-services, 'mssql') }}
+        run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+
+      - name: Wait for Docker Servers
+        if: ${{ inputs.docker-services != '' }}
+        run: |
+          until bash ./.github/scripts/docker_compose_ready.sh; do
+            sleep 1
+          done
+
+      - name: Run tests
+        env:
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}        
+        run: |
+          pixi run -e ${{ inputs.environment }} pytest tests -ra ${RUNNER_DEBUG:+-v} --color=yes --workers=${{ inputs.workers }} ${{ inputs.pytest-arguments }}
