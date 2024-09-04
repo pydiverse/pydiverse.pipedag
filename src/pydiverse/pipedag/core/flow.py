@@ -21,12 +21,12 @@ from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.context.trace_hook import TraceHook
 from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.core.group_node import BarrierTask, VisualizationStyle
+from pydiverse.pipedag.core.task import TaskGetItem
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import GroupNode, Result, Stage, Task
     from pydiverse.pipedag.core.stage import CommitStageTask
-    from pydiverse.pipedag.core.task import TaskGetItem
     from pydiverse.pipedag.engine import OrchestrationEngine
 
 
@@ -399,7 +399,7 @@ class Flow:
         if inputs is not None:
             resolved_inputs = {}
             for task, ref in inputs.items():
-                if hasattr(task, "task"):
+                if isinstance(task, TaskGetItem):
                     task = task.task
                 resolved_inputs[task] = ref
             inputs = resolved_inputs
