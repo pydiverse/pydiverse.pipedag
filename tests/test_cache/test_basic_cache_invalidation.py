@@ -27,7 +27,8 @@ try:
 except ImportError:
     pl = None
 
-pytestmark = [with_instances(ALL_INSTANCES)]
+# snowflake tests are too slow, possibly they could move to nightly tests
+pytestmark = [with_instances(tuple(set(ALL_INSTANCES) - {"snowflake"}))]
 
 
 # Test Basic Cache Invalidation Behaviour
@@ -889,7 +890,7 @@ def test_cache_validation_mode(
             all(spy.assert_called_once() for spy in ind_spy)
 
 
-@skip_instances("postgres", "local_table_cache")
+@skip_instances("postgres", "local_table_cache", "snowflake")
 @pytest.mark.parametrize("ignore_task_version", [False])
 @pytest.mark.parametrize("disable_cache_function", [False])
 @pytest.mark.parametrize(
@@ -899,8 +900,13 @@ def test_cache_validation_mode(
 def test_cache_validation_mode_reduced(
     ignore_task_version, disable_cache_function, mode, imperative, mocker
 ):
-    # reduce combinatorial space for duckdb to avoid timeout after 10min
-    # duckdb is particularly slow for those tests (~10x: 7-15s instead of 1-2s)
+    # Reduce combinatorial space for duckdb to avoid timeout after 10min
+    # duckdb is particularly slow for those tests (~10x: 7-15s instead of 1-2s).
+    # This reduced combinatorial space is even too much for snowflake. There,
+    # we have 1-2 seconds roundtrip time for many individual database requests.
+    # And even just reflecting a SQLAlchemy tables issues several of those.
+    # Thus this test takes >30min alone for snowflake. In realistic scenarios,
+    # the 1-2s per request should not matter too much, though.
     test_cache_validation_mode(
         ignore_task_version, disable_cache_function, mode, imperative, mocker
     )

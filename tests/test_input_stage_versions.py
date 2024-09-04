@@ -126,7 +126,8 @@ def test_input_versions_table():
         val = -5
         f = get_flow()
         with swallowing_raises(
-            AssertionError, match=r"\[left\]:  \[-5\]\n\[right\]: \[12\]"
+            AssertionError,
+            match=r"\[left\]:[ \t]*\[-5(\.0)?\]\n[ \t]*\[right\]:[ \t]*\[12(\.0)?\]",
         ):
             f.run()
 

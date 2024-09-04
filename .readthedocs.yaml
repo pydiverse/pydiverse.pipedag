@@ -2,22 +2,16 @@
 # See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
 
 version: 2
-
 build:
   os: ubuntu-22.04
   tools:
-    python: "3.11"
-  jobs:
-    post_create_environment:
-      - pip install poetry
-    post_install:
-      # Install dependencies with 'docs' dependency group
-      # https://python-poetry.org/docs/managing-dependencies/#dependency-groups
-      # VIRTUAL_ENV needs to be set manually for now.
-      # See https://github.com/readthedocs/readthedocs.org/pull/11152/
-      - VIRTUAL_ENV=$READTHEDOCS_VIRTUALENV_PATH poetry install --with docs
-
-
+    python: mambaforge-latest
+  commands:
+    - mamba install -c conda-forge -c nodefaults pixi
+    - pixi run -e docs postinstall
+    - pixi run -e docs docs
+    - pixi run -e docs readthedocs
 sphinx:
-  builder: html
   configuration: docs/source/conf.py
+formats:
+  - pdf

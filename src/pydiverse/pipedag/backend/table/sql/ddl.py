@@ -1051,6 +1051,30 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     return f"ALTER TABLE {schema}.{table} {alter_columns}"
 
 
+@compiles(ChangeColumnTypes, "snowflake")
+def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
+    _ = kw
+    table = compiler.preparer.quote(change.table_name)
+    schema = compiler.preparer.format_schema(change.schema.get())
+    alter_columns = ",".join(
+        [
+            f"COLUMN {compiler.preparer.quote(col)} SET DATA TYPE"
+            f" {compiler.type_compiler.process(_type)}"
+            for col, _type, nullable in zip(
+                change.column_names, change.column_types, change.nullable
+            )
+        ]
+        + [
+            "COLUMN"
+            f" {compiler.preparer.quote(col)}"
+            f" {'SET' if not nullable else 'DROP'} NOT NULL"
+            for col, nullable in zip(change.column_names, change.nullable)
+            if nullable is not None
+        ]
+    )
+    return f"ALTER TABLE {schema}.{table} ALTER {alter_columns}"
+
+
 @compiles(ChangeColumnTypes, "duckdb")
 def visit_change_column_types_duckdb(change: ChangeColumnTypes, compiler, **kw):
     table = compiler.preparer.quote(change.table_name)
@@ -1151,6 +1175,22 @@ def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
         ]
     )
     return f"ALTER TABLE {schema}.{table} {alter_columns}"
+
+
+@compiles(ChangeColumnNullable, "snowflake")
+def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
+    _ = kw
+    table = compiler.preparer.quote(change.table_name)
+    schema = compiler.preparer.format_schema(change.schema.get())
+    alter_columns = ",".join(
+        [
+            "COLUMN"
+            f" {compiler.preparer.quote(col)}"
+            f" {'SET' if not nullable else 'DROP'} NOT NULL"
+            for col, nullable in zip(change.column_names, change.nullable)
+        ]
+    )
+    return f"ALTER TABLE {schema}.{table} ALTER {alter_columns}"
 
 
 @compiles(ChangeColumnNullable, "ibm_db_sa")

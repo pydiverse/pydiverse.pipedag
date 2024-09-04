@@ -228,7 +228,7 @@ Traceback (most recent call last):
   File "/home/user/code/pydiverse.pipedag/src/pydiverse/pipedag/materialize/container.py", line 200, in materialize
     return task_context.imperative_materialize_callback(
 ...    
-  File "/home/martin/.cache/pypoetry/virtualenvs/pydiverse-pipedag-Hmb_rarN-py3.10/lib/python3.10/site-packages/duckdb_engine/__init__.py", line 162, in execute
+  File "/home/user/.cache/env/virtualenvs/pydiverse-pipedag-Hmb_rarN-py3.10/lib/python3.10/site-packages/duckdb_engine/__init__.py", line 162, in execute
     self.__c.execute(statement, parameters)
 sqlalchemy.exc.ProgrammingError: (duckdb.duckdb.ParserException) Parser Error: syntax error at or near "<"
 [SQL: CREATE TABLE stage_1__odd.lazy_task_1_ej2ik3i4op3osgqyqm3m_0000 AS

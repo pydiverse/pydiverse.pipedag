@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC
 from multiprocessing import Queue
 
 import pytest
@@ -12,6 +13,19 @@ def start_worker(
     option_dict["plugins"].append("no:terminal")
     config = Config.fromdictargs(option_dict, args)
     config.args = args
+
+    from typing import TextIO
+
+    class DontPrint(TextIO, ABC):
+        def write(*_):
+            pass
+
+    # TODO: find a way to fix assert inspection code of pytest raised in threads
+    # The following code meant to do this, but prevents tests from running at all.
+    # # register dummy terminal reporter since it is needed by pytest even with
+    # # plugins:"no:terminal" option
+    # terminal_reporter = TerminalReporter(config, DontPrint())
+    # config.pluginmanager.register(terminal_reporter, "terminalreporter")
 
     # Remove workers option to prevent triggering main plugin
     config.option.workers = None
