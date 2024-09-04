@@ -395,6 +395,15 @@ class Flow:
         if trace_hook is None:
             trace_hook = TraceHook()
 
+        # resolve MaterializingTaskGetItem objects in inputs
+        if inputs is not None:
+            resolved_inputs = {}
+            for task, ref in inputs.items():
+                if hasattr(task, "task"):
+                    task = task.task
+                resolved_inputs[task] = ref
+            inputs = resolved_inputs
+
         with config, RunContextServer(subflow, trace_hook):
             if orchestration_engine is None:
                 orchestration_engine = config.create_orchestration_engine()

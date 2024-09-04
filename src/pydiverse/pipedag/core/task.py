@@ -204,7 +204,11 @@ class Task:
             if isinstance(x, Task):
                 return x.resolve_value(inputs[x.id])
             if isinstance(x, TaskGetItem):
-                return x.resolve_value(inputs[x.task.id])
+                try:
+                    return x.resolve_value(inputs[x.task.id])
+                except TypeError:
+                    # special handling for resolving constant inputs
+                    return x.task.resolve_value(inputs[x.task.id])
             return x
 
         args = deep_map(args, task_result_mapper)
