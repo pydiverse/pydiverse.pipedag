@@ -7,11 +7,14 @@ import structlog
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
-from pydiverse.pipedag import ExternalTableReference, Table
+from pydiverse.pipedag import ExternalTableReference
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.core.result import Result
 from pydiverse.pipedag.core.task import TaskGetItem
-from pydiverse.pipedag.engine.base import OrchestrationEngine
+from pydiverse.pipedag.engine.base import (
+    OrchestrationEngine,
+    _replace_task_inputs_with_const_inputs,
+)
 from pydiverse.pipedag.util import requires
 
 if TYPE_CHECKING:
@@ -75,16 +78,12 @@ class PrefectOneEngine(OrchestrationEngine):
             # otherwise try to get it from results
             task_inputs = {
                 **{
-                    in_id: Table(inputs[in_t])
-                    for in_id, in_t in t.input_tasks.items()
-                    if in_t in inputs
-                },
-                **{
                     in_id: tasks[in_t]
                     for in_id, in_t in t.input_tasks.items()
                     if in_t not in inputs
                 },
             }
+            task_inputs = _replace_task_inputs_with_const_inputs(task_inputs, inputs)
 
             flow.add_task(task)
             flow.set_dependencies(
@@ -199,16 +198,15 @@ class PrefectTwoEngine(OrchestrationEngine):
                 parents = [futures[p] for p in f.get_parent_tasks(t)]
                 task_inputs = {
                     **{
-                        in_id: Table(inputs[in_t])
-                        for in_id, in_t in t.input_tasks.items()
-                        if in_t in inputs
-                    },
-                    **{
                         in_id: futures[in_t]
                         for in_id, in_t in t.input_tasks.items()
                         if in_t not in inputs
                     },
                 }
+                task_inputs = _replace_task_inputs_with_const_inputs(
+                    task_inputs, inputs
+                )
+
                 futures[t] = task.submit(
                     inputs=task_inputs,
                     run_context=run_context,

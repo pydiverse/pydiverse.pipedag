@@ -6,11 +6,14 @@ from typing import TYPE_CHECKING
 
 import structlog
 
-from pydiverse.pipedag import ExternalTableReference, Table
+from pydiverse.pipedag import ExternalTableReference
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.core import Result
 from pydiverse.pipedag.core.task import TaskGetItem
-from pydiverse.pipedag.engine.base import OrchestrationEngine
+from pydiverse.pipedag.engine.base import (
+    OrchestrationEngine,
+    _replace_task_inputs_with_const_inputs,
+)
 from pydiverse.pipedag.util import requires
 
 if TYPE_CHECKING:
@@ -84,16 +87,12 @@ class DaskEngine(OrchestrationEngine):
         for task in flow.get_tasks():
             task_inputs = {
                 **{
-                    in_id: Table(inputs[in_t])
-                    for in_id, in_t in task.input_tasks.items()
-                    if in_t in inputs
-                },
-                **{
                     in_id: results[in_t]
                     for in_id, in_t in task.input_tasks.items()
                     if in_t not in inputs
                 },
             }
+            task_inputs = _replace_task_inputs_with_const_inputs(task_inputs, inputs)
 
             results[task] = bind_run(task)(
                 parent_futures=[

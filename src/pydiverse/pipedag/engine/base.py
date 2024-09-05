@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from pydiverse.pipedag import ExternalTableReference, Task
+from pydiverse.pipedag import ExternalTableReference, RawSql, Table, Task
 from pydiverse.pipedag.core.task import TaskGetItem
 from pydiverse.pipedag.util import Disposable
 
@@ -39,3 +39,33 @@ class OrchestrationEngine(Disposable, ABC):
             engine specific.
         :return: A result instance wrapping the flow execution result.
         """
+
+
+def _replace_task_inputs_with_const_inputs(
+    task_inputs: dict[int, Any], inputs: dict[tuple[int, int | str | None], Table]
+) -> dict[int, Any]:
+    # check if one of the inputs should be replaced with a constant input
+    for task_identifier, reference in inputs.items():
+        task_id = task_identifier[0]
+        if task_id not in task_inputs.keys():
+            continue
+        task_item = task_identifier[1]
+        if task_item is None:
+            task_inputs[task_id] = reference
+        elif isinstance(task_item, int):
+            # handling TaskGetItem args
+            items = list(task_inputs[task_id])
+            items[task_item] = reference
+            task_inputs[task_id] = tuple(items)
+        elif isinstance(task_item, str):
+            # handling TaskGetItem kwargs and RawSql tasks
+            items = task_inputs[task_id]
+            if isinstance(items, RawSql):
+                if task_inputs[task_id].loaded_tables is None:
+                    task_inputs[task_id].loaded_tables = {task_item: reference}
+                else:
+                    task_inputs[task_id].loaded_tables[task_item] = reference
+            else:
+                items[task_item] = reference
+            task_inputs[task_id] = items
+    return task_inputs

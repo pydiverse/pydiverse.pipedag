@@ -174,7 +174,7 @@ def test_external_table_inputs_nout():
             _ = make_external_table()
 
         with Stage("sql_table_linked"):
-            table, _ = duplicate_table_reference()
+            table, dummy = duplicate_table_reference()
             output = identity(table)
 
     with StageLockContext():
@@ -190,7 +190,11 @@ def test_external_table_inputs_nout():
                 table: ExternalTableReference(
                     "external_table",
                     schema="external_schema",
-                )
+                ),
+                dummy: ExternalTableReference(
+                    "external_table",
+                    schema="external_schema",
+                ),
             }
         )
         assert result.get(output, as_type=pd.DataFrame).shape[0] == 4
