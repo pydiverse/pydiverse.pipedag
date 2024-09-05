@@ -41,7 +41,7 @@ class SequentialEngine(OrchestrationEngine):
                             **{
                                 in_id: results[in_t]
                                 for in_id, in_t in task.input_tasks.items()
-                                if in_t in results and in_t not in inputs
+                                if in_t in results
                             },
                         }
                         task_inputs = _replace_task_inputs_with_const_inputs(

@@ -402,9 +402,11 @@ class Flow:
             inputs_resolved = {}
             for task, ref in inputs.items():
                 if isinstance(task, TaskGetItem):
-                    inputs_resolved[(task.task.id, task.item)] = Table(ref)
+                    if not hasattr(inputs_resolved, task.task.id):
+                        inputs_resolved[task.task.id] = {}
+                    inputs_resolved[task.task.id][task.item] = Table(ref)
                 else:
-                    inputs_resolved[(task.id, None)] = Table(ref)
+                    inputs_resolved[task.id] = Table(ref)
         else:
             inputs_resolved = None
 
