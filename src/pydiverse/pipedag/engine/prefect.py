@@ -77,7 +77,11 @@ class PrefectOneEngine(OrchestrationEngine):
             # if desired input is passed in inputs use it,
             # otherwise try to get it from results
             task_inputs = {
-                **{in_id: tasks[in_t] for in_id, in_t in t.input_tasks.items()},
+                **{
+                    in_id: tasks[in_t]
+                    for in_id, in_t in t.input_tasks.items()
+                    if in_t in tasks
+                },
             }
             task_inputs = _replace_task_inputs_with_const_inputs(task_inputs, inputs)
 
@@ -193,7 +197,11 @@ class PrefectTwoEngine(OrchestrationEngine):
 
                 parents = [futures[p] for p in f.get_parent_tasks(t)]
                 task_inputs = {
-                    **{in_id: futures[in_t] for in_id, in_t in t.input_tasks.items()},
+                    **{
+                        in_id: futures[in_t]
+                        for in_id, in_t in t.input_tasks.items()
+                        if in_t in futures
+                    },
                 }
                 task_inputs = _replace_task_inputs_with_const_inputs(
                     task_inputs, inputs
