@@ -78,12 +78,12 @@ class PrefectOneEngine(OrchestrationEngine):
             task_inputs = {
                 **{
                     in_id: tasks[in_t]
-                    for in_id, in_t in task.input_tasks.items()
+                    for in_id, in_t in t.input_tasks.items()
                     if in_t in tasks and in_t not in inputs
                 },
                 **{
                     in_id: Table(inputs[in_t])
-                    for in_id, in_t in task.input_tasks.items()
+                    for in_id, in_t in t.input_tasks.items()
                     if in_t in inputs
                 },
             }
@@ -202,12 +202,12 @@ class PrefectTwoEngine(OrchestrationEngine):
                 task_inputs = {
                     **{
                         in_id: futures[in_t]
-                        for in_id, in_t in task.input_tasks.items()
+                        for in_id, in_t in t.input_tasks.items()
                         if in_t in futures and in_t not in inputs
                     },
                     **{
                         in_id: Table(inputs[in_t])
-                        for in_id, in_t in task.input_tasks.items()
+                        for in_id, in_t in t.input_tasks.items()
                         if in_t in inputs
                     },
                 }
