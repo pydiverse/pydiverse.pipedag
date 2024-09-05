@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.7 (2024-xx-xx)
+## 0.9.7 (2024-09-05)
 - Add support for passing `inputs` for tasks returning multiple Tables and for `RawSql` tasks.
 
 ## 0.9.6 (2024-08-29)
