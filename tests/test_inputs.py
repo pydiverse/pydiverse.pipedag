@@ -11,6 +11,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     InsertIntoSelect,
 )
 from pydiverse.pipedag.container import ExternalTableReference, Schema
+from tests.fixtures.instances import with_instances
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.util.sql import sql_table_expr
@@ -75,6 +76,7 @@ def test_external_table_inputs():
         assert result.get(output, as_type=pd.DataFrame).shape[0] == 4
 
 
+@with_instances("mssql")
 def test_external_table_inputs_rawsql():
     @materialize(version="1.1")
     def make_external_table():
