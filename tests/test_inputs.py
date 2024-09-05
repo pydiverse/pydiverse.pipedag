@@ -76,7 +76,7 @@ def test_external_table_inputs():
         assert result.get(output, as_type=pd.DataFrame).shape[0] == 4
 
 
-@with_instances("postgres")
+@with_instances("mssql")
 def test_external_table_inputs_rawsql():
     @materialize(version="1.1")
     def make_external_table():
