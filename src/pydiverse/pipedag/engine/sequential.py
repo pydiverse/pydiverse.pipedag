@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pydiverse.pipedag import ExternalTableReference, Table, Task
+from pydiverse.pipedag import ExternalTableReference, Task
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.core.result import Result
 from pydiverse.pipedag.core.task import TaskGetItem
-from pydiverse.pipedag.engine.base import OrchestrationEngine
+from pydiverse.pipedag.engine.base import (
+    OrchestrationEngine,
+    _replace_task_inputs_with_const_inputs,
+)
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import Subflow
@@ -34,20 +37,16 @@ class SequentialEngine(OrchestrationEngine):
             for task in flow.get_tasks():
                 try:
                     if not (set(task.input_tasks) & failed_tasks):
-                        # if desired input is passed in inputs use it,
-                        # otherwise try to get it from results
                         task_inputs = {
-                            **{
-                                in_id: Table(inputs[in_t])
-                                for in_id, in_t in task.input_tasks.items()
-                                if in_t in inputs
-                            },
                             **{
                                 in_id: results[in_t]
                                 for in_id, in_t in task.input_tasks.items()
                                 if in_t in results and in_t not in inputs
                             },
                         }
+                        task_inputs = _replace_task_inputs_with_const_inputs(
+                            task_inputs, inputs
+                        )
 
                         results[task] = task.run(
                             inputs=task_inputs,

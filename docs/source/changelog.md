@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.9.7 (2024-xx-xx)
+- Add support for passing `inputs` for tasks returning multiple Tables and for `RawSql` tasks.
+
 ## 0.9.6 (2024-08-29)
 - Support ExternalTableReference creation at flow wiring time. A pipedag `Table(ExternalTableReference(...))` object can
     be passed as a parameter into any task instead of any other pipedag table reference.

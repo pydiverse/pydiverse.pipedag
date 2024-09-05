@@ -10,7 +10,7 @@ import networkx as nx
 import pydot
 import structlog
 
-from pydiverse.pipedag import ExternalTableReference
+from pydiverse.pipedag import ExternalTableReference, Table
 from pydiverse.pipedag.context import (
     ConfigContext,
     DAGContext,
@@ -21,12 +21,12 @@ from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.context.trace_hook import TraceHook
 from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.core.group_node import BarrierTask, VisualizationStyle
+from pydiverse.pipedag.core.task import TaskGetItem
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import GroupNode, Result, Stage, Task
     from pydiverse.pipedag.core.stage import CommitStageTask
-    from pydiverse.pipedag.core.task import TaskGetItem
     from pydiverse.pipedag.engine import OrchestrationEngine
 
 
@@ -315,7 +315,9 @@ class Flow:
             Every task that is listed in this mapping
             will not be executed but instead the output,
             will be read from the external reference.
-            NOTE: This is only supported when using the SQLTablestore at the moment
+            NOTE: Using this feature disables caching.
+            NOTE: This feature is only supported when using
+            the SQLTablestore at the moment.
         :param kwargs:
             Other keyword arguments that get passed on directly to the
             ``run()`` method of the orchestration engine. Consequently, these
@@ -395,11 +397,22 @@ class Flow:
         if trace_hook is None:
             trace_hook = TraceHook()
 
+        # resolve constant inputs
+        if inputs is not None:
+            inputs_resolved = {}
+            for task, ref in inputs.items():
+                if isinstance(task, TaskGetItem):
+                    inputs_resolved[(task.task.id, task.item)] = Table(ref)
+                else:
+                    inputs_resolved[(task.id, None)] = Table(ref)
+        else:
+            inputs_resolved = None
+
         with config, RunContextServer(subflow, trace_hook):
             if orchestration_engine is None:
                 orchestration_engine = config.create_orchestration_engine()
             result = orchestration_engine.run(
-                subflow, ignore_position_hashes, inputs, **kwargs
+                subflow, ignore_position_hashes, inputs_resolved, **kwargs
             )
 
             visualization_url = result.visualize_url()
