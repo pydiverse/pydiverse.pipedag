@@ -10,7 +10,7 @@ import networkx as nx
 import pydot
 import structlog
 
-from pydiverse.pipedag import ExternalTableReference, Table
+from pydiverse.pipedag import ExternalTableReference
 from pydiverse.pipedag.context import (
     ConfigContext,
     DAGContext,
@@ -397,24 +397,11 @@ class Flow:
         if trace_hook is None:
             trace_hook = TraceHook()
 
-        # resolve constant inputs
-        if inputs is not None:
-            inputs_resolved = {}
-            for task, ref in inputs.items():
-                if isinstance(task, TaskGetItem):
-                    if task.task.id not in inputs_resolved:
-                        inputs_resolved[task.task.id] = {}
-                    inputs_resolved[task.task.id][task.item] = Table(ref)
-                else:
-                    inputs_resolved[task.id] = Table(ref)
-        else:
-            inputs_resolved = None
-
         with config, RunContextServer(subflow, trace_hook):
             if orchestration_engine is None:
                 orchestration_engine = config.create_orchestration_engine()
             result = orchestration_engine.run(
-                subflow, ignore_position_hashes, inputs_resolved, **kwargs
+                subflow, ignore_position_hashes, inputs, **kwargs
             )
 
             visualization_url = result.visualize_url()

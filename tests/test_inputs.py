@@ -65,9 +65,11 @@ def test_external_table_inputs():
     with StageLockContext():
         # Linked execution. Body of duplicate_table_reference should not be executed,
         # instead output is referenced from the linked table
+        task_to_link = f["sql_table_linked"].get_task("duplicate_table_reference")
+
         result = f.run(
             inputs={
-                table: ExternalTableReference(
+                task_to_link: ExternalTableReference(
                     "external_table",
                     schema="external_schema",
                 )
@@ -128,9 +130,10 @@ def test_external_table_inputs_rawsql():
     with StageLockContext():
         # Linked execution. Body of duplicate_table_reference should not be executed,
         # instead output is referenced from the linked table
+        task_to_link = f["sql_table_linked"].get_task("duplicate_table_reference")
         result = f.run(
             inputs={
-                table: ExternalTableReference(
+                task_to_link: ExternalTableReference(
                     "external_table",
                     schema="external_schema",
                 )
@@ -187,16 +190,14 @@ def test_external_table_inputs_nout():
     with StageLockContext():
         # Linked execution. Body of duplicate_table_reference should not be executed,
         # instead output is referenced from the linked table
+        task_to_link = f["sql_table_linked"].get_task("duplicate_table_reference")
+
         result = f.run(
             inputs={
-                table: ExternalTableReference(
+                task_to_link: ExternalTableReference(
                     "external_table",
                     schema="external_schema",
-                ),
-                dummy: ExternalTableReference(
-                    "external_table",
-                    schema="external_schema",
-                ),
+                )
             }
         )
         assert result.get(output, as_type=pd.DataFrame).shape[0] == 4
@@ -250,10 +251,12 @@ def test_external_table_inputs_no_run():
     with StageLockContext():
         # Linked execution. Body of duplicate_table_reference should not be executed,
         # instead output is referenced from the linked table
+        task_to_link = f["sql_table_linked"].get_task("duplicate_table_reference")
+
         result = f.run(
             run_selection=[output],
             inputs={
-                table: ExternalTableReference(
+                task_to_link: ExternalTableReference(
                     "external_table",
                     schema="external_schema",
                 )

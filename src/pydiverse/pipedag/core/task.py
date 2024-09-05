@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 import structlog
 
+from pydiverse.pipedag import Table
 from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext, TaskContext
 from pydiverse.pipedag.context.run_context import FinalTaskState
 from pydiverse.pipedag.errors import StageError
@@ -204,7 +205,10 @@ class Task:
             if isinstance(x, Task):
                 return x.resolve_value(inputs[x.id])
             if isinstance(x, TaskGetItem):
-                return x.resolve_value(inputs[x.task.id])
+                if isinstance(inputs[x.task.id], Table):
+                    return x.task.resolve_value(inputs[x.task.id])
+                else:
+                    return x.resolve_value(inputs[x.task.id])
             return x
 
         args = deep_map(args, task_result_mapper)

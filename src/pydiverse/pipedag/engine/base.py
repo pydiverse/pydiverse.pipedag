@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from pydiverse.pipedag import ExternalTableReference, Table, Task
+from pydiverse.pipedag import ExternalTableReference, Task
 from pydiverse.pipedag.core.task import TaskGetItem
 from pydiverse.pipedag.util import Disposable
 
@@ -39,12 +39,3 @@ class OrchestrationEngine(Disposable, ABC):
             engine specific.
         :return: A result instance wrapping the flow execution result.
         """
-
-
-def _replace_task_inputs_with_const_inputs(
-    task_inputs: dict[int, Any], inputs: dict[tuple[int, int | str | None], Table]
-) -> dict[int, Any]:
-    # check if one of the inputs should be replaced with a constant input
-    for task_id, reference in inputs.items():
-        task_inputs[task_id] = reference
-    return task_inputs
