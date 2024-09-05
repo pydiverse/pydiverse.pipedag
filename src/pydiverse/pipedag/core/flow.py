@@ -315,7 +315,9 @@ class Flow:
             Every task that is listed in this mapping
             will not be executed but instead the output,
             will be read from the external reference.
-            NOTE: This is only supported when using the SQLTablestore at the moment
+            NOTE: Using this feature disables caching.
+            NOTE: This feature is only supported when using
+            the SQLTablestore at the moment.
         :param kwargs:
             Other keyword arguments that get passed on directly to the
             ``run()`` method of the orchestration engine. Consequently, these
@@ -403,13 +405,14 @@ class Flow:
                     inputs_resolved[(task.task.id, task.item)] = Table(ref)
                 else:
                     inputs_resolved[(task.id, None)] = Table(ref)
-            inputs = inputs_resolved
+        else:
+            inputs_resolved = None
 
         with config, RunContextServer(subflow, trace_hook):
             if orchestration_engine is None:
                 orchestration_engine = config.create_orchestration_engine()
             result = orchestration_engine.run(
-                subflow, ignore_position_hashes, inputs, **kwargs
+                subflow, ignore_position_hashes, inputs_resolved, **kwargs
             )
 
             visualization_url = result.visualize_url()

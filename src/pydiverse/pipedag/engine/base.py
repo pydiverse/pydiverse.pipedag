@@ -50,22 +50,25 @@ def _replace_task_inputs_with_const_inputs(
         if task_id not in task_inputs.keys():
             continue
         task_item = task_identifier[1]
-        if task_item is None:
+        if isinstance(task_inputs[task_id], Table):
             task_inputs[task_id] = reference
-        elif isinstance(task_item, int):
+        elif isinstance(task_inputs[task_id], tuple):
             # handling TaskGetItem args
             items = list(task_inputs[task_id])
             items[task_item] = reference
             task_inputs[task_id] = tuple(items)
-        elif isinstance(task_item, str):
+        elif isinstance(task_inputs[task_id], dict):
             # handling TaskGetItem kwargs and RawSql tasks
             items = task_inputs[task_id]
-            if isinstance(items, RawSql):
-                if task_inputs[task_id].loaded_tables is None:
-                    task_inputs[task_id].loaded_tables = {task_item: reference}
-                else:
-                    task_inputs[task_id].loaded_tables[task_item] = reference
-            else:
-                items[task_item] = reference
+            items[task_item] = reference
             task_inputs[task_id] = items
+        elif isinstance(task_inputs[task_id], RawSql):
+            items = task_inputs[task_id]
+            if task_inputs[task_id].loaded_tables is None:
+                task_inputs[task_id].loaded_tables = {task_item: reference}
+            else:
+                task_inputs[task_id].loaded_tables[task_item] = reference
+            task_inputs[task_id] = items
+        else:
+            raise TypeError(f"Got unexpected task type: {type(task_inputs[task_id])}")
     return task_inputs
