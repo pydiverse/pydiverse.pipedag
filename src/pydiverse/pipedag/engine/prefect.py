@@ -10,7 +10,6 @@ from packaging.version import Version
 from pydiverse.pipedag import ExternalTableReference, Table
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.core.result import Result
-from pydiverse.pipedag.core.task import TaskGetItem
 from pydiverse.pipedag.engine.base import (
     OrchestrationEngine,
 )
@@ -54,7 +53,7 @@ class PrefectOneEngine(OrchestrationEngine):
     def construct_prefect_flow(
         self,
         f: Subflow,
-        inputs: dict[Task | TaskGetItem, ExternalTableReference] | None = None,
+        inputs: dict[Task, ExternalTableReference] | None = None,
     ):
         inputs = inputs if inputs is not None else {}
 
@@ -114,7 +113,7 @@ class PrefectOneEngine(OrchestrationEngine):
         self,
         flow: Subflow,
         ignore_position_hashes: bool = False,
-        inputs: dict[Task | TaskGetItem, ExternalTableReference] | None = None,
+        inputs: dict[Task, ExternalTableReference] | None = None,
         **run_kwargs,
     ):
         _ = ignore_position_hashes
@@ -172,7 +171,7 @@ class PrefectTwoEngine(OrchestrationEngine):
     def construct_prefect_flow(
         self,
         f: Subflow,
-        inputs: dict[Task | TaskGetItem, ExternalTableReference] | None = None,
+        inputs: dict[Task, ExternalTableReference] | None = None,
     ) -> prefect.Flow:
         from pydiverse.pipedag.materialize.core import MaterializingTask
 
@@ -227,7 +226,7 @@ class PrefectTwoEngine(OrchestrationEngine):
         self,
         flow: Subflow,
         ignore_position_hashes: bool = False,
-        inputs: dict[Task | TaskGetItem, ExternalTableReference] | None = None,
+        inputs: dict[Task, ExternalTableReference] | None = None,
         **kwargs,
     ):
         _ = ignore_position_hashes

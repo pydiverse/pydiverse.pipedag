@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from pydiverse.pipedag import ExternalTableReference, Task
-from pydiverse.pipedag.core.task import TaskGetItem
 from pydiverse.pipedag.util import Disposable
 
 if TYPE_CHECKING:
@@ -19,7 +18,7 @@ class OrchestrationEngine(Disposable, ABC):
         self,
         flow: Subflow,
         ignore_position_hashes: bool = False,
-        inputs: dict[Task | TaskGetItem, ExternalTableReference] | None = None,
+        inputs: dict[Task, ExternalTableReference] | None = None,
         **kwargs,
     ) -> Result:
         """Execute a flow

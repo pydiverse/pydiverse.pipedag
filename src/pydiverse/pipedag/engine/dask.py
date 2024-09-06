@@ -9,7 +9,6 @@ import structlog
 from pydiverse.pipedag import ExternalTableReference, Table
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.core import Result
-from pydiverse.pipedag.core.task import TaskGetItem
 from pydiverse.pipedag.engine.base import (
     OrchestrationEngine,
 )
@@ -53,7 +52,7 @@ class DaskEngine(OrchestrationEngine):
         self,
         flow: Subflow,
         ignore_position_hashes: bool = False,
-        inputs: dict[Task | TaskGetItem, ExternalTableReference] | None = None,
+        inputs: dict[Task, ExternalTableReference] | None = None,
         **run_kwargs,
     ):
         inputs = inputs if inputs is not None else {}
