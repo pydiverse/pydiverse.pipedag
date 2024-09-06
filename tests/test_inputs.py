@@ -63,13 +63,11 @@ def test_external_table_inputs():
         assert result.get(output, as_type=pd.DataFrame).shape[0] == 0
 
     with StageLockContext():
-        # Linked execution. Body of duplicate_table_reference should not be executed,
-        # instead output is referenced from the linked table
-        task_to_link = f["sql_table_linked"].get_task("duplicate_table_reference")
-
+        # Linked execution.
+        # Input of identity should be the output of make_external_table.
         result = f.run(
             inputs={
-                task_to_link: ExternalTableReference(
+                table: ExternalTableReference(
                     "external_table",
                     schema="external_schema",
                 )
@@ -128,12 +126,11 @@ def test_external_table_inputs_rawsql():
         assert result.get(output, as_type=pd.DataFrame).shape[0] == 1
 
     with StageLockContext():
-        # Linked execution. Body of duplicate_table_reference should not be executed,
-        # instead output is referenced from the linked table
-        task_to_link = f["sql_table_linked"].get_task("duplicate_table_reference")
+        # Linked execution.
+        # Input of identity should be the output of make_external_table.
         result = f.run(
             inputs={
-                task_to_link: ExternalTableReference(
+                table.task: ExternalTableReference(
                     "external_table",
                     schema="external_schema",
                 )
@@ -188,13 +185,11 @@ def test_external_table_inputs_nout():
         assert result.get(output, as_type=pd.DataFrame).shape[0] == 1
 
     with StageLockContext():
-        # Linked execution. Body of duplicate_table_reference should not be executed,
-        # instead output is referenced from the linked table
-        task_to_link = f["sql_table_linked"].get_task("duplicate_table_reference")
-
+        # Linked execution.
+        # Input of identity should be the output of make_external_table.
         result = f.run(
             inputs={
-                task_to_link: ExternalTableReference(
+                table.task: ExternalTableReference(
                     "external_table",
                     schema="external_schema",
                 )
@@ -249,14 +244,12 @@ def test_external_table_inputs_no_run():
         assert result.get(output, as_type=pd.DataFrame).shape[0] == 0
 
     with StageLockContext():
-        # Linked execution. Body of duplicate_table_reference should not be executed,
-        # instead output is referenced from the linked table
-        task_to_link = f["sql_table_linked"].get_task("duplicate_table_reference")
-
+        # Linked execution.
+        # Input of identity should be the output of make_external_table.
         result = f.run(
             run_selection=[output],
             inputs={
-                task_to_link: ExternalTableReference(
+                table: ExternalTableReference(
                     "external_table",
                     schema="external_schema",
                 )

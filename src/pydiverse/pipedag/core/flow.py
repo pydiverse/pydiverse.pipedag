@@ -312,9 +312,8 @@ class Flow:
             Optionally provide the outputs for a subset of tasks.
             The format is expected as
             dict[Task, ExternalTableReference].
-            Every task that is listed in this mapping
-            will not be executed but instead the output,
-            will be read from the external reference.
+            When the output of said tasks are retrieved as inputs for another
+            dependent task they will be fetched from the ExternalTableReference instead.
 
             NOTE: This feature is experimental and is not compatible
             with all aspects of pipedag.
