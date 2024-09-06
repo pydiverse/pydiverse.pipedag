@@ -311,13 +311,20 @@ class Flow:
         :param inputs:
             Optionally provide the outputs for a subset of tasks.
             The format is expected as
-            dict[Task|TaskGetItem, ExternalTableReference].
+            dict[Task, ExternalTableReference].
             Every task that is listed in this mapping
             will not be executed but instead the output,
             will be read from the external reference.
-            NOTE: Using this feature disables caching.
-            NOTE: This feature is only supported when using
-            the SQLTablestore at the moment.
+
+            NOTE: This feature is experimental and is not compatible
+            with all aspects of pipedag.
+            Only ExternalTableReferences are supported as inputs.
+            This feature does not work well in combination with Tasks returning
+            multiple outputs (nout > 1 or RawSql tasks returning multiple tables).
+            In the case of multiple outputs, the provided ExternalTableReference
+            will override all outputs of the task.
+            It is currently only supported when using
+            the SQLTablestore at the moment. Using it disables caching.
         :param kwargs:
             Other keyword arguments that get passed on directly to the
             ``run()`` method of the orchestration engine. Consequently, these
