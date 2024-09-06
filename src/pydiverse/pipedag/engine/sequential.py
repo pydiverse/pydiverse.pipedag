@@ -2,13 +2,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pydiverse.pipedag import ExternalTableReference, Task
+from pydiverse.pipedag import ExternalTableReference, Table, Task
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.core.result import Result
-from pydiverse.pipedag.core.task import TaskGetItem
 from pydiverse.pipedag.engine.base import (
     OrchestrationEngine,
-    _replace_task_inputs_with_const_inputs,
 )
 
 if TYPE_CHECKING:
@@ -22,7 +20,7 @@ class SequentialEngine(OrchestrationEngine):
         self,
         flow: Subflow,
         ignore_position_hashes: bool = False,
-        inputs: dict[Task | TaskGetItem, ExternalTableReference] | None = None,
+        inputs: dict[Task, ExternalTableReference] | None = None,
         **run_kwargs,
     ):
         run_context = RunContext.get()
@@ -43,10 +41,12 @@ class SequentialEngine(OrchestrationEngine):
                                 for in_id, in_t in task.input_tasks.items()
                                 if in_t in results and in_t not in inputs
                             },
+                            **{
+                                in_id: Table(inputs[in_t])
+                                for in_id, in_t in task.input_tasks.items()
+                                if in_t in inputs
+                            },
                         }
-                        task_inputs = _replace_task_inputs_with_const_inputs(
-                            task_inputs, inputs
-                        )
 
                         results[task] = task.run(
                             inputs=task_inputs,

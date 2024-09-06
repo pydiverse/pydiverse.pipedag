@@ -6,13 +6,11 @@ from typing import TYPE_CHECKING
 
 import structlog
 
-from pydiverse.pipedag import ExternalTableReference
+from pydiverse.pipedag import ExternalTableReference, Table
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.core import Result
-from pydiverse.pipedag.core.task import TaskGetItem
 from pydiverse.pipedag.engine.base import (
     OrchestrationEngine,
-    _replace_task_inputs_with_const_inputs,
 )
 from pydiverse.pipedag.util import requires
 
@@ -54,7 +52,7 @@ class DaskEngine(OrchestrationEngine):
         self,
         flow: Subflow,
         ignore_position_hashes: bool = False,
-        inputs: dict[Task | TaskGetItem, ExternalTableReference] | None = None,
+        inputs: dict[Task, ExternalTableReference] | None = None,
         **run_kwargs,
     ):
         inputs = inputs if inputs is not None else {}
@@ -89,10 +87,14 @@ class DaskEngine(OrchestrationEngine):
                 **{
                     in_id: results[in_t]
                     for in_id, in_t in task.input_tasks.items()
-                    if in_t not in inputs
+                    if in_t in results and in_t not in inputs
+                },
+                **{
+                    in_id: Table(inputs[in_t])
+                    for in_id, in_t in task.input_tasks.items()
+                    if in_t in inputs
                 },
             }
-            task_inputs = _replace_task_inputs_with_const_inputs(task_inputs, inputs)
 
             results[task] = bind_run(task)(
                 parent_futures=[

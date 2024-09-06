@@ -10,7 +10,7 @@ import networkx as nx
 import pydot
 import structlog
 
-from pydiverse.pipedag import ExternalTableReference, Table
+from pydiverse.pipedag import ExternalTableReference
 from pydiverse.pipedag.context import (
     ConfigContext,
     DAGContext,
@@ -258,7 +258,7 @@ class Flow:
         disable_cache_function: bool | None = None,
         ignore_task_version: bool | None = None,
         ignore_position_hashes: bool = False,
-        inputs: dict[Task | TaskGetItem, ExternalTableReference] | None = None,
+        inputs: dict[Task, ExternalTableReference] | None = None,
         **kwargs,
     ) -> Result:
         """Execute the flow.
@@ -311,13 +311,19 @@ class Flow:
         :param inputs:
             Optionally provide the outputs for a subset of tasks.
             The format is expected as
-            dict[Task|TaskGetItem, ExternalTableReference].
-            Every task that is listed in this mapping
-            will not be executed but instead the output,
-            will be read from the external reference.
-            NOTE: Using this feature disables caching.
-            NOTE: This feature is only supported when using
-            the SQLTablestore at the moment.
+            dict[Task, ExternalTableReference].
+            When the output of said tasks are retrieved as inputs for another
+            dependent task they will be fetched from the ExternalTableReference instead.
+
+            NOTE: This feature is experimental and is not compatible
+            with all aspects of pipedag.
+            Only ExternalTableReferences are supported as inputs.
+            This feature does not work well in combination with Tasks returning
+            multiple outputs (nout > 1 or RawSql tasks returning multiple tables).
+            In the case of multiple outputs, the provided ExternalTableReference
+            will override all outputs of the task.
+            It is currently only supported when using
+            the SQLTablestore at the moment. Using it disables caching.
         :param kwargs:
             Other keyword arguments that get passed on directly to the
             ``run()`` method of the orchestration engine. Consequently, these
@@ -397,22 +403,11 @@ class Flow:
         if trace_hook is None:
             trace_hook = TraceHook()
 
-        # resolve constant inputs
-        if inputs is not None:
-            inputs_resolved = {}
-            for task, ref in inputs.items():
-                if isinstance(task, TaskGetItem):
-                    inputs_resolved[(task.task.id, task.item)] = Table(ref)
-                else:
-                    inputs_resolved[(task.id, None)] = Table(ref)
-        else:
-            inputs_resolved = None
-
         with config, RunContextServer(subflow, trace_hook):
             if orchestration_engine is None:
                 orchestration_engine = config.create_orchestration_engine()
             result = orchestration_engine.run(
-                subflow, ignore_position_hashes, inputs_resolved, **kwargs
+                subflow, ignore_position_hashes, inputs, **kwargs
             )
 
             visualization_url = result.visualize_url()
