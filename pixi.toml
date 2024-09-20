@@ -89,6 +89,9 @@ sphinx-click = ">=4.4.0"
 sphinx-autobuild = ">=2021.3.14"
 sphinx-copybutton = ">=0.5.2"
 
+[tasks]
+postinstall = "pip install --no-build-isolation --no-deps --disable-pip-version-check -e ."
+
 [feature.docs.tasks]
 docs = "cd docs && make html "
 readthedocs = "rm -rf $READTHEDOCS_OUTPUT/html && cp -r docs/build/html $READTHEDOCS_OUTPUT/html"

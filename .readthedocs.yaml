@@ -8,6 +8,7 @@ build:
     python: mambaforge-latest
   commands:
     - mamba install -c conda-forge -c nodefaults pixi
+    - pixi run -e docs postinstall
     - pixi run -e docs docs
     - pixi run -e docs readthedocs
 sphinx:
