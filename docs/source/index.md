@@ -72,7 +72,7 @@ def join_tables(names: sa.Alias, ages: sa.Alias):
 Or with pydiverse.transform:
 
 ```python
-@materialize(lazy=True, input_type=pdt.SQLTableImpl)
+@materialize(lazy=True, input_type=pdt.SqlImpl)
 def join_tables(names: pdt.Table, ages: pdt.Table):
     return (
             names

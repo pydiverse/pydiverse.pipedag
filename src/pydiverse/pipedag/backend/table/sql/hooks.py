@@ -816,30 +816,28 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        from pydiverse.transform.polars.polars_table import PolarsEager
-        from pydiverse.transform.sql.sql_table import SQLTableImpl
+        from pydiverse.transform.backend import PolarsImpl, SqlImpl
 
-        return issubclass(type_, (PolarsEager, SQLTableImpl))
+        return issubclass(type_, (PolarsImpl, SqlImpl))
 
     @classmethod
     def retrieve_as_reference(cls, type_) -> bool:
-        from pydiverse.transform.sql.sql_table import SQLTableImpl
+        from pydiverse.transform.backend import SqlImpl
 
-        return issubclass(type_, SQLTableImpl)
+        return issubclass(type_, SqlImpl)
 
     @classmethod
     def materialize(cls, store, table: Table[pdt.Table], stage_name):
-        from pydiverse.transform.core.verbs import collect
-        from pydiverse.transform.polars.polars_table import PolarsEager
-        from pydiverse.transform.sql.sql_table import SQLTableImpl
+        from pydiverse.transform.backend import PolarsImpl, SqlImpl
+        from pydiverse.transform.pipe.verbs import collect
 
         t = table.obj
         table = table.copy_without_obj()
-        if isinstance(t._impl, PolarsEager):
+        if isinstance(t._impl, PolarsImpl):
             table.obj = t >> collect()
             hook = store.get_hook_subclass(PandasTableHook)
             return hook.materialize(store, table, stage_name)
-        if isinstance(t._impl, SQLTableImpl):
+        if isinstance(t._impl, SqlImpl):
             table.obj = t._impl.build_select()
             hook = store.get_hook_subclass(SQLAlchemyTableHook)
             return hook.materialize(store, table, stage_name)
@@ -853,17 +851,16 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         stage_name: str | None,
         as_type: type[T],
     ) -> T:
-        from pydiverse.transform.polars.polars_table import PolarsEager
-        from pydiverse.transform.sql.sql_table import SQLTableImpl
+        from pydiverse.transform.backend import PolarsImpl, SqlImpl
 
-        if issubclass(as_type, PolarsEager):
+        if issubclass(as_type, PolarsImpl):
             hook = store.get_hook_subclass(PandasTableHook)
             df = hook.retrieve(store, table, stage_name, pd.DataFrame)
-            return pdt.Table(PolarsEager(table.name, df))
-        if issubclass(as_type, SQLTableImpl):
+            return pdt.Table(PolarsImpl(table.name, df))
+        if issubclass(as_type, SqlImpl):
             hook = store.get_hook_subclass(SQLAlchemyTableHook)
             sa_tbl = hook.retrieve(store, table, stage_name, sa.Table)
-            return pdt.Table(SQLTableImpl(store.engine, sa_tbl))
+            return pdt.Table(SqlImpl(store.engine, sa_tbl))
         raise NotImplementedError
 
     @classmethod
@@ -872,7 +869,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def lazy_query_str(cls, store, obj: pdt.Table) -> str:
-        from pydiverse.transform.core.verbs import build_query
+        from pydiverse.transform.pipe.verbs import build_query
 
         query = obj >> build_query()
 

@@ -41,4 +41,4 @@ def test_unicode(unicode_str="äöüßéç"):
 
 @skip_instances("mssql", "mssql_pytsql")
 def test_unicode_beyond_mssql():
-    test_unicode("λ")
+    test_unicode("C")

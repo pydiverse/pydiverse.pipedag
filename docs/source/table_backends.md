@@ -47,11 +47,11 @@ decorator out-of-the-box:
 
 - `sqlalchemy.Table` (see [https://www.sqlalchemy.org/](https://www.sqlalchemy.org/); recommended with `lazy=True`;
   can also be used for composing handwritten SQL strings)
-- `pydiverse.transform.eager.PolarsEager
+- `pydiverse.transform.backend.PolarsImpl
 ` (see
   [https://pydiversetransform.readthedocs.io/en/latest/](https://pydiversetransform.readthedocs.io/en/latest/);
   recommended with manual version bumping and `version="X.Y.Z"`)
-- `pydiverse.transform.lazy.SQLTableImpl` (
+- `pydiverse.transform.backend.SqlImpl` (
   see [https://pydiversetransform.readthedocs.io/en/latest/](https://pydiversetransform.readthedocs.io/en/latest/);
   recommended with `lazy=True`)
 - `ibis.Table` (see [https://ibis-project.org/](https://ibis-project.org/); recommended with `lazy=True`)

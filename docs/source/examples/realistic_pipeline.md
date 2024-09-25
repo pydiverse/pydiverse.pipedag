@@ -26,8 +26,8 @@ import pydiverse.transform as pdt
 import xgboost
 import xgboost as xgb
 from pydiverse.pipedag import Blob, Flow, Stage, Table, materialize
-from pydiverse.transform import aligned, λ
-from pydiverse.transform.core.verbs import (
+from pydiverse.transform import aligned, C
+from pydiverse.transform.pipe.verbs import (
     alias,
     collect,
     filter,
@@ -36,8 +36,7 @@ from pydiverse.transform.core.verbs import (
     select,
     build_query,
 )
-from pydiverse.transform.polars.polars_table import PolarsEager
-from pydiverse.transform.sql.sql_table import SQLTableImpl
+from pydiverse.transform.backend import PolarsImpl, SqlImpl
 
 
 @pdt.verb
@@ -77,12 +76,12 @@ def read_input_data(src_dir="data/pipedag_example_data"):
     ]
 
 
-@materialize(input_type=SQLTableImpl, lazy=True)
+@materialize(input_type=SqlImpl, lazy=True)
 def clean(src_tbls: list[pdt.Table]):
     return [tbl >> trim_all_str() for tbl in src_tbls]
 
 
-@materialize(input_type=SQLTableImpl, lazy=True, nout=3)
+@materialize(input_type=SqlImpl, lazy=True, nout=3)
 def transform(src_tbls: list[pdt.Table]):
     named_tbls = get_named_tables(src_tbls)
     a = named_tbls["a"]
@@ -99,7 +98,7 @@ def transform(src_tbls: list[pdt.Table]):
     return new_a, new_b, new_c
 
 
-@materialize(input_type=SQLTableImpl, lazy=True)
+@materialize(input_type=SqlImpl, lazy=True)
 def lazy_features(a: pdt.Table, src_tbls: list[pdt.Table]):
     named_tbls = get_named_tables(src_tbls)
     b = named_tbls["b"]
@@ -111,7 +110,7 @@ def lazy_features(a: pdt.Table, src_tbls: list[pdt.Table]):
     )
 
 
-@materialize(input_type=PolarsEager
+@materialize(input_type=PolarsImpl
 , version="2.3.5")
 def eager_features(a: pdt.Table, src_tbls: list[pdt.Table]):
     named_tbls = get_named_tables(src_tbls)
@@ -124,7 +123,7 @@ def eager_features(a: pdt.Table, src_tbls: list[pdt.Table]):
     )
 
 
-@materialize(input_type=SQLTableImpl, lazy=True)
+@materialize(input_type=SqlImpl, lazy=True)
 def combine_features(features1: pdt.Table, features2: pdt.Table):
     return (
         features1
@@ -135,7 +134,7 @@ def combine_features(features1: pdt.Table, features2: pdt.Table):
     )
 
 
-@materialize(input_type=SQLTableImpl, lazy=True, nout=2)
+@materialize(input_type=SqlImpl, lazy=True, nout=2)
 def train_and_test_set(flat_table: pdt.Table, features: pdt.Table):
     tbl = (
         flat_table
@@ -146,12 +145,12 @@ def train_and_test_set(flat_table: pdt.Table, features: pdt.Table):
 
     training_set = (
         tbl
-        >> filter(λ.row_num % 10 != 0)
-        >> select(-λ.row_num)
+        >> filter(C.row_num % 10 != 0)
+        >> select(-C.row_num)
         >> alias("training_set")
     )
     test_set = (
-        tbl >> filter(λ.row_num % 10 == 0) >> select(-λ.row_num) >> alias("test_set")
+        tbl >> filter(C.row_num % 10 == 0) >> select(-C.row_num) >> alias("test_set")
     )
 
     return (training_set, test_set)
@@ -171,7 +170,7 @@ def model_training(train_set: pd.DataFrame):
 
 @aligned(with_="test_set")
 def predict(model: xgboost.Booster, test_set: pdt.Table):
-    x = test_set >> select(-λ.target) >> collect()
+    x = test_set >> select(-C.target) >> collect()
 
     # Ugly hack to convert new pandas dtypes to numpy dtypes, because xgboost
     # requires numpy dtypes.
@@ -183,20 +182,20 @@ def predict(model: xgboost.Booster, test_set: pdt.Table):
     predict_col = model.predict(dx)
 
     return pdt.Table(
-        PolarsEager
+        PolarsImpl
 ("prediction", pd.DataFrame({"prediction": predict_col}))
     ).prediction
 
 
-@materialize(input_type=PolarsEager
+@materialize(input_type=PolarsImpl
 , version="3.4.5")
 def model_evaluation(model: xgboost.Booster, test_set: pdt.Table):
     prediction = predict(model, test_set)  # produces an aligned vector with input
     return (
         test_set
-        >> select(λ.target)
+        >> select(C.target)
         >> mutate(prediction=prediction)
-        >> mutate(abs_error=abs(λ.target - λ.prediction))
+        >> mutate(abs_error=abs(C.target - C.prediction))
         >> alias("evaluation")
     )
 

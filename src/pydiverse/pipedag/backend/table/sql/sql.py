@@ -101,9 +101,9 @@ class SQLTableStore(BaseTableStore):
 
            * - pydiverse.transform
              - ``pdt.Table``
-             - | ``pdt.eager.PolarsEager
+             - | ``pdt.eager.PolarsImpl
     ``
-               | ``pdt.lazy.SQLTableImpl``
+               | ``pdt.lazy.SqlImpl``
 
            * - pydiverse.pipedag table reference
              - :py:class:`~.ExternalTableReference` (no materialization)
