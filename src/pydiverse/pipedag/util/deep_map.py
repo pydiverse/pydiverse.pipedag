@@ -3,6 +3,7 @@
 Heavily inspired by the builtin copy module of python:
 https://github.com/python/cpython/blob/main/Lib/copy.py
 """
+
 from __future__ import annotations
 
 from typing import Callable
@@ -19,13 +20,11 @@ def deep_map(x, fn: Callable, memo=None):
     if y is not _nil:
         return y
 
-    cls = type(x)
-
-    if cls == list:
+    if isinstance(x, list):
         y = _deep_map_list(x, fn, memo)
-    elif cls == tuple:
+    elif isinstance(x, tuple):
         y = _deep_map_tuple(x, fn, memo)
-    elif cls == dict:
+    elif isinstance(x, dict):
         y = _deep_map_dict(x, fn, memo)
     else:
         y = fn(x)
