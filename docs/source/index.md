@@ -152,7 +152,7 @@ Pipedag will be most powerful when giving it control of cache invalidation of th
 raw ingestion with filtering to various sample sizes (many pipeline instances) to model training and evaluation.
 A few features are still missing so pipedag can handle this job in all envisioned cases:
 
-1. In some cases, performance might not permit to materialize all tables in the databse. Thus, we envision a feature to
+1. In some cases, performance might not permit to materialize all tables in the database. Thus, we envision a feature to
    mark a task output with an "inline" annotation (compare with the "inline" keyword in C++). In case two tasks can
    actually be connected directly (i.e via passing an Apache Arrow dataframe), the materialization of the intermediate
    step
@@ -162,7 +162,6 @@ A few features are still missing so pipedag can handle this job in all envisione
    In general, we like materialization of intermediate results since it massively speeds up debugging without the need
    for
    a debugger. Please note that we already have a feature called local table cache which can avoid some of the database
-   to
    to python transfers.
 2. Interactive debugging might currently not be as nice as it could be. The aim is that given the flow graph, you may
    ask for the input of any task and then interactively run the code within the task right up to materialization. We
