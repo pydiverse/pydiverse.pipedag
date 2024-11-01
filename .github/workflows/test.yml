@@ -42,7 +42,7 @@ jobs:
 
       - name: Start Docker Compose
         if: ${{ inputs.docker-services != '' }}
-        uses: isbang/compose-action@e5813a5909aca4ae36058edae58f6e52b9c971f8
+        uses: isbang/compose-action@f1ca7fefe3627c2dab0ae1db43a106d82740245e
         with:
           compose-file: docker-compose.yaml
           services: ${{ inputs.docker-services }}
