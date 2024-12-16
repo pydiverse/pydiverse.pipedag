@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.9 (XXXX-XX-XX)
+- Support using subclasses of lists, tuple, and dict via deep_map. This allows usage of NamedTuple for more
+    semantically obvious return types.
+
 ## 0.9.8 (2024-09-06)
 - Bugfix for `inputs` argument for `flow.run()`.
 

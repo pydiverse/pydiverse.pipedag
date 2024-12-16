@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import NamedTuple
 
 import pandas as pd
 import sqlalchemy as sa
@@ -46,9 +47,14 @@ def list_arg(x: list[pd.DataFrame]):
     return Blob(x)
 
 
+class Blobs(NamedTuple):
+    a: Blob
+    b: Blob
+
+
 @materialize
 def blob_task(x, y):
-    return Blob(x), Blob(y)
+    return Blobs(Blob(x), Blob(y))
 
 
 def test_simple_flow(with_blob=True):
