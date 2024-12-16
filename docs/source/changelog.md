@@ -1,7 +1,5 @@
 # Changelog
 
-- Don't require Rosetta 2 for Apple Silicon anymore for IBM DB2 drivers
-
 ## 0.9.8 (2024-09-06)
 - Bugfix for `inputs` argument for `flow.run()`.
 
