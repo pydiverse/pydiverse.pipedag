@@ -4,6 +4,21 @@ API
 
 Public
 ======
+    "Flow",
+    "Stage",
+    "materialize",
+    "input_stage_versions",
+    "AUTO_VERSION",
+    "Table",
+    "RawSql",
+    "Blob",
+    "GroupNode",
+    "VisualizationStyle",
+    "Schema",
+    "Result",
+    "PipedagConfig",
+    "ConfigContext",
+    "StageLockContext",
 
 .. py:module:: pydiverse.pipedag
 
