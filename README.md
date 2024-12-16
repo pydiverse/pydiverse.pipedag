@@ -63,14 +63,6 @@ When using Pycharm, you might find it useful that we install a `conda` executabl
 use for creating conda interpreters: `<pydiverse.pipedag checkout>/.pixi/envs/default/libexec/conda`
 For more information, see [here](https://pixi.sh/latest/ide_integration/pycharm/).
 
-> [!NOTE]
-> The following warning is expected when running `pixi` commands that solve all environments for the first time 
-> in your checkout
-> ```
-> WARN osx-arm64 (Apple Silicon) is not supported by the pixi.toml, falling back to osx-64 (emulated with Rosetta)
-> ```
-> It actually just applies to the `py39ibm` and `py312ibm` environments used for running IBM DB2 tests.
-
 ## Testing
 
 Most tests are based on a Postgres container running. You can launch it with a working docker-compose setup via:
@@ -260,33 +252,17 @@ select * from stage_2.task_2_out;
 
 ### IBM DB2 development on macOS
 
-For IBM DB2 on macOS, there are only drivers for the `x86_64` architecture, not on `aarch64` 
-(see [this tracking issue](https://ibm-data-and-ai.ideas.ibm.com/ideas/DB2CON-I-92)). For this reason, you need to have 
-Rosetta 2 installed and create the conda environment in `x86_64` mode (see [here](https://pixi.sh/dev/reference/project_configuration/#platforms) for more info about this).
-
-```bash
-softwareupdate --install-rosetta
-```
-
-Unfortunately, the `ibm_db` package is not available on conda-forge because the shipped library 
-`libdb2.dylib` is compiled with GCC and not compatible with clang-based conda-forge installations 
+Unfortunately, the `ibm_db` package is not available on conda-forge because the shipped library
+`libdb2.dylib` is compiled with GCC and not compatible with clang-based conda-forge installations
 (see [ibmdb/db2drivers #3](https://github.com/ibmdb/db2drivers/issues/3)).
 Thus, we need to install GCC via homebrew in addition to the conda environment.
 
-On Apple Silicon (M1/M2/M3/...), you need to install homebrew+gcc using Rosetta (Rosetta uses /usr/local by default):
-```bash
-# 
-arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-arch -x86_64 /usr/local/bin/brew install gcc
-```
-
-On Intel based Macs:
 ```bash
 brew install gcc
 ```
 
 > [!NOTE]
-> Because of these reasons, the IBM DB2 drivers are only available in the `py312ibm` and `py39ibm` 
+> Because of these reasons, the IBM DB2 drivers are only available in the `py312ibm` and `py39ibm`
 > environments.
 > You can run tests using `pixi run -e py312ibm pytest --ibm_db2`.
 
