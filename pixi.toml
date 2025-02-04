@@ -70,13 +70,10 @@ pytsql = ">=1.1.4"
 
 # IBM DB2
 [feature.ibm-db]
-# ibm-db is not available on Apple Silicon
-# https://ibm-data-and-ai.ideas.ibm.com/ideas/DB2CON-I-92
-platforms = ["linux-64", "osx-64", "win-64"]
 [feature.ibm-db.target.osx.pypi-dependencies]
 # ibm_db is not on conda-forge for macOS
 # https://github.com/ibmdb/db2drivers/issues/3
-ibm-db = ">=3.1.4"
+ibm-db = ">=3.2.4"
 [feature.ibm-db.target.linux.dependencies]
 ibm_db = ">=3.1.4"
 [feature.ibm-db.target.win.dependencies]
