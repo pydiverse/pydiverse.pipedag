@@ -7,7 +7,7 @@ authors = [
     {name = "Nicolas Camenisch", email = "garnele007@gmail.com"},
     {name = "Martin Trautmann", email = "windiana@users.sf.net"},
 ]
-license = "BSD-3-Clause"
+license = { file = "LICENSE" }
 readme = "docs/package/README.md"
 requires-python = ">=3.9"
 
