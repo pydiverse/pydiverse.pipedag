@@ -96,11 +96,9 @@ class PandasTableHook(PandasTableHook):
         table_name = engine.dialect.identifier_preparer.quote(table.name)
         schema_name = engine.dialect.identifier_preparer.format_schema(schema.get())
 
-        with engine.connect() as conn:
-            # Attention: This sql copies local variable df into database (FROM df)
-            conn.execute(
-                sa.text(f"INSERT INTO {schema_name}.{table_name} SELECT * FROM df")
-            )
+        conn = engine.raw_connection()
+        # Attention: This sql copies local variable df into database (FROM df)
+        conn.execute(f"INSERT INTO {schema_name}.{table_name} SELECT * FROM df")
 
         store.add_indexes_and_set_nullable(
             table,
