@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.9.9 (2025-02-dd)
+- Fix incompatibility with DuckDB 1.1.
+
 ## 0.9.8 (2024-09-06)
 - Bugfix for `inputs` argument for `flow.run()`.
 
