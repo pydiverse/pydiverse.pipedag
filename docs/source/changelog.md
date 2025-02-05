@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.9 (2025-02-dd)
+## 0.9.9 (2025-02-05)
 - Fix incompatibility with DuckDB 1.1.
 
 ## 0.9.8 (2024-09-06)
