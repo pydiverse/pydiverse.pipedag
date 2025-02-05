@@ -96,10 +96,11 @@ class PandasTableHook(PandasTableHook):
         table_name = engine.dialect.identifier_preparer.quote(table.name)
         schema_name = engine.dialect.identifier_preparer.format_schema(schema.get())
 
-        connection_uri = store.engine_url.render_as_string(hide_password=False)
-        connection_uri = connection_uri.replace("duckdb:///", "", 1)
-        with duckdb.connect(connection_uri) as conn:
-            conn.execute(f"INSERT INTO {schema_name}.{table_name} SELECT * FROM df")
+        with engine.connect() as conn:
+            # Attention: This sql copies local variable df into database (FROM df)
+            conn.execute(
+                sa.text(f"INSERT INTO {schema_name}.{table_name} SELECT * FROM df")
+            )
 
         store.add_indexes_and_set_nullable(
             table,
