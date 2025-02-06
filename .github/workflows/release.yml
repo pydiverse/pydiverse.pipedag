@@ -61,8 +61,9 @@ jobs:
           name: artifact
           path: dist
       - name: Publish package on PyPi
-        uses: pypa/gh-action-pypi-publish@ec4db0b4ddc65acdf4bff5fa45ac92d78b56bdf0
+        uses: pypa/gh-action-pypi-publish@ec4db0b4ddc65acdf4bff5fa45ac92d78b56bdf0 # v1.12.4
         with:
           # the twine version in the container is outdated
           # and results in a false positive
           verify-metadata: false
+          verify_metadata: false
