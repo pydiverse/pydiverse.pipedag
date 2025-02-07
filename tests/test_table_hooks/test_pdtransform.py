@@ -13,17 +13,24 @@ pytestmark = [pytest.mark.pdtransform, with_instances(DATABASE_INSTANCES)]
 
 
 try:
+    from pydiverse.transform.core.verbs import *
     from pydiverse.transform.core.verbs import mutate
     from pydiverse.transform.eager import PandasTableImpl
     from pydiverse.transform.lazy import SQLTableImpl
+
+    test_list = [SQLTableImpl, PandasTableImpl]
 except ImportError:
-    SQLTableImpl = None
-    PandasTableImpl = None
+    try:
+        from pydiverse.transform.extended import *  # --> find syntax
+
+        test_list = [SqlAlchemy, Polars]
+    except ImportError:
+        test_list = []
 
 
 @pytest.mark.parametrize(
     "impl_type",
-    [SQLTableImpl, PandasTableImpl],
+    test_list,
 )
 def test_table_store(impl_type: type):
     def cache_fn(*args, **kwargs):
