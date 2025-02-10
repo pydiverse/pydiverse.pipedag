@@ -166,8 +166,9 @@ instances:
     table_store:
       table_store_connection: duckdb
     lock_manager:
-      class: "pydiverse.pipedag.backend.lock.NoLockManager"
-
+      class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
+      args:
+        hosts: "localhost:2181"
 
   snowflake:
     instance_id: pd_snowflake

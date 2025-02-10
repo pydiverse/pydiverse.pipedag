@@ -806,6 +806,10 @@ try:
     try:
         # Detect which version of pdtransform is installed
         # this import only exists in version <0.2
+        from pydiverse.transform.eager import PandasTableImpl
+
+        # ensures a "used" state for the import, preventing black from deleting it
+        _ = PandasTableImpl
 
         pdt_old = pdt
         pdt_new = None
