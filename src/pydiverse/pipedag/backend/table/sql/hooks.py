@@ -815,6 +815,8 @@ try:
 except ImportError as e:
     warnings.warn(str(e), ImportWarning)
     pdt = None
+    pdt_old = None
+    pdt_new = None
 
 
 @SQLTableStore.register_table(pdt_old)
