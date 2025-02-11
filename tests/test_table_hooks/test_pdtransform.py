@@ -25,7 +25,7 @@ except ImportError:
 
         test_list = [SqlAlchemy, Polars]
     except ImportError:
-        test_list = []
+        raise NotImplementedError("pydiverse.transform 0.2.0 isn't supported")
 
 
 @pytest.mark.parametrize(

@@ -814,8 +814,18 @@ try:
         pdt_old = pdt
         pdt_new = None
     except ImportError:
-        pdt_old = None
-        pdt_new = pdt
+        try:
+            # detect if 0.2 or >0.2 is active
+            # this import would only work in <=0.2
+            from pydiverse.transform.extended import Polars
+
+            # ensures a "used" state for the import, preventing black from deleting it
+            _ = Polars
+
+            pdt_old = None
+            pdt_new = pdt
+        except ImportError:
+            raise NotImplementedError("pydiverse.transform 0.2.0 isn't supported")
 except ImportError as e:
     warnings.warn(str(e), ImportWarning)
     pdt = None
@@ -896,6 +906,7 @@ class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
         return super().lazy_query_str(store, obj)
 
 
+
 @SQLTableStore.register_table(pdt_new)
 class PydiverseTransformTableHook(TableHook[SQLTableStore]):
     @classmethod
@@ -908,6 +919,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             Polars,
             SqlAlchemy,
         )
+
 
         return issubclass(type_, (Polars, SqlAlchemy))
 
@@ -936,7 +948,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             hook = store.get_hook_subclass(SQLAlchemyTableHook)
             return hook.materialize(store, table, stage_name)
         except Exception:
-            table.obj = t >> export(Pandas)
+            table.obj = t >> export(Pandas())
             hook = store.get_hook_subclass(PandasTableHook)
             return hook.materialize(store, table, stage_name)
 
