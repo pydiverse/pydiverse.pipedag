@@ -13,11 +13,13 @@ pytestmark = [pytest.mark.pdtransform, with_instances(DATABASE_INSTANCES)]
 
 try:
     import pydiverse.transform as pdt
+
     try:
-        from pydiverse.transform.core.verbs import *
-        from pydiverse.transform.core.verbs import mutate
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
+
+        # ensures a "used" state for the import, preventing black from deleting it
+        _ = PandasTableImpl
 
         test_list = [SQLTableImpl, PandasTableImpl]
     except ImportError:
