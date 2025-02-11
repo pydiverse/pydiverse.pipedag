@@ -17,6 +17,7 @@ try:
     _ = pdt
 
     try:
+        from pydiverse.transform.core.verbs import mutate
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
 
@@ -26,7 +27,7 @@ try:
         test_list = [SQLTableImpl, PandasTableImpl]
     except ImportError:
         try:
-            from pydiverse.transform.extended import *  # --> find syntax
+            from pydiverse.transform.extended import Polars, SqlAlchemy, mutate
 
             test_list = [SqlAlchemy, Polars]
         except ImportError:
