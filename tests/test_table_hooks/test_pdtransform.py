@@ -14,6 +14,8 @@ pytestmark = [pytest.mark.pdtransform, with_instances(DATABASE_INSTANCES)]
 try:
     import pydiverse.transform as pdt
 
+    _ = pdt
+
     try:
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
@@ -28,8 +30,10 @@ try:
 
             test_list = [SqlAlchemy, Polars]
         except ImportError:
-            raise NotImplementedError("pydiverse.transform 0.2.0 isn't supported")
-except:
+            raise NotImplementedError(
+                "pydiverse.transform 0.2.0 isn't supported"
+            ) from None
+except ImportError:
     test_list = []
 
 

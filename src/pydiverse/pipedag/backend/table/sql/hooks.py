@@ -825,7 +825,9 @@ try:
             pdt_old = None
             pdt_new = pdt
         except ImportError:
-            raise NotImplementedError("pydiverse.transform 0.2.0 isn't supported")
+            raise NotImplementedError(
+                "pydiverse.transform 0.2.0 isn't supported"
+            ) from None
 except ImportError as e:
     warnings.warn(str(e), ImportWarning)
     pdt = None
@@ -906,7 +908,6 @@ class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
         return super().lazy_query_str(store, obj)
 
 
-
 @SQLTableStore.register_table(pdt_new)
 class PydiverseTransformTableHook(TableHook[SQLTableStore]):
     @classmethod
@@ -919,7 +920,6 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             Polars,
             SqlAlchemy,
         )
-
 
         return issubclass(type_, (Polars, SqlAlchemy))
 
