@@ -58,7 +58,6 @@ jobs:
           - py312all
           - py311all
           - py310all
-          - py39all
           - py39pdsa1all
           - py311pdsa1all
     uses: ./.github/workflows/test.yml

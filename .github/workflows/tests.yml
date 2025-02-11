@@ -58,7 +58,6 @@ jobs:
         os:
           - ubuntu-latest
         environment:
-          - py39all
           - py310all
           - py311all
           - py312all
@@ -80,7 +79,7 @@ jobs:
         os:
           - ubuntu-latest
         environment:
-          - py39all
+          - py310all
           - py312all
     uses: ./.github/workflows/test.yml
     with:
@@ -98,7 +97,7 @@ jobs:
         os:
           - ubuntu-latest
         environment:
-          - py39ibm
+          - py310ibm
           - py312ibm
     uses: ./.github/workflows/test.yml
     with:
@@ -118,7 +117,7 @@ jobs:
         os:
           - ubuntu-latest
         environment:
-          - py39all
+          - py310all
           - py311all
     uses: ./.github/workflows/test.yml
     with:
