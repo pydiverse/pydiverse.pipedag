@@ -77,11 +77,11 @@ pydiverse-transform = "<0.2"
 [feature.ibm-db]
 # ibm-db is not available on Apple Silicon
 # https://ibm-data-and-ai.ideas.ibm.com/ideas/DB2CON-I-92
-platforms = ["linux-64", "osx-64", "win-64"]
-[feature.ibm-db.target.osx.pypi-dependencies]
-# ibm_db is not on conda-forge for macOS
-# https://github.com/ibmdb/db2drivers/issues/3
-ibm-db = ">=3.1.4"
+platforms = ["linux-64", "win-64"]  # TODO "osx-arm64"
+#[feature.ibm-db.target.osx.pypi-dependencies]
+## ibm_db is not on conda-forge for macOS
+## https://github.com/ibmdb/db2drivers/issues/3
+#ibm-db = ">=3.1.4"
 [feature.ibm-db.target.linux.dependencies]
 ibm_db = ">=3.1.4"
 [feature.ibm-db.target.win.dependencies]
@@ -153,5 +153,5 @@ py311all = ["py311", "dev", "zookeeper", "all-tests", "pdtransform-new", "filelo
 py312all = ["py312", "dev", "zookeeper", "all-tests", "pdtransform-new", "filelock", "dask", "prefect", "pd2", "sa2", "snowflake"]
 py39pdsa1all = ["py39", "dev", "zookeeper", "pd1", "sa1", "connectorx-noarm", "all-tests", "pdtransform-old", "filelock",  "dask", "prefect", "snowflake", "tidypolars"]
 py311pdsa1all = ["py311", "dev", "zookeeper", "pd1", "sa1", "connectorx-noarm", "all-tests", "pdtransform-old", "filelock",  "dask", "prefect", "snowflake"]
-py310ibm = ["py310", "dev", "zookeeper", "pd2", "sa2", "dask", "ibm-db", "all-tests", "pdtransform-new", "tidypolars"]
-py312ibm = ["py312", "dev", "zookeeper", "pd2", "sa2", "dask", "ibm-db", "all-tests", "pdtransform-new"]
+py310ibm = ["py310", "dev", "zookeeper", "pd2", "sa2", "dask", "ibm-db", "all-tests", "pdtransform-old", "tidypolars"]
+py312ibm = ["py312", "dev", "zookeeper", "pd2", "sa2", "dask", "ibm-db", "all-tests", "pdtransform-old"]
