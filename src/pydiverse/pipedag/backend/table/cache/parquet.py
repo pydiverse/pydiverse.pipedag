@@ -187,7 +187,6 @@ class PolarsTableHook(TableHook[ParquetTableCache]):
         path = store.get_table_path(table, ".parquet")
         return polars.read_parquet(path)
 
-# Ab hier
 
 try:
     import pydiverse.transform as pdt
@@ -216,6 +215,8 @@ try:
             ) from None
 except ImportError:
     pdt = None
+    pdt_old = None
+    pdt_new = None
 
 
 @ParquetTableCache.register_table(pdt_old)
