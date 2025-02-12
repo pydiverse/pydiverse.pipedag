@@ -187,15 +187,39 @@ class PolarsTableHook(TableHook[ParquetTableCache]):
         path = store.get_table_path(table, ".parquet")
         return polars.read_parquet(path)
 
+# Ab hier
 
 try:
     import pydiverse.transform as pdt
+
+    try:
+        from pydiverse.transform.eager import PandasTableImpl
+
+        _ = PandasTableImpl
+
+        pdt_old = pdt
+        pdt_new = None
+    except ImportError:
+        try:
+            # detect if 0.2 or >0.2 is active
+            # this import would only work in <=0.2
+            from pydiverse.transform.extended import Polars
+
+            # ensures a "used" state for the import, preventing black from deleting it
+            _ = Polars
+
+            pdt_old = None
+            pdt_new = pdt
+        except ImportError:
+            raise NotImplementedError(
+                "pydiverse.transform 0.2.0 isn't supported"
+            ) from None
 except ImportError:
     pdt = None
 
 
-@ParquetTableCache.register_table(pdt)
-class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
+@ParquetTableCache.register_table(pdt_old)
+class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
     @classmethod
     def can_materialize(cls, type_) -> bool:
         return issubclass(type_, pdt.Table)
@@ -238,5 +262,52 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
             hook = store.get_hook_subclass(PandasTableHook)
             df = hook.retrieve(store, table, stage_name, pd.DataFrame)
             return pdt.Table(PandasTableImpl(table.name, df))
+
+        raise ValueError(f"Invalid type {as_type}")
+
+@ParquetTableCache.register_table(pdt_new)
+class PydiverseTransformTableHookNew(TableHook[ParquetTableCache]):
+    @classmethod
+    def can_materialize(cls, type_) -> bool:
+        return issubclass(type_, pdt.Table)
+
+    @classmethod
+    def can_retrieve(cls, type_) -> bool:
+        from pydiverse.transform.extended import Pandas
+
+        return issubclass(type_, Pandas)
+
+    @classmethod
+    def materialize(
+        cls, store: ParquetTableCache, table: Table[pdt.Table], stage_name: str
+    ):
+        from pydiverse.transform.core.verbs import collect
+        from pydiverse.transform.extended import Pandas
+
+        t = table.obj
+        table = table.copy_without_obj()
+
+        if isinstance(t._impl, Pandas):
+            table.obj = t >> collect()
+            return store.get_hook_subclass(PandasTableHook).materialize(
+                store, table, stage_name
+            )
+
+        raise TypeError(f"Unsupported type {type(t._impl).__name__}")
+
+    @classmethod
+    def retrieve(
+        cls,
+        store: ParquetTableCache,
+        table: Table,
+        stage_name: str | None,
+        as_type: type,
+    ):
+        from pydiverse.transform.extended import Polars
+
+        if isinstance(as_type, Polars):
+            hook = store.get_hook_subclass(PandasTableHook)
+            df = hook.retrieve(store, table, stage_name, pd.DataFrame)
+            return pdt.Table(df)
 
         raise ValueError(f"Invalid type {as_type}")

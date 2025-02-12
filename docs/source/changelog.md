@@ -1,11 +1,13 @@
 # Changelog
 
 ## 0.9.9.1 (2025-02-11)
-- Fix incompatibility with pydiverse.trasnform >0.2.0 (<0.2.0 still supported):
+- Fix incompatibility with pydiverse.transform >0.2.0 (<0.2.0 still supported):
   - Added new TableHook for new and kept the old.
   - Added Version-Detecter (new/old) with try-except imports.
   - Added same Version-Detector method to tests/test_table_hooks/test_pdtransform
+  - Added Version-Detecter to parquet.py as well as a new TableHook
 - Added NotImplementedError("pydiverse.transform 0.2.0 isn't supported") when pydiverse.transform 0.2.0 is being used.
+- Pinned prefect to Version ">=2.13.5, <3.0.0", because future versions were incompatible
 
 ## 0.9.9 (2025-02-05)
 - Fix incompatibility with DuckDB 1.1.
