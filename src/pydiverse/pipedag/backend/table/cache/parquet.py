@@ -266,6 +266,7 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
 
         raise ValueError(f"Invalid type {as_type}")
 
+
 @ParquetTableCache.register_table(pdt_new)
 class PydiverseTransformTableHookNew(TableHook[ParquetTableCache]):
     @classmethod

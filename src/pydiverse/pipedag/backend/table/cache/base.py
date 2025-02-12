@@ -88,19 +88,18 @@ class BaseTableCache(ABC, TableHookResolver, Disposable):
         return self._retrieve_table_obj(table, as_type)
 
     def _retrieve_table_obj(self, table: Table, as_type: type[T]) -> T:
-        # try:
-        if True:
+        try:
             hook = self.get_r_table_hook(as_type)
             obj = hook.retrieve(self, table, table.stage.name, as_type)
             self.logger.info("Retrieved table from local table cache", table=table)
             return obj
-        # except Exception as e:
-        #     self.logger.error(
-        #         "Failed to retrieve table from local table cache",
-        #         table=table,
-        #         cause=str(e),
-        #     )
-        #     return None
+        except Exception as e:
+            self.logger.error(
+                "Failed to retrieve table from local table cache",
+                table=table,
+                cause=str(e),
+            )
+            return None
 
     @abstractmethod
     def _has_table(self, table: Table, as_type: type) -> bool:
