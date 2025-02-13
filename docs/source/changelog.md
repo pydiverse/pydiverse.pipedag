@@ -1,7 +1,7 @@
 # Changelog
 
 ## 0.9.9.1 (2025-02-11)
-- Fix incompatibility with pydiverse.transform >0.2.0 (<0.2.0 still supported):
+- Fix incompatibility with pydiverse.transform 0.2.3 (<0.2.0 still supported) (0.2.0, 0.2.1, 0.2.2 still not compatible):
   - Added new TableHook for new and kept the old.
   - Added Version-Detecter (new/old) with try-except imports.
   - Added same Version-Detector method to tests/test_table_hooks/test_pdtransform

@@ -283,7 +283,7 @@ class PydiverseTransformTableHookNew(TableHook[ParquetTableCache]):
     def materialize(
         cls, store: ParquetTableCache, table: Table[pdt.Table], stage_name: str
     ):
-        from pydiverse.transform.core.verbs import collect
+        from pydiverse.transform.base import collect
         from pydiverse.transform.extended import Pandas
 
         t = table.obj
