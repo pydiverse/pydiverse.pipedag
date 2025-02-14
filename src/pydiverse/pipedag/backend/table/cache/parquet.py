@@ -283,19 +283,20 @@ class PydiverseTransformTableHookNew(TableHook[ParquetTableCache]):
     def materialize(
         cls, store: ParquetTableCache, table: Table[pdt.Table], stage_name: str
     ):
-        from pydiverse.transform.base import collect
-        from pydiverse.transform.extended import Pandas
+        from pydiverse.transform.extended import (
+            Polars,
+            export,
+        )
 
         t = table.obj
         table = table.copy_without_obj()
 
-        if isinstance(t._impl, Pandas):
-            table.obj = t >> collect()
-            return store.get_hook_subclass(PandasTableHook).materialize(
-                store, table, stage_name
-            )
-
-        raise TypeError(f"Unsupported type {type(t._impl).__name__}")
+        try:
+            table.obj = t >> export(Polars())
+            hook = store.get_hook_subclass(PolarsTableHook)
+            return hook.materialize(store, table, stage_name)
+        except Exception as e:
+            raise TypeError(f"Unsupported type {type(t._ast).__name__}") from e
 
     @classmethod
     def retrieve(

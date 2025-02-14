@@ -27,9 +27,9 @@ try:
         test_list = [SQLTableImpl, PandasTableImpl]
     except ImportError:
         try:
-            from pydiverse.transform.extended import Polars, SqlAlchemy, mutate
+            from pydiverse.transform.extended import Pandas, Polars, SqlAlchemy, mutate
 
-            test_list = [SqlAlchemy, Polars]
+            test_list = [SqlAlchemy, Polars, Pandas]
         except ImportError:
             raise NotImplementedError(
                 "pydiverse.transform 0.2.0 isn't supported"
