@@ -151,5 +151,5 @@ py311all = ["py311", "dev", "zookeeper", "all-tests", "pdtransform-new", "filelo
 py312all = ["py312", "dev", "zookeeper", "all-tests", "pdtransform-new", "filelock", "dask", "prefect", "pd2", "sa2", "snowflake"]
 py39pdsa1all = ["py39", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx033", "connectorx", "all-tests", "pdtransform-old", "filelock",  "dask", "prefect", "snowflake", "tidypolars"]
 py311pdsa1all = ["py311", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx033", "connectorx", "all-tests", "pdtransform-old", "filelock",  "dask", "prefect", "snowflake"]
-py310ibm = ["py310", "dev", "zookeeper", "pd2", "sa2", "dask", "ibm-db", "all-tests", "pdtransform-new", "tidypolars"]
-py312ibm = ["py312", "dev", "zookeeper", "pd2", "sa2", "dask", "ibm-db", "all-tests", "pdtransform-new"]
+py310ibm = ["py310", "dev", "zookeeper", "pd2", "sa2", "dask", "ibm-db", "all-tests", "pdtransform-old", "tidypolars"]
+py312ibm = ["py312", "dev", "zookeeper", "pd2", "sa2", "dask", "ibm-db", "all-tests", "pdtransform-old"]

@@ -284,6 +284,10 @@ Furthermore, make sure you use 127.0.0.1 instead of localhost. It seems that /et
 Pydiverse.pipedag doesn't support pydiverse.transform 0.2.0 - 0.2.2, please consider using a newer Version,
 or downgrading to pydiverse.transform 0.1.6.
 
+### Incompatibility of ibm-db2 with pydiverse.transform > 0.2.2
+
+The current versions of pydiverse.transform do not support ibm-db2 backend.
+
 ## Packaging and publishing to pypi and conda-forge using github actions
 
 - bump version number in [pyproject.toml](pyproject.toml)
