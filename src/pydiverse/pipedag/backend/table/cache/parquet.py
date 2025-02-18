@@ -211,7 +211,7 @@ try:
             pdt_new = pdt
         except ImportError:
             raise NotImplementedError(
-                "pydiverse.transform 0.2.0 isn't supported"
+                "pydiverse.transform 0.2.0 - 0.2.2 isn't supported"
             ) from None
 except ImportError:
     pdt = None
@@ -268,7 +268,7 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
 
 
 @ParquetTableCache.register_table(pdt_new)
-class PydiverseTransformTableHookNew(TableHook[ParquetTableCache]):
+class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
     @classmethod
     def can_materialize(cls, type_) -> bool:
         return issubclass(type_, pdt.Table)

@@ -68,7 +68,7 @@ pyodbc = ">=4.0.35"
 pytsql = ">=1.1.4"
 
 [feature.pdtransform-new.dependencies]
-pydiverse-transform = ">0.2.0"
+pydiverse-transform = ">0.2.2"
 
 [feature.pdtransform-old.dependencies]
 pydiverse-transform = "<0.2"

@@ -279,9 +279,9 @@ Same happened for MacOS. The driver was installed in `/opt/homebrew/etc/odbcinst
 
 Furthermore, make sure you use 127.0.0.1 instead of localhost. It seems that /etc/hosts is ignored.
 
-### Incompatibility with pydiverse.transform 0.2.0
+### Incompatibility with pydiverse.transform 0.2.0 - 0.2.2
 
-Pydiverse.pipedag currently doesn't support pydiverse.transform 0.2.0, please consider using a newer Version,
+Pydiverse.pipedag doesn't support pydiverse.transform 0.2.0 - 0.2.2, please consider using a newer Version,
 or downgrading to pydiverse.transform 0.1.6.
 
 ## Packaging and publishing to pypi and conda-forge using github actions

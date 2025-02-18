@@ -826,7 +826,7 @@ try:
             pdt_new = pdt
         except ImportError:
             raise NotImplementedError(
-                "pydiverse.transform 0.2.0 isn't supported"
+                "pydiverse.transform 0.2.0 - 0.2.2 isn't supported"
             ) from None
 except ImportError as e:
     warnings.warn(str(e), ImportWarning)
