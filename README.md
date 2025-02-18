@@ -1,7 +1,9 @@
 # pydiverse.pipedag
 
-[![Tests](https://github.com/pydiverse/pydiverse.pipedag/actions/workflows/tests.yml/badge.svg)](https://github.com/pydiverse/pydiverse.pipedag/actions/workflows/tests.yml)
-[![Docs](https://readthedocs.org/projects/pydiversepipedag/badge/?version=latest&style=flat)](https://readthedocs.org/projects/pydiversepipedag/builds/)
+[![CI](https://img.shields.io/github/actions/workflow/status/pydiverse/pydiverse.pipedag/tests.yml?style=flat-square&branch=main&label=tests)](https://github.com/pydiverse/pydiverse.pipedag/actions/workflows/tests.yml)
+[![Docs](https://readthedocs.org/projects/pydiversepipedag/badge/?version=latest&style=flat-square)](https://pydiversepipedag.readthedocs.io/en/latest)
+[![pypi-version](https://img.shields.io/pypi/v/pydiverse-pipedag.svg?logo=pypi&logoColor=white&style=flat-square)](https://pypi.org/project/pydiverse-pipedag)
+[![conda-forge](https://img.shields.io/conda/pn/conda-forge/pydiverse-pipedag?logoColor=white&logo=conda-forge&style=flat-square)](https://prefix.dev/channels/conda-forge/packages/pydiverse-pipedag)
 
 A pipeline orchestration library executing tasks within one python session. It takes care of SQL table
 (de)materialization, caching and cache invalidation. Blob storage is supported as well for example

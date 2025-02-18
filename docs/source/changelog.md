@@ -1,6 +1,10 @@
 # Changelog
 
+## 0.9.10 (2025-MM-DD)
 - Don't require Rosetta 2 for Apple Silicon anymore for IBM DB2 drivers
+
+## 0.9.9 (2025-02-05)
+- Fix incompatibility with DuckDB 1.1.
 
 ## 0.9.8 (2024-09-06)
 - Bugfix for `inputs` argument for `flow.run()`.
