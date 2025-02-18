@@ -116,12 +116,18 @@ sqlalchemy = ">=2"
 duckdb = "<1"
 [feature.duckdb1.dependencies]
 duckdb = ">=1.1"
-[feature.connectorx-noarm.target.linux.dependencies]
+[feature.connectorx.dependencies]
 connectorx = ">=0.3.3"
-[feature.connectorx-noarm.target.win.dependencies]
-connectorx = ">=0.3.3"
-[feature.connectorx-noarm.target.osx-64.dependencies]
-connectorx = ">=0.3.3"
+# keeping old code running requires more precise pinning
+[feature.polars12.dependencies]
+polars = "1.2.1"
+
+[feature.connectorx033.target.linux-64.dependencies]
+connectorx = "0.3.3"
+[feature.connectorx033.target.osx-64.dependencies]
+connectorx = "0.3.3"
+[feature.connectorx033.target.win-64.dependencies]
+connectorx = "0.3.3"
 
 [environments]
 default = ["py312", "all-tests", "dev", "filelock", "zookeeper", "dask", "prefect", "pd2", "sa2", "snowflake"]
@@ -132,14 +138,14 @@ py39 = ["py39", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1"]
 py310 = ["py310", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1"]
 py311 = ["py311", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1"]
 py312 = ["py312", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1"]
-py39pdsa1 = ["py39", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx-noarm", "duckdb0"]
-py311pdsa1 = ["py311", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx-noarm", "duckdb0"]
-py312pdsa1 = ["py39", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx-noarm", "duckdb0"]
+py39pdsa1 = ["py39", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx", "duckdb0"]
+py311pdsa1 = ["py311", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx", "duckdb0"]
+py312pdsa1 = ["py39", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx", "duckdb0"]
 py39all = ["py39", "dev", "zookeeper", "all-tests", "filelock", "dask", "prefect", "pd2", "sa2", "snowflake", "tidypolars"]
 py310all = ["py310", "dev", "zookeeper", "all-tests", "filelock", "dask", "prefect", "pd2", "sa2", "snowflake", "tidypolars"]
 py311all = ["py311", "dev", "zookeeper", "all-tests", "filelock", "dask", "prefect", "pd2", "sa2", "snowflake"]
 py312all = ["py312", "dev", "zookeeper", "all-tests", "filelock", "dask", "prefect", "pd2", "sa2", "snowflake"]
-py39pdsa1all = ["py39", "dev", "zookeeper", "pd1", "sa1", "connectorx-noarm", "all-tests", "filelock",  "dask", "prefect", "snowflake", "tidypolars"]
-py311pdsa1all = ["py311", "dev", "zookeeper", "pd1", "sa1", "connectorx-noarm", "all-tests", "filelock",  "dask", "prefect", "snowflake"]
+py39pdsa1all = ["py39", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx033", "all-tests", "filelock",  "dask", "prefect", "snowflake", "tidypolars"]
+py311pdsa1all = ["py311", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx033", "all-tests", "filelock",  "dask", "prefect", "snowflake"]
 py39ibm = ["py39", "dev", "zookeeper", "pd2", "sa2", "dask", "ibm-db", "all-tests", "tidypolars"]
 py312ibm = ["py312", "dev", "zookeeper", "pd2", "sa2", "dask", "ibm-db", "all-tests"]
