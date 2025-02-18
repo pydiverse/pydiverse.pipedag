@@ -94,7 +94,7 @@ class BaseTableCache(ABC, TableHookResolver, Disposable):
             self.logger.info("Retrieved table from local table cache", table=table)
             return obj
         except Exception as e:
-            self.logger.info(
+            self.logger.warning(
                 "Failed to retrieve table from local table cache",
                 table=table,
                 cause=str(e),

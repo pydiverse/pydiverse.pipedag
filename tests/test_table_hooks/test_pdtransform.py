@@ -11,19 +11,36 @@ from tests.util.tasks_library import assert_table_equal
 
 pytestmark = [pytest.mark.pdtransform, with_instances(DATABASE_INSTANCES)]
 
-
 try:
-    from pydiverse.transform.core.verbs import mutate
-    from pydiverse.transform.eager import PandasTableImpl
-    from pydiverse.transform.lazy import SQLTableImpl
+    import pydiverse.transform as pdt
+
+    _ = pdt
+
+    try:
+        from pydiverse.transform.core.verbs import mutate
+        from pydiverse.transform.eager import PandasTableImpl
+        from pydiverse.transform.lazy import SQLTableImpl
+
+        # ensures a "used" state for the import, preventing black from deleting it
+        _ = PandasTableImpl
+
+        test_list = [SQLTableImpl, PandasTableImpl]
+    except ImportError:
+        try:
+            from pydiverse.transform.extended import Pandas, Polars, SqlAlchemy, mutate
+
+            test_list = [SqlAlchemy, Polars, Pandas]
+        except ImportError:
+            raise NotImplementedError(
+                "pydiverse.transform 0.2.0 - 0.2.2 isn't supported"
+            ) from None
 except ImportError:
-    SQLTableImpl = None
-    PandasTableImpl = None
+    test_list = []
 
 
 @pytest.mark.parametrize(
     "impl_type",
-    [SQLTableImpl, PandasTableImpl],
+    test_list,
 )
 def test_table_store(impl_type: type):
     def cache_fn(*args, **kwargs):

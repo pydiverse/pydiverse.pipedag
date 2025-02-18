@@ -150,3 +150,9 @@ But `odbcinst -j` revealed that it installed the configuration in `/etc/unixODBC
 its own `odbcinst` executable and that shows odbc config files are expected in `/etc/*`. Symlinks were enough to fix the
 problem. Try `python -c 'import pyodbc;print(pyodbc.drivers())'` and see whether you get more than an empty list.
 Furthermore, make sure you use 127.0.0.1 instead of localhost. It seems that /etc/hosts is ignored.
+
+### Incompatibility with specific pydiverse.transform Versions
+
+pydiverse.pipedag currently doesn't support pydiverse.transfrom Versions (0.2.0, 0.2.1, 0.2.2), due to major
+differences to pdt 0.2.3 and pdt <0.2.
+However it does still work with pdt <0.2.

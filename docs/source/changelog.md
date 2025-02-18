@@ -1,7 +1,11 @@
 # Changelog
 
-## 0.9.10 (2025-MM-DD)
-- Don't require Rosetta 2 for Apple Silicon anymore for IBM DB2 drivers
+## 0.9.10 (2025-mm-dd)
+- Fix incompatibility with pydiverse.transform >=0.2.1 (<0.2.0 still supported) (0.2.0 will not be supported):
+  - pydiverse transform had a radical refactoring around this point
+- NotImplementedError when pydiverse.transform 0.2.0 - 0.2.2 is being used.
+- Pinned prefect to version ">=2.13.5, <3.0.0", because future versions are currently not supported
+- IBM DB2 tests: switch from pypi to conda-forge; support osx-arm64; drop support for osx-64 
 
 ## 0.9.9 (2025-02-05)
 - Fix incompatibility with DuckDB 1.1.
