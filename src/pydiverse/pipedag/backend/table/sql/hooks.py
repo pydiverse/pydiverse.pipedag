@@ -940,18 +940,19 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
 
         t = table.obj
         table = table.copy_without_obj()
-        # if isinstance(t._impl, Polars):
-        #     table.obj = t >> collect()
-        #     hook = store.get_hook_subclass(PandasTableHook)
-        #     return hook.materialize(store, table, stage_name)
         try:
-            table.obj = sa.text(t >> build_query())
-            hook = store.get_hook_subclass(SQLAlchemyTableHook)
-            return hook.materialize(store, table, stage_name)
+            # detect SQL by checking whether build_query() succeeds
+            query = t >> build_query()
         except Exception:
+            # use Polars for dataframe handling
             table.obj = t >> export(Polars())
             hook = store.get_hook_subclass(PolarsTableHook)
             return hook.materialize(store, table, stage_name)
+
+        # continue with SQL case handling
+        table.obj = sa.text(query)
+        hook = store.get_hook_subclass(SQLAlchemyTableHook)
+        return hook.materialize(store, table, stage_name)
 
         raise NotImplementedError
 
