@@ -88,7 +88,7 @@ to see different parameters to launch more tests.
 pixi run pytest --workers=auto --mssql --duckdb --snowflake --pdtransform --ibis --polars --dask --prefect
 ```
 
-for `--ibm_db2`, see the [IBM DB2 development on macOS](#ibm-db2-development-on-macos) section. 
+for `--ibm_db2`, see the [IBM DB2 development](#ibm-db2-development) section. 
 
 ## Example
 
@@ -252,19 +252,12 @@ psql --username=sa --dbname=pipedag_default
 select * from stage_2.task_2_out;
 ```
 
-### IBM DB2 development on macOS
+### IBM DB2 development
 
-Unfortunately, the `ibm_db` package is not available on conda-forge because the shipped library
-`libdb2.dylib` is compiled with GCC and not compatible with clang-based conda-forge installations
-(see [ibmdb/db2drivers #3](https://github.com/ibmdb/db2drivers/issues/3)).
-Thus, we need to install GCC via homebrew in addition to the conda environment.
-
-```bash
-brew install gcc
-```
+The `ibm_db` package is only available on the following platforms: linux-64, osx-arm64, win-64.
 
 > [!NOTE]
-> Because of these reasons, the IBM DB2 drivers are only available in the `py312ibm` and `py39ibm`
+> Because of this, the IBM DB2 drivers are only available in the `py312ibm` and `py39ibm`
 > environments.
 > You can run tests using `pixi run -e py312ibm pytest --ibm_db2`.
 
