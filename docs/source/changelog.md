@@ -5,6 +5,7 @@
   - pydiverse transform had a radical refactoring around this point
 - NotImplementedError("pydiverse.transform 0.2.0 isn't supported") when pydiverse.transform 0.2.0 is being used.
 - Pinned prefect to version ">=2.13.5, <3.0.0", because future versions are currently not supported
+- IBM DB2 tests: switch from pypi to conda-forge; support osx-arm64; drop support for osx-64 
 
 ## 0.9.9 (2025-02-05)
 - Fix incompatibility with DuckDB 1.1.
