@@ -120,14 +120,14 @@ duckdb = ">=1.1"
 connectorx = ">=0.3.3"
 # keeping old code running requires more precise pinning
 [feature.polars12.dependencies]
-polars = "1.2.1"
+polars = "==1.2.1"
 
 [feature.connectorx033.target.linux-64.dependencies]
-connectorx = "0.3.3"
+connectorx = "==0.3.3"
 [feature.connectorx033.target.osx-64.dependencies]
-connectorx = "0.3.3"
+connectorx = "==0.3.3"
 [feature.connectorx033.target.win-64.dependencies]
-connectorx = "0.3.3"
+connectorx = "==0.3.3"
 
 [environments]
 default = ["py312", "all-tests", "dev", "filelock", "zookeeper", "dask", "prefect", "pd2", "sa2", "snowflake"]
