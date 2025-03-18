@@ -1,22 +1,22 @@
 [project]
 name = "pydiverse-pipedag"
-version = "0.9.9"
+version = "0.9.10"
 description = "A pipeline orchestration library executing tasks within one python session. It takes care of SQL table (de)materialization, caching and cache invalidation. Blob storage is supported as well for example for storing model files."
 authors = [
-    {name = "QuantCo, Inc."},
-    {name = "Nicolas Camenisch", email = "garnele007@gmail.com"},
-    {name = "Martin Trautmann", email = "windiana@users.sf.net"},
+    { name = "QuantCo, Inc." },
+    { name = "Nicolas Camenisch", email = "garnele007@gmail.com" },
+    { name = "Martin Trautmann", email = "windiana@users.sf.net" },
 ]
 license = { file = "LICENSE" }
 readme = "docs/package/README.md"
 requires-python = ">=3.9"
 
 classifiers = [
-  "Development Status :: 3 - Alpha",
-  "Intended Audience :: Developers",
-  "Intended Audience :: Science/Research",
-  "Programming Language :: SQL",
-  "Topic :: Database",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: SQL",
+    "Topic :: Database",
 ]
 
 dependencies = [
@@ -45,19 +45,8 @@ packages = ["src/pydiverse"]
 pipedag-manage = "pydiverse.pipedag.management.cli:cli"
 
 [tool.ruff]
-select = [
-    "F",
-    "E",
-    "UP",
-    "W",
-    "I001",
-    "I002",
-    "B",
-    "A",
-]
-ignore = [
-    "B028",
-]
+select = ["F", "E", "UP", "W", "I001", "I002", "B", "A"]
+ignore = ["B028"]
 extend-exclude = ["docs/*"]
 ignore-init-module-imports = true
 fix = true

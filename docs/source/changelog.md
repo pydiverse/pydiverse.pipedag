@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.10 (2025-mm-dd)
+## 0.9.10 (2025-03-18)
 - Fix incompatibility with pydiverse.transform >=0.2.1 (<0.2.0 still supported) (0.2.0 will not be supported):
   - pydiverse transform had a radical refactoring around this point
 - NotImplementedError when pydiverse.transform 0.2.0 - 0.2.2 is being used.
