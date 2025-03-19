@@ -968,7 +968,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
 
             hook = store.get_hook_subclass(PolarsTableHook)
             df = hook.retrieve(store, table, stage_name, pl.DataFrame)
-            return pdt.Table(df)
+            return pdt.Table(df, name=table.name)
         if issubclass(as_type, SqlAlchemy):
             hook = store.get_hook_subclass(SQLAlchemyTableHook)
             sa_tbl = hook.retrieve(store, table, stage_name, sa.Table)
@@ -979,7 +979,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         if issubclass(as_type, Pandas):
             hook = store.get_hook_subclass(PandasTableHook)
             df = hook.retrieve(store, table, stage_name, pd.DataFrame)
-            return pdt.Table(df)
+            return pdt.Table(df, name=table.name)
 
         raise NotImplementedError
 
