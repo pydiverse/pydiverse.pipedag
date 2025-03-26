@@ -629,9 +629,10 @@ class MaterializationWrapper:
         bound = self.fn_signature.bind(*args, **kwargs)
 
         for name, value in bound.arguments.items():
-            # copy type annotation into Table objects so they can be used during
-            # dematerialization
-            attach_annotation(self.fn_annotations[name], value)
+            if name in self.fn_annotations:
+                # copy type annotation into Table objects so they can be used during
+                # dematerialization
+                attach_annotation(self.fn_annotations[name], value)
 
         if task is None:
             raise TypeError("Task can't be None.")
