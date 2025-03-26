@@ -3,8 +3,9 @@ from __future__ import annotations
 import copy
 import functools
 import inspect
+import typing
 import uuid
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sized
 from contextlib import contextmanager
 from functools import partial
 from typing import TYPE_CHECKING, Any, overload
@@ -566,6 +567,36 @@ class MaterializingTaskGetItem(TaskGetItem):
         )
 
 
+def attach_annotation(annotation: type, arg):
+    if isinstance(annotation, typing.GenericAlias):
+        anno_origin = typing.get_origin(annotation)
+        anno_args = typing.get_args(annotation)
+        if (
+            issubclass(anno_origin, dict)
+            and len(anno_args) == 2
+            and isinstance(arg, dict)
+        ):
+            for key, value in arg.items():
+                attach_annotation(anno_args[0], key)
+                attach_annotation(anno_args[1], value)
+        elif (
+            issubclass(anno_origin, list)
+            and len(anno_args) == 1
+            and isinstance(arg, Iterable)
+        ):
+            for value in arg:
+                attach_annotation(anno_args[0], value)
+        elif (
+            issubclass(anno_origin, tuple)
+            and isinstance(arg, Sized)
+            and len(anno_args) == len(arg)
+        ):
+            for value, anno in zip(arg, anno_args):
+                attach_annotation(anno, value)
+    if isinstance(arg, Table | Blob | RawSql):
+        arg.annotation = annotation
+
+
 class MaterializationWrapper:
     """Function wrapper that contains all high level materialization logic
 
@@ -577,6 +608,7 @@ class MaterializationWrapper:
 
         self.fn = fn
         self.fn_signature = inspect.signature(fn)
+        self.fn_annotations = typing.get_type_hints(fn)
 
     def __call__(self, *args, **kwargs):
         """Function wrapper / materialization logic
@@ -595,6 +627,11 @@ class MaterializationWrapper:
 
         task: MaterializingTask = task_context.task  # type: ignore
         bound = self.fn_signature.bind(*args, **kwargs)
+
+        for name, value in bound.arguments.items():
+            # copy type annotation into Table objects so they can be used during
+            # dematerialization
+            attach_annotation(self.fn_annotations[name], value)
 
         if task is None:
             raise TypeError("Task can't be None.")

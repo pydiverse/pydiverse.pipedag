@@ -69,11 +69,15 @@ class Table(Generic[T]):
         non_nullable: list[str] | None = None,
         materialization_details: str | None = None,
     ):
+        # state
         self._name = None
         self.stage: Stage | None = None
         self.external_schema: str | None = None
         self.shared_lock_allowed: bool = True
+        self.annotation = None  # will be set by core.py:attach_annotation()
+        #                         and used by dematerialization hook
 
+        # arguments
         self.obj = obj
         self.name = name
         self.primary_key = primary_key

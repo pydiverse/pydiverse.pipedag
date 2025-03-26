@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 import re
 import time
+import typing
 import warnings
 from typing import Any
 
@@ -611,7 +612,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         query = cls._compile_query(store, query)
         connection_uri = store.engine_url.render_as_string(hide_password=False)
         try:
-            return cls._execute_query(query, connection_uri, store)
+            df = cls._execute_query(query, connection_uri, store)
         except (RuntimeError, ModuleNotFoundError) as e:
             logger = structlog.get_logger(logger_name=cls.__name__)
             logger.error(
@@ -623,7 +624,23 @@ class PolarsTableHook(TableHook[SQLTableStore]):
             pandas_hook = store.get_hook_subclass(PandasTableHook)
             with store.engine.connect() as conn:
                 pd_df = pandas_hook.download_table(query, conn)
-            return polars.from_pandas(pd_df)
+            df = polars.from_pandas(pd_df)
+        df = cls._apply_retrieve_annotation(df, table)
+        return df
+
+    @classmethod
+    def _apply_retrieve_annotation(cls, df, table):
+        import dataframely as dy
+
+        if isinstance(table.annotation, typing._GenericAlias) and issubclass(
+            typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
+        ):
+            anno_args = typing.get_args(table.annotation)
+            if len(anno_args) == 1:
+                column_spec = anno_args[0]
+                if issubclass(column_spec, dy.Schema | dy.Collection):
+                    df = column_spec.cast(df)
+        return df
 
     @classmethod
     def auto_table(cls, obj: polars.DataFrame):
@@ -720,6 +737,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         connection_uri = store.engine_url.render_as_string(hide_password=False)
 
         df = polars_hook._execute_query(query, connection_uri, store)
+        df = polars_hook._apply_retrieve_annotation(df, table)
 
         # Create lazy frame where each column is identified by:
         #     stage name, table name, column name

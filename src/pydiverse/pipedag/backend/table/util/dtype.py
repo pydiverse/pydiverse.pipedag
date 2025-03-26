@@ -188,6 +188,7 @@ class DType(Enum):
             pl.Datetime: DType.DATETIME,
             pl.Time: DType.TIME,
             pl.Date: DType.DATE,
+            pl.Enum: DType.STRING,
         }[type_.base_type()]
 
     def to_sql(self):
