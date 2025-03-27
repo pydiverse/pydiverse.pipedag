@@ -5,7 +5,7 @@ import functools
 import inspect
 import typing
 import uuid
-from collections.abc import Callable, Iterable, Sized
+from collections.abc import Callable, Iterable
 from contextlib import contextmanager
 from functools import partial
 from typing import TYPE_CHECKING, Any, overload
@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, overload
 import sqlalchemy as sa
 
 from pydiverse.pipedag._typing import CallableT
-from pydiverse.pipedag.container import Blob, RawSql, Table
+from pydiverse.pipedag.container import Blob, RawSql, Table, attach_annotation
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.context.context import (
     CacheValidationMode,
@@ -411,6 +411,7 @@ class MaterializingTask(Task):
         self._version = unbound_task.version
         self.cache = unbound_task.cache
         self.lazy = unbound_task.lazy
+        self.fn_annotations = typing.get_type_hints(unbound_task.fn)
 
     @property
     def version(self):
@@ -565,36 +566,6 @@ class MaterializingTaskGetItem(TaskGetItem):
         return _get_output_from_store(
             self, as_type, ignore_position_hashes=ignore_position_hashes
         )
-
-
-def attach_annotation(annotation: type, arg):
-    if isinstance(annotation, typing.GenericAlias):
-        anno_origin = typing.get_origin(annotation)
-        anno_args = typing.get_args(annotation)
-        if (
-            issubclass(anno_origin, dict)
-            and len(anno_args) == 2
-            and isinstance(arg, dict)
-        ):
-            for key, value in arg.items():
-                attach_annotation(anno_args[0], key)
-                attach_annotation(anno_args[1], value)
-        elif (
-            issubclass(anno_origin, list)
-            and len(anno_args) == 1
-            and isinstance(arg, Iterable)
-        ):
-            for value in arg:
-                attach_annotation(anno_args[0], value)
-        elif (
-            issubclass(anno_origin, tuple)
-            and isinstance(arg, Sized)
-            and len(anno_args) == len(arg)
-        ):
-            for value, anno in zip(arg, anno_args):
-                attach_annotation(anno, value)
-    if isinstance(arg, Table | Blob | RawSql):
-        arg.annotation = annotation
 
 
 class MaterializationWrapper:

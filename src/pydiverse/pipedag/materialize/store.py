@@ -7,7 +7,7 @@ import structlog
 
 from pydiverse.pipedag import Blob, Stage, Table, backend
 from pydiverse.pipedag._typing import Materializable, T
-from pydiverse.pipedag.container import RawSql
+from pydiverse.pipedag.container import RawSql, attach_annotation
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.core.config import PipedagConfig
@@ -351,6 +351,7 @@ class PipeDAGStore(Disposable):
             return x
 
         value = deep_map(value, preparation_mutator)
+        attach_annotation(task.fn_annotations.get("return"), value)
 
         return value, tables, raw_sqls, blobs
 

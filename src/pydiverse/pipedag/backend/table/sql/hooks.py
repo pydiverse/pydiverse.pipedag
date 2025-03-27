@@ -587,15 +587,29 @@ class PolarsTableHook(TableHook[SQLTableStore]):
 
         dtypes = dict(zip(df.columns, map(Dtype.from_polars, df.dtypes)))
 
-        pd_df = df.to_pandas(use_pyarrow_extension_array=True, zero_copy_only=True)
-        pandas_hook = store.get_hook_subclass(PandasTableHook)
-        return pandas_hook.materialize_(
-            df=pd_df,
-            dtypes=dtypes,
-            store=store,
-            table=table,
-            schema=schema,
-        )
+        try:
+            df = cls._apply_materialize_annotation(df, table)
+            e = None
+        except Exception as e:
+            logger = structlog.get_logger(logger_name=cls.__name__)
+            logger.error(
+                "Failed to apply materialize annotation for table %s: %s",
+                table.name,
+                e,
+            )
+        finally:
+            pd_df = df.to_pandas(use_pyarrow_extension_array=True, zero_copy_only=True)
+            pandas_hook = store.get_hook_subclass(PandasTableHook)
+            ret = pandas_hook.materialize_(
+                df=pd_df,
+                dtypes=dtypes,
+                store=store,
+                table=table,
+                schema=schema,
+            )
+            if e:
+                raise e
+        return ret
 
     @classmethod
     def retrieve(
@@ -637,6 +651,20 @@ class PolarsTableHook(TableHook[SQLTableStore]):
                 column_spec = anno_args[0]
                 if issubclass(column_spec, dy.Schema | dy.Collection):
                     df = column_spec.cast(df)
+        return df
+
+    @classmethod
+    def _apply_materialize_annotation(cls, df, table):
+        import dataframely as dy
+
+        if isinstance(table.annotation, typing._GenericAlias) and issubclass(
+            typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
+        ):
+            anno_args = typing.get_args(table.annotation)
+            if len(anno_args) == 1:
+                column_spec = anno_args[0]
+                if issubclass(column_spec, dy.Schema | dy.Collection):
+                    df = column_spec.validate(df, cast=True)
         return df
 
     @classmethod

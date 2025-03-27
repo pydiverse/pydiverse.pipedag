@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import typing
 from collections.abc import Iterable
 from functools import total_ordering
 from typing import TYPE_CHECKING, Any, Generic
@@ -68,14 +69,13 @@ class Table(Generic[T]):
         nullable: list[str] | None = None,
         non_nullable: list[str] | None = None,
         materialization_details: str | None = None,
+        annotation: type | None = None,
     ):
         # state
         self._name = None
         self.stage: Stage | None = None
         self.external_schema: str | None = None
         self.shared_lock_allowed: bool = True
-        self.annotation = None  # will be set by core.py:attach_annotation()
-        #                         and used by dematerialization hook
 
         # arguments
         self.obj = obj
@@ -86,6 +86,9 @@ class Table(Generic[T]):
         self.nullable = nullable
         self.non_nullable = non_nullable
         self.materialization_details = materialization_details
+        self.annotation = annotation  # if None, will be set by
+        #                               core.py:attach_annotation() and used by
+        #                               dematerialization hook
 
         # Check that indexes is of type list[list[str]]
         indexes_type_error = TypeError(
@@ -652,3 +655,34 @@ class Schema:
 
     def __str__(self):
         return self.get()
+
+
+def attach_annotation(annotation: type, arg):
+    """Recursive traversal for attaching type annotations to correct container."""
+    if isinstance(annotation, typing.GenericAlias):
+        anno_origin = typing.get_origin(annotation)
+        anno_args = typing.get_args(annotation)
+        if (
+            issubclass(anno_origin, dict)
+            and len(anno_args) == 2
+            and isinstance(arg, dict)
+        ):
+            for key, value in arg.items():
+                attach_annotation(anno_args[0], key)
+                attach_annotation(anno_args[1], value)
+        elif (
+            issubclass(anno_origin, list)
+            and len(anno_args) == 1
+            and isinstance(arg, Iterable)
+        ):
+            for value in arg:
+                attach_annotation(anno_args[0], value)
+        elif (
+            issubclass(anno_origin, tuple)
+            and isinstance(arg, typing.Sized)
+            and len(anno_args) == len(arg)
+        ):
+            for value, anno in zip(arg, anno_args):
+                attach_annotation(anno, value)
+    if isinstance(arg, (Table, Blob, RawSql)):
+        arg.annotation = annotation
