@@ -13,6 +13,7 @@ import sqlalchemy.exc
 import structlog
 from packaging.version import Version
 
+from pydiverse.common import Date, Dtype, Int16, PandasBackend
 from pydiverse.pipedag import ConfigContext
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.table.base import AutoVersionSupport, TableHook
@@ -22,10 +23,6 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
 )
 from pydiverse.pipedag.backend.table.sql.sql import (
     SQLTableStore,
-)
-from pydiverse.pipedag.backend.table.util import (
-    DType,
-    PandasDTypeBackend,
 )
 from pydiverse.pipedag.container import ExternalTableReference, Schema, Table
 from pydiverse.pipedag.context import TaskContext
@@ -241,7 +238,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         df: pd.DataFrame,
         name: str,
         schema: str,
-        dtypes: dict[str, DType],
+        dtypes: dict[str, Dtype],
         conn: sa.Connection,
         early: bool,
     ):
@@ -261,7 +258,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def download_table(
-        cls, query: Any, conn: sa.Connection, dtypes: dict[str, DType] | None = None
+        cls, query: Any, conn: sa.Connection, dtypes: dict[str, Dtype] | None = None
     ) -> pd.DataFrame:
         """
         Provide hook that allows to override the default
@@ -309,7 +306,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
     def materialize_(
         cls,
         df: pd.DataFrame,
-        dtypes: dict[str:DType] | None,
+        dtypes: dict[str:Dtype] | None,
         store: SQLTableStore,
         table: Table[Any],
         schema: Schema,
@@ -317,7 +314,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         """Helper function that can be invoked by other hooks"""
         if dtypes is None:
             dtypes = {
-                name: DType.from_pandas(dtype) for name, dtype in df.dtypes.items()
+                name: Dtype.from_pandas(dtype) for name, dtype in df.dtypes.items()
             }
 
         for col, dtype in dtypes.items():
@@ -325,7 +322,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
             # -> Temporarily convert all dates to objects
             # See: https://github.com/pandas-dev/pandas/issues/53854
             # TODO: Remove this once pandas 2.1 gets released (fixed by #53856)
-            if dtype == DType.DATE:
+            if dtype == Date():
                 df[col] = df[col].astype(object)
 
         cls._execute_materialize(
@@ -337,7 +334,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         )
 
     @classmethod
-    def _get_dialect_dtypes(cls, dtypes: dict[str, DType], table: Table[pd.DataFrame]):
+    def _get_dialect_dtypes(cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame]):
         _ = table
         return {name: dtype.to_sql() for name, dtype in dtypes.items()}
 
@@ -348,7 +345,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         df: pd.DataFrame,
         table: Table[pd.DataFrame],
         schema: Schema,
-        dtypes: dict[str, DType],
+        dtypes: dict[str, Dtype],
     ):
         df[:0].to_sql(
             table.name,
@@ -365,7 +362,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         store: SQLTableStore,
         table: Table[pd.DataFrame],
         schema: Schema,
-        dtypes: dict[str, DType],
+        dtypes: dict[str, Dtype],
     ):
         dtypes = cls._get_dialect_dtypes(dtypes, table)
         if table.type_map:
@@ -422,7 +419,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         elif isinstance(as_type, dict):
             backend_str = as_type["backend"]
 
-        backend = PandasDTypeBackend(backend_str)
+        backend = PandasBackend(backend_str)
 
         # Retrieve
         query, dtypes = cls._build_retrieve_query(store, table, stage_name, backend)
@@ -435,14 +432,14 @@ class PandasTableHook(TableHook[SQLTableStore]):
         store: SQLTableStore,
         table: Table,
         stage_name: str | None,
-        backend: PandasDTypeBackend,
-    ) -> tuple[Any, dict[str, DType]]:
+        backend: PandasBackend,
+    ) -> tuple[Any, dict[str, Dtype]]:
         table_name, schema = store.resolve_alias(table, stage_name)
 
         sql_table = store.reflect_table(table_name, schema).alias("tbl")
 
         cols = {col.name: col for col in sql_table.columns}
-        dtypes = {name: DType.from_sql(col.type) for name, col in cols.items()}
+        dtypes = {name: Dtype.from_sql(col.type) for name, col in cols.items()}
 
         cols, dtypes = cls._adjust_cols_retrieve(cols, dtypes, backend)
 
@@ -451,12 +448,12 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def _adjust_cols_retrieve(
-        cls, cols: dict, dtypes: dict, backend: PandasDTypeBackend
+        cls, cols: dict, dtypes: dict, backend: PandasBackend
     ) -> tuple[dict, dict]:
-        if backend == PandasDTypeBackend.ARROW:
+        if backend == PandasBackend.ARROW:
             return cols, dtypes
 
-        assert backend == PandasDTypeBackend.NUMPY
+        assert backend == PandasBackend.NUMPY
 
         # Pandas datetime64[ns] can represent dates between 1678 AD - 2262 AD.
         # As such, when reading dates from a database, we must ensure that those
@@ -484,7 +481,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
                     year_col = sa.cast(sa.func.extract("year", col), sa.Integer)
                     year_col = year_col.label(year_col_name)
                     res_cols[year_col_name] = year_col
-                    res_dtypes[year_col_name] = DType.INT16
+                    res_dtypes[year_col_name] = Int16()
 
                 # Clamp date range
                 clamped_col = sa.case(
@@ -502,8 +499,8 @@ class PandasTableHook(TableHook[SQLTableStore]):
         cls,
         store: SQLTableStore,
         query: Any,
-        dtypes: dict[str, DType],
-        backend: PandasDTypeBackend,
+        dtypes: dict[str, Dtype],
+        backend: PandasBackend,
     ) -> pd.DataFrame:
         dtypes = {name: dtype.to_pandas(backend) for name, dtype in dtypes.items()}
 
@@ -588,7 +585,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
                 f"Writing table '{schema.get()}.{table.name}'", table_obj=table.obj
             )
 
-        dtypes = dict(zip(df.columns, map(DType.from_polars, df.dtypes)))
+        dtypes = dict(zip(df.columns, map(Dtype.from_polars, df.dtypes)))
 
         pd_df = df.to_pandas(use_pyarrow_extension_array=True, zero_copy_only=True)
         pandas_hook = store.get_hook_subclass(PandasTableHook)

@@ -8,6 +8,7 @@ import pandas as pd
 import sqlalchemy as sa
 import sqlalchemy.dialects.mssql
 
+from pydiverse.common import Datetime, Dtype
 from pydiverse.pipedag.backend.table.sql.ddl import (
     ChangeColumnTypes,
     CreateAlias,
@@ -16,7 +17,6 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
 from pydiverse.pipedag.backend.table.sql.hooks import IbisTableHook, PandasTableHook
 from pydiverse.pipedag.backend.table.sql.reflection import PipedagMSSqlReflection
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
-from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.container import RawSql, Schema, Table
 
 
@@ -290,13 +290,13 @@ class MSSqlTableStore(SQLTableStore):
 @MSSqlTableStore.register_table(pd)
 class PandasTableHook(PandasTableHook):
     @classmethod
-    def _get_dialect_dtypes(cls, dtypes: dict[str, DType], table: Table[pd.DataFrame]):
+    def _get_dialect_dtypes(cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame]):
         _ = table
         return ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
             {
                 name: sa.dialects.mssql.DATETIME2()
                 for name, dtype in dtypes.items()
-                if dtype == DType.DATETIME
+                if dtype == Datetime()
             }
         )
 

@@ -11,10 +11,10 @@ import sqlalchemy as sa
 from packaging.version import Version
 
 import tests.util.tasks_library as m
+from pydiverse.common import Dtype
 from pydiverse.pipedag import *
 from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
-from pydiverse.pipedag.backend.table.util import DType
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
@@ -355,7 +355,7 @@ class TestPandasCustomHook:
                 df: pd.DataFrame,
                 name: str,
                 schema: str,
-                dtypes: dict[str, DType],
+                dtypes: dict[str, Dtype],
                 conn: sa.Connection,
                 early: bool,
             ):
@@ -398,7 +398,7 @@ class TestPandasCustomHook:
                 cls,
                 query: Any,
                 conn: sa.Connection,
-                dtypes: dict[str, DType] | None = None,
+                dtypes: dict[str, Dtype] | None = None,
             ):
                 df = super().download_table(query, conn, dtypes)
                 df["custom_download"] = True

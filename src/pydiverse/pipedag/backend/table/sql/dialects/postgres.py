@@ -7,6 +7,7 @@ from typing import Any
 
 import pandas as pd
 
+from pydiverse.common import Dtype
 from pydiverse.pipedag.backend.table.sql.ddl import (
     ChangeTableLogged,
     LockSourceTable,
@@ -17,7 +18,6 @@ from pydiverse.pipedag.backend.table.sql.hooks import (
     SQLAlchemyTableHook,
 )
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
-from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.container import Schema, Table
 from pydiverse.pipedag.materialize.details import (
     BaseMaterializationDetails,
@@ -121,7 +121,7 @@ class PandasTableHook(PandasTableHook):
         store: PostgresTableStore,
         table: Table[pd.DataFrame],
         schema: Schema,
-        dtypes: dict[str, DType],
+        dtypes: dict[str, Dtype],
     ):
         dtypes = {name: dtype.to_sql() for name, dtype in dtypes.items()}
         if table.type_map:
