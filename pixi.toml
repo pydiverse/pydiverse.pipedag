@@ -1,7 +1,7 @@
 [project]
 name = "pydiverse-pidepag"
 channels = ["conda-forge"]
-platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]  # "linux-aarch64",
+platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"] # "linux-aarch64",
 
 [dependencies]
 python = ">=3.9"
@@ -21,6 +21,7 @@ cryptography = ">=41.0.1"
 pydot = ">=1.4.2"
 click = ">=8.1.3"
 pyparsing = ">=3.0"
+adbc-driver-postgresql = ">=1.5.0,<2"
 
 [host-dependencies]
 pip = "*"
@@ -135,21 +136,161 @@ connectorx = "==0.3.3"
 connectorx = "==0.3.3"
 
 [environments]
-default = ["py312", "all-tests", "pdtransform-new", "dev", "filelock", "zookeeper", "dask", "prefect", "pd2", "sa2", "snowflake"]
-all-tests = ["py312", "all-tests", "pdtransform-new", "dev", "filelock", "zookeeper", "dask", "prefect", "pd2", "sa2", "snowflake"]
+default = [
+    "py312",
+    "all-tests",
+    "pdtransform-new",
+    "dev",
+    "filelock",
+    "zookeeper",
+    "dask",
+    "prefect",
+    "pd2",
+    "sa2",
+    "snowflake",
+]
+all-tests = [
+    "py312",
+    "all-tests",
+    "pdtransform-new",
+    "dev",
+    "filelock",
+    "zookeeper",
+    "dask",
+    "prefect",
+    "pd2",
+    "sa2",
+    "snowflake",
+]
 docs = ["docs"]
-release = { features=["release"], no-default-feature=true }
+release = { features = ["release"], no-default-feature = true }
 py39 = ["py39", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1"]
 py310 = ["py310", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1"]
 py311 = ["py311", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1"]
 py312 = ["py312", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1"]
-py39pdsa1 = ["py39", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx", "duckdb0"]
-py311pdsa1 = ["py311", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx", "duckdb0"]
-py312pdsa1 = ["py39", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx", "duckdb0"]
-py310all = ["py310", "dev", "zookeeper", "all-tests", "pdtransform-new", "filelock", "dask", "prefect", "pd2", "sa2", "snowflake", "tidypolars"]
-py311all = ["py311", "dev", "zookeeper", "all-tests", "pdtransform-new", "filelock", "dask", "prefect", "pd2", "sa2", "snowflake"]
-py312all = ["py312", "dev", "zookeeper", "all-tests", "pdtransform-new", "filelock", "dask", "prefect", "pd2", "sa2", "snowflake"]
-py39pdsa1all = ["py39", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx033", "connectorx", "all-tests", "pdtransform-old", "filelock",  "dask", "prefect", "snowflake", "tidypolars"]
-py311pdsa1all = ["py311", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx033", "connectorx", "all-tests", "pdtransform-old", "filelock",  "dask", "prefect", "snowflake"]
-py310ibm = ["py310", "dev", "zookeeper", "pd2", "sa2", "dask", "ibm-db", "all-tests", "pdtransform-old", "tidypolars"]
-py312ibm = ["py312", "dev", "zookeeper", "pd2", "sa2", "dask", "ibm-db", "all-tests", "pdtransform-old"]
+py39pdsa1 = [
+    "py39",
+    "dev",
+    "zookeeper",
+    "pd1",
+    "sa1",
+    "dask",
+    "connectorx",
+    "duckdb0",
+]
+py311pdsa1 = [
+    "py311",
+    "dev",
+    "zookeeper",
+    "pd1",
+    "sa1",
+    "dask",
+    "connectorx",
+    "duckdb0",
+]
+py312pdsa1 = [
+    "py39",
+    "dev",
+    "zookeeper",
+    "pd1",
+    "sa1",
+    "dask",
+    "connectorx",
+    "duckdb0",
+]
+py310all = [
+    "py310",
+    "dev",
+    "zookeeper",
+    "all-tests",
+    "pdtransform-new",
+    "filelock",
+    "dask",
+    "prefect",
+    "pd2",
+    "sa2",
+    "snowflake",
+    "tidypolars",
+]
+py311all = [
+    "py311",
+    "dev",
+    "zookeeper",
+    "all-tests",
+    "pdtransform-new",
+    "filelock",
+    "dask",
+    "prefect",
+    "pd2",
+    "sa2",
+    "snowflake",
+]
+py312all = [
+    "py312",
+    "dev",
+    "zookeeper",
+    "all-tests",
+    "pdtransform-new",
+    "filelock",
+    "dask",
+    "prefect",
+    "pd2",
+    "sa2",
+    "snowflake",
+]
+py39pdsa1all = [
+    "py39",
+    "dev",
+    "zookeeper",
+    "pd1",
+    "sa1",
+    "polars12",
+    "connectorx033",
+    "connectorx",
+    "all-tests",
+    "pdtransform-old",
+    "filelock",
+    "dask",
+    "prefect",
+    "snowflake",
+    "tidypolars",
+]
+py311pdsa1all = [
+    "py311",
+    "dev",
+    "zookeeper",
+    "pd1",
+    "sa1",
+    "polars12",
+    "connectorx033",
+    "connectorx",
+    "all-tests",
+    "pdtransform-old",
+    "filelock",
+    "dask",
+    "prefect",
+    "snowflake",
+]
+py310ibm = [
+    "py310",
+    "dev",
+    "zookeeper",
+    "pd2",
+    "sa2",
+    "dask",
+    "ibm-db",
+    "all-tests",
+    "pdtransform-old",
+    "tidypolars",
+]
+py312ibm = [
+    "py312",
+    "dev",
+    "zookeeper",
+    "pd2",
+    "sa2",
+    "dask",
+    "ibm-db",
+    "all-tests",
+    "pdtransform-old",
+]

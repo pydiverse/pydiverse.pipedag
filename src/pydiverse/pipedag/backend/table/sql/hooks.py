@@ -29,6 +29,11 @@ from pydiverse.pipedag.context import TaskContext
 from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
 from pydiverse.pipedag.util.computation_tracing import ComputationTracer
 
+try:
+    import polars as pl
+except ImportError:
+    pl = None
+
 # region SQLALCHEMY
 
 
@@ -637,6 +642,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
                 pd_df = pandas_hook.download_table(query, conn)
             df = polars.from_pandas(pd_df)
         df = cls._apply_retrieve_annotation(df, table)
+        df = df.with_columns(pl.col(pl.Datetime).dt.replace_time_zone(None))
         return df
 
     @classmethod

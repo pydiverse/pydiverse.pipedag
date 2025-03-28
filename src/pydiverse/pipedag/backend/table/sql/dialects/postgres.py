@@ -6,16 +6,14 @@ from io import StringIO
 from typing import Any
 
 import pandas as pd
+import structlog
 
 from pydiverse.common import Dtype
+from pydiverse.pipedag.backend.table.sql import hooks
 from pydiverse.pipedag.backend.table.sql.ddl import (
     ChangeTableLogged,
     LockSourceTable,
     LockTable,
-)
-from pydiverse.pipedag.backend.table.sql.hooks import (
-    PandasTableHook,
-    SQLAlchemyTableHook,
 )
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.container import Schema, Table
@@ -23,6 +21,16 @@ from pydiverse.pipedag.materialize.details import (
     BaseMaterializationDetails,
     resolve_materialization_details_label,
 )
+
+try:
+    import polars as pl
+except ImportError:
+    pl = None
+
+try:
+    import pyarrow as pa
+except ImportError:
+    pa = None
 
 
 @dataclass(frozen=True)
@@ -52,6 +60,10 @@ class PostgresTableStore(SQLTableStore):
     """
 
     _dialect_name = "postgresql"
+
+    def __init__(self, *args, use_adbc: bool = True, **kwargs):
+        self.use_adbc = use_adbc
+        super().__init__(*args, **kwargs)
 
     def _init_database(self):
         self._init_database_with_database("postgres", {"isolation_level": "AUTOCOMMIT"})
@@ -108,12 +120,12 @@ class PostgresTableStore(SQLTableStore):
 
 
 @PostgresTableStore.register_table()
-class SQLAlchemyTableHook(SQLAlchemyTableHook):
+class SQLAlchemyTableHook(hooks.SQLAlchemyTableHook):
     pass  # postges is our reference dialect
 
 
 @PostgresTableStore.register_table(pd)
-class PandasTableHook(PandasTableHook):
+class PandasTableHook(hooks.PandasTableHook):
     @classmethod
     def _execute_materialize(
         cls,
@@ -138,8 +150,8 @@ class PandasTableHook(PandasTableHook):
 
         # COPY data
         # TODO: For python 3.12, there is csv.QUOTE_STRINGS
-        #       This would make everything a bit safer, because then we could represent
-        #       the string "\\N" (backslash + capital n).
+        #       This would make everything a bit safer, because then we could
+        #       represent the string "\\N" (backslash + capital n).
         s_buf = StringIO()
         df.to_csv(
             s_buf,
@@ -170,4 +182,65 @@ class PandasTableHook(PandasTableHook):
             table,
             schema,
             on_empty_table=False,
+        )
+
+
+@PostgresTableStore.register_table(pl)
+class PolarsTableHook(hooks.PolarsTableHook):
+    @classmethod
+    def materialize(
+        cls, store: PostgresTableStore, table: Table[pl.DataFrame], stage_name: str
+    ):
+        if not store.use_adbc:
+            super().materialize(store, table, stage_name)
+
+        import adbc_driver_postgresql.dbapi
+
+        df = table.obj
+        try:
+            df = cls._apply_materialize_annotation(df, table)
+        except Exception as e:
+            logger = structlog.get_logger(logger_name=cls.__name__)
+            logger.error(
+                "Failed to apply materialize annotation for table %s: %s",
+                table.name,
+                e,
+            )
+
+        schema = store.get_schema(stage_name)
+        dtypes = {
+            name: Dtype.from_polars(dtype).to_sql()
+            for name, dtype in df.collect_schema().items()
+        }
+
+        if table.type_map:
+            dtypes.update(table.type_map)
+
+        engine = store.engine
+        table_name = engine.dialect.identifier_preparer.quote(table.name)
+        schema_name = engine.dialect.identifier_preparer.format_schema(schema.get())
+
+        conn = adbc_driver_postgresql.dbapi.connect(
+            engine.url.render_as_string(hide_password=False)
+        )
+
+        # Create empty table
+        df.slice(0, 0).write_database(
+            f"{schema_name}.{table_name}",
+            conn,
+            if_table_exists="replace",
+            engine="adbc",
+        )
+        store.add_indexes_and_set_nullable(
+            table, schema, on_empty_table=True, table_cols=df.columns
+        )
+
+        if store.get_unlogged(resolve_materialization_details_label(table)):
+            store.execute(ChangeTableLogged(table.name, schema, False))
+
+        df.write_database(
+            f"{schema_name}.{table_name}",
+            conn,
+            if_table_exists="append",
+            engine="adbc",
         )
