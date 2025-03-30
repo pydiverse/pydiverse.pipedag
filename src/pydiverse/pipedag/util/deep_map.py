@@ -7,6 +7,9 @@ from __future__ import annotations
 
 from typing import Callable
 
+from pydiverse.pipedag.util.computation_tracing import fully_qualified_name
+from pydiverse.pipedag.util.import_ import load_object
+
 _nil = []
 
 
@@ -27,6 +30,14 @@ def deep_map(x, fn: Callable, memo=None):
         y = _deep_map_tuple(x, fn, memo)
     elif cls == dict:
         y = _deep_map_dict(x, fn, memo)
+    elif hasattr(cls, "__dataclass_fields__"):
+        # reconstruct data classes
+        y = load_object(
+            {
+                "class": fully_qualified_name(cls),
+                "args": _deep_map_dict(x.__dict__, fn, memo),
+            }
+        )
     else:
         y = fn(x)
 

@@ -649,7 +649,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
     def _apply_retrieve_annotation(cls, df, table):
         import dataframely as dy
 
-        if isinstance(table.annotation, typing._GenericAlias) and issubclass(
+        if isinstance(table.annotation, typing.GenericAlias) and issubclass(
             typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
         ):
             anno_args = typing.get_args(table.annotation)
@@ -663,7 +663,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
     def _apply_materialize_annotation(cls, df, table):
         import dataframely as dy
 
-        if isinstance(table.annotation, typing._GenericAlias) and issubclass(
+        if isinstance(table.annotation, typing.GenericAlias) and issubclass(
             typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
         ):
             anno_args = typing.get_args(table.annotation)

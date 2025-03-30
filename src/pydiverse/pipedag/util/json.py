@@ -17,6 +17,8 @@ from pydiverse.pipedag import ConfigContext, Stage
 from pydiverse.pipedag.container import Blob, RawSql, Table
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.core.config import PipedagConfig
+from pydiverse.pipedag.util.computation_tracing import fully_qualified_name
+from pydiverse.pipedag.util.import_ import load_object
 
 TYPE_KEY = "__pipedag_type__"
 
@@ -29,6 +31,9 @@ class Type(str, Enum):
     STAGE = "stage"
     PIPEDAG_CONFIG = "pipedag_config"
     CONFIG_CONTEXT = "config_context"
+
+    # Data classes can be reconstructed
+    DATA_CLASS = "data_class"
 
     # Other types we want to support
     PATHLIB_PATH = "pathlib:path"
@@ -113,6 +118,14 @@ def json_default(o):
             TYPE_KEY: Type.DT_DATETIME,
             "datetime": o.isoformat(),
         }
+    if hasattr(o, "__dataclass_fields__"):
+        return {
+            TYPE_KEY: Type.DATA_CLASS,
+            "config_dict": {
+                "class": fully_qualified_name(o),
+                "args": o.__dict__,
+            },
+        }
 
     raise TypeError(f"Object of type {type(o)} is not JSON serializable")
 
@@ -169,6 +182,8 @@ def json_object_hook(d: dict):
         return dt.date.fromisoformat(d["date"])
     if type_ == Type.DT_DATETIME:
         return dt.datetime.fromisoformat(d["datetime"])
+    if type_ == Type.DATA_CLASS:
+        return load_object(d["config_dict"])
 
     raise ValueError(f"Invalid value for '{TYPE_KEY}' key: {type_}")
 
