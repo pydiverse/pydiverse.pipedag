@@ -5,7 +5,7 @@ import warnings
 import pandas as pd
 
 from pydiverse.pipedag import Stage, Table
-from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
+from pydiverse.pipedag.backend.table.base import BaseTableStore, CanResult, TableHook
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.errors import CacheError, StageError
 from pydiverse.pipedag.materialize.core import MaterializingTask
@@ -138,8 +138,9 @@ class DictTableStore(BaseTableStore):
 @DictTableStore.register_table(pd)
 class PandasTableHook(TableHook[DictTableStore]):
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, pd.DataFrame)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        return CanResult.new(issubclass(type_, pd.DataFrame))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -172,11 +173,25 @@ except ImportError as e:
 @DictTableStore.register_table(pdt)
 class PydiverseTransformTableHook(TableHook[DictTableStore]):
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, pdt.Table)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        from pydiverse.transform._internal.pipe.verbs import build_query
+
+        query = tbl.obj >> build_query()
+        if query is None:
+            # SQL is not supported
+            return CanResult.NO
+        else:
+            # this error is expected for eager backend
+            type_ = type(tbl.obj)
+            return (
+                CanResult.YES_BUT_DONT_CACHE
+                if issubclass(type_, pdt.Table)
+                else CanResult.NO
+            )
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
+        # TODO: this is old pydiverse transform. This needs to be updated!
         from pydiverse.transform.eager import PandasTableImpl
 
         return issubclass(type_, PandasTableImpl)

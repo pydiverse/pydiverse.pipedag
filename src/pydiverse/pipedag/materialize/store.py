@@ -290,7 +290,7 @@ class PipeDAGStore(Disposable):
             # type is inside either `config.auto_table` or `.auto_blob`.
             if isinstance(x, config.auto_table):
                 try:
-                    hook = self.table_store.get_m_table_hook(type(x))
+                    hook = self.table_store.get_m_table_hook(Table(x))
                     x = hook.auto_table(x)
                 except TypeError:
                     x = Table(x)

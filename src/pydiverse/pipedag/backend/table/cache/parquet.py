@@ -10,7 +10,7 @@ import pandas as pd
 from packaging.version import Version
 
 from pydiverse.pipedag import ConfigContext, Stage, Table
-from pydiverse.pipedag.backend.table.base import TableHook
+from pydiverse.pipedag.backend.table.base import CanResult, TableHook
 from pydiverse.pipedag.backend.table.cache.base import BaseTableCache
 from pydiverse.pipedag.materialize.core import MaterializingTask
 from pydiverse.pipedag.util import normalize_name
@@ -88,8 +88,9 @@ class PandasTableHook(TableHook[ParquetTableCache]):
     pd_version = Version(pd.__version__)
 
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, pd.DataFrame)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        return CanResult.new(issubclass(type_, pd.DataFrame))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -162,12 +163,13 @@ except ImportError:
 @ParquetTableCache.register_table(polars)
 class PolarsTableHook(TableHook[ParquetTableCache]):
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return type_ == polars.dataframe.DataFrame
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        return CanResult.new(issubclass(type_, (polars.DataFrame, polars.LazyFrame)))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        return type_ == polars.dataframe.DataFrame
+        return issubclass(type_, (polars.DataFrame, polars.LazyFrame))
 
     @classmethod
     def materialize(
@@ -185,7 +187,10 @@ class PolarsTableHook(TableHook[ParquetTableCache]):
         as_type: type,
     ):
         path = store.get_table_path(table, ".parquet")
-        return polars.read_parquet(path)
+        df = polars.read_parquet(path)
+        if isinstance(as_type, polars.LazyFrame):
+            return df.lazy()
+        return df
 
 
 try:
@@ -222,8 +227,17 @@ except ImportError:
 @ParquetTableCache.register_table(pdt_old)
 class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, pdt.Table)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        if not issubclass(type_, pdt.Table):
+            return CanResult.NO
+        from pydiverse.transform.eager import PandasTableImpl
+
+        return (
+            CanResult.YES_BUT_DONT_CACHE
+            if issubclass(type_, PandasTableImpl)
+            else CanResult.NO
+        )
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -270,14 +284,23 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
 @ParquetTableCache.register_table(pdt_new)
 class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, pdt.Table)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        if not issubclass(type_, pdt.Table):
+            return CanResult.NO
+        from pydiverse.transform._internal.pipe.verbs import build_query
+
+        query = tbl.obj >> build_query()
+        if query is None:
+            return CanResult.NO
+        else:
+            return CanResult.YES_BUT_DONT_CACHE
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        from pydiverse.transform.extended import Pandas
+        from pydiverse.transform.extended import Polars
 
-        return issubclass(type_, Pandas)
+        return issubclass(type_, Polars)
 
     @classmethod
     def materialize(

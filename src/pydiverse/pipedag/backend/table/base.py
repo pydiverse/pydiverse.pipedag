@@ -127,14 +127,16 @@ class TableHookResolver:
             if issubclass(cls, TableHookResolver):
                 yield from cls._resolver_state().registered_table_hooks[::-1]  # noqa
 
-    def get_m_table_hook(self: Self, type_: type[T]) -> type[TableHook[Self]]:
+    def get_m_table_hook(self: Self, tbl: Table) -> type[TableHook[Self]]:
         """Get a table hook that can materialize the specified type"""
+        type_ = type(tbl.obj)
         if type_ in self._resolver_state().m_hook_cache:
             return self._resolver_state().m_hook_cache[type_]
 
         for hook in self.__all_registered_table_hooks():
-            if hook.can_materialize(type_):
-                self._resolver_state().m_hook_cache[type_] = hook
+            if res := hook.can_materialize(tbl) != CanResult.NO:
+                if res == CanResult.YES:
+                    self._resolver_state().m_hook_cache[type_] = hook
                 return hook
 
         raise TypeError(
@@ -215,7 +217,7 @@ class TableHookResolver:
             RunContext.get().set_stage_has_changed(task.stage)
 
         # Materialize
-        hook = self.get_m_table_hook(type(table.obj))
+        hook = self.get_m_table_hook(table)
         hook.materialize(self, table, table.stage.transaction_name)
 
     def retrieve_table_obj(
@@ -368,7 +370,7 @@ class BaseTableStore(TableHookResolver, Disposable):
         """
         config_context = ConfigContext.get()
         try:
-            hook = self.get_m_table_hook(type(table.obj))
+            hook = self.get_m_table_hook(table)
             query_str = hook.lazy_query_str(self, table.obj)
         except TypeError:
             self.logger.warning(
@@ -731,6 +733,17 @@ class AutoVersionSupport(Enum):
     TRACE = 2
 
 
+class CanResult(Enum):
+    NO = 0
+    YES = 1
+    # Don't assume that other tables of same obj type can be materialized the same way
+    YES_BUT_DONT_CACHE = 2
+
+    @staticmethod
+    def new(bool_val: bool):
+        return CanResult.YES if bool_val else CanResult.NO
+
+
 class TableHook(Generic[TableHookResolverT], ABC):
     """Base class to define how to handle a specific table
 
@@ -743,7 +756,7 @@ class TableHook(Generic[TableHookResolverT], ABC):
 
     @classmethod
     @abstractmethod
-    def can_materialize(cls, type_: type) -> bool:
+    def can_materialize(cls, tbl: Table) -> CanResult:
         """
         Return `True` if this hook can materialize a table with the specified
         underlying type. If `True` is returned, the `materialize` method

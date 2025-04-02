@@ -59,7 +59,7 @@ class BaseTableCache(ABC, TableHookResolver, Disposable):
         :return: bool flag indicating if storing was successful
         """
         try:
-            hook = self.get_m_table_hook(type(table.obj))
+            hook = self.get_m_table_hook(table)
         except TypeError:
             return False
 

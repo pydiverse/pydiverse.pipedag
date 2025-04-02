@@ -89,7 +89,7 @@ def materialize_table(
                 "drop_if_exists not supported for non SQLTableStore table stores."
             )
     if task is None:
-        hook = table_store.get_m_table_hook(type(table.obj))
+        hook = table_store.get_m_table_hook(table)
         schema_name = (
             schema.name
             if table_store.get_schema(schema.name).get() == schema.get()

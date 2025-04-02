@@ -1104,7 +1104,7 @@ class SQLTableStore(BaseTableStore):
 
         # Copy table via executing a select statement with respective hook
         RunContext.get().trace_hook.cache_pre_transfer(dest_tbl)
-        hook = self.get_m_table_hook(type(dest_tbl.obj))
+        hook = self.get_m_table_hook(dest_tbl)
         hook.materialize(self, dest_tbl, dest_tbl.stage.transaction_name)
         RunContext.get().trace_hook.cache_post_transfer(dest_tbl)
 
