@@ -5,8 +5,6 @@ import inspect
 from enum import Enum
 from typing import Any
 
-from pydiverse.pipedag.util import deep_map
-
 
 class Operation(Enum):
     OBJECT = 0
@@ -58,6 +56,8 @@ class ComputationTracer:
 
     def _add_computation(self, computation: tuple):
         if not self.did_exit:
+            from pydiverse.pipedag.util.deep_map import deep_map
+
             computation = deep_map(computation, self._computation_mapper)
             self.trace.append(computation)
         else:
