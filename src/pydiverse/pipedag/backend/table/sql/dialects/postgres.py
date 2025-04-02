@@ -224,6 +224,9 @@ class PolarsTableHook(hooks.PolarsTableHook):
             engine.url.render_as_string(hide_password=False)
         )
 
+        if isinstance(df, pl.LazyFrame):
+            df = df.collect()
+
         # Create empty table
         df.slice(0, 0).write_database(
             f"{schema_name}.{table_name}",

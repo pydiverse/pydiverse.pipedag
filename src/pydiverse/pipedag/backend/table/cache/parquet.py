@@ -176,7 +176,12 @@ class PolarsTableHook(TableHook[ParquetTableCache]):
         cls, store: ParquetTableCache, table: Table[polars.DataFrame], stage_name: str
     ):
         path = store.get_table_path(table, ".parquet")
-        table.obj.write_parquet(path)
+        df = table.obj
+        import polars as pl
+
+        if isinstance(df, pl.LazyFrame):
+            df = df.collect()
+        df.write_parquet(path)
 
     @classmethod
     def retrieve(
@@ -188,7 +193,7 @@ class PolarsTableHook(TableHook[ParquetTableCache]):
     ):
         path = store.get_table_path(table, ".parquet")
         df = polars.read_parquet(path)
-        if isinstance(as_type, polars.LazyFrame):
+        if issubclass(as_type, polars.LazyFrame):
             return df.lazy()
         return df
 
@@ -291,7 +296,8 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
         from pydiverse.transform._internal.pipe.verbs import build_query
 
         query = tbl.obj >> build_query()
-        if query is None:
+        if query is not None:
+            # don't cache if the table is SQL backed
             return CanResult.NO
         else:
             return CanResult.YES_BUT_DONT_CACHE
