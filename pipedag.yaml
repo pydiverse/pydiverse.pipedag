@@ -19,7 +19,12 @@ table_store_connections:
 
   duckdb:
     args:
-      url: "duckdb:////tmp/pipedag/{instance_id}/db.duckdb"
+      url: "duckdb:////tmp/pipedag/duckdb/{instance_id}.duckdb"
+      create_database_if_not_exists: true
+
+  parquet_duckdb:
+    args:
+      url: "duckdb:////tmp/pipedag/parquet_duckdb/{instance_id}.duckdb"
       create_database_if_not_exists: true
 
   snowflake:
@@ -239,3 +244,18 @@ instances:
     instance_id: prefect_engine
     orchestration:
       class: "pydiverse.pipedag.engine.prefect.PrefectEngine"
+
+  ## Backend: Parquet Table Store
+
+  parquet_backend:
+    instance_id: parquet_backend
+    table_store:
+      class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
+      table_store_connection: parquet_duckdb
+      args:
+        parquet_base_path: "/tmp/pipedag/parquet_store/"
+    stage_commit_technique: READ_VIEWS
+    lock_manager:
+      class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
+      args:
+        hosts: "localhost:2181"

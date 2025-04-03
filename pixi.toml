@@ -22,6 +22,7 @@ pydot = ">=1.4.2"
 click = ">=8.1.3"
 pyparsing = ">=3.0"
 adbc-driver-postgresql = ">=1.5.0,<2"
+libgfortran5 = ">=14"
 
 [host-dependencies]
 pip = "*"

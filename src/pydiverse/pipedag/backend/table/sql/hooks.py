@@ -578,9 +578,10 @@ class PolarsTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanResult:
+        # there is a separate hook for LazyFrame
         type_ = type(tbl.obj)
         # attention: tidypolars.Tibble is subclass of polars DataFrame
-        return CanResult.new(issubclass(type_, (polars.DataFrame, polars.LazyFrame)))
+        return CanResult.new(issubclass(type_, polars.DataFrame))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -657,30 +658,38 @@ class PolarsTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def _apply_retrieve_annotation(cls, df, table):
-        import dataframely as dy
+        try:
+            import dataframely as dy
 
-        if isinstance(table.annotation, typing.GenericAlias) and issubclass(
-            typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
-        ):
-            anno_args = typing.get_args(table.annotation)
-            if len(anno_args) == 1:
-                column_spec = anno_args[0]
-                if issubclass(column_spec, dy.Schema | dy.Collection):
-                    df = column_spec.cast(df)
+            if isinstance(table.annotation, typing.GenericAlias) and issubclass(
+                typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
+            ):
+                anno_args = typing.get_args(table.annotation)
+                if len(anno_args) == 1:
+                    column_spec = anno_args[0]
+                    if issubclass(column_spec, dy.Schema | dy.Collection):
+                        df = column_spec.cast(df)
+        except ImportError:
+            # If dataframely is not installed, we can't apply the annotation.
+            pass
         return df
 
     @classmethod
     def _apply_materialize_annotation(cls, df, table):
-        import dataframely as dy
+        try:
+            import dataframely as dy
 
-        if isinstance(table.annotation, typing.GenericAlias) and issubclass(
-            typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
-        ):
-            anno_args = typing.get_args(table.annotation)
-            if len(anno_args) == 1:
-                column_spec = anno_args[0]
-                if issubclass(column_spec, dy.Schema | dy.Collection):
-                    df = column_spec.validate(df, cast=True)
+            if isinstance(table.annotation, typing.GenericAlias) and issubclass(
+                typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
+            ):
+                anno_args = typing.get_args(table.annotation)
+                if len(anno_args) == 1:
+                    column_spec = anno_args[0]
+                    if issubclass(column_spec, dy.Schema | dy.Collection):
+                        df = column_spec.validate(df, cast=True)
+        except ImportError:
+            # If dataframely is not installed, we can't apply the annotation.
+            pass
         return df
 
     @classmethod
@@ -729,7 +738,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanResult:
         type_ = type(tbl.obj)
-        return type_ == polars.LazyFrame
+        return CanResult.new(type_ == polars.LazyFrame)
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:

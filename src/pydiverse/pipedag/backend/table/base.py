@@ -134,8 +134,9 @@ class TableHookResolver:
             return self._resolver_state().m_hook_cache[type_]
 
         for hook in self.__all_registered_table_hooks():
-            if res := hook.can_materialize(tbl) != CanResult.NO:
-                if res == CanResult.YES:
+            can = hook.can_materialize(tbl)
+            if can != CanResult.NO and can is not False:
+                if can == CanResult.YES:
                     self._resolver_state().m_hook_cache[type_] = hook
                 return hook
 

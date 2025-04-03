@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.0 (2025-04-dd)
+TODO: test/fix serialization of Table(annotation=) field and consider increasing metadata_version
+
 ## 0.9.10 (2025-03-18)
 - Fix incompatibility with pydiverse.transform >=0.2.1 (<0.2.0 still supported) (0.2.0 will not be supported):
   - pydiverse transform had a radical refactoring around this point

@@ -1,3 +1,5 @@
+from pydiverse.pipedag.backend.table.base import CanResult
+
 # Table Backends
 
 We currently only support one table backend battle tested:
@@ -17,7 +19,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 Which need to implement the following functions:
 
 ```python
-def can_materialize(cls, type_) -> bool:
+def can_materialize(cls, type_) -> CanResult:
 def can_retrieve(cls, type_) -> bool:
 def materialize(cls, store: SQLTableStore, table: Table, stage_name):
 def retrieve(cls, store, table, stage_name, as_type: type):
