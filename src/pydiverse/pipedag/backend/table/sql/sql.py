@@ -930,21 +930,9 @@ class SQLTableStore(BaseTableStore):
                     )
 
     def _init_stage_read_views(self, stage: Stage):
-        try:
-            with self.engine_connect() as conn:
-                metadata_rows = (
-                    conn.execute(
-                        self.stage_table.select().where(
-                            self.stage_table.c.stage == stage.name
-                        )
-                    )
-                    .mappings()
-                    .one()
-                )
-            cur_transaction_name = metadata_rows["cur_transaction_name"]
-        except (sa.exc.MultipleResultsFound, sa.exc.NoResultFound):
-            cur_transaction_name = ""
+        cur_transaction_name = self._get_read_view_transaction_name(stage.name)
 
+        # swap transaction name
         suffix = "__even" if cur_transaction_name.endswith("__odd") else "__odd"
         new_transaction_name = stage.name + suffix
 
@@ -954,6 +942,24 @@ class SQLTableStore(BaseTableStore):
         # Call schema swap function with updated transaction name
         self._init_stage_schema_swap(stage)
 
+    def _get_read_view_transaction_name(self, schema_name: str):
+        """Returns transaction name where committed tables are stored."""
+        try:
+            with self.engine_connect() as conn:
+                metadata_rows = (
+                    conn.execute(
+                        self.stage_table.select().where(
+                            self.stage_table.c.stage == schema_name
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
+            cur_transaction_name = metadata_rows["cur_transaction_name"]
+        except (sa.exc.MultipleResultsFound, sa.exc.NoResultFound):
+            cur_transaction_name = ""
+        return cur_transaction_name
+
     def commit_stage(self, stage: Stage):
         # If the stage is 100% cache valid, then we just need to update the
         # "in_transaction_schema" column of the metadata tables.
@@ -961,6 +967,7 @@ class SQLTableStore(BaseTableStore):
             self.logger.info("Stage is cache valid", stage=stage)
             with self.engine_connect() as conn:
                 self._commit_stage_update_metadata(stage, conn)
+            self._committed_unchanged(stage)
             return
 
         # Commit normally
@@ -970,6 +977,23 @@ class SQLTableStore(BaseTableStore):
         if stage_commit_technique == StageCommitTechnique.READ_VIEWS:
             return self._commit_stage_read_views(stage)
         raise ValueError(f"Invalid stage commit technique: {stage_commit_technique}")
+
+    def _committed_unchanged(self, stage):
+        # an opportunity for derived classes to take actions
+        pass
+
+    def _get_read_view_original_transaction_name(
+        self, stage, override_transaction_name: str | None = None
+    ):
+        transaction_name = (
+            stage.transaction_name
+            if override_transaction_name is None
+            else override_transaction_name
+        )
+        # undo transaction name assignment
+        suffix = "__even" if transaction_name.endswith("__odd") else "__odd"
+        original_transaction_name = stage.name + suffix
+        return original_transaction_name
 
     def _commit_stage_schema_swap(self, stage: Stage):
         schema = self.get_schema(stage.name)
@@ -1018,7 +1042,9 @@ class SQLTableStore(BaseTableStore):
 
             # Create aliases for all tables in transaction schema
             inspector = sa.inspect(self.engine)
-            for table in inspector.get_table_names(schema=src_schema.get()):
+            for table in inspector.get_table_names(
+                schema=src_schema.get()
+            ) + inspector.get_view_names(schema=src_schema.get()):
                 self.execute(CreateAlias(table, src_schema, table, dest_schema))
 
             # Update metadata

@@ -19,6 +19,7 @@ __all__ = [
     "InsertIntoSelect",
     "CreateTableWithSuffix",
     "CreateViewAsSelect",
+    "CopySelectTo",
     "CreateAlias",
     "CopyTable",
     "RenameTable",
@@ -151,6 +152,15 @@ class CreateViewAsSelect(DDLElement):
     def __init__(self, name: str, schema: Schema, query: Select | TextClause | sa.Text):
         self.name = name
         self.schema = schema
+        self.query = query
+
+
+class CopySelectTo(DDLElement):
+    def __init__(
+        self, target: str, format_spec: str, query: Select | TextClause | sa.Text
+    ):
+        self.target = target
+        self.format = format_spec
         self.query = query
 
 
@@ -770,6 +780,28 @@ def visit_create_table_with_suffix(create: CreateTableWithSuffix, compiler, **kw
 @compiles(CreateViewAsSelect)
 def visit_create_view_as_select(create: CreateViewAsSelect, compiler, **kw):
     return _visit_fill_obj_as_select(create, compiler, "VIEW", kw)
+
+
+@compiles(CopySelectTo)
+def visit_copy_to_as_select(copy: CopySelectTo, compiler, **kw):
+    kw["literal_binds"] = True
+    select = compiler.sql_compiler.process(copy.query, **kw)
+    tick = "'"
+    return (
+        f"COPY (\n{select}\n) TO '{str(copy.target).replace(tick, '')}' "
+        f"WITH (FORMAT {copy.format})"
+    )
+
+
+@compiles(CopySelectTo, "duckdb")
+def visit_copy_to_as_select(copy: CopySelectTo, compiler, **kw):
+    kw["literal_binds"] = True
+    select = compiler.sql_compiler.process(copy.query, **kw)
+    tick = "'"
+    return (
+        f"COPY (\n{select}\n) TO '{str(copy.target).replace(tick, '')}' "
+        f"(FORMAT {copy.format})"
+    )
 
 
 def insert_into_in_query(select_sql, schema, table):

@@ -1,9 +1,36 @@
 from __future__ import annotations
 
-from typing import Any
+import os
+import shutil
+from pathlib import Path
 
+import sqlalchemy as sa
+
+import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
+from pydiverse.pipedag import ConfigContext, Schema, Stage, Table
+from pydiverse.pipedag.backend.table.base import (
+    AutoVersionSupport,
+    CanResult,
+    TableHook,
+)
+from pydiverse.pipedag.backend.table.sql.ddl import (
+    CopySelectTo,
+    CreateViewAsSelect,
+    DropView,
+)
 from pydiverse.pipedag.backend.table.sql.dialects import DuckDBTableStore
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
+from pydiverse.pipedag.context import RunContext
+
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
+
+try:
+    import duckdb
+except ImportError:
+    duckdb = None
 
 
 class ParquetTableStore(DuckDBTableStore):
@@ -146,12 +173,6 @@ class ParquetTableStore(DuckDBTableStore):
 
     _dialect_name = DISABLE_DIALECT_REGISTRATION
 
-    @classmethod
-    def _init_conf_(cls, config: dict[str, Any]):
-        config = config.copy()
-        engine_url = config.pop("url")
-        return cls(engine_url, **config)
-
     def __init__(
         self,
         engine_url: str,
@@ -183,8 +204,23 @@ class ParquetTableStore(DuckDBTableStore):
             strict_materialization_details=strict_materialization_details,
             materialization_details=materialization_details,
             default_materialization_details=default_materialization_details,
+            max_concurrent_copy_operations=max_concurrent_copy_operations,
+            sqlalchemy_pool_size=sqlalchemy_pool_size,
+            sqlalchemy_pool_timeout=sqlalchemy_pool_timeout,
         )
-        self.parquet_base_path = parquet_base_path
+        self.parquet_base_path = Path(parquet_base_path)
+
+        # ## state
+
+        # whether parquet files of stage are stored in __odd or __even
+        # can typically be found in metadata, but firstly we cache this
+        # and secondly we modify it for the current stage before commit
+        self.parquet_schema_pathes: dict[str, Path] = {}
+        # tables may get alias to other transaction slot in case of cache
+        # valid tasks
+        self.parquet_table_pathes: dict[tuple[str, str], Path] = {}
+        # remember tables that need to be copied if stage is not unchanged
+        self.parquet_deferred_copy: list[Table] = []
 
         self.logger.info(
             "Initialized Parquet Table Store",
@@ -193,3 +229,358 @@ class ParquetTableStore(DuckDBTableStore):
             schema_prefix=self.schema_prefix,
             schema_suffix=self.schema_suffix,
         )
+
+    def init_stage(self, stage: Stage):
+        # fetch existing tables from database before schema is deleted there
+        old_transaction_name = self._get_read_view_transaction_name(stage.name)
+        new_transaction_name = self._get_read_view_original_transaction_name(
+            stage, old_transaction_name
+        )
+        with self.engine_connect() as conn:
+            existing_tables = self.execute(
+                f"FROM duckdb_views() SELECT view_name WHERE "
+                f"schema_name='{new_transaction_name}' "
+                f"and sql like '%%FROM read_parquet(%%'",
+                conn=conn,
+            ).fetchall()
+        # this creates transaction schema and modifies stage.current_name
+        super().init_stage(stage)
+        # update cache: this is important since before this stage commits,
+        # self._get_read_view_transaction_name() will yield the wrong name
+        schema = self.get_schema(stage.current_name)
+        self.parquet_schema_pathes[schema.name] = self.get_parquet_path(schema)
+        self.parquet_schema_pathes[
+            self.get_schema(stage.name).name
+        ] = self.get_parquet_path(schema)
+        # TODO: for nested stages this might be per stage
+        self.parquet_deferred_copy.clear()
+        path = self.get_stage_path(stage)
+        # TODO: figure out how to do this for S3
+        os.makedirs(path, exist_ok=True)
+        for row in existing_tables:
+            table = row[0]
+            file_path = path / (table + ".parquet")
+            try:
+                os.remove(file_path)
+            except FileNotFoundError:
+                self.logger.error(
+                    "Could not remove parquet file which would corresponed to view "
+                    "being cleaned up in transaction schema",
+                    file=file_path,
+                    view_name=table,
+                    stage=stage,
+                )
+
+    def _copy_table(self, table: Table, from_schema: Schema, from_name: str):
+        if table.name != from_name:
+            # we ignore the _copy_table which wants to write __copy tables
+            return
+        _ = from_schema  # not used because this only points to READ VIEW
+        dest_schema = self.get_schema(table.stage.current_name)
+        original_transaction_name = self._get_read_view_original_transaction_name(
+            table.stage
+        )
+        original_schema = self.get_schema(original_transaction_name)
+        src_file_path = self.get_parquet_path(original_schema) / (
+            from_name + ".parquet"
+        )
+        dest_file_path = self.get_parquet_path(dest_schema) / src_file_path.name
+        self.logger.info(
+            "Copying table between transactions",
+            src_file_path=src_file_path,
+            dest_file_path=dest_file_path,
+        )
+        # TODO: think about how to do this with S3
+        shutil.copy(src_file_path, dest_file_path)
+        # create view in duckdb database file
+        self.execute(
+            CreateViewAsSelect(
+                table.name, dest_schema, self._read_parquet_query(dest_file_path)
+            )
+        )
+
+    @staticmethod
+    def _read_parquet_query(file_path):
+        # attention: we filter for %%FROM read_parquet(%% in init_stage
+        return sa.text(f"FROM read_parquet('{file_path}')")
+
+    def _swap_alias_with_table_copy(self, table: Table, table_copy: Table):
+        # There is no __copy table which can be renamed for this table store.
+        # Alias will be replaced in commit_stage()
+        pass
+
+    def _deferred_copy_table(
+        self,
+        table: Table,
+        from_schema: Schema,
+        from_name: str,
+    ):
+        # this will just create an alias in the duckdb database
+        super()._deferred_copy_table(table, from_schema, from_name)
+        # keep symlink to original parquet file until stage commits
+        original_transaction_name = self._get_read_view_original_transaction_name(
+            table.stage
+        )
+        original_schema = self.get_schema(original_transaction_name)
+        schema = self.get_schema(table.stage.current_name)
+        self.parquet_table_pathes[(schema.name, table.name)] = self.get_parquet_path(
+            original_schema
+        ) / (table.name + ".parquet")
+        self.parquet_deferred_copy.append(table)
+
+    def commit_stage(self, stage: Stage):
+        schema = self.get_schema(stage.current_name)
+        stage_transaction_path = self.parquet_schema_pathes[schema.name]
+        # deferred copy of parquet files if stage is not 100% cache valid
+        if RunContext.get().has_stage_changed(stage):
+            for table in self.parquet_deferred_copy:
+                # remove views which were placed as aliases
+                self.execute(DropView(table.name, schema))
+                src_file_path = self.parquet_table_pathes[(schema.name, table.name)]
+                dest_file_path = stage_transaction_path / src_file_path.name
+                self.logger.info(
+                    "Copying table between transactions",
+                    src_file_path=src_file_path,
+                    dest_file_path=dest_file_path,
+                )
+                # TODO: think about how to do this with S3
+                shutil.copy(src_file_path, dest_file_path)
+                # replace view in duckdb database file (which was previously just
+                # alias to main schema)
+                self.execute(
+                    CreateViewAsSelect(
+                        table.name, schema, self._read_parquet_query(dest_file_path)
+                    )
+                )
+        super().commit_stage(stage)
+        # clear table individual parquet pathes since this is not needed after commit
+        self.parquet_table_pathes = {}
+
+    def _committed_unchanged(self, stage):
+        super()._committed_unchanged(stage)
+        # reset the stage path to the original name since schema was not swapped
+        original_transaction_name = self._get_read_view_original_transaction_name(stage)
+        original_schema = self.get_schema(original_transaction_name)
+        schema = self.get_schema(stage.name)
+        self.parquet_schema_pathes[schema.name] = self.get_parquet_path(original_schema)
+        self.parquet_deferred_copy.clear()
+
+    def get_parquet_path(self, schema: Schema):
+        return self.parquet_base_path / schema.get()
+
+    def get_parquet_schema_path(self, schema: Schema) -> Path:
+        # Parquet files are stored in transaction schema while stage.current_name
+        # changes to final schema. We resolve a level of indirection in memory.
+        if schema.name in self.parquet_schema_pathes:
+            return self.parquet_schema_pathes[schema.name]
+        # now we assume schema.name == stage.name (any stage with
+        # current_name != name should be in self.parquet_schema_pathes)
+        transaction_name = self._get_read_view_transaction_name(schema.name)
+        path = self.get_parquet_path(self.get_schema(transaction_name))
+        self.parquet_schema_pathes[schema.name] = path
+        return path
+
+    def get_stage_path(self, stage: Stage):
+        store = ConfigContext.get().store.table_store
+        return self.get_parquet_schema_path(store.get_schema(stage.current_name))
+
+    def get_table_path(self, table: Table, file_extension: str = ".parquet") -> Path:
+        store = ConfigContext.get().store.table_store
+        return self.get_table_schema_path(
+            table.name, store.get_schema(table.stage.current_name), file_extension
+        )
+
+    def get_table_schema_path(
+        self, table_name: str, schema: Schema, file_extension: str = ".parquet"
+    ) -> Path:
+        # Parquet files might be stored in other transaction schema in case of cache
+        # validity. We resolve a level of indirection in memory.
+        if (schema.name, table_name) in self.parquet_table_pathes:
+            return self.parquet_table_pathes[(schema.name, table_name)]
+        return self.get_parquet_schema_path(schema) / (table_name + file_extension)
+
+
+@ParquetTableStore.register_table(pd)
+class PandasTableHook(TableHook[ParquetTableStore]):
+    @classmethod
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        return CanResult.new(issubclass(type_, pd.DataFrame))
+
+    @classmethod
+    def can_retrieve(cls, type_) -> bool:
+        return issubclass(type_, pd.DataFrame)
+
+    @classmethod
+    def materialize(
+        cls, store: ParquetTableStore, table: Table[pd.DataFrame], stage_name: str
+    ):
+        file_path = store.get_table_path(table)
+        schema = store.get_schema(table.stage.current_name)
+
+        if store.print_materialize:
+            store.logger.info(
+                f"Writing pandas table '{schema.get()}.{table.name}'",
+                file_path=file_path,
+                table_obj=table.obj,
+            )
+
+        df = table.obj
+        df.to_parquet(file_path)
+        store.execute(
+            CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path))
+        )
+
+    @classmethod
+    def retrieve(
+        cls,
+        store: ParquetTableStore,
+        table: Table,
+        stage_name: str | None,
+        as_type: type,
+    ):
+        path = store.get_table_path(table)
+        df = pd.read_parquet(path)
+        return df
+
+
+try:
+    import polars
+except ImportError:
+    polars = None
+
+
+@ParquetTableStore.register_table(polars, duckdb)
+class PolarsTableHook(TableHook[ParquetTableStore]):
+    @classmethod
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        return CanResult.new(issubclass(type_, polars.DataFrame))
+
+    @classmethod
+    def can_retrieve(cls, type_) -> bool:
+        return issubclass(type_, polars.DataFrame)
+
+    # this hook is identical to parquet based local table cache
+    # it will ask the store for get_table_path()
+    @classmethod
+    def materialize(
+        cls,
+        store: ParquetTableStore,
+        table: Table[polars.DataFrame | polars.LazyFrame],
+        stage_name: str,
+    ):
+        file_path = store.get_table_path(table)
+        schema = store.get_schema(table.stage.current_name)
+        df = table.obj
+        if isinstance(df, polars.LazyFrame):
+            df = df.collect()
+
+        if store.print_materialize:
+            store.logger.info(
+                f"Writing polars table '{schema.get()}.{table.name}'",
+                file_path=file_path,
+                table_obj=df,
+            )
+
+        df.write_parquet(file_path)
+        store.execute(
+            CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path))
+        )
+
+    @classmethod
+    def retrieve(
+        cls,
+        store: ParquetTableStore,
+        table: Table,
+        stage_name: str | None,
+        as_type: type,
+    ):
+        file_path = store.get_table_path(table)
+        df = polars.read_parquet(file_path)
+        if issubclass(as_type, polars.LazyFrame):
+            return df.lazy()
+        return df
+
+
+@ParquetTableStore.register_table(polars)
+class LazyPolarsTableHook(PolarsTableHook):
+    # TODO: it might simplify things if auto_version_support was a function call
+    # that takes input_type as a parameter
+    auto_version_support = AutoVersionSupport.LAZY
+
+    @classmethod
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        return CanResult.new(issubclass(type_, polars.LazyFrame))
+
+    @classmethod
+    def can_retrieve(cls, type_) -> bool:
+        return issubclass(type_, polars.LazyFrame)
+
+    @classmethod
+    def retrieve_for_auto_versioning_lazy(
+        cls,
+        store: ParquetTableStore,
+        table: Table,
+        stage_name: str,
+        as_type: type[polars.LazyFrame],
+    ) -> polars.LazyFrame:
+        path = store.get_table_path(table)
+        df = polars.scan_parquet(path)
+        df = df.limit(0).collect()
+        # TODO: dataframely
+        # df = polars_hook._apply_retrieve_annotation(df, table)
+
+        # Create lazy frame where each column is identified by:
+        #     stage name, table name, column name
+        # We then rename all columns to match the names of the table.
+        #
+        # This allows us to properly trace the origin of each column in
+        # the output `.serialize` back to the table where it originally came from.
+
+        schema = {}
+        rename = {}
+        for col in df:
+            qualified_name = f"[{table.stage.name}].[{table.name}].[{col.name}]"
+            schema[qualified_name] = col.dtype
+            rename[qualified_name] = col.name
+
+        lf = polars.LazyFrame(schema=schema).rename(rename)
+        return lf
+
+    @classmethod
+    def get_auto_version_lazy(cls, obj) -> str:
+        """
+        :param obj: object returned from task
+        :return: string representation of the operations performed on this object.
+        :raises TypeError: if the object doesn't support automatic versioning.
+        """
+        if not isinstance(obj, polars.LazyFrame):
+            raise TypeError("Expected LazyFrame")
+        return str(obj.serialize())
+
+
+@ParquetTableStore.register_table()
+class SQLAlchemyTableHook(sql_hooks.SQLAlchemyTableHook):
+    @classmethod
+    def _create_as_select_statements(
+        cls,
+        table_name: str,
+        schema: Schema,
+        query: sa.Select | sa.TextClause | sa.Text,
+        store: ParquetTableStore,
+        suffix: str,
+        unlogged: bool,
+    ):
+        file_path = store.get_table_schema_path(table_name, schema)
+        return [
+            CopySelectTo(
+                file_path,
+                "PARQUET",
+                query,
+            ),
+            CreateViewAsSelect(
+                table_name, schema, store._read_parquet_query(file_path)
+            ),
+        ]

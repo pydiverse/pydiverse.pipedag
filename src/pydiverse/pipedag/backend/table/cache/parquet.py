@@ -262,7 +262,7 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
 
         if isinstance(t._impl, PandasTableImpl):
             table.obj = t >> collect()
-            return store.get_hook_subclass(PandasTableHook).materialize(
+            return store.get_r_table_hook(pd.DataFrame).materialize(
                 store, table, stage_name
             )
 
@@ -279,7 +279,7 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
         from pydiverse.transform.eager import PandasTableImpl
 
         if isinstance(as_type, PandasTableImpl):
-            hook = store.get_hook_subclass(PandasTableHook)
+            hook = store.get_r_table_hook(pd.DataFrame)
             df = hook.retrieve(store, table, stage_name, pd.DataFrame)
             return pdt.Table(PandasTableImpl(table.name, df))
 
@@ -321,8 +321,9 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
         table = table.copy_without_obj()
 
         try:
-            table.obj = t >> export(Polars())
-            hook = store.get_hook_subclass(PolarsTableHook)
+            table.obj = t >> export(Polars(lazy=True))
+
+            hook = store.get_m_table_hook(table)
             return hook.materialize(store, table, stage_name)
         except Exception as e:
             raise TypeError(f"Unsupported type {type(t._ast).__name__}") from e
@@ -338,7 +339,9 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
         from pydiverse.transform.extended import Polars
 
         if isinstance(as_type, Polars):
-            hook = store.get_hook_subclass(PandasTableHook)
+            import polars as pl
+
+            hook = store.get_r_table_hook(pl.LazyFrame)
             df = hook.retrieve(store, table, stage_name, pd.DataFrame)
             return pdt.Table(df)
 

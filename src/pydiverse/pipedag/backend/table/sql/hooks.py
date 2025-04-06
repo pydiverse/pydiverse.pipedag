@@ -7,7 +7,6 @@ import typing
 import warnings
 from typing import Any
 
-import pandas as pd
 import sqlalchemy as sa
 import sqlalchemy.exc
 import structlog
@@ -67,9 +66,9 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         table: Table[sa.sql.expression.TextClause | sa.sql.expression.Selectable],
         stage_name,
     ):
-        obj = table.obj
+        query = table.obj
         if isinstance(table.obj, (sa.Table, sa.sql.expression.Alias)):
-            obj = sa.select("*").select_from(table.obj)
+            query = sa.select("*").select_from(table.obj)
             tbl = table.obj if isinstance(table.obj, sa.Table) else table.obj.original
             source_tables = [
                 dict(
@@ -105,45 +104,83 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         )
         unlogged = store.get_unlogged(resolve_materialization_details_label(table))
         if store.dialect_requests_empty_creation(table, is_sql=True):
-            limit_query = store.get_limit_query(obj, rows=0)
-            store.execute(
-                CreateTableAsSelect(
-                    table.name,
-                    schema,
-                    limit_query,
-                    unlogged=unlogged,
-                    suffix=suffix,
-                )
+            cls._create_table_as_select_empty_insert(
+                table, schema, query, source_tables, store, suffix, unlogged
             )
-            store.add_indexes_and_set_nullable(table, schema, on_empty_table=True)
-            statements = store.lock_table(table, schema)
-            statements += store.lock_source_tables(source_tables)
-            statements += [
-                InsertIntoSelect(
-                    table.name,
-                    schema,
-                    obj,
-                )
-            ]
-            store.execute(
-                statements,
-                truncate_printed_select=True,
-            )
-            store.add_indexes_and_set_nullable(table, schema, on_empty_table=False)
         else:
-            statements = store.lock_source_tables(source_tables)
-            statements += [
-                CreateTableAsSelect(
-                    table.name,
-                    schema,
-                    obj,
-                    unlogged=unlogged,
-                    suffix=suffix,
-                )
-            ]
-            store.execute(statements)
-            store.add_indexes_and_set_nullable(table, schema)
+            cls._create_table_as_select(
+                table, schema, query, source_tables, store, suffix, unlogged
+            )
         store.optional_pause_for_db_transactionality("table_create")
+
+    @classmethod
+    def _create_table_as_select(
+        cls, table, schema, query, source_tables, store, suffix, unlogged
+    ):
+        statements = store.lock_source_tables(source_tables)
+        statements += cls._create_as_select_statements(
+            table.name, schema, query, store, suffix, unlogged
+        )
+        store.execute(statements)
+        store.add_indexes_and_set_nullable(table, schema)
+
+    @classmethod
+    def _create_table_as_select_empty_insert(
+        cls, table, schema, query, source_tables, store, suffix, unlogged
+    ):
+        limit_query = store.get_limit_query(query, rows=0)
+        store.execute(
+            cls._create_as_select_statements(
+                table.name, schema, limit_query, store, suffix, unlogged
+            )
+        )
+        store.add_indexes_and_set_nullable(table, schema, on_empty_table=True)
+        statements = store.lock_table(table, schema)
+        statements += store.lock_source_tables(source_tables)
+        statements += cls._insert_as_select_statements(table.name, schema, query, store)
+        store.execute(
+            statements,
+            truncate_printed_select=True,
+        )
+        store.add_indexes_and_set_nullable(table, schema, on_empty_table=False)
+
+    @classmethod
+    def _create_as_select_statements(
+        cls,
+        table_name: str,
+        schema: Schema,
+        query: sa.Select | sa.TextClause | sa.Text,
+        store: SQLTableStore,
+        suffix: str,
+        unlogged: bool,
+    ):
+        _ = store
+        return [
+            CreateTableAsSelect(
+                table_name,
+                schema,
+                query,
+                unlogged=unlogged,
+                suffix=suffix,
+            )
+        ]
+
+    @classmethod
+    def _insert_as_select_statements(
+        cls,
+        table_name: str,
+        schema: Schema,
+        query: sa.Select | sa.TextClause | sa.Text,
+        store: SQLTableStore,
+    ):
+        _ = store
+        return [
+            InsertIntoSelect(
+                table_name,
+                schema,
+                query,
+            )
+        ]
 
     @classmethod
     def retrieve(
@@ -229,6 +266,10 @@ class ExternalTableReferenceHook(TableHook[SQLTableStore]):
 # endregion
 
 # region PANDAS
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
 
 
 @SQLTableStore.register_table(pd)
@@ -615,7 +656,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
             )
         finally:
             pd_df = df.to_pandas(use_pyarrow_extension_array=True, zero_copy_only=True)
-            pandas_hook = store.get_hook_subclass(PandasTableHook)
+            pandas_hook = store.get_m_table_hook(Table(pd_df))
             ret = pandas_hook.materialize_(
                 df=pd_df,
                 dtypes=dtypes,
@@ -648,7 +689,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
                 store.engine_url.render_as_string(hide_password=True),
                 e,
             )
-            pandas_hook = store.get_hook_subclass(PandasTableHook)
+            pandas_hook = store.get_r_table_hook(pd.DataFrame)
             with store.engine.connect() as conn:
                 pd_df = pandas_hook.download_table(query, conn)
             df = polars.from_pandas(pd_df)
@@ -724,7 +765,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
                 engine.url.render_as_string(hide_password=True),
                 e,
             )
-            pandas_hook = store.get_hook_subclass(PandasTableHook)
+            pandas_hook = store.get_r_table_hook(pd.DataFrame)
             with engine.connect() as conn:
                 pd_df = pandas_hook.download_table(query, conn)
             engine.dispose()
@@ -750,7 +791,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         table = table.copy_without_obj()
         table.obj = t.collect()
 
-        polars_hook = store.get_hook_subclass(PolarsTableHook)
+        polars_hook = store.get_m_table_hook(table)
         return polars_hook.materialize(store, table, stage_name)
 
     @classmethod
@@ -761,7 +802,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         stage_name: str | None,
         as_type: type[polars.DataFrame],
     ) -> polars.LazyFrame:
-        polars_hook = store.get_hook_subclass(PolarsTableHook)
+        polars_hook = store.get_r_table_hook(pl.DataFrame)
         result = polars_hook.retrieve(
             store=store,
             table=table,
@@ -779,7 +820,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         stage_name: str,
         as_type: type[polars.LazyFrame],
     ) -> polars.LazyFrame:
-        polars_hook = store.get_hook_subclass(PolarsTableHook)
+        polars_hook = store.get_r_table_hook(pl.DataFrame)
 
         # Retrieve with LIMIT 0 -> only get schema but no data
         query = polars_hook._read_db_query(store, table, stage_name)
@@ -843,7 +884,7 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         table = table.copy_without_obj()
         table.obj = t.to_polars()
 
-        polars_hook = store.get_hook_subclass(PolarsTableHook)
+        polars_hook = store.get_m_table_hook(table)
         return polars_hook.materialize(store, table, stage_name)
 
     @classmethod
@@ -854,7 +895,7 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         stage_name: str | None,
         as_type: type[tidypolars.Tibble],
     ) -> tidypolars.Tibble:
-        polars_hook = store.get_hook_subclass(PolarsTableHook)
+        polars_hook = store.get_r_table_hook(pl.DataFrame)
         df = polars_hook.retrieve(store, table, stage_name, as_type)
         return tidypolars.from_polars(df)
 
@@ -935,11 +976,11 @@ class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
         table = table.copy_without_obj()
         if isinstance(t._impl, PandasTableImpl):
             table.obj = t >> collect()
-            hook = store.get_hook_subclass(PandasTableHook)
+            hook = store.get_m_table_hook(pd.DataFrame)
             return hook.materialize(store, table, stage_name)
         if isinstance(t._impl, SQLTableImpl):
             table.obj = t._impl.build_select()
-            hook = store.get_hook_subclass(SQLAlchemyTableHook)
+            hook = store.get_m_table_hook(table)
             return hook.materialize(store, table, stage_name)
         raise NotImplementedError
 
@@ -955,11 +996,11 @@ class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
         from pydiverse.transform.lazy import SQLTableImpl
 
         if issubclass(as_type, PandasTableImpl):
-            hook = store.get_hook_subclass(PandasTableHook)
+            hook = store.get_r_table_hook(pd.DataFrame)
             df = hook.retrieve(store, table, stage_name, pd.DataFrame)
             return pdt.Table(PandasTableImpl(table.name, df))
         if issubclass(as_type, SQLTableImpl):
-            hook = store.get_hook_subclass(SQLAlchemyTableHook)
+            hook = store.get_r_table_hook(sa.Table)
             sa_tbl = hook.retrieve(store, table, stage_name, sa.Table)
             return pdt.Table(SQLTableImpl(store.engine, sa_tbl))
         raise NotImplementedError
@@ -1017,12 +1058,12 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         if query is not None:
             # continue with SQL case handling
             table.obj = sa.text(str(query))
-            hook = store.get_hook_subclass(SQLAlchemyTableHook)
+            hook = store.get_m_table_hook(table)
             return hook.materialize(store, table, stage_name)
         else:
             # use Polars for dataframe handling
-            table.obj = t >> export(Polars())
-            hook = store.get_hook_subclass(PolarsTableHook)
+            table.obj = t >> export(Polars(lazy=True))
+            hook = store.get_m_table_hook(table)
             return hook.materialize(store, table, stage_name)
 
     @classmethod
@@ -1038,18 +1079,20 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         if issubclass(as_type, Polars):
             import polars as pl
 
-            hook = store.get_hook_subclass(PolarsTableHook)
-            df = hook.retrieve(store, table, stage_name, pl.DataFrame)
-            return pdt.Table(df, name=table.name)
-        if issubclass(as_type, SqlAlchemy):
-            hook = store.get_hook_subclass(SQLAlchemyTableHook)
+            hook = store.get_r_table_hook(pl.LazyFrame)
+            lf = hook.retrieve(store, table, stage_name, pl.DataFrame)
+            return pdt.Table(lf, name=table.name)
+        elif issubclass(as_type, SqlAlchemy):
+            hook = store.get_r_table_hook(sa.Table)
             sa_tbl = hook.retrieve(store, table, stage_name, sa.Table)
             return pdt.Table(
                 sa_tbl.original.name,
                 SqlAlchemy(store.engine, schema=sa_tbl.original.schema),
             )
-        if issubclass(as_type, Pandas):
-            hook = store.get_hook_subclass(PandasTableHook)
+        elif issubclass(as_type, Pandas):
+            import pandas as pd
+
+            hook = store.get_r_table_hook(pd.DataFrame)
             df = hook.retrieve(store, table, stage_name, pd.DataFrame)
             return pdt.Table(df, name=table.name)
 
@@ -1118,7 +1161,7 @@ class IbisTableHook(TableHook[SQLTableStore]):
         table = table.copy_without_obj()
         table.obj = sa.text(cls.lazy_query_str(store, t))
 
-        sa_hook = store.get_hook_subclass(SQLAlchemyTableHook)
+        sa_hook = store.get_m_table_hook(table)
         return sa_hook.materialize(store, table, stage_name)
 
     @classmethod
