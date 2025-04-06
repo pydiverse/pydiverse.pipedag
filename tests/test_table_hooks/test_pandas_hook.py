@@ -141,18 +141,12 @@ class TestPandasTableHookNumpy:
 
         df_expected = pd.DataFrame(
             {
-                "date": pd.array(Values.DATE_NS, dtype="datetime64[ns]"),
-                "date_ns": pd.array(Values.DATE_NS, dtype="datetime64[ns]"),
-                "date_none": pd.array(NoneValues.DATE, dtype="datetime64[ns]"),
-                "datetime": pd.array(Values.DATETIME_NS, dtype="datetime64[ns]"),
-                "datetime_ns": pd.array(Values.DATETIME_NS, dtype="datetime64[ns]"),
-                "datetime_none": pd.array(NoneValues.DATETIME, dtype="datetime64[ns]"),
-                "date_year": [d.year for d in Values.DATE],
-                "date_ns_year": [d.year for d in Values.DATE_NS],
-                "date_none_year": [1970, None],
-                "datetime_year": [d.year for d in Values.DATETIME],
-                "datetime_ns_year": [d.year for d in Values.DATETIME_NS],
-                "datetime_none_year": [1970, None],
+                "date": pd.array(Values.DATE, dtype="datetime64[s]"),
+                "date_ns": pd.array(Values.DATE_NS, dtype="datetime64[s]"),
+                "date_none": pd.array(NoneValues.DATE, dtype="datetime64[s]"),
+                "datetime": pd.array(Values.DATETIME, dtype="datetime64[us]"),
+                "datetime_ns": pd.array(Values.DATETIME_NS, dtype="datetime64[us]"),
+                "datetime_none": pd.array(NoneValues.DATETIME, dtype="datetime64[us]"),
             }
         )
 
@@ -179,6 +173,63 @@ class TestPandasTableHookNumpy:
         @materialize(input_type=(pd.DataFrame, "numpy"))
         def assert_expected(in_df):
             pd.testing.assert_frame_equal(in_df, df_expected, check_dtype=False)
+
+        with Flow() as f:
+            with Stage("stage"):
+                t = numpy_input()
+                assert_expected(t)
+
+        assert f.run().successful
+
+    @pytest.mark.polars
+    def test_datetime_polars(self):
+        import polars as pl
+
+        df = pd.DataFrame(
+            {
+                "date": Values.DATE,
+                "date_ns": Values.DATE_NS,
+                "date_none": NoneValues.DATE,
+                "datetime": Values.DATETIME,
+                "datetime_ns": Values.DATETIME_NS,
+                "datetime_none": NoneValues.DATETIME,
+            }
+        ).astype(object)
+
+        df_expected = pl.DataFrame(
+            {
+                "date": Values.DATE,
+                "date_ns": Values.DATE_NS,
+                "date_none": NoneValues.DATE,
+                "datetime": Values.DATETIME,
+                "datetime_ns": Values.DATETIME_NS,
+                "datetime_none": NoneValues.DATETIME,
+            }
+        )
+
+        @materialize()
+        def numpy_input():
+            datetime_dtype = (
+                sa.DateTime()
+                if (get_dialect_name() != "mssql")
+                else sa.dialects.mssql.DATETIME2()
+            )
+
+            return Table(
+                df,
+                type_map={
+                    "date": sa.Date(),
+                    "date_ns": sa.Date(),
+                    "date_none": sa.Date(),
+                    "datetime": datetime_dtype,
+                    "datetime_ns": datetime_dtype,
+                    "datetime_none": datetime_dtype,
+                },
+            )
+
+        @materialize(input_type=pl.DataFrame)
+        def assert_expected(in_df):
+            pl.testing.assert_frame_equal(in_df, df_expected, check_dtype=False)
 
         with Flow() as f:
             with Stage("stage"):

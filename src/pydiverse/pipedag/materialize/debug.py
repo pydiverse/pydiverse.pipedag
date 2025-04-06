@@ -6,7 +6,6 @@ import structlog
 
 from pydiverse.pipedag import ConfigContext, Table
 from pydiverse.pipedag.backend import SQLTableStore
-from pydiverse.pipedag.backend.table.sql.ddl import DropTable
 from pydiverse.pipedag.container import Schema
 from pydiverse.pipedag.context import TaskContext
 from pydiverse.pipedag.materialize.core import MaterializingTask
@@ -82,7 +81,7 @@ def materialize_table(
 
     if drop_if_exists:
         if isinstance(table_store, SQLTableStore):
-            table_store.execute(DropTable(table.name, schema, if_exists=True))
+            table_store.delete_table_from_transaction(table)
         else:
             logger = structlog.get_logger(logger_name="Debug materialize_table")
             logger.warning(

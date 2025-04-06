@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import datetime
 import re
 import time
 import typing
@@ -12,7 +11,7 @@ import sqlalchemy.exc
 import structlog
 from packaging.version import Version
 
-from pydiverse.common import Date, Dtype, Int16, PandasBackend
+from pydiverse.common import Date, Dtype, PandasBackend
 from pydiverse.pipedag import ConfigContext
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.table.base import (
@@ -505,49 +504,9 @@ class PandasTableHook(TableHook[SQLTableStore]):
     def _adjust_cols_retrieve(
         cls, cols: dict, dtypes: dict, backend: PandasBackend
     ) -> tuple[dict, dict]:
-        if backend == PandasBackend.ARROW:
-            return cols, dtypes
-
-        assert backend == PandasBackend.NUMPY
-
-        # Pandas datetime64[ns] can represent dates between 1678 AD - 2262 AD.
-        # As such, when reading dates from a database, we must ensure that those
-        # dates don't overflow the range of representable dates by pandas.
-        # This is done by clipping the date to a predefined range and adding a
-        # years column.
-
-        res_cols = cols.copy()
-        res_dtypes = dtypes.copy()
-
-        for name, col in cols.items():
-            if isinstance(col.type, (sa.Date, sa.DateTime)):
-                if isinstance(col.type, sa.Date):
-                    min_val = datetime.date(1700, 1, 1)
-                    max_val = datetime.date(2200, 1, 1)
-                elif isinstance(col.type, sa.DateTime):
-                    min_val = datetime.datetime(1700, 1, 1, 0, 0, 0)
-                    max_val = datetime.datetime(2200, 1, 1, 0, 0, 0)
-                else:
-                    raise
-
-                # Year column
-                year_col_name = f"{name}_year"
-                if year_col_name not in cols:
-                    year_col = sa.cast(sa.func.extract("year", col), sa.Integer)
-                    year_col = year_col.label(year_col_name)
-                    res_cols[year_col_name] = year_col
-                    res_dtypes[year_col_name] = Int16()
-
-                # Clamp date range
-                clamped_col = sa.case(
-                    (col.is_(None), None),
-                    (col < min_val, min_val),
-                    (col > max_val, max_val),
-                    else_=col,
-                ).label(name)
-                res_cols[name] = clamped_col
-
-        return res_cols, res_dtypes
+        # in earlier times pandas only supported datetime64[ns] and thus we implemented
+        # clipping in this function to avoid the creation of dtype=object columns
+        return cols, dtypes
 
     @classmethod
     def _execute_query_retrieve(

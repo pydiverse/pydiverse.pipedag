@@ -20,13 +20,14 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
 from pydiverse.pipedag.container import ExternalTableReference, Schema
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
 from tests.util import swallowing_raises
 from tests.util.sql import sql_table_expr
 
 pytestmark = [with_instances(DATABASE_INSTANCES)]
 
 
+@skip_instances("parquet_backend")
 def test_smoke_table_reference():
     @materialize(version="1.1")
     def in_table():

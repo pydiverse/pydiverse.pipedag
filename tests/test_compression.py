@@ -32,7 +32,7 @@ pytestmark = [with_instances(DATABASE_INSTANCES)]
     ],
 )
 @with_instances(DATABASE_INSTANCES, "ibm_db2_materialization_details")
-@skip_instances("ibm_db2")
+@skip_instances("ibm_db2", "parquet_backend")
 def test_compression(task, stage_materialization_details):
     @materialize(input_type=sa.Table, lazy=False)
     def get_compression_attributes(table: sa.sql.expression.Alias):

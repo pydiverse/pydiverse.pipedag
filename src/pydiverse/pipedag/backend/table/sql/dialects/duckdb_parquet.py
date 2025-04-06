@@ -399,9 +399,51 @@ class ParquetTableStore(DuckDBTableStore):
             return self.parquet_table_pathes[(schema.name, table_name)]
         return self.get_parquet_schema_path(schema) / (table_name + file_extension)
 
+    def delete_table_from_transaction(self, table: Table):
+        file_path = self.get_table_path(table)
+        # TODO: think about how to do this with S3
+        if file_path.exists():
+            os.remove(file_path)
+        self.execute(
+            DropView(
+                table.name,
+                self.get_schema(table.stage.transaction_name),
+                if_exists=True,
+            )
+        )
+
+    def add_primary_key(
+        self,
+        table_name: str,
+        schema: Schema,
+        key_columns: list[str],
+        *,
+        name: str | None = None,
+    ):
+        # ParquetTableStore does not support indexes. They are ignored.
+        pass
+
+    def add_index(
+        self,
+        table_name: str,
+        schema: Schema,
+        index_columns: list[str],
+        name: str | None = None,
+    ):
+        # ParquetTableStore does not support indexes. They are ignored.
+        pass
+
+    def copy_indexes(
+        self, src_table: str, src_schema: Schema, dest_table: str, dest_schema: Schema
+    ):
+        # ParquetTableStore does not support indexes. They are ignored.
+        pass
+
 
 @ParquetTableStore.register_table(pd)
 class PandasTableHook(TableHook[ParquetTableStore]):
+    auto_version_support = AutoVersionSupport.TRACE
+
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanResult:
         type_ = type(tbl.obj)
@@ -441,7 +483,25 @@ class PandasTableHook(TableHook[ParquetTableStore]):
     ):
         path = store.get_table_path(table)
         df = pd.read_parquet(path)
+        import pyarrow.parquet
+
+        schema = pyarrow.parquet.read_schema(path)
+        df = df.astype(
+            {
+                col: "datetime64[s]"
+                for col, type_ in zip(schema.names, schema.types)
+                if type_ == "date32"
+            }
+        )
         return df
+
+    @classmethod
+    def auto_table(cls, obj: pd.DataFrame):
+        return sql_hooks.PandasTableHook.auto_table(obj)
+
+    @classmethod
+    def get_computation_tracer(cls):
+        return sql_hooks.PandasTableHook.ComputationTracer()
 
 
 try:
@@ -501,6 +561,14 @@ class PolarsTableHook(TableHook[ParquetTableStore]):
         if issubclass(as_type, polars.LazyFrame):
             return df.lazy()
         return df
+
+    @classmethod
+    def auto_table(cls, obj: pd.DataFrame):
+        return sql_hooks.PolarsTableHook.auto_table(obj)
+
+    @classmethod
+    def get_computation_tracer(cls):
+        return sql_hooks.PolarsTableHook.ComputationTracer()
 
 
 @ParquetTableStore.register_table(polars)
