@@ -9,6 +9,7 @@ from typing import Any
 import pandas as pd
 from packaging.version import Version
 
+import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
 from pydiverse.pipedag import ConfigContext, Stage, Table
 from pydiverse.pipedag.backend.table.base import CanResult, TableHook
 from pydiverse.pipedag.backend.table.cache.base import BaseTableCache
@@ -182,6 +183,8 @@ class PolarsTableHook(TableHook[ParquetTableCache]):
         if isinstance(df, pl.LazyFrame):
             df = df.collect()
         df.write_parquet(path)
+        # intentionally don't apply annotation checks because they might also be done
+        # within polars table hook of actual table store
 
     @classmethod
     def retrieve(
@@ -193,6 +196,7 @@ class PolarsTableHook(TableHook[ParquetTableCache]):
     ):
         path = store.get_table_path(table, ".parquet")
         df = polars.read_parquet(path)
+        df = sql_hooks._polars_apply_retrieve_annotation(df, table)
         if issubclass(as_type, polars.LazyFrame):
             return df.lazy()
         return df

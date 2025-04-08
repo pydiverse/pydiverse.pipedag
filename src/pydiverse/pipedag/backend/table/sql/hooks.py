@@ -39,6 +39,42 @@ except ImportError:
 # region SQLALCHEMY
 
 
+def _polars_apply_retrieve_annotation(df, table, intentionally_empty: bool = False):
+    try:
+        import dataframely as dy
+
+        if isinstance(table.annotation, typing.GenericAlias) and issubclass(
+            typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
+        ):
+            anno_args = typing.get_args(table.annotation)
+            if len(anno_args) == 1:
+                column_spec = anno_args[0]
+                if issubclass(column_spec, dy.Schema | dy.Collection):
+                    df = column_spec.cast(df)
+    except ImportError:
+        # If dataframely is not installed, we can't apply the annotation.
+        pass
+    return df
+
+
+def _polars_apply_materialize_annotation(df, table):
+    try:
+        import dataframely as dy
+
+        if isinstance(table.annotation, typing.GenericAlias) and issubclass(
+            typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
+        ):
+            anno_args = typing.get_args(table.annotation)
+            if len(anno_args) == 1:
+                column_spec = anno_args[0]
+                if issubclass(column_spec, dy.Schema | dy.Collection):
+                    df = column_spec.validate(df, cast=True)
+    except ImportError:
+        # If dataframely is not installed, we can't apply the annotation.
+        pass
+    return df
+
+
 @SQLTableStore.register_table()
 class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @classmethod
@@ -604,7 +640,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         dtypes = dict(zip(df.columns, map(Dtype.from_polars, df.dtypes)))
 
         try:
-            df = cls._apply_materialize_annotation(df, table)
+            df = _polars_apply_materialize_annotation(df, table)
             e = None
         except Exception as e:
             logger = structlog.get_logger(logger_name=cls.__name__)
@@ -652,44 +688,8 @@ class PolarsTableHook(TableHook[SQLTableStore]):
             with store.engine.connect() as conn:
                 pd_df = pandas_hook.download_table(query, conn)
             df = polars.from_pandas(pd_df)
-        df = cls._apply_retrieve_annotation(df, table)
+        df = _polars_apply_retrieve_annotation(df, table)
         df = df.with_columns(pl.col(pl.Datetime).dt.replace_time_zone(None))
-        return df
-
-    @classmethod
-    def _apply_retrieve_annotation(cls, df, table):
-        try:
-            import dataframely as dy
-
-            if isinstance(table.annotation, typing.GenericAlias) and issubclass(
-                typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
-            ):
-                anno_args = typing.get_args(table.annotation)
-                if len(anno_args) == 1:
-                    column_spec = anno_args[0]
-                    if issubclass(column_spec, dy.Schema | dy.Collection):
-                        df = column_spec.cast(df)
-        except ImportError:
-            # If dataframely is not installed, we can't apply the annotation.
-            pass
-        return df
-
-    @classmethod
-    def _apply_materialize_annotation(cls, df, table):
-        try:
-            import dataframely as dy
-
-            if isinstance(table.annotation, typing.GenericAlias) and issubclass(
-                typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
-            ):
-                anno_args = typing.get_args(table.annotation)
-                if len(anno_args) == 1:
-                    column_spec = anno_args[0]
-                    if issubclass(column_spec, dy.Schema | dy.Collection):
-                        df = column_spec.validate(df, cast=True)
-        except ImportError:
-            # If dataframely is not installed, we can't apply the annotation.
-            pass
         return df
 
     @classmethod
@@ -788,7 +788,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         connection_uri = store.engine_url.render_as_string(hide_password=False)
 
         df = polars_hook._execute_query(query, connection_uri, store)
-        df = polars_hook._apply_retrieve_annotation(df, table)
+        df = _polars_apply_retrieve_annotation(df, table)
 
         # Create lazy frame where each column is identified by:
         #     stage name, table name, column name

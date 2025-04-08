@@ -425,8 +425,8 @@ class RawSql:
 
         # If a task receives a RawSQL object as input, it loads all tables
         # produced by it and makes them available through a dict like interface.
-        self.table_names: list[str] = None  # type: ignore
-        self.loaded_tables: dict[str, Any] = None  # type: ignore
+        self.table_names: list[str] | None = None  # type: ignore
+        self.loaded_tables: dict[str, Any] | None = None  # type: ignore
 
     def __repr__(self):
         stage_name = self.stage.name if self.stage else None
@@ -449,15 +449,15 @@ class RawSql:
 
     def __iter__(self) -> Iterable[str]:
         """Yields all names of tables produced by this RawSql object."""
-        yield from self.table_names
+        yield from (self.table_names or [])
 
     def __contains__(self, table_name: str) -> bool:
         """Check if this RawSql object produced a table with name `table_name`."""
-        return table_name in self.table_names
+        return table_name in (self.table_names or [])
 
     def __getitem__(self, table_name: str):
         """Gets the table produced by this RawSql object with name `table_name`."""
-        if table_name not in self.table_names:
+        if table_name not in (self.table_names or []):
             raise KeyError(f"No table with name '{table_name}' found in RawSql.")
 
         # Did load tables -> __getitem__ should return Table.obj
@@ -473,7 +473,7 @@ class RawSql:
 
     def items(self) -> Iterable[tuple[str, Any]]:
         """Returns pairs of ``(table_name, table)``."""
-        for table_name in self.table_names:
+        for table_name in self.table_names or []:
             yield table_name, self[table_name]
 
     def get(self, table_name: str, default=None):

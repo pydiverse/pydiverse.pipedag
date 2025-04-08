@@ -586,10 +586,18 @@ class PolarsTableHook(TableHook[ParquetTableStore]):
                 table_obj=df,
             )
 
+        try:
+            df = sql_hooks._polars_apply_materialize_annotation(df, table)
+            exception = None
+        except Exception as e:
+            # still write the table before raising exception
+            exception = e
         df.write_parquet(file_path)
         store.execute(
             CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path))
         )
+        if exception:
+            raise exception
 
     @classmethod
     def retrieve(
@@ -601,6 +609,7 @@ class PolarsTableHook(TableHook[ParquetTableStore]):
     ):
         file_path = store.get_table_path(table)
         df = polars.read_parquet(file_path)
+        df = sql_hooks._polars_apply_retrieve_annotation(df, table)
         if issubclass(as_type, polars.LazyFrame):
             return df.lazy()
         return df
@@ -640,8 +649,9 @@ class LazyPolarsTableHook(PolarsTableHook):
         path = store.get_table_path(table)
         df = polars.scan_parquet(path)
         df = df.limit(0).collect()
-        # TODO: dataframely
-        # df = polars_hook._apply_retrieve_annotation(df, table)
+        df = sql_hooks._polars_apply_retrieve_annotation(
+            df, table, intentionally_empty=True
+        )
 
         # Create lazy frame where each column is identified by:
         #     stage name, table name, column name

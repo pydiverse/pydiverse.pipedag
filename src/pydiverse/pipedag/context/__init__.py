@@ -5,6 +5,7 @@ from pydiverse.pipedag.context.context import (
     DAGContext,
     StageLockContext,
     TaskContext,
+    default_config_dict,
 )
 from pydiverse.pipedag.context.run_context import (
     FinalTaskState,
@@ -20,4 +21,5 @@ __all__ = [
     "RunContextServer",
     "StageLockContext",
     "FinalTaskState",
+    "default_config_dict",
 ]
