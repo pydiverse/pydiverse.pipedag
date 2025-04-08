@@ -4,7 +4,7 @@ import warnings
 
 import pandas as pd
 
-from pydiverse.pipedag import Stage, Table
+from pydiverse.pipedag import Schema, Stage, Table
 from pydiverse.pipedag.backend.table.base import BaseTableStore, CanResult, TableHook
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.errors import CacheError, StageError
@@ -78,9 +78,13 @@ class DictTableStore(BaseTableStore):
                 f"No table with name '{metadata.name}' found in '{stage.name}' stage"
             ) from None
 
-    def delete_table_from_transaction(self, table: Table):
+    def delete_table_from_transaction(
+        self, table: Table, *, schema: Schema | None = None
+    ):
+        if schema is None:
+            schema = self.get_schema(table.stage.transaction_name)
         try:
-            self.store[table.stage.transaction_name].pop(table.name)
+            self.store[schema.name].pop(table.name)
         except KeyError:
             return
 

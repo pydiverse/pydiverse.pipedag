@@ -81,7 +81,7 @@ def materialize_table(
 
     if drop_if_exists:
         if isinstance(table_store, SQLTableStore):
-            table_store.delete_table_from_transaction(table)
+            table_store.delete_table_from_transaction(table, schema=schema)
         else:
             logger = structlog.get_logger(logger_name="Debug materialize_table")
             logger.warning(

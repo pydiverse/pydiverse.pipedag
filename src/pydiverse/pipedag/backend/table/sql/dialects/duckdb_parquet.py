@@ -247,11 +247,15 @@ class ParquetTableStore(DuckDBTableStore):
         super().init_stage(stage)
         # update cache: this is important since before this stage commits,
         # self._get_read_view_transaction_name() will yield the wrong name
-        schema = self.get_schema(stage.current_name)
-        self.parquet_schema_pathes[schema.name] = self.get_parquet_path(schema)
+        new_schema = self.get_schema(stage.current_name)
+        self.parquet_schema_pathes[new_schema.name] = self.get_parquet_path(new_schema)
+        # The stage.name should still point to opposite transaction schema
+        old_schema = self.get_schema(
+            self._get_read_view_original_transaction_name(stage)
+        )
         self.parquet_schema_pathes[
             self.get_schema(stage.name).name
-        ] = self.get_parquet_path(schema)
+        ] = self.get_parquet_path(old_schema)
         # TODO: for nested stages this might be per stage
         self.parquet_deferred_copy.clear()
         path = self.get_stage_path(stage)
@@ -261,6 +265,10 @@ class ParquetTableStore(DuckDBTableStore):
             table = row[0]
             file_path = path / (table + ".parquet")
             try:
+                self.logger.info(
+                    "Cleaning up parquet file in transaction schema",
+                    file_path=file_path,
+                )
                 os.remove(file_path)
             except FileNotFoundError:
                 self.logger.error(
@@ -352,17 +360,17 @@ class ParquetTableStore(DuckDBTableStore):
                         table.name, schema, self._read_parquet_query(dest_file_path)
                     )
                 )
+            # switch committed transaction path to the new transaction path
+            self.parquet_schema_pathes[
+                self.get_schema(stage.name).name
+            ] = stage_transaction_path
         super().commit_stage(stage)
         # clear table individual parquet pathes since this is not needed after commit
         self.parquet_table_pathes = {}
 
     def _committed_unchanged(self, stage):
         super()._committed_unchanged(stage)
-        # reset the stage path to the original name since schema was not swapped
-        original_transaction_name = self._get_read_view_original_transaction_name(stage)
-        original_schema = self.get_schema(original_transaction_name)
-        schema = self.get_schema(stage.name)
-        self.parquet_schema_pathes[schema.name] = self.get_parquet_path(original_schema)
+        # transaction schema is discarded, so we don't need to copy tables there
         self.parquet_deferred_copy.clear()
 
     def get_parquet_path(self, schema: Schema):
@@ -376,6 +384,8 @@ class ParquetTableStore(DuckDBTableStore):
         # now we assume schema.name == stage.name (any stage with
         # current_name != name should be in self.parquet_schema_pathes)
         transaction_name = self._get_read_view_transaction_name(schema.name)
+        if transaction_name == "":
+            transaction_name = schema.name
         path = self.get_parquet_path(self.get_schema(transaction_name))
         self.parquet_schema_pathes[schema.name] = path
         return path
@@ -384,10 +394,16 @@ class ParquetTableStore(DuckDBTableStore):
         store = ConfigContext.get().store.table_store
         return self.get_parquet_schema_path(store.get_schema(stage.current_name))
 
-    def get_table_path(self, table: Table, file_extension: str = ".parquet") -> Path:
+    def get_table_path(
+        self,
+        table: Table,
+        file_extension: str = ".parquet",
+        lookup_schema: bool = False,
+    ) -> Path:
         store = ConfigContext.get().store.table_store
+        schema_name = table.stage.current_name
         return self.get_table_schema_path(
-            table.name, store.get_schema(table.stage.current_name), file_extension
+            table.name, store.get_schema(schema_name), file_extension
         )
 
     def get_table_schema_path(
@@ -399,8 +415,12 @@ class ParquetTableStore(DuckDBTableStore):
             return self.parquet_table_pathes[(schema.name, table_name)]
         return self.get_parquet_schema_path(schema) / (table_name + file_extension)
 
-    def delete_table_from_transaction(self, table: Table):
-        file_path = self.get_table_path(table)
+    def delete_table_from_transaction(
+        self, table: Table, *, schema: Schema | None = None
+    ):
+        if schema is None:
+            schema = self.get_schema(table.stage.transaction_name)
+        file_path = self.get_table_schema_path(table.name, schema)
         # TODO: think about how to do this with S3
         if file_path.exists():
             os.remove(file_path)
@@ -481,7 +501,7 @@ class PandasTableHook(TableHook[ParquetTableStore]):
         stage_name: str | None,
         as_type: type,
     ):
-        path = store.get_table_path(table)
+        path = store.get_table_path(table, lookup_schema=True)
         df = pd.read_parquet(path)
         import pyarrow.parquet
 
@@ -489,10 +509,33 @@ class PandasTableHook(TableHook[ParquetTableStore]):
         df = df.astype(
             {
                 col: "datetime64[s]"
-                for col, type_ in zip(schema.names, schema.types)
-                if type_ == "date32"
+                for col, type_, dtype in zip(schema.names, schema.types, df.dtypes)
+                if type_ == "date32" and dtype == object
             }
         )
+        if isinstance(as_type, tuple) and len(as_type) == 2 and len(schema.names) > 0:
+            if as_type[1] == "arrow" and not all(
+                hasattr(dtype, "storage") and dtype.storage == "pyarrow"
+                for dtype in df.dtypes
+            ):
+                store.logger.warning(
+                    f"Ignoring storage specialization '{as_type[1]}' for {table.name} "
+                    f"as ParquetTableStore reads pandas the same encoding as it writes"
+                    f" it. This can be changed if need arises.",
+                    as_type=as_type,
+                    dtypes=df.dtypes,
+                )
+            if as_type[1] == "numpy" and any(
+                hasattr(dtype, "storage") and dtype.storage == "pyarrow"
+                for dtype in df.dtypes
+            ):
+                store.logger.warning(
+                    f"Ignoring storage specialization '{as_type[1]}' for {table.name} "
+                    f"as ParquetTableStore reads pandas the same encoding as it writes"
+                    f" it. This can be changed if need arises.",
+                    as_type=as_type,
+                    dtypes=df.dtypes,
+                )
         return df
 
     @classmethod

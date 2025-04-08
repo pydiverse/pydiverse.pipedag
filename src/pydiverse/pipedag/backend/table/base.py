@@ -26,7 +26,7 @@ from pydiverse.pipedag.util.computation_tracing import ComputationTracer
 from pydiverse.pipedag.util.hashing import stable_hash
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag import Stage
+    from pydiverse.pipedag import Schema, Stage
     from pydiverse.pipedag.backend.table.cache.base import BaseTableCache
     from pydiverse.pipedag.materialize.core import MaterializingTask
 
@@ -578,7 +578,9 @@ class BaseTableStore(TableHookResolver, Disposable):
         )
 
     @abstractmethod
-    def delete_table_from_transaction(self, table: Table):
+    def delete_table_from_transaction(
+        self, table: Table, *, schema: Schema | None = None
+    ):
         """Delete a table from the transaction
 
         If the table doesn't exist in the transaction stage, fail silently.

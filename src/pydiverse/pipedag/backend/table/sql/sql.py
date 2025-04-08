@@ -1364,11 +1364,15 @@ class SQLTableStore(BaseTableStore):
         dialect = self.engine.dialect.name
         raise NotImplementedError(f"Not implemented for dialect '{dialect}'.")
 
-    def delete_table_from_transaction(self, table: Table):
+    def delete_table_from_transaction(
+        self, table: Table, *, schema: Schema | None = None
+    ):
+        if schema is None:
+            schema = self.get_schema(table.stage.transaction_name)
         self.execute(
             DropTable(
                 table.name,
-                self.get_schema(table.stage.transaction_name),
+                schema,
                 if_exists=True,
             )
         )

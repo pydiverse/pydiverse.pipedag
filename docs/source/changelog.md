@@ -1,6 +1,9 @@
 # Changelog
 
 ## 0.10.0 (2025-04-dd)
+- Added ParquetTableStore which is based on duckdb SQLTableStore. It stores all tables as parquet files but still
+  references them inside a duckdb database file as views to `FROM read_parquet(file)`
+- DataFramely support
 TODO: test/fix serialization of Table(annotation=) field and consider increasing metadata_version
 
 ## 0.9.10 (2025-03-18)
