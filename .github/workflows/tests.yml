@@ -61,6 +61,7 @@ jobs:
           - py310all
           - py311all
           - py312all
+          - py313all
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}

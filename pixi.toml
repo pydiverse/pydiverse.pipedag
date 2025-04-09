@@ -4,7 +4,7 @@ channels = ["conda-forge"]
 platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"] # "linux-aarch64",
 
 [dependencies]
-python = ">=3.9"
+python = ">=3.9, <3.14"
 pandas = ">=1.5.0, <3"
 SQLAlchemy = ">=1.4.39, <3"
 typing-extensions = ">=4.1.0"
@@ -111,6 +111,8 @@ python = "3.10.*"
 python = "3.11.*"
 [feature.py312.dependencies]
 python = "3.12.*"
+[feature.py313.dependencies]
+python = "3.13.*"
 [feature.pd1.dependencies]
 pandas = ">=1.5.0, <2"
 [feature.pd2.dependencies]
@@ -169,6 +171,7 @@ py39 = ["py39", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1"]
 py310 = ["py310", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1"]
 py311 = ["py311", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1"]
 py312 = ["py312", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1"]
+py313 = ["py313", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1"]
 py39pdsa1 = [
     "py39",
     "dev",
@@ -228,6 +231,19 @@ py311all = [
 ]
 py312all = [
     "py312",
+    "dev",
+    "zookeeper",
+    "all-tests",
+    "pdtransform-new",
+    "filelock",
+    "dask",
+    "prefect",
+    "pd2",
+    "sa2",
+    "snowflake",
+]
+py313all = [
+    "py313",
     "dev",
     "zookeeper",
     "all-tests",
