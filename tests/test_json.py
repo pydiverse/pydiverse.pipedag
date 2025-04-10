@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import datetime as dt
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,12 +48,18 @@ def deep_cmp(a, b):
     return a == b
 
 
-def check(x):
+def check(
+    x, expected_result=None, regex: str | None = None, regex_replace: str | None = None
+):
+    expected_result = expected_result or x
     json_encoder = PipedagJSONEncoder()
     json_decoder = PipedagJSONDecoder()
     y = json_encoder.encode(x)
+    if regex:
+        regex_replace = regex_replace or ""
+        y = re.sub(regex, regex_replace, y, flags=re.MULTILINE)
     z = json_decoder.decode(y)
-    assert deep_cmp(x, z)
+    assert deep_cmp(expected_result, z)
 
 
 def test_json_coder_primitive():
@@ -110,6 +117,38 @@ def test_json_coder_table():
     }
     with _with_dummy_context(stage_name="h"):
         check(x)
+
+
+def test_json_coder_table_fallback():
+    class C:
+        t: dt.datetime
+
+    x = {
+        "a": Table(),
+        "d": Table(name="d", annotation=C.__annotations__["t"]),
+        "e": Table(annotation=C.__annotations__),
+    }
+    expected_result = {
+        "a": Table(),
+        "d": Table(name="d"),
+        "e": Table(),
+    }
+    check(x, expected_result, regex=r'"annotation":[^,]*,', regex_replace="")
+
+
+def test_json_coder_table_fallback2():
+    check(
+        Table(annotation=list[int]),
+        Table(),
+        regex=r'"annotation":[^}]*}[^}]*}[^}]*},',
+        regex_replace="",
+    )
+    check(
+        Table(annotation=dict[str, dt.datetime]),
+        Table(),
+        regex=r'"annotation":[^}]*}[^}]*}[^}]*}[^}]*},',
+        regex_replace="",
+    )
 
 
 def test_json_coder_table_obj_remove():
