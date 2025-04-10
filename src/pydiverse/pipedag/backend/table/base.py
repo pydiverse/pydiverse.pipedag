@@ -339,9 +339,9 @@ class BaseTableStore(TableHookResolver, Disposable):
     # Materialize
 
     def store_table(self, table: Table, task: MaterializingTask | None):
-        super().store_table(table, task)
         if self.local_table_cache:
             self.local_table_cache.store_table(table, task)
+        super().store_table(table, task)
 
     def execute_raw_sql(self, raw_sql: RawSql):
         """Executed raw SQL statements in the associated transaction stage
