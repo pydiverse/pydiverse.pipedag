@@ -378,10 +378,17 @@ hook_args
   pandas
   : dtype_backend
     : The default [dtype backend](https://pandas.pydata.org/docs/reference/arrays.html) to use.
+
+    In both cases, the aim is to avoid `dtype=object` columns in the provided pd.DataFrame tables.
+    That is why date columns are converted to `datetime64[s]`/`pa.date32` and datetimes to 
+    `datetime64[us]`/`pa.time64("us")`. Nanosecond precision is rarely needed and triggers conversion 
+    to object dtype if year < 1677 or >  2262.
     
     : Supported values:
       - `numpy`: Use pandas' nullable extension dtypes for numpy.
       - `arrow`: Use pyarrow backed dataframes.
+
+    (default: 'numpy')
 
 
 local_table_cache

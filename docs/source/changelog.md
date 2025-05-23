@@ -3,7 +3,6 @@
 ## 0.10.0 (2025-04-dd)
 - Added ParquetTableStore which is based on duckdb SQLTableStore. It stores all tables as parquet files but still
   references them inside a duckdb database file as views to `FROM read_parquet(file)`
-- Write local table cache before actual table store
 - ColSpec / DataFramely support based on annotations of parameters and return type of tasks
 - Pandas table hook reads date/datetime columns as 'datetime64[us]' and thus does not need clipping 
   and extra year columns any more
