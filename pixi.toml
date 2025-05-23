@@ -4,6 +4,7 @@ channels = ["conda-forge"]
 platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"] # "linux-aarch64",
 
 [dependencies]
+pydiverse-common = ">=0.1.0,<0.2"
 python = ">=3.9.22,<3.14"
 pandas = ">=1.5.3,<3"
 sqlalchemy = ">=1.4.54,<3"
@@ -71,7 +72,6 @@ pytsql = ">=1.1.4"
 
 [feature.pdtransform-new.dependencies]
 pydiverse-transform = ">=0.3"
-pydiverse-common = ">=0.1.0"
 
 [feature.pdtransform-old.dependencies]
 pydiverse-transform = "<0.2"
