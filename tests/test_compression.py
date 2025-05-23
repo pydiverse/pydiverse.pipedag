@@ -4,8 +4,10 @@ import pytest
 import sqlalchemy as sa
 
 from pydiverse.pipedag import ConfigContext, Flow, Stage, Table, materialize
-from pydiverse.pipedag.backend.table.sql.dialects import (
+from pydiverse.pipedag.backend.table.sql.dialects.ibm_db2 import (
     IBMDB2TableStore,
+)
+from pydiverse.pipedag.backend.table.sql.dialects.mssql import (
     MSSqlTableStore,
 )
 

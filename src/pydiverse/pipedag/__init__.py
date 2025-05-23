@@ -14,8 +14,11 @@ from .core import (
     PipedagConfig,
     Result,
     Stage,
-    Task,
     VisualizationStyle,
+)
+from .core.task import (
+    Task,
+    TaskGetItem,
 )
 from .materialize import (
     input_stage_versions,
@@ -32,6 +35,9 @@ __all__ = [
     "Table",
     "RawSql",
     "Blob",
+    "ExternalTableReference",
+    "Task",
+    "TaskGetItem",
     "GroupNode",
     "VisualizationStyle",
     "Schema",

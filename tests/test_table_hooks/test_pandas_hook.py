@@ -12,7 +12,15 @@ from packaging.version import Version
 
 import tests.util.tasks_library as m
 from pydiverse.common import Dtype
-from pydiverse.pipedag import *
+from pydiverse.pipedag import (
+    AUTO_VERSION,
+    ConfigContext,
+    Flow,
+    Stage,
+    StageLockContext,
+    Table,
+    materialize,
+)
 from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
 

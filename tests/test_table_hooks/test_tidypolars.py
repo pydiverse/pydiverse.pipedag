@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from pydiverse.pipedag import *
+from pydiverse.pipedag import Flow, Stage, Table, materialize
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances

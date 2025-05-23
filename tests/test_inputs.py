@@ -3,14 +3,14 @@ from __future__ import annotations
 import pandas as pd
 import sqlalchemy as sa
 
-from pydiverse.pipedag import *
+from pydiverse.pipedag import ConfigContext, Flow, Stage, StageLockContext, materialize
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateSchema,
     CreateTableAsSelect,
     DropTable,
     InsertIntoSelect,
 )
-from pydiverse.pipedag.container import ExternalTableReference, Schema
+from pydiverse.pipedag.container import ExternalTableReference, RawSql, Schema, Table
 from tests.fixtures.instances import with_instances
 
 # Parameterize all tests in this file with several instance_id configurations

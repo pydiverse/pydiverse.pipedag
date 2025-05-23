@@ -142,7 +142,7 @@ class RunContextServer(IPCServer):
 
     def __enter__(self):
         super().__enter__()
-        from pydiverse.pipedag.backend import LockState
+        from pydiverse.pipedag.backend.lock import LockState
 
         # INITIALIZE EVERYTHING
         with self.lock_manager("_pipedag_setup_"):
@@ -734,7 +734,7 @@ class StageLockStateHandler(Disposable):
         self, stage: Stage, old_state: LockState, new_state: LockState
     ):
         """Internal listener that gets notified when the state of a lock changes"""
-        from pydiverse.pipedag.backend import LockState
+        from pydiverse.pipedag.backend.lock import LockState
         from pydiverse.pipedag.core import Stage
 
         if not isinstance(stage, Stage):

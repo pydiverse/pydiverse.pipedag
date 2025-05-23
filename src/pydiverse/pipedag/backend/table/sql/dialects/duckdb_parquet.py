@@ -18,7 +18,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateViewAsSelect,
     DropView,
 )
-from pydiverse.pipedag.backend.table.sql.dialects import DuckDBTableStore
+from pydiverse.pipedag.backend.table.sql.dialects.duckdb import DuckDBTableStore
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
 from pydiverse.pipedag.context import RunContext
 

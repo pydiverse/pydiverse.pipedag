@@ -4,7 +4,14 @@ from typing import Any
 
 import pytest
 
-from pydiverse.pipedag import *
+from pydiverse.pipedag import (
+    AUTO_VERSION,
+    ConfigContext,
+    Flow,
+    Stage,
+    Table,
+    materialize,
+)
 from pydiverse.pipedag.backend.table.sql.hooks import PolarsTableHook
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
 

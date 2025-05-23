@@ -6,6 +6,7 @@ from .dict import DictTableStore
 from .sql import SQLTableStore
 
 __all__ = [
+    "cache",
     "BaseTableStore",
     "DictTableStore",
     "SQLTableStore",

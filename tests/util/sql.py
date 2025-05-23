@@ -4,7 +4,7 @@ import copy
 
 import sqlalchemy as sa
 
-from pydiverse.pipedag.backend import BaseTableStore
+from pydiverse.pipedag.backend.table import BaseTableStore
 from pydiverse.pipedag.context import ConfigContext
 
 
