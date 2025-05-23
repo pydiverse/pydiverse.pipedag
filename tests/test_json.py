@@ -6,6 +6,8 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from types import GenericAlias
+from typing import get_args, get_origin
 
 import pytest
 import structlog
@@ -33,6 +35,11 @@ def deep_cmp(a, b):
         return a == b
     if isinstance(a, dict):
         return all([deep_cmp(v, b[k]) for k, v in a.items()])
+    if isinstance(a, GenericAlias):
+        base_cmp = get_origin(a) == get_origin(b)
+        return base_cmp and all(
+            [deep_cmp(v, w) for v, w in zip(get_args(a), get_args(b))]
+        )
     if isinstance(a, Iterable):
         return all([deep_cmp(v, w) for v, w in zip(a, b)])
     if hasattr(a, "__dict__"):
