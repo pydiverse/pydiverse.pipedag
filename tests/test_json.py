@@ -140,7 +140,12 @@ def test_json_coder_table_fallback():
         "d": Table(name="d"),
         "e": Table(),
     }
-    check(x, expected_result, regex=r'"annotation":[^,]*,', regex_replace="")
+    check(
+        x,
+        expected_result,
+        regex=r'"annotation":([^,]*{[^}]*(}(?!,)[^}]*)?},|[^,{}]*,)',
+        regex_replace="",
+    )
 
 
 def test_json_coder_table_fallback2():

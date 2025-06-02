@@ -257,7 +257,7 @@ select * from stage_2.task_2_out;
 The `ibm_db` package is only available on the following platforms: linux-64, osx-arm64, win-64.
 
 > [!NOTE]
-> Because of this, the IBM DB2 drivers are only available in the `py312ibm` and `py39ibm`
+> Because of this, the IBM DB2 drivers are only available in the `py312ibm` and `py310ibm`
 > environments.
 > You can run tests using `pixi run -e py312ibm pytest --ibm_db2`.
 

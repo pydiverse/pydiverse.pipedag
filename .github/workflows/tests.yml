@@ -155,7 +155,7 @@ jobs:
         os:
           - ubuntu-latest
         environment:
-          - py39pdsa1all
+          - py310pdsa1all
           - py311pdsa1all
     uses: ./.github/workflows/test.yml
     with:

@@ -22,10 +22,6 @@ class Operation(Enum):
         return self.name
 
 
-def _get_tracer(proxy: ComputationTracerProxy) -> ComputationTracer:
-    return object.__getattribute__(proxy, "_computation_tracer_")
-
-
 class ComputationTracer:
     proxy_type: type[ComputationTracerProxy]
 
@@ -147,6 +143,10 @@ class ComputationTracerProxy:
 
     def __len__(self):
         raise RuntimeError("__len__ is not supported by ComputationTracerProxy")
+
+
+def _get_tracer(proxy: ComputationTracerProxy) -> ComputationTracer:
+    return object.__getattribute__(proxy, "_computation_tracer_")
 
 
 __supported_dunder = {

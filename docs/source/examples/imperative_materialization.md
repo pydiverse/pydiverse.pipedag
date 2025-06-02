@@ -46,8 +46,6 @@ imperative materialization needs to assume that every previously materialized ta
 materialized tables for automatic cache invalidation. 
 
 ```python
-from __future__ import annotations
-
 import tempfile
 
 import pandas as pd
@@ -171,8 +169,6 @@ Imperative materialization also has the advantage that the task stays in the sta
 during the materialization itself:
 
 ```python
-from __future__ import annotations
-
 import tempfile
 
 import sqlalchemy as sa

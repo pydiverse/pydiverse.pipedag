@@ -1,6 +1,6 @@
+# register all SQLTableStore dialects (otherwise, they cannot be selected by DB URL)
 from __future__ import annotations
 
-# register all SQLTableStore dialects (otherwise, they cannot be selected by DB URL)
 from .duckdb import DuckDBTableStore
 from .ibm_db2 import IBMDB2TableStore
 from .mssql import MSSqlTableStore

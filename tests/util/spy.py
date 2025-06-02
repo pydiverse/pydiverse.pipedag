@@ -4,7 +4,7 @@ import copy
 import unittest.mock
 
 from pydiverse.pipedag.core.task import Task, TaskGetItem
-from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 
 
 class PipedagMock:

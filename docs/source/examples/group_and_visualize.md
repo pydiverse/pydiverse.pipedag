@@ -151,8 +151,6 @@ when using an ipython kernel similar to running `conda env create`
 with this [environment.yml](environment.yml).
 
 ```python
-from __future__ import annotations
-
 import tempfile
 
 from pydiverse.pipedag import Flow, Stage, materialize, GroupNode, VisualizationStyle
@@ -212,8 +210,6 @@ For SQLAlchemy >= 2.0, you can use sa.Alias instead of sa.sql.expression.Alias.
 
 This code was used for creating the legend of colors:
 ```python
-from __future__ import annotations
-
 import tempfile
 
 from pydiverse.pipedag import Flow, GroupNode, Stage, VisualizationStyle, materialize

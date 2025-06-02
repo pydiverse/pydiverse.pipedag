@@ -4,7 +4,8 @@ from typing import TYPE_CHECKING, Callable, TypeVar, Union
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Blob, Table
-    from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHookResolver
+    from pydiverse.pipedag.materialize.store import BaseTableStore
+    from pydiverse.pipedag.materialize.table_hook_base import TableHookResolver
 
 
 def decorator_hint(decorator: Callable) -> Callable:

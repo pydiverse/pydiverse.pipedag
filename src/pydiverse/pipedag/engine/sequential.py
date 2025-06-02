@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from pydiverse.pipedag import ExternalTableReference, Table, Task
 from pydiverse.pipedag.context import ConfigContext, RunContext
+from pydiverse.pipedag.core import Subflow
 from pydiverse.pipedag.core.result import Result
 from pydiverse.pipedag.engine.base import (
     OrchestrationEngine,
 )
-
-if TYPE_CHECKING:
-    from pydiverse.pipedag.core import Subflow
 
 
 class SequentialEngine(OrchestrationEngine):

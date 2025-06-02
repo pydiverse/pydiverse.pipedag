@@ -4,7 +4,6 @@ PipeDAG objects get serialized as JSON objects with a special `__pipedag_type__`
 key to identify them when decoding. The associated value encodes the
 type of the object.
 """
-
 from __future__ import annotations
 
 import datetime as dt

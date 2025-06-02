@@ -13,8 +13,6 @@ overwrite the table. However, it also switches automatically to debugging mode w
 the debugger exit from the task function:
 
 ```python
-from __future__ import annotations
-
 import tempfile
 import logging
 
@@ -94,8 +92,6 @@ Furthermore, it is possible to run tasks outside of flow context in case you tak
 dematerialization yourself:
 
 ```python
-from __future__ import annotations
-
 import tempfile
 
 import pandas as pd

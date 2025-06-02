@@ -11,9 +11,9 @@ from packaging.version import Version
 
 import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
 from pydiverse.pipedag import ConfigContext, Stage, Table
-from pydiverse.pipedag.backend.table.base import CanResult, TableHook
-from pydiverse.pipedag.backend.table.cache.base import BaseTableCache
-from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
+from pydiverse.pipedag.materialize.store import BaseTableCache
+from pydiverse.pipedag.materialize.table_hook_base import CanResult, TableHook
 from pydiverse.pipedag.util import normalize_name
 
 

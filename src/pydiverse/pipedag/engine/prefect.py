@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import structlog
 from packaging.specifiers import SpecifierSet
@@ -9,14 +9,12 @@ from packaging.version import Version
 
 from pydiverse.pipedag import ExternalTableReference, Table
 from pydiverse.pipedag.context import ConfigContext, RunContext
+from pydiverse.pipedag.core import Subflow, Task
 from pydiverse.pipedag.core.result import Result
 from pydiverse.pipedag.engine.base import (
     OrchestrationEngine,
 )
 from pydiverse.pipedag.util import requires
-
-if TYPE_CHECKING:
-    from pydiverse.pipedag.core import Subflow, Task
 
 try:
     import prefect
@@ -173,7 +171,7 @@ class PrefectTwoEngine(OrchestrationEngine):
         f: Subflow,
         inputs: dict[Task, ExternalTableReference] | None = None,
     ) -> prefect.Flow:
-        from pydiverse.pipedag.materialize.core import MaterializingTask
+        from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 
         inputs = inputs if inputs is not None else {}
 

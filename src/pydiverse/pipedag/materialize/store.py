@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import uuid
+from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Callable
 
 import structlog
 
-from pydiverse.pipedag import Blob, Stage, Table, backend
+from pydiverse.pipedag import Blob, Schema, Stage, Table
 from pydiverse.pipedag._typing import Materializable, T
 from pydiverse.pipedag.container import RawSql, attach_annotation
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
@@ -13,10 +15,622 @@ from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.core.task import Task, TaskGetItem
 from pydiverse.pipedag.errors import CacheError, DuplicateNameError, StageError
-from pydiverse.pipedag.materialize.cache import TaskCacheInfo
-from pydiverse.pipedag.materialize.core import MaterializingTask
-from pydiverse.pipedag.materialize.metadata import TaskMetadata
+from pydiverse.pipedag.materialize.cache import TaskCacheInfo, lazy_table_cache_key
+from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
+from pydiverse.pipedag.materialize.metadata import (
+    LazyTableMetadata,
+    RawSqlMetadata,
+    TaskMetadata,
+)
+from pydiverse.pipedag.materialize.table_hook_base import TableHookResolver
 from pydiverse.pipedag.util import Disposable, deep_map
+from pydiverse.pipedag.util.hashing import stable_hash
+
+
+class BaseTableStore(TableHookResolver, Disposable):
+    """Table store base class
+
+    The table store is responsible for storing and retrieving various types
+    of tabular data. Additionally, it also has to manage all task metadata,
+    This includes storing it, but also cleaning up stale metadata.
+
+    A store must use a table's name (`table.name`) and stage (`table.stage`)
+    as the primary keys for storing and retrieving it. This means that
+    two different `Table` objects can be used to store and retrieve the same
+    data as long as they have the same name and stage.
+
+    The same is also true for the task metadata where the task `stage`,
+    `version` and `cache_key` act as the primary keys (those values are
+    stored both in the task object and the metadata object).
+
+    To implement the stage transaction and commit mechanism, a technique
+    called schema swapping is used:
+
+    All outputs from materializing tasks get materialized into a temporary
+    empty schema (`stage.transaction_name`) and only if all tasks have
+    finished running *successfully* you swap the 'base schema' (original stage,
+    or cache) with the 'transaction schema'. This is usually done by renaming
+    them.
+
+    """
+
+    def __init__(self):
+        self.logger = structlog.get_logger(logger_name=type(self).__name__)
+        self.local_table_cache: BaseTableCache | None = None
+
+    def setup(self):
+        """Setup function
+
+        This function gets called at the beginning of a flow run.
+        Unlike the __init__ method, a lock is acquired before
+        the setup method gets called to prevent race conditions.
+        """
+
+    # Stage
+
+    @abstractmethod
+    def init_stage(self, stage: Stage):
+        """Initialize a stage transaction
+
+        When working with schema swapping:
+
+        Ensures that the base schema exists (but doesn't clear it) and that
+        the transaction schema exists and is empty.
+        """
+
+    @abstractmethod
+    def commit_stage(self, stage: Stage):
+        """Commit the stage
+
+        When using schema swapping:
+
+        After the schema swap the contents of the base schema should be in the
+        transaction schema, and the contents of the transaction schema in
+        the base schema.
+
+        Additionally, the metadata associated with the transaction schema should
+        replace the metadata of the base schema. The latter can be discarded.
+        """
+
+    # Materialize
+
+    def store_table(self, table: Table, task: MaterializingTask | None):
+        if self.local_table_cache:
+            self.local_table_cache.store_table(table, task)
+        super().store_table(table, task)
+
+    def execute_raw_sql(self, raw_sql: RawSql):
+        """Executed raw SQL statements in the associated transaction stage
+
+        This method is overridden by actual table stores that can handle raw SQL.
+        """
+
+        raise NotImplementedError(
+            "This table store does not support executing raw sql statements"
+        )
+
+    def store_table_lazy(
+        self,
+        table: Table,
+        task: MaterializingTask,
+        task_cache_info: TaskCacheInfo,
+    ):
+        """Lazily stores a table in the associated commit stage
+
+        The same as `store_table()`, with the difference being that if the
+        table object represents a lazy table / query, the store first checks
+        if the same query with the same input (based on `table.cache_key`)
+        has already been executed before. If yes, instead of evaluating
+        the query, it just copies the previous result to the commit stage.
+
+        Used when `lazy = True` is set for a materializing task.
+        """
+        config_context = ConfigContext.get()
+        try:
+            hook = self.get_m_table_hook(table)
+            query_str = hook.lazy_query_str(self, table.obj)
+        except TypeError:
+            self.logger.warning(
+                f"The output table {table.name} given by a"
+                f" {repr(type(table.obj))} of the lazy task {task.name} does"
+                " not provide a query string. Lazy evaluation is not"
+                " possible. Assuming that the table is not cache valid."
+            )
+            # Assign random query string to ensure that task is not cache valid
+            query_str = uuid.uuid4().hex
+
+        if table.assumed_dependencies is None:
+            query_hash = stable_hash("LAZY-TABLE", query_str)
+        else:
+            # include assumed dependencies in query hash for imperative materialize
+            dependencies = config_context.store.json_encoder.encode(
+                table.assumed_dependencies
+            )
+            query_hash = stable_hash("LAZY-TABLE", query_str, dependencies)
+
+        # Store the table
+        try:
+            if task_cache_info.force_task_execution:
+                self.logger.info(
+                    "Forced task execution due to config",
+                    cache_validation=config_context.cache_validation,
+                )
+                raise CacheError("Forced task execution")
+            # Try retrieving the table from the cache and then copying it
+            # to the transaction stage
+            metadata = self.retrieve_lazy_table_metadata(
+                query_hash, task_cache_info.cache_key, table.stage
+            )
+            RunContext.get().trace_hook.query_cache_status(
+                task,
+                table,
+                task_cache_info,
+                query_hash,
+                query_str,
+                cache_metadata=metadata,
+            )
+            RunContext.get().trace_hook.cache_init_transfer(task, table)
+            self.copy_lazy_table_to_transaction(metadata, table)
+            self.logger.info(f"Lazy cache of table '{table.name}' found")
+        except CacheError as e:
+            # Either not found in cache, or copying failed
+            # -> Store using default method
+            self.logger.warning(
+                "Cache miss", table=table.name, stage=table.stage.name, cause=str(e)
+            )
+            TaskContext.get().is_cache_valid = False
+            RunContext.get().trace_hook.query_cache_status(
+                task, table, task_cache_info, query_hash, query_str, cache_valid=False
+            )
+            if task_cache_info.assert_no_materialization:
+                raise AssertionError(
+                    "cache_validation.mode=ASSERT_NO_FRESH_INPUT is a "
+                    "protection mechanism to prevent execution of "
+                    "source tasks to keep pipeline input stable. However,"
+                    "this table was still about to be materialized: "
+                    f"{table.stage.name}.{table.name}"
+                ) from None
+            self.store_table(table, task)
+            RunContext.get().trace_hook.query_complete(task, table)
+
+        # Store table metadata
+        self.store_lazy_table_metadata(
+            LazyTableMetadata(
+                name=table.name,
+                stage=table.stage.name,
+                query_hash=query_hash,
+                task_hash=task_cache_info.cache_key,
+            )
+        )
+
+        # At this point we MUST also update the cache info, so that any downstream
+        # tasks get invalidated if the sql query string changed.
+        table.cache_key = lazy_table_cache_key(task_cache_info.cache_key, query_hash)
+
+    def store_raw_sql(
+        self, raw_sql: RawSql, task: MaterializingTask, task_cache_info: TaskCacheInfo
+    ):
+        """Lazily stores a table in the associated commit stage
+
+        The same as `store_table()`, with the difference being that the store first
+        checks if the same query with the same input (based on `raw_sql.cache_key`)
+        has already been executed before. If yes, instead of evaluating
+        the query, it just copies the previous result to the commit stage.
+        """
+
+        # hacky way to canonicalize query (despite __tmp/__even/__odd suffixes
+        # and alias resolution)
+        import re
+
+        query_str = raw_sql.sql
+        query_str = re.sub(r'["\[\]]', "", query_str)
+        query_str = re.sub(
+            r'(__tmp|__even|__odd)(?=[ \t\n.;"]|$)', "", query_str.lower()
+        )
+
+        query_hash = stable_hash("RAW-SQL", query_str)
+
+        # Store raw sql
+        try:
+            if task_cache_info.force_task_execution:
+                config_context = ConfigContext.get()
+                self.logger.info(
+                    "Forced task execution due to config",
+                    cache_validation=config_context.cache_validation,
+                )
+                raise CacheError("Forced task execution")
+            # Try retrieving the table from the cache and then copying it
+            # to the transaction stage
+            metadata = self.retrieve_raw_sql_metadata(
+                query_hash, task_cache_info.cache_key, raw_sql.stage
+            )
+            self.copy_raw_sql_tables_to_transaction(metadata, raw_sql.stage)
+            self.logger.info(f"Lazy cache of stage '{raw_sql.stage}' found")
+
+            prev_objects = metadata.prev_objects
+            new_objects = metadata.new_objects
+        except CacheError as e:
+            # Either not found in cache, or copying failed
+            # -> Store using default method
+            self.logger.warning("Cache miss for raw-SQL", cause=str(e))
+
+            TaskContext.get().is_cache_valid = False
+            RunContext.get().set_stage_has_changed(task.stage)
+
+            if task_cache_info.assert_no_materialization:
+                raise AssertionError(
+                    "cache_validation.mode=ASSERT_NO_FRESH_INPUT is a "
+                    "protection mechanism to prevent execution of "
+                    "source tasks to keep pipeline input stable. However,"
+                    f"this raw SQL script was still about to be executed: {raw_sql}"
+                ) from None
+
+            prev_objects = self.get_objects_in_stage(raw_sql.stage)
+            self.execute_raw_sql(raw_sql)
+            post_objects = self.get_objects_in_stage(raw_sql.stage)
+
+            # Object names must be sorted to ensure that we can identify the task
+            # again in the future even if the objects get returned in a different order.
+            prev_objects = sorted(prev_objects)
+
+            prev_objects_set = set(prev_objects)
+            new_objects = [o for o in post_objects if o not in prev_objects_set]
+
+        # Store metadata
+        # Attention: Raw SQL statements may only be executed sequentially within
+        #            stage for store.get_objects_in_stage to work
+        self.store_raw_sql_metadata(
+            RawSqlMetadata(
+                prev_objects=prev_objects,
+                new_objects=new_objects,
+                stage=raw_sql.stage.name,
+                query_hash=query_hash,
+                task_hash=task_cache_info.cache_key,
+            )
+        )
+
+        # At this point we MUST also update the cache info, so that any downstream
+        # tasks get invalidated if the sql query string changed.
+        raw_sql.cache_key = lazy_table_cache_key(task_cache_info.cache_key, query_hash)
+
+        # Store new_objects as part of raw_sql.
+        all_table_names = set(self.get_table_objects_in_stage(raw_sql.stage))
+        raw_sql.table_names = sorted(o for o in new_objects if o in all_table_names)
+
+    @abstractmethod
+    def copy_table_to_transaction(self, table: Table):
+        """Copy a table from the base stage to the transaction stage
+
+        This operation MUST not remove the table from the base stage store
+        or modify it in any way.
+
+        :raises CacheError: if the table can't be found in the cache
+        """
+
+    @abstractmethod
+    def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
+        """Copy the lazy table identified by the metadata to the transaction stage of
+        table.
+
+        This operation MUST not remove the table from the base stage or modify
+        it in any way.
+
+        :raises CacheError: if the lazy table can't be found
+        """
+
+    def copy_raw_sql_tables_to_transaction(
+        self, metadata: RawSqlMetadata, stage: Stage
+    ):
+        """Copy all tables identified by the metadata as generated by raw
+        SQL statements to the transaction stage.
+
+        This operation MUST not remove the table from the base stage or modify
+        it in any way.
+
+        :raises CacheError: if the lazy table can't be found
+        """
+        raise NotImplementedError(
+            "This table store does not support executing raw sql statements"
+        )
+
+    @abstractmethod
+    def delete_table_from_transaction(
+        self, table: Table, *, schema: Schema | None = None
+    ):
+        """Delete a table from the transaction
+
+        If the table doesn't exist in the transaction stage, fail silently.
+        """
+
+    def retrieve_table_obj(
+        self,
+        table: Table,
+        as_type: type[T] | None,
+        for_auto_versioning: bool = False,
+    ) -> T:
+        if as_type is None:
+            # Simply return enough information that a user could dematerialize the table
+            # or perform it with some other library.
+            # hint: `schema = table_store.get_schema(table.stage.current_name).get()`
+            return table.name, table.stage.current_name
+
+        if for_auto_versioning:
+            return super().retrieve_table_obj(table, as_type, for_auto_versioning)
+
+        if self.local_table_cache:
+            obj = self.local_table_cache.retrieve_table_obj(table, as_type)
+            if obj is not None:
+                return obj
+
+        obj = super().retrieve_table_obj(table, as_type)
+
+        if self.local_table_cache:
+            t = table.copy_without_obj()
+            t.obj = obj
+            self.local_table_cache.store_input(t, task=None)
+
+        return obj
+
+    # Metadata
+
+    @abstractmethod
+    def store_task_metadata(self, metadata: TaskMetadata, stage: Stage):
+        """Stores the metadata of a task
+
+        The metadata must always be stored in such a way that it is
+        associated with the transaction. Only after a stage has been
+        committed, should it be associated with the base stage / cache.
+        """
+
+    @abstractmethod
+    def retrieve_task_metadata(
+        self, task: MaterializingTask, input_hash: str, cache_fn_hash: str
+    ) -> TaskMetadata:
+        """Retrieve a task's metadata from the store
+
+        :raises CacheError: if no metadata for this task can be found.
+        """
+
+    @abstractmethod
+    def retrieve_all_task_metadata(
+        self, task: MaterializingTask, ignore_position_hashes: bool = False
+    ) -> list[TaskMetadata]:
+        """Retrieves all metadata objects associated with a task from the store
+
+        As long as a metadata entry has the same task and stage name, as well
+        as the same position hash as the `task` object, it should get returned.
+        """
+
+    # Lazy Table Metadata
+
+    @abstractmethod
+    def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
+        """Stores the metadata of a lazy table
+
+        The metadata must always be stored in such a way that it is
+        associated with the transaction. Only after a stage has been
+        committed, should it be associated with the base stage / cache.
+        """
+
+    @abstractmethod
+    def retrieve_lazy_table_metadata(
+        self, query_hash: str, task_hash: str, stage: Stage
+    ) -> LazyTableMetadata:
+        """Retrieve a lazy table's metadata from the store
+
+        :param query_hash: A hash of the query that produced this lazy table
+        :param task_hash: The hash of the task for which we want to retrieve this
+            metadata. This can be used to retrieve the lazy table metadata produced
+            by the same task in a previous run, if the current task is still cache
+            valid.
+        :param stage: The stage in which this lazy table should be.
+        :return: The metadata.
+
+        :raises CacheError: if not metadata that matches the provided inputs was found.
+        """
+
+    def store_raw_sql_metadata(self, metadata: RawSqlMetadata):
+        """Stores the metadata of raw SQL statements
+
+        The metadata must always be stored in such a way that it is
+        associated with the transaction. Only after a stage has been
+        committed, should it be associated with the base stage / cache.
+        """
+        raise NotImplementedError(
+            "This table store does not support executing raw sql statements"
+        )
+
+    def retrieve_raw_sql_metadata(
+        self, query_hash: str, task_hash: str, stage: Stage
+    ) -> RawSqlMetadata:
+        """Retrieve raw SQL metadata from the store
+
+        :param query_hash: A hash of the query that produced this raw sql object
+        :param task_hash: The hash of the task for which we want to retrieve this
+            metadata. This can be used to retrieve the raw sql metadata produced
+            by the same task in a previous run, if the current task is still cache
+            valid.
+        :param stage: The stage associated with the raw sql object.
+        :return: The metadata.
+
+        :raises CacheError: if not metadata that matches the provided inputs was found.
+        """
+        raise NotImplementedError(
+            "This table store does not support executing raw sql statements"
+        )
+
+    # Utility
+
+    @abstractmethod
+    def get_objects_in_stage(self, stage: Stage) -> list[str]:
+        """
+        List all objects that are in the current stage.
+
+        This may include tables but also other database objects like views, stored
+        procedures, functions etc. This function is used to calculate a diff on the
+        table store to determine which objects were produced (or could have been used
+        to produce those objects) when executing RawSQL.
+
+        :param stage: the stage
+        :return: list of object names in the stage at the current point in time.
+        """
+
+    @abstractmethod
+    def get_table_objects_in_stage(self, stage: Stage, include_views=True) -> list[str]:
+        """
+        List all table-like objects that are in the current stage.
+
+        :param stage: the stage
+        :return: list of table-like object names in the stage at
+            the current point in time.
+        """
+
+
+class BaseTableCache(ABC, TableHookResolver, Disposable):
+    def __init__(
+        self,
+        store_input: bool = True,
+        store_output: bool = False,
+        use_stored_input_as_cache: bool = True,
+    ):
+        super().__init__()
+
+        self.logger = structlog.get_logger(logger_name=type(self).__name__)
+
+        self.should_store_input = store_input
+        self.should_store_output = store_output
+        self.should_use_stored_input_as_cache = use_stored_input_as_cache
+
+    def setup(self):
+        """Setup function
+
+        This function gets called at the beginning of a flow run.
+        Unlike the __init__ method, a lock is acquired before
+        the setup method gets called to prevent race conditions.
+        """
+
+    def init_stage(self, stage: Stage):
+        """Initialize a stage
+
+        Gets called before any table is attempted to be stored in the stage.
+        """
+
+    @abstractmethod
+    def clear_cache(self, stage: Stage):
+        """Delete the cache for a specific stage"""
+
+    def store_table(self, table: Table, task: MaterializingTask):
+        if self.should_store_output:
+            return self._store_table(table, task)
+
+    def store_input(self, table: Table, task: MaterializingTask):
+        if self.should_store_input:
+            return self._store_table(table, task)
+
+    def _store_table(self, table: Table, task: MaterializingTask | None) -> bool:
+        """
+        :return: bool flag indicating if storing was successful
+        """
+        try:
+            hook = self.get_m_table_hook(table)
+        except TypeError:
+            return False
+
+        if not RunContext.get().should_store_table_in_cache(table):
+            # Prevent multiple tasks writing at the same time
+            return False
+
+        try:
+            hook.materialize(self, table, table.stage.transaction_name)
+        except TypeError:
+            return False
+        return True
+
+    def retrieve_table_obj(
+        self,
+        table: Table,
+        as_type: type[T],
+        for_auto_versioning: bool = False,
+    ) -> T:
+        assert not for_auto_versioning
+
+        if not self.should_use_stored_input_as_cache:
+            return None
+        if not self._has_table(table, as_type):
+            return None
+        return self._retrieve_table_obj(table, as_type)
+
+    def _retrieve_table_obj(self, table: Table, as_type: type[T]) -> T:
+        try:
+            hook = self.get_r_table_hook(as_type)
+            obj = hook.retrieve(self, table, table.stage.name, as_type)
+            self.logger.info("Retrieved table from local table cache", table=table)
+            return obj
+        except Exception as e:
+            self.logger.warning(
+                "Failed to retrieve table from local table cache",
+                table=table,
+                cause=str(e),
+            )
+            return None
+
+    @abstractmethod
+    def _has_table(self, table: Table, as_type: type) -> bool:
+        """Check if the given table is in the cache"""
+
+
+class BaseBlobStore(Disposable, ABC):
+    """Blob store base class
+
+    A blob (binary large object) store is responsible for storing arbitrary
+    python objects. This can, for example, be done by serializing them using
+    the python ``pickle`` module.
+
+    A store must use a blob's name (``Blob.name``) and stage (``Blob.stage``)
+    as the primary keys for storing and retrieving blobs. This means that
+    two different ``Blob`` objects can be used to store and retrieve the same
+    data as long as they have the same name and stage.
+    """
+
+    @abstractmethod
+    def init_stage(self, stage: Stage):
+        """Initialize a stage and start a transaction"""
+
+    @abstractmethod
+    def commit_stage(self, stage: Stage):
+        """Commit the stage transaction
+
+        Replace the blobs of the base stage with the blobs in the transaction.
+        """
+
+    @abstractmethod
+    def store_blob(self, blob: Blob):
+        """Stores a blob in the associated stage transaction"""
+
+    @abstractmethod
+    def copy_blob_to_transaction(self, blob: Blob):
+        """Copy a blob from the base stage to the transaction
+
+        This operation MUST not remove the blob from the base stage or modify
+        it in any way.
+        """
+
+    @abstractmethod
+    def delete_blob_from_transaction(self, blob: Blob):
+        """Delete a blob from the transaction
+
+        If the blob doesn't exist in the transaction, fail silently.
+        """
+
+    @abstractmethod
+    def retrieve_blob(self, blob: Blob) -> Any:
+        """Loads a blob from the store
+
+        Retrieves the stored python object from the store and returns it.
+        If the stage hasn't yet been committed, the blob must be retrieved
+        from the transaction, else it must be retrieved from the committed
+        stage.
+        """
 
 
 class PipeDAGStore(Disposable):
@@ -32,9 +646,9 @@ class PipeDAGStore(Disposable):
 
     def __init__(
         self,
-        table: backend.table.BaseTableStore,
-        blob: backend.blob.BaseBlobStore,
-        local_table_cache: backend.table.cache.BaseTableCache | None,
+        table: BaseTableStore,
+        blob: BaseBlobStore,
+        local_table_cache: BaseTableCache | None,
     ):
         self.table_store = table
         self.blob_store = blob

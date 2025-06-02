@@ -4,12 +4,11 @@ import pandas as pd
 import pytest
 import sqlalchemy as sa
 
-from pydiverse.pipedag import Blob, ConfigContext, Flow, Stage, Table
+from pydiverse.pipedag import AUTO_VERSION, Blob, ConfigContext, Flow, Stage, Table
 from pydiverse.pipedag.container import RawSql
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.materialize.core import (
-    AUTO_VERSION,
     input_stage_versions,
     materialize,
 )
@@ -728,8 +727,8 @@ def test_cache_validation_mode(
 
     @input_stage_versions(lazy=True, input_type=sa.Table)
     def dummy_copy_inputs(
-        transaction: dict[str, sa.sql.expressions.Alias],
-        other: dict[str, sa.sql.expressions.Alias],
+        transaction: dict[str, sa.sql.selectable.Alias],
+        other: dict[str, sa.sql.selectable.Alias],
     ):
         _ = other  # we cannot make any assumptions on the other stage version
         assert len(transaction) == 0
@@ -737,8 +736,8 @@ def test_cache_validation_mode(
 
     @input_stage_versions(lazy=True, input_type=sa.Table)
     def validate_stage(
-        transaction: dict[str, sa.sql.expressions.Alias],
-        other: dict[str, sa.sql.expressions.Alias],
+        transaction: dict[str, sa.sql.selectable.Alias],
+        other: dict[str, sa.sql.selectable.Alias],
     ):
         _ = other  # we cannot make any assumptions on the other stage version
         get_task_logger().info(f"Transaction tables: {transaction}")
@@ -755,8 +754,8 @@ def test_cache_validation_mode(
 
     @input_stage_versions(lazy=True, input_type=sa.Table)
     def validate_stage2(
-        transaction: dict[str, sa.sql.expressions.Alias],
-        other: dict[str, sa.sql.expressions.Alias],
+        transaction: dict[str, sa.sql.selectable.Alias],
+        other: dict[str, sa.sql.selectable.Alias],
     ):
         # it is expected that we have a "Failed to retrieve"-exception in other stage
         _ = other

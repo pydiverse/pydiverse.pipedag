@@ -14,13 +14,13 @@ import structlog
 from attrs import define, evolve, field, frozen
 from box import Box
 
+from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.util import deep_merge
 from pydiverse.pipedag.util.import_ import import_object, load_object
 from pydiverse.pipedag.util.naming import NameDisambiguator
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Flow, GroupNode, Stage, Task, VisualizationStyle
-    from pydiverse.pipedag._typing import T
     from pydiverse.pipedag.backend import BaseLockManager
     from pydiverse.pipedag.context.run_context import StageLockStateHandler
     from pydiverse.pipedag.engine.base import OrchestrationEngine

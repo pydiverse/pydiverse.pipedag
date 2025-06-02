@@ -24,14 +24,13 @@ from .materialize import (
     input_stage_versions,
     materialize,
 )
-from .materialize.core import AUTO_VERSION
+from .materialize.materializing_task import AUTO_VERSION
 
 __all__ = [
     "Flow",
     "Stage",
     "materialize",
     "input_stage_versions",
-    "AUTO_VERSION",
     "Table",
     "RawSql",
     "Blob",
@@ -45,4 +44,5 @@ __all__ = [
     "PipedagConfig",
     "ConfigContext",
     "StageLockContext",
+    "AUTO_VERSION",
 ]

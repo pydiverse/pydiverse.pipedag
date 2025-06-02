@@ -18,6 +18,7 @@ import attrs
 import msgpack
 import structlog
 
+from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.context.context import (
     BaseAttrsContext,
     BaseContext,
@@ -30,7 +31,6 @@ from pydiverse.pipedag.util import Disposable
 from pydiverse.pipedag.util.ipc import IPCServer
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag._typing import T
     from pydiverse.pipedag.backend import BaseLockManager, LockState
     from pydiverse.pipedag.core import Flow, Stage, Subflow, Task
     from pydiverse.pipedag.materialize import Blob, Table

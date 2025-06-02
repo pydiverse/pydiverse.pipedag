@@ -8,11 +8,6 @@ import sqlalchemy as sa
 
 import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
 from pydiverse.pipedag import ConfigContext, Schema, Stage, Table
-from pydiverse.pipedag.backend.table.base import (
-    AutoVersionSupport,
-    CanResult,
-    TableHook,
-)
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CopySelectTo,
     CreateViewAsSelect,
@@ -21,6 +16,11 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
 from pydiverse.pipedag.backend.table.sql.dialects.duckdb import DuckDBTableStore
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
 from pydiverse.pipedag.context import RunContext
+from pydiverse.pipedag.materialize.table_hook_base import (
+    AutoVersionSupport,
+    CanResult,
+    TableHook,
+)
 
 try:
     import pandas as pd

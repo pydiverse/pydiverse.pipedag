@@ -8,7 +8,7 @@ from pydiverse.pipedag import ConfigContext, Table
 from pydiverse.pipedag.backend import SQLTableStore
 from pydiverse.pipedag.container import Schema
 from pydiverse.pipedag.context import TaskContext
-from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.store import mangle_table_name
 from pydiverse.pipedag.util.hashing import stable_hash
 

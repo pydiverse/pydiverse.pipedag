@@ -11,8 +11,6 @@ current development state against the most recent main branch run.
 Here is an example how this might look like:
 
 ```python
-from __future__ import annotations
-
 import logging
 import tempfile
 

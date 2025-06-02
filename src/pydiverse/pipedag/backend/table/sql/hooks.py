@@ -14,11 +14,6 @@ from packaging.version import Version
 from pydiverse.common import Date, Dtype, PandasBackend
 from pydiverse.pipedag import ConfigContext
 from pydiverse.pipedag._typing import T
-from pydiverse.pipedag.backend.table.base import (
-    AutoVersionSupport,
-    CanResult,
-    TableHook,
-)
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateTableAsSelect,
     InsertIntoSelect,
@@ -29,6 +24,11 @@ from pydiverse.pipedag.backend.table.sql.sql import (
 from pydiverse.pipedag.container import ExternalTableReference, Schema, Table
 from pydiverse.pipedag.context import TaskContext
 from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
+from pydiverse.pipedag.materialize.table_hook_base import (
+    AutoVersionSupport,
+    CanResult,
+    TableHook,
+)
 from pydiverse.pipedag.util.computation_tracing import ComputationTracer
 
 try:
@@ -821,9 +821,11 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
 
 try:
     import tidypolars
+    from tidypolars import Tibble
 except ImportError as e:
     warnings.warn(str(e), ImportWarning)
     tidypolars = None
+    Tibble = None
 
 
 @SQLTableStore.register_table(tidypolars, polars)
@@ -831,14 +833,14 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanResult:
         type_ = type(tbl.obj)
-        return CanResult.new(issubclass(type_, tidypolars.Tibble))
+        return CanResult.new(issubclass(type_, Tibble))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        return type_ == tidypolars.Tibble
+        return type_ == Tibble
 
     @classmethod
-    def materialize(cls, store, table: Table[tidypolars.Tibble], stage_name):
+    def materialize(cls, store, table: Table[Tibble], stage_name):
         t = table.obj
         table = table.copy_without_obj()
         table.obj = t.to_polars()
@@ -852,15 +854,15 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         store: SQLTableStore,
         table: Table,
         stage_name: str | None,
-        as_type: type[tidypolars.Tibble],
-    ) -> tidypolars.Tibble:
+        as_type: type[Tibble],
+    ) -> Tibble:
         polars_hook = store.get_r_table_hook(pl.DataFrame)
         df = polars_hook.retrieve(store, table, stage_name, as_type)
         return tidypolars.from_polars(df)
 
     @classmethod
-    def auto_table(cls, obj: tidypolars.Tibble):
-        # currently, we don't know how to store a table name inside tidypolars tibble
+    def auto_table(cls, obj: Tibble):
+        # currently, we don't know how to store a table name inside tidypolar   s tibble
         return super().auto_table(obj)
 
 

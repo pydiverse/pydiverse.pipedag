@@ -17,8 +17,6 @@ See [best practices around SQL](best_practices_sql) for how to move from raw SQL
 and thus more fine-grained cache invalidation.
 
 ```python
-from __future__ import annotations
-
 from pathlib import Path
 
 import sqlalchemy as sa
