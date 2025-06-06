@@ -105,6 +105,18 @@ instances:
     blob_store:
       blob_store_connection: no_blob
 
+  mssql_columnstore:
+    instance_id: pd_mssql_columnstore
+    table_store:
+      table_store_connection: mssql
+      args:
+        disable_pytsql: true
+        materialization_details:
+          __any__:
+            columnstore: true
+    blob_store:
+      blob_store_connection: no_blob
+
   mssql_pytsql:
     instance_id: pd_mssql_pytsql
     table_store:
