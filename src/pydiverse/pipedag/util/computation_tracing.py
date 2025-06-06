@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import dis
@@ -76,8 +79,7 @@ class ComputationTracer:
 
         return x
 
-    def _monkey_patch(self):
-        ...
+    def _monkey_patch(self): ...
 
     def trace_hash(self) -> str:
         try:

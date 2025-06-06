@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import json
@@ -482,7 +485,7 @@ class SQLTableStore(BaseTableStore):
                 for cur_query in query:
                     if isinstance(cur_query, sa.schema.DDLElement):
                         # Some custom DDL statements contain multiple statements.
-                        # They are all seperated using a special seperator.
+                        # They are all separated using a special separator.
                         query_str = str(
                             cur_query.compile(
                                 self.engine, compile_kwargs={"literal_binds": True}
@@ -560,7 +563,7 @@ class SQLTableStore(BaseTableStore):
 
         :param materialization_details_label:
             A label that can be controlled on table or stage level to reference
-            options layed out in detail in configuration
+            options laid out in detail in configuration
         :return:
             Suffix that is appended to CREATE TABLE statement as string
         """

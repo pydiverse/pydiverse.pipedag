@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import copy
@@ -198,9 +201,9 @@ def test_imperative_materialize_given_config():
         )
     )
     raw_config2 = copy.deepcopy(pipedag_config.raw_config)
-    raw_config2["instances"]["__any__"]["table_store"]["args"][
-        "schema_prefix"
-    ] = "dummy_"
+    raw_config2["instances"]["__any__"]["table_store"]["args"]["schema_prefix"] = (
+        "dummy_"
+    )
     cfg2 = PipedagConfig(raw_config2).get()
     tbl.name = "e"
     with pytest.raises(ValueError, match="Schema prefix and postfix must match"):
@@ -219,9 +222,9 @@ def test_imperative_materialize_given_config():
         )
     )
     raw_config2 = copy.deepcopy(pipedag_config.raw_config)
-    raw_config2["instances"]["__any__"]["table_store"]["args"][
-        "schema_suffix"
-    ] = "_schema"
+    raw_config2["instances"]["__any__"]["table_store"]["args"]["schema_suffix"] = (
+        "_schema"
+    )
     cfg2 = PipedagConfig(raw_config2).get()
     tbl.name = "e"
     with pytest.raises(ValueError, match="Schema prefix and postfix must match"):

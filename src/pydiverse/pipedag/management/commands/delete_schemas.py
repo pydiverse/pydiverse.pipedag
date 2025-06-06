@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import click
@@ -66,9 +69,9 @@ def delete_schemas(
     with config:
         table_store: SQLTableStore = config.store.table_store
 
-        assert isinstance(
-            table_store, SQLTableStore
-        ), "delete-schemas only supported for SQLTableStore"
+        assert isinstance(table_store, SQLTableStore), (
+            "delete-schemas only supported for SQLTableStore"
+        )
 
         prefix = table_store.schema_prefix
         suffix = table_store.schema_suffix

@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import datetime as dt
@@ -345,9 +348,9 @@ def test_pandas_table_hook_postgres_null_string():
 
     assert df["strNA"][0] == ""
     assert pd.isna(df["strNA"][1])
-    assert (
-        df["strNA"].fillna("X")[2] == "\\N"
-    ), "This is a known issue that the string '\\N' is considered NA"
+    assert df["strNA"].fillna("X")[2] == "\\N", (
+        "This is a known issue that the string '\\N' is considered NA"
+    )
 
 
 @with_instances("postgres", "local_table_store")
@@ -432,13 +435,13 @@ class TestPandasCustomHook:
             return df
 
         @materialize(input_type=pd.DataFrame)
-        def verify_cutom(t):
+        def verify_custom(t):
             assert "custom_upload" in t.columns
 
         with Flow() as f:
             with Stage("stage"):
                 t = numpy_input()
-                verify_cutom(t)
+                verify_custom(t)
 
         assert f.run(config=cfg).successful
 
@@ -474,12 +477,12 @@ class TestPandasCustomHook:
             return df
 
         @materialize(input_type=pd.DataFrame)
-        def verify_cutom(t):
+        def verify_custom(t):
             assert "custom_download" in t.columns
 
         with Flow() as f:
             with Stage("stage"):
                 t = numpy_input()
-                verify_cutom(t)
+                verify_custom(t)
 
         assert f.run(config=cfg).successful

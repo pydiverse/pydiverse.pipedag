@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -46,7 +49,7 @@ def raw_sql_bind_schema(
     if stage is not None:
         stage_name = stage.transaction_name if transaction else stage.name
         schema = store.get_schema(stage_name).get()
-        sql = sql.replace("{{%sschema}}" % prefix, schema)
+        sql = sql.replace("{{%sschema}}" % prefix, schema)  # noqa: UP031
     return sql
 
 

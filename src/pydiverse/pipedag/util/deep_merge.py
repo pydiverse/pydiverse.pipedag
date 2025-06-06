@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 """Generic deep update function for nested dictionaries.
 
 Seems to be solved already in various ways (do we like an extra dependency for pydantic.deep_update?)
@@ -5,6 +8,7 @@ https://stackoverflow.com/questions/3232943/update-value-of-a-nested-dictionary-
 But for snippets, license restrictions exist:
 https://www.ictrecht.nl/en/blog/what-is-the-license-status-of-stackoverflow-code-snippets
 """  # noqa: E501
+
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
@@ -13,7 +17,7 @@ from box import Box
 
 
 def deep_merge(x, y, check_enum=False):
-    if type(x) != type(y) and not (isinstance(x, Mapping) and isinstance(y, Mapping)):
+    if type(x) != type(y) and not (isinstance(x, Mapping) and isinstance(y, Mapping)):  # noqa: E721
         raise TypeError(
             f"deep_merge failed due to type mismatch '{x}' (type: {type(x)}) vs. '{y}'"
             f" (type: {type(y)})"

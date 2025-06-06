@@ -2,14 +2,14 @@
 
 This [example](../examples.md) shows how perform interactive development with pydiverse-pipedag.
 
-Pipedag is designed to support execution from Continuous Integration (CI), Pipeline Orchestration User Interface (UI), 
-or Integrated development environment (IDE) on local developer setup. When working with IDE, it supports entry 
-point execution and unit test execution with debugger stepping through tasks, and interactive development at debugger 
-breakpoint. 
+Pipedag is designed to support execution from Continuous Integration (CI), Pipeline Orchestration User Interface (UI),
+or Integrated development environment (IDE) on local developer setup. When working with IDE, it supports entry
+point execution and unit test execution with debugger stepping through tasks, and interactive development at debugger
+breakpoint.
 
-[Imperative materialization](/examples/imperative_materialization) is a handy feature to debug and fix 
+[Imperative materialization](/examples/imperative_materialization) is a handy feature to debug and fix
 materialization problems interactively. You can materialize the same table multiple times if you like. This will simply
-overwrite the table. However, it also switches automatically to debugging mode which will fail the flow after you let 
+overwrite the table. However, it also switches automatically to debugging mode which will fail the flow after you let
 the debugger exit from the task function:
 
 ```python
@@ -81,14 +81,14 @@ if __name__ == "__main__":
     main()
 ```
 
-This is expected to yield the following exception. However, we were successful in interactively fixing the code of our 
+This is expected to yield the following exception. However, we were successful in interactively fixing the code of our
 task.
 
 ```
 RuntimeError: The task lazy_task_1 has been tainted by interactive debugging. Aborting.
 ```
 
-Furthermore, it is possible to run tasks outside of flow context in case you take care of materialization and 
+Furthermore, it is possible to run tasks outside of flow context in case you take care of materialization and
 dematerialization yourself:
 
 ```python

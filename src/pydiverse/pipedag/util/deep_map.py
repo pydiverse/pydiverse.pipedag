@@ -1,8 +1,12 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 """Generic deep map or mutation operations.
 
 Heavily inspired by the builtin copy module of python:
 https://github.com/python/cpython/blob/main/Lib/copy.py
 """
+
 from __future__ import annotations
 
 from typing import Callable
@@ -24,11 +28,11 @@ def deep_map(x, fn: Callable, memo=None):
 
     cls = type(x)
 
-    if cls == list:
+    if cls == list:  # noqa: E721
         y = _deep_map_list(x, fn, memo)
-    elif cls == tuple:
+    elif cls == tuple:  # noqa: E721
         y = _deep_map_tuple(x, fn, memo)
-    elif cls == dict:
+    elif cls == dict:  # noqa: E721
         y = _deep_map_dict(x, fn, memo)
     elif hasattr(cls, "__dataclass_fields__"):
         # reconstruct data classes

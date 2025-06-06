@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 # this code is inspired by https://github.com/dmgass/baseline/ but uses separate JSON
 from __future__ import annotations
 

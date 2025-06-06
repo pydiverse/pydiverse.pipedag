@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import warnings
@@ -156,7 +159,7 @@ class PrefectTwoEngine(OrchestrationEngine):
 
     :param flow_kwargs:
         Optional dictionary of keyword arguments that get passed to the
-        initializer of |@prefect2.flow|_ deecorator.
+        initializer of |@prefect2.flow|_ decorator.
 
     .. |@prefect2.flow| replace:: ``@prefect.flow``
     .. _@prefect2.flow:

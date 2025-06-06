@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import pytest
@@ -25,9 +28,9 @@ def test_run_specific_task(mocker):
         assert all(task_states[t] == expected_state for t in tasks)
 
     def cache():
-        assert (
-            cache_function_call_allowed
-        ), "Cache function call not allowed with disable_cache_function=True"
+        assert cache_function_call_allowed, (
+            "Cache function call not allowed with disable_cache_function=True"
+        )
         return 0
 
     @materialize(lazy=True, cache=cache)

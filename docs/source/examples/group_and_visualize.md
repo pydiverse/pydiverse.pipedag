@@ -28,7 +28,7 @@ You can also use the group to order tasks within a stage with `ordering_barrier=
                 _ = any_task()
 ```
 
-In this [visualization](https://kroki.io/graphviz/svg/eNqlkM1KxDAURvd5ihC3I9SUClLi1p2u1MUwhKRJ2zDXpOYHKeK72zZ0UJkRdLK8X875LleZzouhx3f4HTXuZXDJKhZ90jUKSeasgRSi9jzwEEWnr6avsmscOM_IRbE8WpAa5ZEE0exr1Dobvw1ASA0sGyZ5HEGz4MCoL01krbL8WV6Pr-mpvH94ZOScxs67NPxspHjbGoBVKZRubyTZ4IxEEfb8zcTeWL7gG5xpMkNakV2Nyr8Z6BHFB0LFrxZhRz6bjrDVf8Gl9PIWU4y30Guh2KmjT7IoDLBiN99rQsoDUq4ZXbPqkFVrdsq7LPEJVE7SIQ==) 
+In this [visualization](https://kroki.io/graphviz/svg/eNqlkM1KxDAURvd5ihC3I9SUClLi1p2u1MUwhKRJ2zDXpOYHKeK72zZ0UJkRdLK8X875LleZzouhx3f4HTXuZXDJKhZ90jUKSeasgRSi9jzwEEWnr6avsmscOM_IRbE8WpAa5ZEE0exr1Dobvw1ASA0sGyZ5HEGz4MCoL01krbL8WV6Pr-mpvH94ZOScxs67NPxspHjbGoBVKZRubyTZ4IxEEfb8zcTeWL7gG5xpMkNakV2Nyr8Z6BHFB0LFrxZhRz6bjrDVf8Gl9PIWU4y30Guh2KmjT7IoDLBiN99rQsoDUq4ZXbPqkFVrdsq7LPEJVE7SIQ==)
 case, the tasks outside the group are linked with the group:
 
 ![Visualization of group of tasks within stage with barrier](group_and_visualize02.svg)
@@ -39,7 +39,7 @@ The group style can be configured quite flexibly with passing a [](Visualization
             with Stage("stage1"):
                 _ = any_task()
                 with GroupNode(
-                        "group1", ordering_barrier=True, 
+                        "group1", ordering_barrier=True,
                         style=VisualizationStyle(hide_content=True, box_always_color="#ccccff")
                 ):
                     task1 = task_within_group()
@@ -52,7 +52,7 @@ case, the content of the group is hidden and the color of the box is chosen expl
 
 ![Visualization of group of tasks within stage with hide_content](group_and_visualize03.svg)
 
-The box of groups can be hidden. In case of ordering_barrier=True, barrier tasks are added in [visualization](https://kroki.io/graphviz/svg/eNqdkcFqxCAQhu8-hdjDXrYlmuRQgj0USh9iKcFEk8hOY1BDG0rfva6SQCFs2Xr0m_mc-ZW6t2Ia8Cv-Qq15n8w8Su7trCrk5iaxFmbnla1d7bzoFQ2lTd8aMJaTuywelpEKpasGRHuuUGdG_-sCRKOAJ0OQ-wUUdwa0rFCGT50GWJVCqu6xIUecWsS41F648xGnJnKpVZK8VYhebSQvo7cLfhbWamXxIb390FszT_RAdnzsqu8yRP2h_aDHOkp2DPltBrajKP5Y6lP7W3Yq_xvuNwofc_-EKcYnGJSQnIYuLzTwLGYfGNsYWxmNOQaWbyxfGYsJBVZsrFhZHlcPrNxYubIijvMDyLDdyA==) 
+The box of groups can be hidden. In case of ordering_barrier=True, barrier tasks are added in [visualization](https://kroki.io/graphviz/svg/eNqdkcFqxCAQhu8-hdjDXrYlmuRQgj0USh9iKcFEk8hOY1BDG0rfva6SQCFs2Xr0m_mc-ZW6t2Ia8Cv-Qq15n8w8Su7trCrk5iaxFmbnla1d7bzoFQ2lTd8aMJaTuywelpEKpasGRHuuUGdG_-sCRKOAJ0OQ-wUUdwa0rFCGT50GWJVCqu6xIUecWsS41F648xGnJnKpVZK8VYhebSQvo7cLfhbWamXxIb390FszT_RAdnzsqu8yRP2h_aDHOkp2DPltBrajKP5Y6lP7W3Yq_xvuNwofc_-EKcYnGJSQnIYuLzTwLGYfGNsYWxmNOQaWbyxfGYsJBVZsrFhZHlcPrNxYubIijvMDyLDdyA==)
 instead:
 ```python
         with Flow() as flow:
@@ -104,7 +104,7 @@ instances:
                 group_nodes:
                     my_group1:
                         label: "Group 1"
-                        tasks: 
+                        tasks:
                           - task_within_group
                           - task_within_group2
                         style_tag: my_group_style
@@ -145,9 +145,9 @@ used for tasks and group nodes:
 
 ![Legend of default task and group node colors](color_legend.svg)
 
-The following code is a basis for testing the code snippets from above. 
+The following code is a basis for testing the code snippets from above.
 It can also be executed as [jupyter notebook](https://github.com/pydiverse/pydiverse.pipedag/tree/main/docs/source/examples/group_and_visualize.ipynb)
-when using an ipython kernel similar to running `conda env create` 
+when using an ipython kernel similar to running `conda env create`
 with this [environment.yml](environment.yml).
 
 ```python
@@ -186,7 +186,7 @@ def main():
                 with Stage("stage1"):
                     _ = any_task()
                     with GroupNode(
-                            "group1", ordering_barrier=True, 
+                            "group1", ordering_barrier=True,
                             style=VisualizationStyle(hide_content=True, box_color_always="#ccccff")
                     ):
                         task1 = task_within_group()
@@ -196,7 +196,7 @@ def main():
             # Run flow
             result = flow.run()
             assert result.successful
-            
+
             # you can also visualize the flow explicitly:
             # kroki_url = result.visualize_url()
             # result.visualize()

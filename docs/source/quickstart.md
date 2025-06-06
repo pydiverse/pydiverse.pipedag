@@ -4,7 +4,7 @@
 
 pydiverse.pipedag is distributed on [PyPi](https://pypi.org/project/pydiverse-pipedag/)
 and [Conda-Forge](https://anaconda.org/conda-forge/pydiverse-pipedag).
-To use it, just install it with pip, conda, or pixi. We recommend also installing duckdb since it is used in example 
+To use it, just install it with pip, conda, or pixi. We recommend also installing duckdb since it is used in example
 code:
 
 ```shell
@@ -32,7 +32,7 @@ written with different styles of data transformation code. Examples are:
 Tasks of different styles can be combined in the same flow because pipedag provides the input tables in the format that
 the task expects. Tasks get defined using the {py:func}`@materialize <pydiverse.pipedag.materialize>` decorator.
 
-Within a flow, tasks are grouped into stages. Stages are used to group tasks that are logically related to each other.  
+Within a flow, tasks are grouped into stages. Stages are used to group tasks that are logically related to each other.
 Stages are typically represented by a schema in a database. New tables in such a schema will only be available in case
 all tasks of a stage completed successfully. But don't worry, in case of an error, you will be able to look at the
 partially written new schema, just under a different name.
@@ -129,7 +129,7 @@ This means that everything went as expected.
 
 If you like to connect to a running database, you can find another way of configuring pipedag [here](database_testing.md).
 
-There are various ways to [visualize](/examples/group_and_visualize) your flow which will color encode which 
+There are various ways to [visualize](/examples/group_and_visualize) your flow which will color encode which
 tasks ran, which ones failed, which ones were cache, valid, etc.:
 
 ![Flow visualization example](examples/simple_pipeline01.svg)
@@ -155,18 +155,18 @@ decorator has a parameter called `nout`, which must match the number of elements
 decomposable. Tasks can also return lists and dictionaries. get-item access executed on them on declaration time will
 also just be recorded and lazily evaluated with consuming tasks.
 
-## Materialization, dematerialization, and `input_type` parameter 
+## Materialization, dematerialization, and `input_type` parameter
 
-Please note the `input_type` parameter of the {py:func}`@materialize <pydiverse.pipedag.materialize>` decorator. It is 
+Please note the `input_type` parameter of the {py:func}`@materialize <pydiverse.pipedag.materialize>` decorator. It is
 used to specify the type in which the task likes to process tabular inputs. Pipedag takes care of reading the table from
-the configured table store and to present it to the task in the requested form. The typical table store is a SQL 
+the configured table store and to present it to the task in the requested form. The typical table store is a SQL
 database. Any tabular outputs of the task are written to the table store independent of its form. You can find a list
-of supported input_type choices [here](/backend_types). 
+of supported input_type choices [here](/backend_types).
 
 ## Automatic cache invalidation with `lazy=True`
 
 For SQL tasks, a common input_type is `sqlalchemy.Table`. This would provide SQLAlchemy table references to input tables
-which are already auto-loaded, so they would know about columns and column types of the respective table in the 
+which are already auto-loaded, so they would know about columns and column types of the respective table in the
 database. Ideally, this is combined with `lazy=True`. In this case, the task must produce a SQLAlchemy expression for
 any tabular outputs without executing them. Pipedag can render the query and will only produce a table based on this
 query expression if the query changed or one of the inputs to the task changed.
@@ -175,7 +175,7 @@ query expression if the query changed or one of the inputs to the task changed.
 
 For non-SQL tasks, the `version` parameter of the {py:func}`@materialize <pydiverse.pipedag.materialize>` decorator must
 be used for manual cache invalidation. As long as the version stays the same, it is assumed that the code of the task
-did not materially change and will produce the same outputs given the same inputs. We refrained from automatically 
-inspecting any python code changes since this would break at shared code changes where it is very hard to distinguish 
-material changes. Not setting the version parameter for non-lazy tasks, will result in the task always being called 
+did not materially change and will produce the same outputs given the same inputs. We refrained from automatically
+inspecting any python code changes since this would break at shared code changes where it is very hard to distinguish
+material changes. Not setting the version parameter for non-lazy tasks, will result in the task always being called
 without any cache validity checks.

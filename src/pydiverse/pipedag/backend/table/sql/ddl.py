@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import copy
@@ -1349,7 +1352,7 @@ def _mssql_update_definition(
     return expr.transform_string(definition)
 
 
-STATEMENT_SEPERATOR = "; -- PYDIVERSE-PIPEDAG-SPLIT\n"
+STATEMENT_SEPARATOR = "; -- PYDIVERSE-PIPEDAG-SPLIT\n"
 
 
 def join_ddl_statements(statements, compiler, **kw):
@@ -1361,13 +1364,13 @@ def join_ddl_statements(statements, compiler, **kw):
             statement_strings.append(statement)
         else:
             statement_strings.append(compiler.process(statement, **kw))
-    return STATEMENT_SEPERATOR.join(statement_strings)
+    return STATEMENT_SEPARATOR.join(statement_strings)
 
 
 def split_ddl_statement(statement: str):
     """Split previously combined DDL statements apart"""
     return [
         statement
-        for statement in statement.split(STATEMENT_SEPERATOR)
+        for statement in statement.split(STATEMENT_SEPARATOR)
         if statement.strip() != ""
     ]

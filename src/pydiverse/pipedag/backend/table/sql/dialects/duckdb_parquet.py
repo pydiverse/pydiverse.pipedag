@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import os
@@ -215,10 +218,10 @@ class ParquetTableStore(DuckDBTableStore):
         # whether parquet files of stage are stored in __odd or __even
         # can typically be found in metadata, but firstly we cache this
         # and secondly we modify it for the current stage before commit
-        self.parquet_schema_pathes: dict[str, Path] = {}
+        self.parquet_schema_paths: dict[str, Path] = {}
         # tables may get alias to other transaction slot in case of cache
         # valid tasks
-        self.parquet_table_pathes: dict[tuple[str, str], Path] = {}
+        self.parquet_table_paths: dict[tuple[str, str], Path] = {}
         # remember tables that need to be copied if stage is not unchanged
         self.parquet_deferred_copy: list[Table] = []
 
@@ -248,14 +251,14 @@ class ParquetTableStore(DuckDBTableStore):
         # update cache: this is important since before this stage commits,
         # self._get_read_view_transaction_name() will yield the wrong name
         new_schema = self.get_schema(stage.current_name)
-        self.parquet_schema_pathes[new_schema.name] = self.get_parquet_path(new_schema)
+        self.parquet_schema_paths[new_schema.name] = self.get_parquet_path(new_schema)
         # The stage.name should still point to opposite transaction schema
         old_schema = self.get_schema(
             self._get_read_view_original_transaction_name(stage)
         )
-        self.parquet_schema_pathes[
-            self.get_schema(stage.name).name
-        ] = self.get_parquet_path(old_schema)
+        self.parquet_schema_paths[self.get_schema(stage.name).name] = (
+            self.get_parquet_path(old_schema)
+        )
         # TODO: for nested stages this might be per stage
         self.parquet_deferred_copy.clear()
         path = self.get_stage_path(stage)
@@ -272,8 +275,8 @@ class ParquetTableStore(DuckDBTableStore):
                 os.remove(file_path)
             except FileNotFoundError:
                 self.logger.error(
-                    "Could not remove parquet file which would corresponed to view "
-                    "being cleaned up in transaction schema",
+                    "Could not remove parquet file while deleting corresponding view "
+                    "in transaction schema",
                     file=file_path,
                     view_name=table,
                     stage=stage,
@@ -331,20 +334,20 @@ class ParquetTableStore(DuckDBTableStore):
         )
         original_schema = self.get_schema(original_transaction_name)
         schema = self.get_schema(table.stage.current_name)
-        self.parquet_table_pathes[(schema.name, table.name)] = self.get_parquet_path(
+        self.parquet_table_paths[(schema.name, table.name)] = self.get_parquet_path(
             original_schema
         ) / (table.name + ".parquet")
         self.parquet_deferred_copy.append(table)
 
     def commit_stage(self, stage: Stage):
         schema = self.get_schema(stage.current_name)
-        stage_transaction_path = self.parquet_schema_pathes[schema.name]
+        stage_transaction_path = self.parquet_schema_paths[schema.name]
         # deferred copy of parquet files if stage is not 100% cache valid
         if RunContext.get().has_stage_changed(stage):
             for table in self.parquet_deferred_copy:
                 # remove views which were placed as aliases
                 self.execute(DropView(table.name, schema))
-                src_file_path = self.parquet_table_pathes[(schema.name, table.name)]
+                src_file_path = self.parquet_table_paths[(schema.name, table.name)]
                 dest_file_path = stage_transaction_path / src_file_path.name
                 self.logger.info(
                     "Copying table between transactions",
@@ -361,12 +364,12 @@ class ParquetTableStore(DuckDBTableStore):
                     )
                 )
             # switch committed transaction path to the new transaction path
-            self.parquet_schema_pathes[
-                self.get_schema(stage.name).name
-            ] = stage_transaction_path
+            self.parquet_schema_paths[self.get_schema(stage.name).name] = (
+                stage_transaction_path
+            )
         super().commit_stage(stage)
-        # clear table individual parquet pathes since this is not needed after commit
-        self.parquet_table_pathes = {}
+        # clear table individual parquet paths since this is not needed after commit
+        self.parquet_table_paths = {}
 
     def _committed_unchanged(self, stage):
         super()._committed_unchanged(stage)
@@ -379,15 +382,15 @@ class ParquetTableStore(DuckDBTableStore):
     def get_parquet_schema_path(self, schema: Schema) -> Path:
         # Parquet files are stored in transaction schema while stage.current_name
         # changes to final schema. We resolve a level of indirection in memory.
-        if schema.name in self.parquet_schema_pathes:
-            return self.parquet_schema_pathes[schema.name]
+        if schema.name in self.parquet_schema_paths:
+            return self.parquet_schema_paths[schema.name]
         # now we assume schema.name == stage.name (any stage with
-        # current_name != name should be in self.parquet_schema_pathes)
+        # current_name != name should be in self.parquet_schema_paths)
         transaction_name = self._get_read_view_transaction_name(schema.name)
         if transaction_name == "":
             transaction_name = schema.name
         path = self.get_parquet_path(self.get_schema(transaction_name))
-        self.parquet_schema_pathes[schema.name] = path
+        self.parquet_schema_paths[schema.name] = path
         return path
 
     def get_stage_path(self, stage: Stage):
@@ -411,8 +414,8 @@ class ParquetTableStore(DuckDBTableStore):
     ) -> Path:
         # Parquet files might be stored in other transaction schema in case of cache
         # validity. We resolve a level of indirection in memory.
-        if (schema.name, table_name) in self.parquet_table_pathes:
-            return self.parquet_table_pathes[(schema.name, table_name)]
+        if (schema.name, table_name) in self.parquet_table_paths:
+            return self.parquet_table_paths[(schema.name, table_name)]
         return self.get_parquet_schema_path(schema) / (table_name + file_extension)
 
     def delete_table_from_transaction(
@@ -510,7 +513,7 @@ class PandasTableHook(TableHook[ParquetTableStore]):
             {
                 col: "datetime64[s]"
                 for col, type_, dtype in zip(schema.names, schema.types, df.dtypes)
-                if type_ == "date32" and dtype == object
+                if type_ == "date32" and dtype == object  # noqa: E721
             }
         )
         if isinstance(as_type, tuple) and len(as_type) == 2 and len(schema.names) > 0:

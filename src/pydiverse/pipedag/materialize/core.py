@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import uuid
@@ -38,13 +41,11 @@ def materialize(
     add_input_source: bool = False,
     ordering_barrier: bool | dict[str, Any] = False,
     call_context: Callable[[], Any] | None = None,
-) -> Callable[[CallableT], CallableT | UnboundMaterializingTask]:
-    ...
+) -> Callable[[CallableT], CallableT | UnboundMaterializingTask]: ...
 
 
 @overload
-def materialize(fn: CallableT, /) -> CallableT | UnboundMaterializingTask:
-    ...
+def materialize(fn: CallableT, /) -> CallableT | UnboundMaterializingTask: ...
 
 
 def materialize(
@@ -243,13 +244,11 @@ def input_stage_versions(
     include_views=True,
     lock_source_stages=True,
     pass_args: Iterable[str] = tuple(),
-) -> Callable[[CallableT], CallableT | UnboundMaterializingTask]:
-    ...
+) -> Callable[[CallableT], CallableT | UnboundMaterializingTask]: ...
 
 
 @overload
-def input_stage_versions(fn: CallableT, /) -> CallableT | UnboundMaterializingTask:
-    ...
+def input_stage_versions(fn: CallableT, /) -> CallableT | UnboundMaterializingTask: ...
 
 
 def input_stage_versions(
@@ -361,7 +360,7 @@ def input_stage_versions(
         If true, lock the other stage version when a ConfigContext object is passed to
         this task.
     :param pass_args
-        A list of named arguments that whould be passed from the call to the task
+        A list of named arguments that would be passed from the call to the task
         function. By default, no arguments are passed, and just tables are extracted.
 
     Example
@@ -598,7 +597,7 @@ def input_stage_versions(
                         else f"{ref.stage.name}.{ref.name}"
                     )
                     transaction_dict[key] = obj
-                    # load committed version of stage (either same pipeline instace or
+                    # load committed version of stage (either same pipeline instance or
                     # other)
                     tbl2 = ref.copy_without_obj()
                     tbl2.stage = Stage(
@@ -726,15 +725,15 @@ def input_stage_versions(
         deep_map(args, visitor)
         deep_map(remaining_kwargs, visitor)
         # dictionary keys don't count since we like to be f(config=cfg) to be considered
-        # as not any_data_arguements_collected
-        any_data_arguements_collected = cnt[0] > cfg_cnt[0] + str_dict_keys[0]
+        # as not any_data_arguments_collected
+        any_data_arguments_collected = cnt[0] > cfg_cnt[0] + str_dict_keys[0]
         return (
             stages,
             table_dict,
             blob_dict,
             raw_sqls,
             other_cfg[0],
-            any_data_arguements_collected,
+            any_data_arguments_collected,
         )
 
     return task

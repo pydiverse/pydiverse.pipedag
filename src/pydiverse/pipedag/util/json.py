@@ -1,9 +1,13 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 """Utilities for JSON to support PipeDAG objects
 
 PipeDAG objects get serialized as JSON objects with a special `__pipedag_type__`
 key to identify them when decoding. The associated value encodes the
 type of the object.
 """
+
 from __future__ import annotations
 
 import datetime as dt
@@ -55,9 +59,7 @@ def json_default(o):
     if isinstance(o, Table):
         kwargs = {}
         if o.assumed_dependencies is not None:
-            kwargs[
-                "assumed_dependencies"
-            ] = (
+            kwargs["assumed_dependencies"] = (
                 o.assumed_dependencies
             )  # [json_default(t) for t in o.assumed_dependencies]
         return {

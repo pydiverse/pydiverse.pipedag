@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import threading
@@ -124,7 +127,7 @@ def test_no_lock():
     def create_lock_manager():
         return NoLockManager()
 
-    with pytest.raises(BaseException):
+    with pytest.raises(RuntimeError):
         _test_lock_manager(create_lock_manager)
         pytest.fail("No lock manager MUST fail the lock manager tests")
 

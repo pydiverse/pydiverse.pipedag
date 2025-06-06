@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import copy
@@ -377,7 +380,7 @@ class RawSql:
             schema = stage.current_name
             return RawSql(f\"\"\"
                 CREATE TABLE {schema}.tbl_1 AS SELECT 1 as x;
-                CREATE TABEL {schema}.tbl_2 AS SELECT 2 as x;
+                CREATE TABLE {schema}.tbl_2 AS SELECT 2 as x;
             \"\"\")
 
         @materialize(input_type=sa.Table)
@@ -625,7 +628,7 @@ class ExternalTableReference:
         self.shared_lock_allowed = shared_lock_allowed
 
     def __repr__(self):
-        return f"<ExternalTableReference: {hex(id(self))}" f" (schema: {self.schema})>"
+        return f"<ExternalTableReference: {hex(id(self))} (schema: {self.schema})>"
 
 
 @frozen

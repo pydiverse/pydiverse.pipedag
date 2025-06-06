@@ -1,10 +1,10 @@
 # Simple pipeline
 
 This [example](../examples.md) shows a simple pipeline with a few tasks and stages. It is the same example as used
-in [Database Testing](../database_testing.md) but with a DuckDB connection that does not require `docker-compose` or 
+in [Database Testing](../database_testing.md) but with a DuckDB connection that does not require `docker-compose` or
 `pipedag.yaml`.
 
-It also shows how to unit-test a pipeline by dematerializing tables after running the flow: 
+It also shows how to unit-test a pipeline by dematerializing tables after running the flow:
 `result.get(lazy_1, as_type=pd.DataFrame)`
 
 

@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import copy
@@ -44,5 +47,5 @@ def get_config_with_table_store(
     cfg._config_dict["table_store"]["class"] = table_store_class
     # this actually instantiates the table store
     table_store = cfg.store.table_store
-    assert type(table_store) == table_store_class
+    assert type(table_store) == table_store_class  # noqa: E721
     return cfg

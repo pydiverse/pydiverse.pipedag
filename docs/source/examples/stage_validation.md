@@ -1,11 +1,11 @@
 # Stage Validation
 
-This [example](../examples.md) shows how to implement tasks that receive different versions of the tables in a stage. 
+This [example](../examples.md) shows how to implement tasks that receive different versions of the tables in a stage.
 One application of this is to validate all tables created in a stage with the possibility to compare them against the
-last successfully validated version of this stage (after schema swap). Another is to compare the tables against 
+last successfully validated version of this stage (after schema swap). Another is to compare the tables against
 reference runs of another pipeline instance. For example the main branch might be automatically tested with running the
-pipeline with one instance ID and all branches as well as interactive development might be tested with another instance 
-ID (could also be other user in a per-user instance). In this case, it might be interesting to always compare the 
+pipeline with one instance ID and all branches as well as interactive development might be tested with another instance
+ID (could also be other user in a per-user instance). In this case, it might be interesting to always compare the
 current development state against the most recent main branch run.
 
 Here is an example how this might look like:
@@ -152,7 +152,7 @@ if __name__ == "__main__":
 ```
 For SQLAlchemy >= 2.0, you can use sa.Alias instead of sa.sql.expression.Alias.
 
-Please note, that the validate_stage1 task is executed after all tasks in the stage that are called before it during 
+Please note, that the validate_stage1 task is executed after all tasks in the stage that are called before it during
 flow wiring:
 
 ![Stage Validation Visualization](stage_validation.svg)
@@ -164,7 +164,7 @@ The output shows that the second run has the missing column "c" in table "dfa":
 0   dfa      c  missing [__main__]
 ```
 
-It is also possible to use `@input_stage_versions` to compare against active schema of another pipeline instance. One 
+It is also possible to use `@input_stage_versions` to compare against active schema of another pipeline instance. One
 needs to pass the ConfigContext object for this instance to the `@input_stage_versions` task during wiring.
 
 ```python
@@ -178,7 +178,7 @@ def validate_stage1(tbls: dict[str, sa.Alias], other_tbls: dict[str, sa.Alias],
     # When accessing tables from other_tbls, in the most general case, one should do this by using other_cfg:
     # `dfs = {name:pd.read_sql_table(tbl, con=other_cfg.store.table_store.engine) for name, tbl in other_tbls.items()}`
     # It may be desirable to set up instances such the database can combine cross instance tables in one query. In case
-    # of SQL Server, it is possible to reference tables cross database when using 
+    # of SQL Server, it is possible to reference tables cross database when using
     # `sa.Table("name", sa.Metadata(), schema="<database>.<schama>")`. In other databases like postgres, one can run all
     # pipeline instances with the same database name but use schema_prefix="{instance_id}_" in the config.
     ...
@@ -201,9 +201,9 @@ def main():
     assert result.successful
 ```
 
-Sometimes it is easier to just handle a defined set of tables in an `@input_stage_versions` task. It does not matter 
-how exactly you pass the tables. The task always receives all mentioned tables in the dictionaries known from above. 
-Other inputs to the task passed during wiring are simply discared except for keyword arguments listed in pass_args 
+Sometimes it is easier to just handle a defined set of tables in an `@input_stage_versions` task. It does not matter
+how exactly you pass the tables. The task always receives all mentioned tables in the dictionaries known from above.
+Other inputs to the task passed during wiring are simply discarded except for keyword arguments listed in pass_args
 parameter.
 This works both with and without passing a config context of another pipeline instance.
 

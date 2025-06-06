@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -192,15 +195,15 @@ class IBMDB2TableStore(SQLTableStore):
     def _get_compression(
         self, materialization_details_label: str | None
     ) -> str | list[str] | None:
-        compression: IBMDB2CompressionTypes | list[
-            IBMDB2CompressionTypes
-        ] | None = IBMDB2MaterializationDetails.get_attribute_from_dict(
-            self.materialization_details,
-            materialization_details_label,
-            self.default_materialization_details,
-            "compression",
-            self.strict_materialization_details,
-            self.logger,
+        compression: IBMDB2CompressionTypes | list[IBMDB2CompressionTypes] | None = (
+            IBMDB2MaterializationDetails.get_attribute_from_dict(
+                self.materialization_details,
+                materialization_details_label,
+                self.default_materialization_details,
+                "compression",
+                self.strict_materialization_details,
+                self.logger,
+            )
         )
         if isinstance(compression, list):
             return [c.value for c in compression]
