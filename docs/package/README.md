@@ -6,14 +6,14 @@ A pipeline orchestration library executing tasks within one python session. It t
 (de)materialization, caching and cache invalidation. Blob storage is supported as well for example
 for storing model files.
 
-This is an early stage version 0.x, however, it is already used in real projects. We are happy to receive your 
-feedback as [issues](https://github.com/pydiverse/pydiverse.pipedag/issues) on the GitHub repo. Feel free to also 
+This is an early stage version 0.x, however, it is already used in real projects. We are happy to receive your
+feedback as [issues](https://github.com/pydiverse/pydiverse.pipedag/issues) on the GitHub repo. Feel free to also
 comment on existing issues to extend them to your needs or to add solution ideas.
 
 ## Usage
 
-pydiverse.pipedag can either be installed via pypi with `pip install pydiverse-pipedag duckdb duckdb-engine` or via 
-conda-forge with `conda install pydiverse-pipedag duckdb duckdb-engine -c conda-forge`. If you don't use duckdb for 
+pydiverse.pipedag can either be installed via pypi with `pip install pydiverse-pipedag duckdb duckdb-engine` or via
+conda-forge with `conda install pydiverse-pipedag duckdb duckdb-engine -c conda-forge`. If you don't use duckdb for
 testing, you can obmit it here. However, it is needed to run the following example.
 
 ## Example
@@ -97,20 +97,20 @@ def main():
                 with Stage("stage_1"):
                     lazy_1 = lazy_task_1()
                     a, b = eager_inputs()
-    
+
                 with Stage("stage_2"):
                     lazy_2 = lazy_task_2(lazy_1, b)
                     lazy_3 = lazy_task_3(lazy_2)
                     eager = eager_task(lazy_1, b)
-    
+
                 with Stage("stage_3"):
                     lazy_4 = lazy_task_4(lazy_2)
                 _ = lazy_3, lazy_4, eager  # unused terminal output tables
-    
+
             # Run flow
             result = f.run()
             assert result.successful
-    
+
             # Run in a different way for testing
             with StageLockContext():
                 result = f.run()
@@ -136,7 +136,7 @@ def main():
     ...
 ```
 
-For a more sophisiticated setup with a `pipedag.yaml` configuration file and with a separate database 
+For a more sophisiticated setup with a `pipedag.yaml` configuration file and with a separate database
 (i.e. containerized Postgres), please look [here](https://pydiversepipedag.readthedocs.io/en/latest/database_testing.html).
 
 ## Troubleshooting
@@ -153,6 +153,6 @@ Furthermore, make sure you use 127.0.0.1 instead of localhost. It seems that /et
 
 ### Incompatibility with specific pydiverse.transform Versions
 
-pydiverse.pipedag currently doesn't support pydiverse.transfrom Versions (0.2.0, 0.2.1, 0.2.2), due to major
+pydiverse.pipedag currently doesn't support pydiverse.transform Versions (0.2.0, 0.2.1, 0.2.2), due to major
 differences to pdt 0.2.3 and pdt <0.2.
 However it does still work with pdt <0.2.

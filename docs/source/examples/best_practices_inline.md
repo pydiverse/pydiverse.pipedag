@@ -1,14 +1,14 @@
 # Best practices: inline views, CTEs, and subqueries
 
-The big advantage of relational databases is that we can combine every table with every other table in 
+The big advantage of relational databases is that we can combine every table with every other table in
 a wide range of ways and don't need to worry about how exactly this should be executed. Especially, we
 don't need to estimate resource consumption of various implementation alternatives in order to avoid out
-of memory errors and alike. 
+of memory errors and alike.
 
 Performance wise, however, it is important to understand a bit what the database is doing under the hood.
-The main task they are solving in the 1-100 million row range is to avoid O(n^2) complexity when joining 
-two tables since in theory, a join could combine very row of one table with every row of the other table 
-and only understanding the `ON` and `WHERE` conditions as well as indexes allows to prevent this quadratic 
+The main task they are solving in the 1-100 million row range is to avoid O(n^2) complexity when joining
+two tables since in theory, a join could combine very row of one table with every row of the other table
+and only understanding the `ON` and `WHERE` conditions as well as indexes allows to prevent this quadratic
 explosion.
 
 Query optimizers of relational databases are decades matured, highly sophisticated technology, which can
@@ -21,9 +21,9 @@ one resource of your database and thus also reducing the performance of other us
 **Stop using CTEs, subqueries, and views!**
 
 They may be a means of raw SQL code organization. And to some extent they work fine as intendent. And then comes
-the flap of a butterfly and a query suddenly incurs a slowdown of 10-1000x for no reason. Especially, in the 
+the flap of a butterfly and a query suddenly incurs a slowdown of 10-1000x for no reason. Especially, in the
 1-100 million row range, this plays out most significant. A slowdown from a 5 min query to 3 hours is not uncommon.
-The good news: [programmatic SQL](/examples/best_practices_sql) can be used as an alternative means of SQL code 
+The good news: [programmatic SQL](/examples/best_practices_sql) can be used as an alternative means of SQL code
 organization where the finally assembled query does not contain any CTEs, subqueries, or views any more.
 
 Pydiverse.pipedag can also hide the existence of multiple table materializations within a function that looks like

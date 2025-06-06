@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import hashlib
@@ -55,9 +58,9 @@ class DatabaseLockManager(BaseLockManager):
 
     @classmethod
     def _init_conf_(cls, config: dict[str, Any]):
-        assert (
-            len(config) == 0
-        ), "DatabaseLockManager doesn't take any additional arguments"
+        assert len(config) == 0, (
+            "DatabaseLockManager doesn't take any additional arguments"
+        )
 
         cfg_context = ConfigContext.get()
         return cls.init_from_config_context(cfg_context)

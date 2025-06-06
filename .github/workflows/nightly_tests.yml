@@ -33,8 +33,8 @@ jobs:
         environment:
           - py312
           - py311
-          - py39
-          - py39pdsa1
+          - py310
+          - py310pdsa1
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
@@ -58,7 +58,7 @@ jobs:
           - py312all
           - py311all
           - py310all
-          - py39pdsa1all
+          - py310pdsa1all
           - py311pdsa1all
     uses: ./.github/workflows/test.yml
     with:

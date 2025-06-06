@@ -1,6 +1,10 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import copy
+import typing
 from collections.abc import Iterable
 from functools import total_ordering
 from typing import TYPE_CHECKING, Any, Generic
@@ -16,7 +20,7 @@ from pydiverse.pipedag.util import normalize_name
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core.stage import Stage
-    from pydiverse.pipedag.materialize.core import MaterializingTask
+    from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 
 
 @total_ordering
@@ -68,12 +72,15 @@ class Table(Generic[T]):
         nullable: list[str] | None = None,
         non_nullable: list[str] | None = None,
         materialization_details: str | None = None,
+        annotation: type | None = None,
     ):
+        # state
         self._name = None
         self.stage: Stage | None = None
         self.external_schema: str | None = None
         self.shared_lock_allowed: bool = True
 
+        # arguments
         self.obj = obj
         self.name = name
         self.primary_key = primary_key
@@ -82,6 +89,9 @@ class Table(Generic[T]):
         self.nullable = nullable
         self.non_nullable = non_nullable
         self.materialization_details = materialization_details
+        self.annotation = annotation  # if None, will be set by
+        #                               core.py:attach_annotation() and used by
+        #                               dematerialization hook
 
         # Check that indexes is of type list[list[str]]
         indexes_type_error = TypeError(
@@ -370,7 +380,7 @@ class RawSql:
             schema = stage.current_name
             return RawSql(f\"\"\"
                 CREATE TABLE {schema}.tbl_1 AS SELECT 1 as x;
-                CREATE TABEL {schema}.tbl_2 AS SELECT 2 as x;
+                CREATE TABLE {schema}.tbl_2 AS SELECT 2 as x;
             \"\"\")
 
         @materialize(input_type=sa.Table)
@@ -418,8 +428,8 @@ class RawSql:
 
         # If a task receives a RawSQL object as input, it loads all tables
         # produced by it and makes them available through a dict like interface.
-        self.table_names: list[str] = None  # type: ignore
-        self.loaded_tables: dict[str, Any] = None  # type: ignore
+        self.table_names: list[str] | None = None  # type: ignore
+        self.loaded_tables: dict[str, Any] | None = None  # type: ignore
 
     def __repr__(self):
         stage_name = self.stage.name if self.stage else None
@@ -442,15 +452,15 @@ class RawSql:
 
     def __iter__(self) -> Iterable[str]:
         """Yields all names of tables produced by this RawSql object."""
-        yield from self.table_names
+        yield from (self.table_names or [])
 
     def __contains__(self, table_name: str) -> bool:
         """Check if this RawSql object produced a table with name `table_name`."""
-        return table_name in self.table_names
+        return table_name in (self.table_names or [])
 
     def __getitem__(self, table_name: str):
         """Gets the table produced by this RawSql object with name `table_name`."""
-        if table_name not in self.table_names:
+        if table_name not in (self.table_names or []):
             raise KeyError(f"No table with name '{table_name}' found in RawSql.")
 
         # Did load tables -> __getitem__ should return Table.obj
@@ -466,7 +476,7 @@ class RawSql:
 
     def items(self) -> Iterable[tuple[str, Any]]:
         """Returns pairs of ``(table_name, table)``."""
-        for table_name in self.table_names:
+        for table_name in self.table_names or []:
             yield table_name, self[table_name]
 
     def get(self, table_name: str, default=None):
@@ -618,7 +628,7 @@ class ExternalTableReference:
         self.shared_lock_allowed = shared_lock_allowed
 
     def __repr__(self):
-        return f"<ExternalTableReference: {hex(id(self))}" f" (schema: {self.schema})>"
+        return f"<ExternalTableReference: {hex(id(self))} (schema: {self.schema})>"
 
 
 @frozen
@@ -648,3 +658,34 @@ class Schema:
 
     def __str__(self):
         return self.get()
+
+
+def attach_annotation(annotation: type, arg):
+    """Recursive traversal for attaching type annotations to correct container."""
+    if isinstance(annotation, typing.GenericAlias):
+        anno_origin = typing.get_origin(annotation)
+        anno_args = typing.get_args(annotation)
+        if (
+            issubclass(anno_origin, dict)
+            and len(anno_args) == 2
+            and isinstance(arg, dict)
+        ):
+            for key, value in arg.items():
+                attach_annotation(anno_args[0], key)
+                attach_annotation(anno_args[1], value)
+        elif (
+            issubclass(anno_origin, list)
+            and len(anno_args) == 1
+            and isinstance(arg, Iterable)
+        ):
+            for value in arg:
+                attach_annotation(anno_args[0], value)
+        elif (
+            issubclass(anno_origin, tuple)
+            and isinstance(arg, typing.Sized)
+            and len(anno_args) == len(arg)
+        ):
+            for value, anno in zip(arg, anno_args):
+                attach_annotation(anno, value)
+    if isinstance(arg, (Table, Blob, RawSql)):
+        arg.annotation = annotation

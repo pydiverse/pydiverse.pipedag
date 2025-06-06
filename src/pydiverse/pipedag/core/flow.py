@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import base64
@@ -150,11 +153,11 @@ class Flow:
         for group_node in group_nodes:
             if group_node.entry_barrier_task is not None:
                 explicit_graph.add_node(group_node.entry_barrier_task)
-                # link entry barrier to leafs before
-                before_leafs = group_node.prev_tasks
+                # link entry barrier to leaves before
+                before_leaves = group_node.prev_tasks
                 for task in group_node.prev_tasks:
-                    before_leafs = before_leafs - set(task.input_tasks.values())
-                for task in before_leafs:
+                    before_leaves = before_leaves - set(task.input_tasks.values())
+                for task in before_leaves:
                     explicit_graph.add_edge(task, group_node.entry_barrier_task)
                 # link barrier to source tasks within group node
                 for task in group_node.tasks:
@@ -167,10 +170,10 @@ class Flow:
                 if after_tasks:
                     explicit_graph.add_node(group_node.exit_barrier_task)
                     # link exit barrier to leaf tasks within group node
-                    in_leafs = group_node.tasks
+                    in_leaves = group_node.tasks
                     for task in group_node.tasks:
-                        in_leafs = in_leafs - set(task.input_tasks.values())
-                    for task in in_leafs:
+                        in_leaves = in_leaves - set(task.input_tasks.values())
+                    for task in in_leaves:
                         explicit_graph.add_edge(task, group_node.exit_barrier_task)
                     # link exit barrier to source tasks after group bode
                     for task in after_tasks:

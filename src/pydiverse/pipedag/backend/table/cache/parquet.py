@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import json
@@ -9,10 +12,11 @@ from typing import Any
 import pandas as pd
 from packaging.version import Version
 
+import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
 from pydiverse.pipedag import ConfigContext, Stage, Table
-from pydiverse.pipedag.backend.table.base import TableHook
-from pydiverse.pipedag.backend.table.cache.base import BaseTableCache
-from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
+from pydiverse.pipedag.materialize.store import BaseTableCache
+from pydiverse.pipedag.materialize.table_hook_base import CanResult, TableHook
 from pydiverse.pipedag.util import normalize_name
 
 
@@ -88,8 +92,9 @@ class PandasTableHook(TableHook[ParquetTableCache]):
     pd_version = Version(pd.__version__)
 
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, pd.DataFrame)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        return CanResult.new(issubclass(type_, pd.DataFrame))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -162,19 +167,27 @@ except ImportError:
 @ParquetTableCache.register_table(polars)
 class PolarsTableHook(TableHook[ParquetTableCache]):
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return type_ == polars.dataframe.DataFrame
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        return CanResult.new(issubclass(type_, (polars.DataFrame, polars.LazyFrame)))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        return type_ == polars.dataframe.DataFrame
+        return issubclass(type_, (polars.DataFrame, polars.LazyFrame))
 
     @classmethod
     def materialize(
         cls, store: ParquetTableCache, table: Table[polars.DataFrame], stage_name: str
     ):
         path = store.get_table_path(table, ".parquet")
-        table.obj.write_parquet(path)
+        df = table.obj
+        import polars as pl
+
+        if isinstance(df, pl.LazyFrame):
+            df = df.collect()
+        df.write_parquet(path)
+        # intentionally don't apply annotation checks because they might also be done
+        # within polars table hook of actual table store
 
     @classmethod
     def retrieve(
@@ -185,7 +198,11 @@ class PolarsTableHook(TableHook[ParquetTableCache]):
         as_type: type,
     ):
         path = store.get_table_path(table, ".parquet")
-        return polars.read_parquet(path)
+        df = polars.read_parquet(path)
+        df = sql_hooks._polars_apply_retrieve_annotation(df, table)
+        if issubclass(as_type, polars.LazyFrame):
+            return df.lazy()
+        return df
 
 
 try:
@@ -222,8 +239,17 @@ except ImportError:
 @ParquetTableCache.register_table(pdt_old)
 class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, pdt.Table)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        if not issubclass(type_, pdt.Table):
+            return CanResult.NO
+        from pydiverse.transform.eager import PandasTableImpl
+
+        return (
+            CanResult.YES_BUT_DONT_CACHE
+            if issubclass(type_, PandasTableImpl)
+            else CanResult.NO
+        )
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -243,7 +269,7 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
 
         if isinstance(t._impl, PandasTableImpl):
             table.obj = t >> collect()
-            return store.get_hook_subclass(PandasTableHook).materialize(
+            return store.get_r_table_hook(pd.DataFrame).materialize(
                 store, table, stage_name
             )
 
@@ -260,7 +286,7 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
         from pydiverse.transform.eager import PandasTableImpl
 
         if isinstance(as_type, PandasTableImpl):
-            hook = store.get_hook_subclass(PandasTableHook)
+            hook = store.get_r_table_hook(pd.DataFrame)
             df = hook.retrieve(store, table, stage_name, pd.DataFrame)
             return pdt.Table(PandasTableImpl(table.name, df))
 
@@ -270,14 +296,24 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
 @ParquetTableCache.register_table(pdt_new)
 class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, pdt.Table)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        if not issubclass(type_, pdt.Table):
+            return CanResult.NO
+        from pydiverse.transform._internal.pipe.verbs import build_query
+
+        query = tbl.obj >> build_query()
+        if query is not None:
+            # don't cache if the table is SQL backed
+            return CanResult.NO
+        else:
+            return CanResult.YES_BUT_DONT_CACHE
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        from pydiverse.transform.extended import Pandas
+        from pydiverse.transform.extended import Polars
 
-        return issubclass(type_, Pandas)
+        return issubclass(type_, Polars)
 
     @classmethod
     def materialize(
@@ -292,8 +328,9 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
         table = table.copy_without_obj()
 
         try:
-            table.obj = t >> export(Polars())
-            hook = store.get_hook_subclass(PolarsTableHook)
+            table.obj = t >> export(Polars(lazy=True))
+
+            hook = store.get_m_table_hook(table)
             return hook.materialize(store, table, stage_name)
         except Exception as e:
             raise TypeError(f"Unsupported type {type(t._ast).__name__}") from e
@@ -309,7 +346,9 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
         from pydiverse.transform.extended import Polars
 
         if isinstance(as_type, Polars):
-            hook = store.get_hook_subclass(PandasTableHook)
+            import polars as pl
+
+            hook = store.get_r_table_hook(pl.LazyFrame)
             df = hook.retrieve(store, table, stage_name, pd.DataFrame)
             return pdt.Table(df)
 

@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import itertools
@@ -5,11 +8,11 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+from pydiverse.pipedag import Table
 from pydiverse.pipedag.util.hashing import stable_hash
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag import Table
-    from pydiverse.pipedag.materialize.core import MaterializingTask
+    from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 
 
 class ImperativeMaterializationState:

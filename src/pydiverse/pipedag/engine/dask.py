@@ -1,21 +1,20 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import sys
 import warnings
-from typing import TYPE_CHECKING
 
 import structlog
 
 from pydiverse.pipedag import ExternalTableReference, Table
 from pydiverse.pipedag.context import ConfigContext, RunContext
-from pydiverse.pipedag.core import Result
+from pydiverse.pipedag.core import Result, Subflow, Task
 from pydiverse.pipedag.engine.base import (
     OrchestrationEngine,
 )
 from pydiverse.pipedag.util import requires
-
-if TYPE_CHECKING:
-    from pydiverse.pipedag.core import Subflow, Task
 
 try:
     import dask

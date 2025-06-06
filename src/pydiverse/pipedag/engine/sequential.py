@@ -1,16 +1,15 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
-from typing import TYPE_CHECKING
+from __future__ import annotations
 
 from pydiverse.pipedag import ExternalTableReference, Table, Task
 from pydiverse.pipedag.context import ConfigContext, RunContext
+from pydiverse.pipedag.core import Subflow
 from pydiverse.pipedag.core.result import Result
 from pydiverse.pipedag.engine.base import (
     OrchestrationEngine,
 )
-
-if TYPE_CHECKING:
-    from pydiverse.pipedag.core import Subflow
 
 
 class SequentialEngine(OrchestrationEngine):

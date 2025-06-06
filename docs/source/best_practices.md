@@ -1,8 +1,8 @@
 # Best Practices for data pipelines
 
-The Python community is very concerned with enabling users to stitch together a few code snippets that run as a py file 
+The Python community is very concerned with enabling users to stitch together a few code snippets that run as a py file
 or jupyter notebook. However, in practice, projects trying to extract significant business impact from data analytics
-very quickly reach a size where more sophisticated code organization is needed. On the one hand, this relates to software 
+very quickly reach a size where more sophisticated code organization is needed. On the one hand, this relates to software
 engineering principles like modularization, unit/integration testing, IDE support, CI/CD. On the other hand, data processing
 steps are best organized as a pipeline or graph of steps/tasks. Those data pipelines are the focus of the following
 best practice suggestions:

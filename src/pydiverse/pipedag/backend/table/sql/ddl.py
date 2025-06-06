@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import copy
@@ -19,6 +22,7 @@ __all__ = [
     "InsertIntoSelect",
     "CreateTableWithSuffix",
     "CreateViewAsSelect",
+    "CopySelectTo",
     "CreateAlias",
     "CopyTable",
     "RenameTable",
@@ -151,6 +155,15 @@ class CreateViewAsSelect(DDLElement):
     def __init__(self, name: str, schema: Schema, query: Select | TextClause | sa.Text):
         self.name = name
         self.schema = schema
+        self.query = query
+
+
+class CopySelectTo(DDLElement):
+    def __init__(
+        self, target: str, format_spec: str, query: Select | TextClause | sa.Text
+    ):
+        self.target = target
+        self.format = format_spec
         self.query = query
 
 
@@ -772,6 +785,28 @@ def visit_create_view_as_select(create: CreateViewAsSelect, compiler, **kw):
     return _visit_fill_obj_as_select(create, compiler, "VIEW", kw)
 
 
+@compiles(CopySelectTo)
+def visit_copy_to_as_select(copy: CopySelectTo, compiler, **kw):
+    kw["literal_binds"] = True
+    select = compiler.sql_compiler.process(copy.query, **kw)
+    tick = "'"
+    return (
+        f"COPY (\n{select}\n) TO '{str(copy.target).replace(tick, '')}' "
+        f"WITH (FORMAT {copy.format})"
+    )
+
+
+@compiles(CopySelectTo, "duckdb")
+def visit_copy_to_as_select(copy: CopySelectTo, compiler, **kw):
+    kw["literal_binds"] = True
+    select = compiler.sql_compiler.process(copy.query, **kw)
+    tick = "'"
+    return (
+        f"COPY (\n{select}\n) TO '{str(copy.target).replace(tick, '')}' "
+        f"(FORMAT {copy.format})"
+    )
+
+
 def insert_into_in_query(select_sql, schema, table):
     into = f"INTO {schema}.{table}"
     into_point = None
@@ -1317,7 +1352,7 @@ def _mssql_update_definition(
     return expr.transform_string(definition)
 
 
-STATEMENT_SEPERATOR = "; -- PYDIVERSE-PIPEDAG-SPLIT\n"
+STATEMENT_SEPARATOR = "; -- PYDIVERSE-PIPEDAG-SPLIT\n"
 
 
 def join_ddl_statements(statements, compiler, **kw):
@@ -1329,13 +1364,13 @@ def join_ddl_statements(statements, compiler, **kw):
             statement_strings.append(statement)
         else:
             statement_strings.append(compiler.process(statement, **kw))
-    return STATEMENT_SEPERATOR.join(statement_strings)
+    return STATEMENT_SEPARATOR.join(statement_strings)
 
 
 def split_ddl_statement(statement: str):
     """Split previously combined DDL statements apart"""
     return [
         statement
-        for statement in statement.split(STATEMENT_SEPERATOR)
+        for statement in statement.split(STATEMENT_SEPARATOR)
         if statement.strip() != ""
     ]

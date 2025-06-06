@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import json
@@ -12,7 +15,6 @@ import sqlalchemy as sa
 import sqlalchemy.exc
 
 from pydiverse.pipedag import Stage, Table
-from pydiverse.pipedag.backend.table.base import BaseTableStore
 from pydiverse.pipedag.backend.table.sql.ddl import (
     AddIndex,
     AddPrimaryKey,
@@ -38,12 +40,13 @@ from pydiverse.pipedag.context.context import (
 )
 from pydiverse.pipedag.context.run_context import DeferredTableStoreOp
 from pydiverse.pipedag.errors import CacheError
-from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import (
     LazyTableMetadata,
     RawSqlMetadata,
     TaskMetadata,
 )
+from pydiverse.pipedag.materialize.store import BaseTableStore
 from pydiverse.pipedag.util.hashing import stable_hash
 
 DISABLE_DIALECT_REGISTRATION = "__DISABLE_DIALECT_REGISTRATION"
@@ -482,7 +485,7 @@ class SQLTableStore(BaseTableStore):
                 for cur_query in query:
                     if isinstance(cur_query, sa.schema.DDLElement):
                         # Some custom DDL statements contain multiple statements.
-                        # They are all seperated using a special seperator.
+                        # They are all separated using a special separator.
                         query_str = str(
                             cur_query.compile(
                                 self.engine, compile_kwargs={"literal_binds": True}
@@ -560,7 +563,7 @@ class SQLTableStore(BaseTableStore):
 
         :param materialization_details_label:
             A label that can be controlled on table or stage level to reference
-            options layed out in detail in configuration
+            options laid out in detail in configuration
         :return:
             Suffix that is appended to CREATE TABLE statement as string
         """
@@ -930,21 +933,9 @@ class SQLTableStore(BaseTableStore):
                     )
 
     def _init_stage_read_views(self, stage: Stage):
-        try:
-            with self.engine_connect() as conn:
-                metadata_rows = (
-                    conn.execute(
-                        self.stage_table.select().where(
-                            self.stage_table.c.stage == stage.name
-                        )
-                    )
-                    .mappings()
-                    .one()
-                )
-            cur_transaction_name = metadata_rows["cur_transaction_name"]
-        except (sa.exc.MultipleResultsFound, sa.exc.NoResultFound):
-            cur_transaction_name = ""
+        cur_transaction_name = self._get_read_view_transaction_name(stage.name)
 
+        # swap transaction name
         suffix = "__even" if cur_transaction_name.endswith("__odd") else "__odd"
         new_transaction_name = stage.name + suffix
 
@@ -954,6 +945,24 @@ class SQLTableStore(BaseTableStore):
         # Call schema swap function with updated transaction name
         self._init_stage_schema_swap(stage)
 
+    def _get_read_view_transaction_name(self, schema_name: str):
+        """Returns transaction name where committed tables are stored."""
+        try:
+            with self.engine_connect() as conn:
+                metadata_rows = (
+                    conn.execute(
+                        self.stage_table.select().where(
+                            self.stage_table.c.stage == schema_name
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
+            cur_transaction_name = metadata_rows["cur_transaction_name"]
+        except (sa.exc.MultipleResultsFound, sa.exc.NoResultFound):
+            cur_transaction_name = ""
+        return cur_transaction_name
+
     def commit_stage(self, stage: Stage):
         # If the stage is 100% cache valid, then we just need to update the
         # "in_transaction_schema" column of the metadata tables.
@@ -961,6 +970,7 @@ class SQLTableStore(BaseTableStore):
             self.logger.info("Stage is cache valid", stage=stage)
             with self.engine_connect() as conn:
                 self._commit_stage_update_metadata(stage, conn)
+            self._committed_unchanged(stage)
             return
 
         # Commit normally
@@ -970,6 +980,23 @@ class SQLTableStore(BaseTableStore):
         if stage_commit_technique == StageCommitTechnique.READ_VIEWS:
             return self._commit_stage_read_views(stage)
         raise ValueError(f"Invalid stage commit technique: {stage_commit_technique}")
+
+    def _committed_unchanged(self, stage):
+        # an opportunity for derived classes to take actions
+        pass
+
+    def _get_read_view_original_transaction_name(
+        self, stage, override_transaction_name: str | None = None
+    ):
+        transaction_name = (
+            stage.transaction_name
+            if override_transaction_name is None
+            else override_transaction_name
+        )
+        # undo transaction name assignment
+        suffix = "__even" if transaction_name.endswith("__odd") else "__odd"
+        original_transaction_name = stage.name + suffix
+        return original_transaction_name
 
     def _commit_stage_schema_swap(self, stage: Stage):
         schema = self.get_schema(stage.name)
@@ -1018,7 +1045,9 @@ class SQLTableStore(BaseTableStore):
 
             # Create aliases for all tables in transaction schema
             inspector = sa.inspect(self.engine)
-            for table in inspector.get_table_names(schema=src_schema.get()):
+            for table in inspector.get_table_names(
+                schema=src_schema.get()
+            ) + inspector.get_view_names(schema=src_schema.get()):
                 self.execute(CreateAlias(table, src_schema, table, dest_schema))
 
             # Update metadata
@@ -1104,7 +1133,7 @@ class SQLTableStore(BaseTableStore):
 
         # Copy table via executing a select statement with respective hook
         RunContext.get().trace_hook.cache_pre_transfer(dest_tbl)
-        hook = self.get_m_table_hook(type(dest_tbl.obj))
+        hook = self.get_m_table_hook(dest_tbl)
         hook.materialize(self, dest_tbl, dest_tbl.stage.transaction_name)
         RunContext.get().trace_hook.cache_post_transfer(dest_tbl)
 
@@ -1338,11 +1367,15 @@ class SQLTableStore(BaseTableStore):
         dialect = self.engine.dialect.name
         raise NotImplementedError(f"Not implemented for dialect '{dialect}'.")
 
-    def delete_table_from_transaction(self, table: Table):
+    def delete_table_from_transaction(
+        self, table: Table, *, schema: Schema | None = None
+    ):
+        if schema is None:
+            schema = self.get_schema(table.stage.transaction_name)
         self.execute(
             DropTable(
                 table.name,
-                self.get_schema(table.stage.transaction_name),
+                schema,
                 if_exists=True,
             )
         )

@@ -1,15 +1,19 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import warnings
 
 import pandas as pd
 
-from pydiverse.pipedag import Stage, Table
-from pydiverse.pipedag.backend.table.base import BaseTableStore, TableHook
+from pydiverse.pipedag import Schema, Stage, Table
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.errors import CacheError, StageError
-from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import LazyTableMetadata, TaskMetadata
+from pydiverse.pipedag.materialize.store import BaseTableStore
+from pydiverse.pipedag.materialize.table_hook_base import CanResult, TableHook
 
 
 class DictTableStore(BaseTableStore):
@@ -78,9 +82,13 @@ class DictTableStore(BaseTableStore):
                 f"No table with name '{metadata.name}' found in '{stage.name}' stage"
             ) from None
 
-    def delete_table_from_transaction(self, table: Table):
+    def delete_table_from_transaction(
+        self, table: Table, *, schema: Schema | None = None
+    ):
+        if schema is None:
+            schema = self.get_schema(table.stage.transaction_name)
         try:
-            self.store[table.stage.transaction_name].pop(table.name)
+            self.store[schema.name].pop(table.name)
         except KeyError:
             return
 
@@ -138,8 +146,9 @@ class DictTableStore(BaseTableStore):
 @DictTableStore.register_table(pd)
 class PandasTableHook(TableHook[DictTableStore]):
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, pd.DataFrame)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        return CanResult.new(issubclass(type_, pd.DataFrame))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -172,11 +181,25 @@ except ImportError as e:
 @DictTableStore.register_table(pdt)
 class PydiverseTransformTableHook(TableHook[DictTableStore]):
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, pdt.Table)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        from pydiverse.transform._internal.pipe.verbs import build_query
+
+        query = tbl.obj >> build_query()
+        if query is None:
+            # SQL is not supported
+            return CanResult.NO
+        else:
+            # this error is expected for eager backend
+            type_ = type(tbl.obj)
+            return (
+                CanResult.YES_BUT_DONT_CACHE
+                if issubclass(type_, pdt.Table)
+                else CanResult.NO
+            )
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
+        # TODO: this is old pydiverse transform. This needs to be updated!
         from pydiverse.transform.eager import PandasTableImpl
 
         return issubclass(type_, PandasTableImpl)

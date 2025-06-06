@@ -1,13 +1,13 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
 
 from pydiverse.pipedag import ExternalTableReference, Task
+from pydiverse.pipedag.core import Result, Subflow
 from pydiverse.pipedag.util import Disposable
-
-if TYPE_CHECKING:
-    from pydiverse.pipedag.core import Result, Subflow
 
 
 class OrchestrationEngine(Disposable, ABC):

@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 from abc import ABC
@@ -24,6 +27,7 @@ def start_worker(
     # The following code meant to do this, but prevents tests from running at all.
     # # register dummy terminal reporter since it is needed by pytest even with
     # # plugins:"no:terminal" option
+    # from _pytest.terminal import TerminalReporter
     # terminal_reporter = TerminalReporter(config, DontPrint())
     # config.pluginmanager.register(terminal_reporter, "terminalreporter")
 

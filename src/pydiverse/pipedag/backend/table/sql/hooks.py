@@ -1,20 +1,22 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
-import datetime
 import re
 import time
+import typing
 import warnings
 from typing import Any
 
-import pandas as pd
 import sqlalchemy as sa
 import sqlalchemy.exc
 import structlog
 from packaging.version import Version
 
+from pydiverse.common import Date, Dtype, PandasBackend
 from pydiverse.pipedag import ConfigContext
 from pydiverse.pipedag._typing import T
-from pydiverse.pipedag.backend.table.base import AutoVersionSupport, TableHook
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateTableAsSelect,
     InsertIntoSelect,
@@ -22,24 +24,69 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
 from pydiverse.pipedag.backend.table.sql.sql import (
     SQLTableStore,
 )
-from pydiverse.pipedag.backend.table.util import (
-    DType,
-    PandasDTypeBackend,
-)
 from pydiverse.pipedag.container import ExternalTableReference, Schema, Table
 from pydiverse.pipedag.context import TaskContext
 from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
+from pydiverse.pipedag.materialize.table_hook_base import (
+    AutoVersionSupport,
+    CanResult,
+    TableHook,
+)
 from pydiverse.pipedag.util.computation_tracing import ComputationTracer
 
+try:
+    import polars as pl
+except ImportError:
+    pl = None
+
 # region SQLALCHEMY
+
+
+def _polars_apply_retrieve_annotation(df, table, intentionally_empty: bool = False):
+    try:
+        import dataframely as dy
+
+        if isinstance(table.annotation, typing.GenericAlias) and issubclass(
+            typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
+        ):
+            anno_args = typing.get_args(table.annotation)
+            if len(anno_args) == 1:
+                column_spec = anno_args[0]
+                if issubclass(column_spec, dy.Schema | dy.Collection):
+                    df = column_spec.cast(df)
+    except ImportError:
+        # If dataframely is not installed, we can't apply the annotation.
+        pass
+    return df
+
+
+def _polars_apply_materialize_annotation(df, table):
+    try:
+        import dataframely as dy
+
+        if isinstance(table.annotation, typing.GenericAlias) and issubclass(
+            typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
+        ):
+            anno_args = typing.get_args(table.annotation)
+            if len(anno_args) == 1:
+                column_spec = anno_args[0]
+                if issubclass(column_spec, dy.Schema | dy.Collection):
+                    df = column_spec.validate(df, cast=True)
+    except ImportError:
+        # If dataframely is not installed, we can't apply the annotation.
+        pass
+    return df
 
 
 @SQLTableStore.register_table()
 class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(
-            type_, (sa.sql.expression.TextClause, sa.sql.expression.Selectable)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        return CanResult.new(
+            issubclass(
+                type_, (sa.sql.expression.TextClause, sa.sql.expression.Selectable)
+            )
         )
 
     @classmethod
@@ -57,9 +104,9 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         table: Table[sa.sql.expression.TextClause | sa.sql.expression.Selectable],
         stage_name,
     ):
-        obj = table.obj
+        query = table.obj
         if isinstance(table.obj, (sa.Table, sa.sql.expression.Alias)):
-            obj = sa.select("*").select_from(table.obj)
+            query = sa.select("*").select_from(table.obj)
             tbl = table.obj if isinstance(table.obj, sa.Table) else table.obj.original
             source_tables = [
                 dict(
@@ -95,45 +142,83 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         )
         unlogged = store.get_unlogged(resolve_materialization_details_label(table))
         if store.dialect_requests_empty_creation(table, is_sql=True):
-            limit_query = store.get_limit_query(obj, rows=0)
-            store.execute(
-                CreateTableAsSelect(
-                    table.name,
-                    schema,
-                    limit_query,
-                    unlogged=unlogged,
-                    suffix=suffix,
-                )
+            cls._create_table_as_select_empty_insert(
+                table, schema, query, source_tables, store, suffix, unlogged
             )
-            store.add_indexes_and_set_nullable(table, schema, on_empty_table=True)
-            statements = store.lock_table(table, schema)
-            statements += store.lock_source_tables(source_tables)
-            statements += [
-                InsertIntoSelect(
-                    table.name,
-                    schema,
-                    obj,
-                )
-            ]
-            store.execute(
-                statements,
-                truncate_printed_select=True,
-            )
-            store.add_indexes_and_set_nullable(table, schema, on_empty_table=False)
         else:
-            statements = store.lock_source_tables(source_tables)
-            statements += [
-                CreateTableAsSelect(
-                    table.name,
-                    schema,
-                    obj,
-                    unlogged=unlogged,
-                    suffix=suffix,
-                )
-            ]
-            store.execute(statements)
-            store.add_indexes_and_set_nullable(table, schema)
+            cls._create_table_as_select(
+                table, schema, query, source_tables, store, suffix, unlogged
+            )
         store.optional_pause_for_db_transactionality("table_create")
+
+    @classmethod
+    def _create_table_as_select(
+        cls, table, schema, query, source_tables, store, suffix, unlogged
+    ):
+        statements = store.lock_source_tables(source_tables)
+        statements += cls._create_as_select_statements(
+            table.name, schema, query, store, suffix, unlogged
+        )
+        store.execute(statements)
+        store.add_indexes_and_set_nullable(table, schema)
+
+    @classmethod
+    def _create_table_as_select_empty_insert(
+        cls, table, schema, query, source_tables, store, suffix, unlogged
+    ):
+        limit_query = store.get_limit_query(query, rows=0)
+        store.execute(
+            cls._create_as_select_statements(
+                table.name, schema, limit_query, store, suffix, unlogged
+            )
+        )
+        store.add_indexes_and_set_nullable(table, schema, on_empty_table=True)
+        statements = store.lock_table(table, schema)
+        statements += store.lock_source_tables(source_tables)
+        statements += cls._insert_as_select_statements(table.name, schema, query, store)
+        store.execute(
+            statements,
+            truncate_printed_select=True,
+        )
+        store.add_indexes_and_set_nullable(table, schema, on_empty_table=False)
+
+    @classmethod
+    def _create_as_select_statements(
+        cls,
+        table_name: str,
+        schema: Schema,
+        query: sa.Select | sa.TextClause | sa.Text,
+        store: SQLTableStore,
+        suffix: str,
+        unlogged: bool,
+    ):
+        _ = store
+        return [
+            CreateTableAsSelect(
+                table_name,
+                schema,
+                query,
+                unlogged=unlogged,
+                suffix=suffix,
+            )
+        ]
+
+    @classmethod
+    def _insert_as_select_statements(
+        cls,
+        table_name: str,
+        schema: Schema,
+        query: sa.Select | sa.TextClause | sa.Text,
+        store: SQLTableStore,
+    ):
+        _ = store
+        return [
+            InsertIntoSelect(
+                table_name,
+                schema,
+                query,
+            )
+        ]
 
     @classmethod
     def retrieve(
@@ -174,8 +259,9 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 @SQLTableStore.register_table()
 class ExternalTableReferenceHook(TableHook[SQLTableStore]):
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, ExternalTableReference)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        return CanResult.new(issubclass(type_, ExternalTableReference))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -218,6 +304,10 @@ class ExternalTableReferenceHook(TableHook[SQLTableStore]):
 # endregion
 
 # region PANDAS
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
 
 
 @SQLTableStore.register_table(pd)
@@ -240,7 +330,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         df: pd.DataFrame,
         name: str,
         schema: str,
-        dtypes: dict[str, DType],
+        dtypes: dict[str, Dtype],
         conn: sa.Connection,
         early: bool,
     ):
@@ -260,7 +350,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def download_table(
-        cls, query: Any, conn: sa.Connection, dtypes: dict[str, DType] | None = None
+        cls, query: Any, conn: sa.Connection, dtypes: dict[str, Dtype] | None = None
     ) -> pd.DataFrame:
         """
         Provide hook that allows to override the default
@@ -277,8 +367,9 @@ class PandasTableHook(TableHook[SQLTableStore]):
         return df
 
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, pd.DataFrame)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        return CanResult.new(issubclass(type_, pd.DataFrame))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -308,7 +399,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
     def materialize_(
         cls,
         df: pd.DataFrame,
-        dtypes: dict[str:DType] | None,
+        dtypes: dict[str:Dtype] | None,
         store: SQLTableStore,
         table: Table[Any],
         schema: Schema,
@@ -316,7 +407,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         """Helper function that can be invoked by other hooks"""
         if dtypes is None:
             dtypes = {
-                name: DType.from_pandas(dtype) for name, dtype in df.dtypes.items()
+                name: Dtype.from_pandas(dtype) for name, dtype in df.dtypes.items()
             }
 
         for col, dtype in dtypes.items():
@@ -324,7 +415,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
             # -> Temporarily convert all dates to objects
             # See: https://github.com/pandas-dev/pandas/issues/53854
             # TODO: Remove this once pandas 2.1 gets released (fixed by #53856)
-            if dtype == DType.DATE:
+            if dtype == Date():
                 df[col] = df[col].astype(object)
 
         cls._execute_materialize(
@@ -336,7 +427,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         )
 
     @classmethod
-    def _get_dialect_dtypes(cls, dtypes: dict[str, DType], table: Table[pd.DataFrame]):
+    def _get_dialect_dtypes(cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame]):
         _ = table
         return {name: dtype.to_sql() for name, dtype in dtypes.items()}
 
@@ -347,7 +438,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         df: pd.DataFrame,
         table: Table[pd.DataFrame],
         schema: Schema,
-        dtypes: dict[str, DType],
+        dtypes: dict[str, Dtype],
     ):
         df[:0].to_sql(
             table.name,
@@ -364,7 +455,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         store: SQLTableStore,
         table: Table[pd.DataFrame],
         schema: Schema,
-        dtypes: dict[str, DType],
+        dtypes: dict[str, Dtype],
     ):
         dtypes = cls._get_dialect_dtypes(dtypes, table)
         if table.type_map:
@@ -421,7 +512,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         elif isinstance(as_type, dict):
             backend_str = as_type["backend"]
 
-        backend = PandasDTypeBackend(backend_str)
+        backend = PandasBackend(backend_str)
 
         # Retrieve
         query, dtypes = cls._build_retrieve_query(store, table, stage_name, backend)
@@ -434,14 +525,14 @@ class PandasTableHook(TableHook[SQLTableStore]):
         store: SQLTableStore,
         table: Table,
         stage_name: str | None,
-        backend: PandasDTypeBackend,
-    ) -> tuple[Any, dict[str, DType]]:
+        backend: PandasBackend,
+    ) -> tuple[Any, dict[str, Dtype]]:
         table_name, schema = store.resolve_alias(table, stage_name)
 
         sql_table = store.reflect_table(table_name, schema).alias("tbl")
 
         cols = {col.name: col for col in sql_table.columns}
-        dtypes = {name: DType.from_sql(col.type) for name, col in cols.items()}
+        dtypes = {name: Dtype.from_sql(col.type) for name, col in cols.items()}
 
         cols, dtypes = cls._adjust_cols_retrieve(cols, dtypes, backend)
 
@@ -450,59 +541,19 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def _adjust_cols_retrieve(
-        cls, cols: dict, dtypes: dict, backend: PandasDTypeBackend
+        cls, cols: dict, dtypes: dict, backend: PandasBackend
     ) -> tuple[dict, dict]:
-        if backend == PandasDTypeBackend.ARROW:
-            return cols, dtypes
-
-        assert backend == PandasDTypeBackend.NUMPY
-
-        # Pandas datetime64[ns] can represent dates between 1678 AD - 2262 AD.
-        # As such, when reading dates from a database, we must ensure that those
-        # dates don't overflow the range of representable dates by pandas.
-        # This is done by clipping the date to a predefined range and adding a
-        # years column.
-
-        res_cols = cols.copy()
-        res_dtypes = dtypes.copy()
-
-        for name, col in cols.items():
-            if isinstance(col.type, (sa.Date, sa.DateTime)):
-                if isinstance(col.type, sa.Date):
-                    min_val = datetime.date(1700, 1, 1)
-                    max_val = datetime.date(2200, 1, 1)
-                elif isinstance(col.type, sa.DateTime):
-                    min_val = datetime.datetime(1700, 1, 1, 0, 0, 0)
-                    max_val = datetime.datetime(2200, 1, 1, 0, 0, 0)
-                else:
-                    raise
-
-                # Year column
-                year_col_name = f"{name}_year"
-                if year_col_name not in cols:
-                    year_col = sa.cast(sa.func.extract("year", col), sa.Integer)
-                    year_col = year_col.label(year_col_name)
-                    res_cols[year_col_name] = year_col
-                    res_dtypes[year_col_name] = DType.INT16
-
-                # Clamp date range
-                clamped_col = sa.case(
-                    (col.is_(None), None),
-                    (col < min_val, min_val),
-                    (col > max_val, max_val),
-                    else_=col,
-                ).label(name)
-                res_cols[name] = clamped_col
-
-        return res_cols, res_dtypes
+        # in earlier times pandas only supported datetime64[ns] and thus we implemented
+        # clipping in this function to avoid the creation of dtype=object columns
+        return cols, dtypes
 
     @classmethod
     def _execute_query_retrieve(
         cls,
         store: SQLTableStore,
         query: Any,
-        dtypes: dict[str, DType],
-        backend: PandasDTypeBackend,
+        dtypes: dict[str, Dtype],
+        backend: PandasBackend,
     ) -> pd.DataFrame:
         dtypes = {name: dtype.to_pandas(backend) for name, dtype in dtypes.items()}
 
@@ -565,9 +616,11 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         return df
 
     @classmethod
-    def can_materialize(cls, type_) -> bool:
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        # there is a separate hook for LazyFrame
+        type_ = type(tbl.obj)
         # attention: tidypolars.Tibble is subclass of polars DataFrame
-        return type_ == polars.DataFrame
+        return CanResult.new(issubclass(type_, polars.DataFrame))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -587,17 +640,31 @@ class PolarsTableHook(TableHook[SQLTableStore]):
                 f"Writing table '{schema.get()}.{table.name}'", table_obj=table.obj
             )
 
-        dtypes = dict(zip(df.columns, map(DType.from_polars, df.dtypes)))
+        dtypes = dict(zip(df.columns, map(Dtype.from_polars, df.dtypes)))
 
-        pd_df = df.to_pandas(use_pyarrow_extension_array=True, zero_copy_only=True)
-        pandas_hook = store.get_hook_subclass(PandasTableHook)
-        return pandas_hook.materialize_(
-            df=pd_df,
-            dtypes=dtypes,
-            store=store,
-            table=table,
-            schema=schema,
-        )
+        try:
+            df = _polars_apply_materialize_annotation(df, table)
+            e = None
+        except Exception as e:
+            logger = structlog.get_logger(logger_name=cls.__name__)
+            logger.error(
+                "Failed to apply materialize annotation for table %s: %s",
+                table.name,
+                e,
+            )
+        finally:
+            pd_df = df.to_pandas(use_pyarrow_extension_array=True, zero_copy_only=True)
+            pandas_hook = store.get_m_table_hook(Table(pd_df))
+            ret = pandas_hook.materialize_(
+                df=pd_df,
+                dtypes=dtypes,
+                store=store,
+                table=table,
+                schema=schema,
+            )
+            if e:
+                raise e
+        return ret
 
     @classmethod
     def retrieve(
@@ -611,7 +678,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         query = cls._compile_query(store, query)
         connection_uri = store.engine_url.render_as_string(hide_password=False)
         try:
-            return cls._execute_query(query, connection_uri, store)
+            df = cls._execute_query(query, connection_uri, store)
         except (RuntimeError, ModuleNotFoundError) as e:
             logger = structlog.get_logger(logger_name=cls.__name__)
             logger.error(
@@ -620,10 +687,13 @@ class PolarsTableHook(TableHook[SQLTableStore]):
                 store.engine_url.render_as_string(hide_password=True),
                 e,
             )
-            pandas_hook = store.get_hook_subclass(PandasTableHook)
+            pandas_hook = store.get_r_table_hook(pd.DataFrame)
             with store.engine.connect() as conn:
                 pd_df = pandas_hook.download_table(query, conn)
-            return polars.from_pandas(pd_df)
+            df = polars.from_pandas(pd_df)
+        df = _polars_apply_retrieve_annotation(df, table)
+        df = df.with_columns(pl.col(pl.Datetime).dt.replace_time_zone(None))
+        return df
 
     @classmethod
     def auto_table(cls, obj: polars.DataFrame):
@@ -657,7 +727,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
                 engine.url.render_as_string(hide_password=True),
                 e,
             )
-            pandas_hook = store.get_hook_subclass(PandasTableHook)
+            pandas_hook = store.get_r_table_hook(pd.DataFrame)
             with engine.connect() as conn:
                 pd_df = pandas_hook.download_table(query, conn)
             engine.dispose()
@@ -669,8 +739,9 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
     auto_version_support = AutoVersionSupport.LAZY
 
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return type_ == polars.LazyFrame
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        return CanResult.new(type_ == polars.LazyFrame)
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -682,7 +753,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         table = table.copy_without_obj()
         table.obj = t.collect()
 
-        polars_hook = store.get_hook_subclass(PolarsTableHook)
+        polars_hook = store.get_m_table_hook(table)
         return polars_hook.materialize(store, table, stage_name)
 
     @classmethod
@@ -693,7 +764,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         stage_name: str | None,
         as_type: type[polars.DataFrame],
     ) -> polars.LazyFrame:
-        polars_hook = store.get_hook_subclass(PolarsTableHook)
+        polars_hook = store.get_r_table_hook(pl.DataFrame)
         result = polars_hook.retrieve(
             store=store,
             table=table,
@@ -711,7 +782,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         stage_name: str,
         as_type: type[polars.LazyFrame],
     ) -> polars.LazyFrame:
-        polars_hook = store.get_hook_subclass(PolarsTableHook)
+        polars_hook = store.get_r_table_hook(pl.DataFrame)
 
         # Retrieve with LIMIT 0 -> only get schema but no data
         query = polars_hook._read_db_query(store, table, stage_name)
@@ -720,6 +791,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         connection_uri = store.engine_url.render_as_string(hide_password=False)
 
         df = polars_hook._execute_query(query, connection_uri, store)
+        df = _polars_apply_retrieve_annotation(df, table)
 
         # Create lazy frame where each column is identified by:
         #     stage name, table name, column name
@@ -752,28 +824,31 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
 
 try:
     import tidypolars
+    from tidypolars import Tibble
 except ImportError as e:
     warnings.warn(str(e), ImportWarning)
     tidypolars = None
+    Tibble = None
 
 
 @SQLTableStore.register_table(tidypolars, polars)
 class TidyPolarsTableHook(TableHook[SQLTableStore]):
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, tidypolars.Tibble)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        return CanResult.new(issubclass(type_, Tibble))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        return type_ == tidypolars.Tibble
+        return type_ == Tibble
 
     @classmethod
-    def materialize(cls, store, table: Table[tidypolars.Tibble], stage_name):
+    def materialize(cls, store, table: Table[Tibble], stage_name):
         t = table.obj
         table = table.copy_without_obj()
         table.obj = t.to_polars()
 
-        polars_hook = store.get_hook_subclass(PolarsTableHook)
+        polars_hook = store.get_m_table_hook(table)
         return polars_hook.materialize(store, table, stage_name)
 
     @classmethod
@@ -782,15 +857,15 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         store: SQLTableStore,
         table: Table,
         stage_name: str | None,
-        as_type: type[tidypolars.Tibble],
-    ) -> tidypolars.Tibble:
-        polars_hook = store.get_hook_subclass(PolarsTableHook)
+        as_type: type[Tibble],
+    ) -> Tibble:
+        polars_hook = store.get_r_table_hook(pl.DataFrame)
         df = polars_hook.retrieve(store, table, stage_name, as_type)
         return tidypolars.from_polars(df)
 
     @classmethod
-    def auto_table(cls, obj: tidypolars.Tibble):
-        # currently, we don't know how to store a table name inside tidypolars tibble
+    def auto_table(cls, obj: Tibble):
+        # currently, we don't know how to store a table name inside tidypolar   s tibble
         return super().auto_table(obj)
 
 
@@ -838,8 +913,9 @@ except ImportError as e:
 @SQLTableStore.register_table(pdt_old)
 class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, pdt.Table)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        return CanResult.new(issubclass(type_, pdt.Table))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -864,11 +940,11 @@ class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
         table = table.copy_without_obj()
         if isinstance(t._impl, PandasTableImpl):
             table.obj = t >> collect()
-            hook = store.get_hook_subclass(PandasTableHook)
+            hook = store.get_m_table_hook(pd.DataFrame)
             return hook.materialize(store, table, stage_name)
         if isinstance(t._impl, SQLTableImpl):
             table.obj = t._impl.build_select()
-            hook = store.get_hook_subclass(SQLAlchemyTableHook)
+            hook = store.get_m_table_hook(table)
             return hook.materialize(store, table, stage_name)
         raise NotImplementedError
 
@@ -884,11 +960,11 @@ class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
         from pydiverse.transform.lazy import SQLTableImpl
 
         if issubclass(as_type, PandasTableImpl):
-            hook = store.get_hook_subclass(PandasTableHook)
+            hook = store.get_r_table_hook(pd.DataFrame)
             df = hook.retrieve(store, table, stage_name, pd.DataFrame)
             return pdt.Table(PandasTableImpl(table.name, df))
         if issubclass(as_type, SQLTableImpl):
-            hook = store.get_hook_subclass(SQLAlchemyTableHook)
+            hook = store.get_r_table_hook(sa.Table)
             sa_tbl = hook.retrieve(store, table, stage_name, sa.Table)
             return pdt.Table(SQLTableImpl(store.engine, sa_tbl))
         raise NotImplementedError
@@ -911,8 +987,9 @@ class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
 @SQLTableStore.register_table(pdt_new)
 class PydiverseTransformTableHook(TableHook[SQLTableStore]):
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, pdt.Table)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        return CanResult.new(issubclass(type_, pdt.Table))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -945,12 +1022,12 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         if query is not None:
             # continue with SQL case handling
             table.obj = sa.text(str(query))
-            hook = store.get_hook_subclass(SQLAlchemyTableHook)
+            hook = store.get_m_table_hook(table)
             return hook.materialize(store, table, stage_name)
         else:
             # use Polars for dataframe handling
-            table.obj = t >> export(Polars())
-            hook = store.get_hook_subclass(PolarsTableHook)
+            table.obj = t >> export(Polars(lazy=True))
+            hook = store.get_m_table_hook(table)
             return hook.materialize(store, table, stage_name)
 
     @classmethod
@@ -966,20 +1043,22 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         if issubclass(as_type, Polars):
             import polars as pl
 
-            hook = store.get_hook_subclass(PolarsTableHook)
-            df = hook.retrieve(store, table, stage_name, pl.DataFrame)
-            return pdt.Table(df)
-        if issubclass(as_type, SqlAlchemy):
-            hook = store.get_hook_subclass(SQLAlchemyTableHook)
+            hook = store.get_r_table_hook(pl.LazyFrame)
+            lf = hook.retrieve(store, table, stage_name, pl.DataFrame)
+            return pdt.Table(lf, name=table.name)
+        elif issubclass(as_type, SqlAlchemy):
+            hook = store.get_r_table_hook(sa.Table)
             sa_tbl = hook.retrieve(store, table, stage_name, sa.Table)
             return pdt.Table(
                 sa_tbl.original.name,
                 SqlAlchemy(store.engine, schema=sa_tbl.original.schema),
             )
-        if issubclass(as_type, Pandas):
-            hook = store.get_hook_subclass(PandasTableHook)
+        elif issubclass(as_type, Pandas):
+            import pandas as pd
+
+            hook = store.get_r_table_hook(pd.DataFrame)
             df = hook.retrieve(store, table, stage_name, pd.DataFrame)
-            return pdt.Table(df)
+            return pdt.Table(df, name=table.name)
 
         raise NotImplementedError
 
@@ -1027,9 +1106,10 @@ class IbisTableHook(TableHook[SQLTableStore]):
         return ibis.connect(store.engine_url.render_as_string(hide_password=False))
 
     @classmethod
-    def can_materialize(cls, type_) -> bool:
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
         # Operations on a table like mutate() or join() don't change the type
-        return issubclass(type_, ibis.api.Table)
+        return CanResult.new(issubclass(type_, ibis.api.Table))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -1045,7 +1125,7 @@ class IbisTableHook(TableHook[SQLTableStore]):
         table = table.copy_without_obj()
         table.obj = sa.text(cls.lazy_query_str(store, t))
 
-        sa_hook = store.get_hook_subclass(SQLAlchemyTableHook)
+        sa_hook = store.get_m_table_hook(table)
         return sa_hook.materialize(store, table, stage_name)
 
     @classmethod

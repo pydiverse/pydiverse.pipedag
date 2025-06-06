@@ -1,11 +1,12 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import dis
 import inspect
 from enum import Enum
 from typing import Any
-
-from pydiverse.pipedag.util import deep_map
 
 
 class Operation(Enum):
@@ -22,10 +23,6 @@ class Operation(Enum):
 
     def __repr__(self):
         return self.name
-
-
-def _get_tracer(proxy: ComputationTracerProxy) -> ComputationTracer:
-    return object.__getattribute__(proxy, "_computation_tracer_")
 
 
 class ComputationTracer:
@@ -58,6 +55,8 @@ class ComputationTracer:
 
     def _add_computation(self, computation: tuple):
         if not self.did_exit:
+            from pydiverse.pipedag.util.deep_map import deep_map
+
             computation = deep_map(computation, self._computation_mapper)
             self.trace.append(computation)
         else:
@@ -80,8 +79,7 @@ class ComputationTracer:
 
         return x
 
-    def _monkey_patch(self):
-        ...
+    def _monkey_patch(self): ...
 
     def trace_hash(self) -> str:
         try:
@@ -147,6 +145,10 @@ class ComputationTracerProxy:
 
     def __len__(self):
         raise RuntimeError("__len__ is not supported by ComputationTracerProxy")
+
+
+def _get_tracer(proxy: ComputationTracerProxy) -> ComputationTracer:
+    return object.__getattribute__(proxy, "_computation_tracer_")
 
 
 __supported_dunder = {

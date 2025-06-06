@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,7 +11,7 @@ import sqlalchemy as sa
 from sqlalchemy.exc import ProgrammingError
 
 import tests.util.tasks_library as m
-from pydiverse.pipedag import *
+from pydiverse.pipedag import ConfigContext, Flow, Stage, materialize
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateSchema,
     CreateTableAsSelect,
@@ -17,16 +20,17 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     DropView,
     InsertIntoSelect,
 )
-from pydiverse.pipedag.container import ExternalTableReference, Schema
+from pydiverse.pipedag.container import ExternalTableReference, Schema, Table
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
 from tests.util import swallowing_raises
 from tests.util.sql import sql_table_expr
 
 pytestmark = [with_instances(DATABASE_INSTANCES)]
 
 
+@skip_instances("parquet_backend")
 def test_smoke_table_reference():
     @materialize(version="1.1")
     def in_table():

@@ -1,15 +1,25 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 from typing import Any
 
 import pytest
 
-from pydiverse.pipedag import *
+from pydiverse.pipedag import (
+    AUTO_VERSION,
+    ConfigContext,
+    Flow,
+    Stage,
+    Table,
+    materialize,
+)
 from pydiverse.pipedag.backend.table.sql.hooks import PolarsTableHook
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
 from tests.util.spy import spy_task
 from tests.util.sql import get_config_with_table_store
 from tests.util.tasks_library import assert_table_equal
@@ -168,6 +178,7 @@ def test_auto_version_2(mocker):
     in_tables_spy.assert_called(2)
 
 
+@skip_instances("parquet_backend")
 def test_custom_download():
     class TestTableStore(ConfigContext.get().store.table_store.__class__):
         _dialect_name = DISABLE_DIALECT_REGISTRATION
