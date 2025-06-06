@@ -1,3 +1,2 @@
 [default]
-extend-ignore-identifiers-re = ["^schem$"]
 extend-ignore-words-re = ["^schem$"]
