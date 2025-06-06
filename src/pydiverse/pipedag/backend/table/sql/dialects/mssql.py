@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Any
 
 import pandas as pd
@@ -9,6 +10,7 @@ import sqlalchemy as sa
 import sqlalchemy.dialects.mssql
 
 from pydiverse.pipedag.backend.table.sql.ddl import (
+    AddClusteredColumnstoreIndex,
     ChangeColumnTypes,
     CreateAlias,
     _mssql_update_definition,
@@ -18,6 +20,25 @@ from pydiverse.pipedag.backend.table.sql.reflection import PipedagMSSqlReflectio
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.container import RawSql, Schema, Table
+from pydiverse.pipedag.materialize.details import (
+    BaseMaterializationDetails,
+    resolve_materialization_details_label,
+)
+
+
+@dataclass(frozen=True)
+class MSSqlMaterializationDetails(BaseMaterializationDetails):
+    """
+    :param columnstore: Whether to create tables as columnstores
+    by defining a clustered columnstore index on them. This can
+    improve performance.
+    See also the Microsoft documentation <https://learn.microsoft.com/en-us/sql/relational-databases/indexes/columnstore-indexes-overview>.
+    """
+
+    def __post_init__(self):
+        assert isinstance(self.columnstore, bool)
+
+    columnstore: bool = False
 
 
 class MSSqlTableStore(SQLTableStore):
@@ -83,6 +104,7 @@ class MSSqlTableStore(SQLTableStore):
             or table.non_nullable is not None
             or (table.primary_key is not None and len(table.primary_key) > 0)
             or (table.indexes is not None and len(table.indexes) > 0)
+            or self.get_create_columnstore_index(table)
         )
 
     def get_forced_nullability_columns(
@@ -180,6 +202,8 @@ class MSSqlTableStore(SQLTableStore):
                             cap_varchar_max=1024,
                         )
                     )
+            if self.get_create_columnstore_index(table):
+                self.execute(AddClusteredColumnstoreIndex(table.name, schema))
         if on_empty_table is None or not on_empty_table:
             self.add_table_primary_key(table, schema)
             self.add_table_indexes(table, schema)
@@ -285,6 +309,28 @@ class MSSqlTableStore(SQLTableStore):
         # For normal Table objects, it needs the stage schema name.
         table_name, schema = super().resolve_alias(table, stage_name)
         return PipedagMSSqlReflection.resolve_alias(self.engine, table_name, schema)
+
+    def _set_materialization_details(
+        self, materialization_details: dict[str, dict[str | list[str]]] | None
+    ) -> None:
+        self.materialization_details = (
+            MSSqlMaterializationDetails.create_materialization_details_dict(
+                materialization_details,
+                self.strict_materialization_details,
+                self.default_materialization_details,
+                self.logger,
+            )
+        )
+
+    def get_create_columnstore_index(self, table: Table) -> bool:
+        return MSSqlMaterializationDetails.get_attribute_from_dict(
+            self.materialization_details,
+            resolve_materialization_details_label(table),
+            self.default_materialization_details,
+            "columnstore",
+            self.strict_materialization_details,
+            self.logger,
+        )
 
 
 @MSSqlTableStore.register_table(pd)
