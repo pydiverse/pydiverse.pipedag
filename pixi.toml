@@ -22,6 +22,11 @@ pydot = ">=1.4.2"
 click = ">=8.1.3"
 pyparsing = ">=3.0"
 
+
+[target.osx-arm64.dependencies]
+libgfortran5 = ">=14" # Lower versions cause numpy import errors. See https://github.com/prefix-dev/pixi/issues/3479
+
+
 [host-dependencies]
 pip = "*"
 hatchling = "*"
