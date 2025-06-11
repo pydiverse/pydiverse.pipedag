@@ -162,10 +162,26 @@ class SQLTableStore(BaseTableStore):
         If ``False``: Log an error instead of raising an exception
 
     :param materialization_details:
-        A dictionary with each entry describing a tag for materialization details of
-        the table store. See subclasses of :py:class:`BaseMaterializationDetails
-         <pydiverse.pipedag.materialize.details.BaseMaterializationDetails>`
-        for details.
+        A dictionary of tags that each define properties used for materialization by
+        the table store. If the tag ``__any__`` is present, the other labels will
+        inherit properties from it if they do not override them.
+
+        An example config for DB2:
+
+        ::
+
+            materialization_details:
+              __any__:
+                compression: ["COMPRESS YES ADAPTIVE", "VALUE COMPRESSION"]
+                table_space_data: "USERSPACE1"
+              no_compression:
+                # user-defined tag. Inherits table_space_data from __any__
+                # but overwrites compression.
+                compression: ""
+
+        See the documentation of the SQLTableStore Dialects for supported options for
+        each table store.
+
     :param default_materialization_details:
         The materialization_details that will be used if materialization_details
         is not specified on table level. If not set, the ``__any__`` tag (if specified)
