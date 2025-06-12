@@ -333,6 +333,24 @@ class AddIndex(DDLElement):
         return truncate_key("idx_", self.table_name, columns, MAX_LENGTH_INDEX)
 
 
+class AddClusteredColumnstoreIndex(DDLElement):
+    def __init__(
+        self,
+        table_name: str,
+        schema: Schema,
+        name: str | None = None,
+    ):
+        self.table_name = table_name
+        self.schema = schema
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        if self._name:
+            return self._name
+        return "ccidx"
+
+
 class ChangeColumnTypes(DDLElement):
     def __init__(
         self,
@@ -1025,6 +1043,19 @@ def visit_add_index(add_index: AddIndex, compiler, **kw):
     index_name = compiler.preparer.quote(add_index.name)
     cols = ",".join([compiler.preparer.quote(col) for col in add_index.index])
     return f"CREATE INDEX {schema}.{index_name} ON {schema}.{table} ({cols})"
+
+
+@compiles(AddClusteredColumnstoreIndex, "mssql")
+def visit_add_clustered_columnstore_index(
+    add_clustered_columnstore_index: AddClusteredColumnstoreIndex, compiler, **kw
+) -> str:
+    _ = kw
+    table = compiler.preparer.quote(add_clustered_columnstore_index.table_name)
+    schema = compiler.preparer.format_schema(
+        add_clustered_columnstore_index.schema.get()
+    )
+    index_name = compiler.preparer.quote(add_clustered_columnstore_index.name)
+    return f"CREATE CLUSTERED COLUMNSTORE INDEX {index_name} ON {schema}.{table}"
 
 
 @compiles(ChangeColumnTypes)

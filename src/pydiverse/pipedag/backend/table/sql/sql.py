@@ -569,7 +569,7 @@ class SQLTableStore(BaseTableStore):
                 )
             self.logger.error(error_msg)
 
-    def get_unlogged(self, materialization_details_label: str | None):
+    def get_unlogged(self, materialization_details_label: str | None) -> bool:
         _ = materialization_details_label
         return False  # only available for some dialects
 
