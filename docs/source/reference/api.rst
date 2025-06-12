@@ -87,6 +87,7 @@ Microsoft SQL Server / T-SQL
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.MSSqlTableStore
+.. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.mssql.MSSqlMaterializationDetails
 
 IBM DB2
 ^^^^^^^
@@ -132,4 +133,4 @@ Orchestration Engine
 Special Table Types
 -------------------
 
-.. autoclass:: pydiverse.pipedag.materialize.container.ExternalTableReference
+.. autoclass:: pydiverse.pipedag.container.ExternalTableReference

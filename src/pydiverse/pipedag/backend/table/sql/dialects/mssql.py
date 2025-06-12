@@ -29,10 +29,12 @@ from pydiverse.pipedag.materialize.details import (
 @dataclass(frozen=True)
 class MSSqlMaterializationDetails(BaseMaterializationDetails):
     """
+    Materialization details specific to Microsoft SQL Server.
+
     :param columnstore: Whether to create tables as columnstores
-    by defining a clustered columnstore index on them. This can
-    improve performance.
-    See also the Microsoft documentation <https://learn.microsoft.com/en-us/sql/relational-databases/indexes/columnstore-indexes-overview>.
+        by defining a clustered columnstore index on them. This can
+        improve performance.
+        See the `Microsoft documentation <https://learn.microsoft.com/en-us/sql/relational-databases/indexes/columnstore-indexes-overview>`_.
     """
 
     def __post_init__(self):
@@ -44,6 +46,10 @@ class MSSqlMaterializationDetails(BaseMaterializationDetails):
 class MSSqlTableStore(SQLTableStore):
     """
     SQLTableStore that supports `Microsoft SQL Server`_.
+
+    Supports the :py:class:`MSSqlMaterializationDetails\
+    <pydiverse.pipedag.backend.table.sql.dialects.mssql.MSSqlMaterializationDetails>`
+    materialization details.
 
     In addition to the arguments of
     :py:class:`SQLTableStore <pydiverse.pipedag.backend.table.SQLTableStore>`,
