@@ -3,7 +3,7 @@
 ## 0.9.11 (2025-XX-XX)
 - Fix numpy import issue on OS X
 - CI: Use SQL Server docker image instead of Azure Edge
-- Document `SQLTableStore` parameters in config.md
+- Improve documentation for materialization details.
 
 ## 0.9.10 (2025-03-18)
 - Fix incompatibility with pydiverse.transform >=0.2.1 (<0.2.0 still supported) (0.2.0 will not be supported):
