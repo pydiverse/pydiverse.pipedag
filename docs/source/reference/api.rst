@@ -70,14 +70,36 @@ Table Store
 .. autoclass:: pydiverse.pipedag.backend.table.SQLTableStore
 
 SQLTableStore Dialects
-^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~
+
+PostgreSQL
+^^^^^^^^^^
+
 .. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.PostgresTableStore
+.. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.postgres.PostgresMaterializationDetails
+
+DuckDB
+^^^^^^
+
 .. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.DuckDBTableStore
+
+Microsoft SQL Server / T-SQL
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 .. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.MSSqlTableStore
+
+IBM DB2
+^^^^^^^
+
 .. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.IBMDB2TableStore
+.. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.ibm_db2.IBMDB2MaterializationDetails
+.. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.ibm_db2::IBMDB2CompressionTypes
+    :members:
+    :undoc-members:
+
 
 Local Table Cache
-^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~
 .. autoclass:: pydiverse.pipedag.backend.table.cache.ParquetTableCache
 
 Blob Store

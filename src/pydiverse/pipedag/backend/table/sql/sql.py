@@ -166,9 +166,10 @@ class SQLTableStore(BaseTableStore):
         the table store. If the tag ``__any__`` is present, the other labels will
         inherit properties from it if they do not override them.
 
-        An example config for DB2:
+        An example config for DB2 that goes into the ``args`` section of the
+        ``table_store`` config in ``pipedag.yaml``:
 
-        ::
+        .. code-block:: yaml
 
             materialization_details:
               __any__:
@@ -178,6 +179,9 @@ class SQLTableStore(BaseTableStore):
                 # user-defined tag. Inherits table_space_data from __any__
                 # but overwrites compression.
                 compression: ""
+
+        Then, by default, all tables will be created with the ``__any__`` config,
+        unless the label ``no_compression`` is specified at stage or table level.
 
         See the documentation of the SQLTableStore Dialects for supported options for
         each table store.
@@ -234,7 +238,7 @@ class SQLTableStore(BaseTableStore):
         print_sql: bool = False,
         no_db_locking: bool = True,
         strict_materialization_details: bool = True,
-        materialization_details: dict[str, dict[str | list[str]]] | None = None,
+        materialization_details: dict[str, dict[str, str | list[str]]] | None = None,
         default_materialization_details: str | None = None,
         max_concurrent_copy_operations: int = 5,
         sqlalchemy_pool_size: int = 12,
