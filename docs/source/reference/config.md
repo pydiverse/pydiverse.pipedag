@@ -369,6 +369,7 @@ class
 
 args
 : Any values in this subsection will be passed as arguments to the `__init__` or, if available, the `_init_conf_` method of the table store class.
+  For a list of available options, look at the `__init__` method of the table store you are using.
 
 hook_args
 : This subsection allows passing custom config arguments to the different table hooks to influence how tables get materialized and retrieved.
