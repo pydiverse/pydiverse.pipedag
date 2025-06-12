@@ -11,11 +11,11 @@ from typing import TYPE_CHECKING, Any, Generic
 
 from typing_extensions import Self
 
+from pydiverse.common.util import requires
+from pydiverse.common.util.computation_tracing import ComputationTracer
 from pydiverse.pipedag import Table
 from pydiverse.pipedag._typing import T, TableHookResolverT
 from pydiverse.pipedag.context import RunContext
-from pydiverse.pipedag.util import requires
-from pydiverse.pipedag.util.computation_tracing import ComputationTracer
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.materialize.materializing_task import MaterializingTask

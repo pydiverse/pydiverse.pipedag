@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
 from __future__ import annotations
 
-from .deep_map import deep_map
-from .deep_merge import deep_merge
-from .disposable import Disposable
-from .import_ import requires
+from pydiverse.common.util.deep_map import deep_map
+from pydiverse.common.util.deep_merge import deep_merge
+from pydiverse.common.util.disposable import Disposable
+from pydiverse.common.util.import_ import requires
+
 from .naming import normalize_name, safe_name
 
 __all__ = [

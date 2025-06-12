@@ -10,6 +10,7 @@ import structlog
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
+from pydiverse.common.util import requires
 from pydiverse.pipedag import ExternalTableReference, Table
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.core import Subflow, Task
@@ -17,7 +18,6 @@ from pydiverse.pipedag.core.result import Result
 from pydiverse.pipedag.engine.base import (
     OrchestrationEngine,
 )
-from pydiverse.pipedag.util import requires
 
 try:
     import prefect

@@ -5,9 +5,9 @@ from __future__ import annotations
 
 import tempfile
 
+from pydiverse.common.util.structlog import setup_logging
 from pydiverse.pipedag import Flow, GroupNode, Stage, VisualizationStyle, materialize
 from pydiverse.pipedag.core.config import create_basic_pipedag_config
-from pydiverse.pipedag.util.structlog import setup_logging
 
 
 @materialize

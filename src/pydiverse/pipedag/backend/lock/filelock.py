@@ -8,10 +8,11 @@ import warnings
 from pathlib import Path
 from typing import Any
 
+from pydiverse.common.util import requires
 from pydiverse.pipedag import ConfigContext, Stage
 from pydiverse.pipedag.backend.lock.base import BaseLockManager, Lockable, LockState
 from pydiverse.pipedag.errors import LockError
-from pydiverse.pipedag.util import normalize_name, requires
+from pydiverse.pipedag.util import normalize_name
 
 try:
     import filelock as fl

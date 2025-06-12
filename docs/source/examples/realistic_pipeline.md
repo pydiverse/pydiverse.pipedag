@@ -226,7 +226,7 @@ def get_pipeline():
 
 if __name__ == "__main__":
     import logging
-    from pydiverse.pipedag.util.structlog import setup_logging
+    from pydiverse.common.util.structlog import setup_logging
 
     setup_logging(log_level=logging.INFO)
 

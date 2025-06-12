@@ -21,6 +21,7 @@ import attrs
 import msgpack
 import structlog
 
+from pydiverse.common.util import Disposable
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.context.context import (
     BaseAttrsContext,
@@ -30,7 +31,6 @@ from pydiverse.pipedag.context.context import (
 )
 from pydiverse.pipedag.context.trace_hook import TraceHook
 from pydiverse.pipedag.errors import LockError, RemoteProcessError, StageError
-from pydiverse.pipedag.util import Disposable
 from pydiverse.pipedag.util.ipc import IPCServer
 
 if TYPE_CHECKING:

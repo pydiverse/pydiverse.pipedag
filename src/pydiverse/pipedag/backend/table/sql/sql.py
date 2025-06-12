@@ -14,6 +14,7 @@ from typing import Any, Literal
 import sqlalchemy as sa
 import sqlalchemy.exc
 
+from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import Stage, Table
 from pydiverse.pipedag.backend.table.sql.ddl import (
     AddIndex,
@@ -47,7 +48,6 @@ from pydiverse.pipedag.materialize.metadata import (
     TaskMetadata,
 )
 from pydiverse.pipedag.materialize.store import BaseTableStore
-from pydiverse.pipedag.util.hashing import stable_hash
 
 DISABLE_DIALECT_REGISTRATION = "__DISABLE_DIALECT_REGISTRATION"
 

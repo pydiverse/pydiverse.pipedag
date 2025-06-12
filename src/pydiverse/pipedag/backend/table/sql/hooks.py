@@ -15,6 +15,7 @@ import structlog
 from packaging.version import Version
 
 from pydiverse.common import Date, Dtype, PandasBackend
+from pydiverse.common.util.computation_tracing import ComputationTracer
 from pydiverse.pipedag import ConfigContext
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.table.sql.ddl import (
@@ -32,7 +33,6 @@ from pydiverse.pipedag.materialize.table_hook_base import (
     CanResult,
     TableHook,
 )
-from pydiverse.pipedag.util.computation_tracing import ComputationTracer
 
 try:
     import polars as pl
@@ -567,7 +567,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
             import numpy
             import pandas
 
-            from pydiverse.pipedag.util.computation_tracing import patch
+            from pydiverse.common.util.computation_tracing import patch
 
             for name in sorted(pandas.__all__):
                 try:

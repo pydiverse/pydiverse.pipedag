@@ -9,10 +9,10 @@ import tempfile
 import pandas as pd
 import sqlalchemy as sa
 
+from pydiverse.common.util.structlog import setup_logging
 from pydiverse.pipedag import Flow, Stage, Table, input_stage_versions, materialize
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.core.config import create_basic_pipedag_config
-from pydiverse.pipedag.util.structlog import setup_logging
 
 
 # The @input_stage_versions decorator offers all the options that @materialize has as

@@ -10,6 +10,8 @@ from typing import Any, Callable
 
 import structlog
 
+from pydiverse.common.util import Disposable, deep_map
+from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import Blob, Schema, Stage, Table
 from pydiverse.pipedag._typing import Materializable, T
 from pydiverse.pipedag.container import RawSql, attach_annotation
@@ -26,8 +28,6 @@ from pydiverse.pipedag.materialize.metadata import (
     TaskMetadata,
 )
 from pydiverse.pipedag.materialize.table_hook_base import TableHookResolver
-from pydiverse.pipedag.util import Disposable, deep_map
-from pydiverse.pipedag.util.hashing import stable_hash
 
 
 class BaseTableStore(TableHookResolver, Disposable):

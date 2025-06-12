@@ -5,9 +5,9 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from pydiverse.common.util import Disposable
 from pydiverse.pipedag import ExternalTableReference, Task
 from pydiverse.pipedag.core import Result, Subflow
-from pydiverse.pipedag.util import Disposable
 
 
 class OrchestrationEngine(Disposable, ABC):

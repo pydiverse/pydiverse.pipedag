@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Any, overload
 
 import sqlalchemy as sa
 
+from pydiverse.common.util import deep_map
+from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import Stage
 from pydiverse.pipedag._typing import CallableT
 from pydiverse.pipedag.container import Blob, RawSql, Table
@@ -21,8 +23,6 @@ from pydiverse.pipedag.materialize.materializing_task import (
     MaterializingTaskGetItem,
     UnboundMaterializingTask,
 )
-from pydiverse.pipedag.util import deep_map
-from pydiverse.pipedag.util.hashing import stable_hash
 from pydiverse.pipedag.util.json import PipedagJSONEncoder
 
 if TYPE_CHECKING:

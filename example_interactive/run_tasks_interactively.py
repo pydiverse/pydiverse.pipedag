@@ -8,10 +8,10 @@ import tempfile
 import pandas as pd
 import sqlalchemy as sa
 
+from pydiverse.common.util.structlog import setup_logging
 from pydiverse.pipedag import Schema, Table, materialize
 from pydiverse.pipedag.core.config import create_basic_pipedag_config
 from pydiverse.pipedag.materialize.debug import materialize_table
-from pydiverse.pipedag.util.structlog import setup_logging
 
 
 def main():

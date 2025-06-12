@@ -13,6 +13,12 @@ from typing import TYPE_CHECKING, Any, Callable
 
 import sqlalchemy as sa
 
+from pydiverse.common.util import deep_map
+from pydiverse.common.util.computation_tracing import (
+    ComputationTraceRef,
+    ComputationTracerProxy,
+)
+from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import (
     Blob,
     ConfigContext,
@@ -30,12 +36,6 @@ from pydiverse.pipedag.core import UnboundTask
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.cache import TaskCacheInfo, task_cache_key
 from pydiverse.pipedag.materialize.table_hook_base import AutoVersionSupport, TableHook
-from pydiverse.pipedag.util import deep_map
-from pydiverse.pipedag.util.computation_tracing import (
-    ComputationTraceRef,
-    ComputationTracerProxy,
-)
-from pydiverse.pipedag.util.hashing import stable_hash
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.materialize.store import PipeDAGStore

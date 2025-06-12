@@ -7,8 +7,8 @@ import traceback
 
 import pytest
 
+from pydiverse.common.util import Disposable, requires
 from pydiverse.pipedag.errors import DisposedError
-from pydiverse.pipedag.util import Disposable, requires
 
 
 def test_requires():

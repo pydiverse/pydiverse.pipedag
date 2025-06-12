@@ -17,9 +17,9 @@ import structlog
 from attrs import define, evolve, field, frozen
 from box import Box
 
+from pydiverse.common.util import deep_merge
+from pydiverse.common.util.import_ import import_object, load_object
 from pydiverse.pipedag._typing import T
-from pydiverse.pipedag.util import deep_merge
-from pydiverse.pipedag.util.import_ import import_object, load_object
 from pydiverse.pipedag.util.naming import NameDisambiguator
 
 if TYPE_CHECKING:

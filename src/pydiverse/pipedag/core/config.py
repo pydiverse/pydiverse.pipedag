@@ -16,7 +16,7 @@ import sqlalchemy as sa
 import structlog
 import yaml
 
-from pydiverse.pipedag.util.deep_merge import deep_merge
+from pydiverse.common.util import deep_merge
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.context import ConfigContext

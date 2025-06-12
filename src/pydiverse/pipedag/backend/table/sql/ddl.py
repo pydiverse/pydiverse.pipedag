@@ -44,8 +44,8 @@ __all__ = [
 
 from sqlalchemy.sql.type_api import TypeEngine
 
+from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import Schema
-from pydiverse.pipedag.util.hashing import stable_hash
 
 # Postgres truncates identifiers at 63 characters
 # MSSQL does not allow identifiers longer than 128 characters

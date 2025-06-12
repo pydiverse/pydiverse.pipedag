@@ -155,7 +155,7 @@ import tempfile
 
 from pydiverse.pipedag import Flow, Stage, materialize, GroupNode, VisualizationStyle
 from pydiverse.pipedag.core.config import create_basic_pipedag_config
-from pydiverse.pipedag.util.structlog import setup_logging
+from pydiverse.common.util.structlog import setup_logging
 
 
 @materialize
@@ -214,7 +214,7 @@ import tempfile
 
 from pydiverse.pipedag import Flow, GroupNode, Stage, VisualizationStyle, materialize
 from pydiverse.pipedag.core.config import create_basic_pipedag_config
-from pydiverse.pipedag.util.structlog import setup_logging
+from pydiverse.common.util.structlog import setup_logging
 
 
 @materialize

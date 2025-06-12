@@ -11,8 +11,8 @@ from typing import Callable, Union
 
 import structlog
 
+from pydiverse.common.util import Disposable
 from pydiverse.pipedag.errors import LockError
-from pydiverse.pipedag.util import Disposable
 
 
 class LockState(Enum):

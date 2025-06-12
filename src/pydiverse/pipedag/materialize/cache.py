@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import Table
-from pydiverse.pipedag.util.hashing import stable_hash
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.materialize.materializing_task import MaterializingTask

@@ -8,13 +8,13 @@ import warnings
 
 import structlog
 
+from pydiverse.common.util import requires
 from pydiverse.pipedag import ExternalTableReference, Table
 from pydiverse.pipedag.context import ConfigContext, RunContext
 from pydiverse.pipedag.core import Result, Subflow, Task
 from pydiverse.pipedag.engine.base import (
     OrchestrationEngine,
 )
-from pydiverse.pipedag.util import requires
 
 try:
     import dask

@@ -19,12 +19,12 @@ from pathlib import Path
 from types import GenericAlias
 from typing import get_args, get_origin
 
+from pydiverse.common.util.computation_tracing import fully_qualified_name
+from pydiverse.common.util.import_ import load_object
 from pydiverse.pipedag import ConfigContext, Stage
 from pydiverse.pipedag.container import Blob, RawSql, Table
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.core.config import PipedagConfig
-from pydiverse.pipedag.util.computation_tracing import fully_qualified_name
-from pydiverse.pipedag.util.import_ import load_object
 
 TYPE_KEY = "__pipedag_type__"
 

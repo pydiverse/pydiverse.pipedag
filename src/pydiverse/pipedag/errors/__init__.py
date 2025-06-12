@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from pydiverse.common.errors import DisposedError
+
 
 class FlowError(Exception):
     """
@@ -51,3 +53,16 @@ class RemoteProcessError(IPCError):
     """
     Exception raised if an exception occurred in the remote IPC process.
     """
+
+
+__all__ = [
+    "FlowError",
+    "StageError",
+    "GroupNodeError",
+    "CacheError",
+    "LockError",
+    "DuplicateNameError",
+    "IPCError",
+    "RemoteProcessError",
+    "DisposedError",
+]

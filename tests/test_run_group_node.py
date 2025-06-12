@@ -11,6 +11,7 @@ import attr
 import pytest
 import sqlalchemy as sa
 
+from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import (
     Flow,
     GroupNode,
@@ -26,7 +27,6 @@ from pydiverse.pipedag.context.context import (
     TaskContext,
 )
 from pydiverse.pipedag.core.config import PipedagConfig
-from pydiverse.pipedag.util.hashing import stable_hash
 from tests.fixtures.instances import (
     ORCHESTRATION_INSTANCES,
     skip_instances,

@@ -148,7 +148,7 @@ from pydiverse.pipedag import (
 )
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.core.config import PipedagConfig
-from pydiverse.pipedag.util.structlog import setup_logging
+from pydiverse.common.util.structlog import setup_logging
 
 
 # these global variables are just a mock for information that can be sourced from somewhere for the full pipeline

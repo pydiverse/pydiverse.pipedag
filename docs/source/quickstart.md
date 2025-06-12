@@ -108,7 +108,7 @@ def main():
 
 
 if __name__ == "__main__":
-    from pydiverse.pipedag.util.structlog import setup_logging
+    from pydiverse.common.util.structlog import setup_logging
 
     setup_logging()  # you can setup the logging and/or structlog libraries as you wish
     main()
