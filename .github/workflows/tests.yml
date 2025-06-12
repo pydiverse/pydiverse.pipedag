@@ -62,6 +62,10 @@ jobs:
           - py311all
           - py312all
           - py313all
+          - py310pdt
+          - py313pdt
+          - py311cspdt
+          - py313cspdt
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
@@ -70,6 +74,26 @@ jobs:
         postgres
         zoo
       pytest-arguments: --polars --ibis --pdtransform
+
+
+  colspec_test:
+    name: ColSpec Tests
+    needs: [smoke_test]
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        environment:
+          - py311cs
+          - py313cs
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      docker-services: |
+        postgres
+        zoo
+      pytest-arguments: --duckdb --polars --ibis
 
 
   duckdb_test:
@@ -82,13 +106,17 @@ jobs:
         environment:
           - py310all
           - py312all
+          - py310pdt
+          - py313pdt
+          - py311cspdt
+          - py313cspdt
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
       environment: ${{ matrix.environment }}
       docker-services: |
         zoo
-      pytest-arguments: --duckdb -m duckdb --polars --ibis --pdtransform --no-postgres
+      pytest-arguments: --duckdb --polars --ibis --pdtransform --no-postgres
 
   db2_test:
     name: DB2 Tests
@@ -108,7 +136,7 @@ jobs:
         zoo
         ibm_db2
       # --polars and --ibis not supported
-      pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform --no-postgres
+      pytest-arguments: --ibm_db2 --pdtransform --no-postgres
 
   mssql_test:
     name: MSSql Tests
@@ -120,6 +148,10 @@ jobs:
         environment:
           - py310all
           - py311all
+          - py310pdt
+          - py313pdt
+          - py311cspdt
+          - py313cspdt
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
@@ -127,7 +159,7 @@ jobs:
       docker-services: |
         mssql
         zoo
-      pytest-arguments: --mssql -m mssql --polars --ibis --pdtransform --no-postgres
+      pytest-arguments: --mssql --polars --ibis --pdtransform --no-postgres
 
   orchestration_test:
     name: Orchestration Tests

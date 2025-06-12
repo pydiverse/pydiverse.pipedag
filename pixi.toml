@@ -1,29 +1,28 @@
 [project]
 name = "pydiverse-pidepag"
 channels = ["conda-forge"]
-platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"] # "linux-aarch64",
+platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"] # "linux-aarch64"
 
 [dependencies]
-pydiverse-common = ">=0.1.0,<0.2"
-python = ">=3.10.17,<3.14"
+python = ">=3.10.18,<3.14"
+pydiverse-common = ">=0.3.4,<0.4"
 pandas = ">=1.5.3,<3"
 sqlalchemy = ">=1.4.54,<3"
-typing-extensions = ">=4.13.2,<5"
+typing-extensions = ">=4.14.0,<5"
 networkx = ">=3.4,<4"
 attrs = ">=25.3.0,<26"
-structlog = ">=25.2.0,<26"
+structlog = ">=25.4.0,<26"
 pynng = ">=0.8.1,<0.9"
 msgpack-python = ">=1.1.0,<2"
 packaging = ">=24.2,<26"
 python-box = ">=7.3.2,<8"
 pyyaml = ">=6.0.2,<7"
 pyarrow = ">=20.0.0,<21"
-cryptography = ">=45.0.3,<46"
+cryptography = ">=45.0.4,<46"
 pydot = ">=4.0.0,<5"
 click = ">=8.1.8,<9"
 pyparsing = ">=3.2.3,<4"
 adbc-driver-postgresql = ">=1.6.0,<2"
-libgfortran5 = ">=14.2.0,<16"
 
 [host-dependencies]
 pip = "*"
@@ -72,10 +71,13 @@ pyodbc = ">=4.0.35"
 pytsql = ">=1.1.4"
 
 [feature.pdtransform-new.dependencies]
-pydiverse-transform = ">=0.3"
+pydiverse-transform = ">=0.5.2,<0.6"
 
 [feature.pdtransform-old.dependencies]
 pydiverse-transform = "<0.2"
+
+[feature.colspec.dependencies]
+pydiverse-colspec = ">=0.1.1,<0.2"
 
 # IBM DB2
 [feature.ibm-db]
@@ -119,6 +121,7 @@ taplo = "*"
 pre-commit-hooks = "*"
 typos = "*"
 conda-deny = "*"
+go-yq = "*"
 
 [feature.lint.tasks]
 #commitit-install = "commitit install"
@@ -126,6 +129,7 @@ conda-deny = "*"
 pre-commit-install = "pre-commit install"
 pre-commit-run = "pre-commit run -a"
 conda-deny = "conda-deny check"
+check-deps = "sh -c .github/scripts/check_deps.sh"
 
 [feature.py310.dependencies]
 python = "3.10.*"
@@ -152,13 +156,6 @@ connectorx = ">=0.3.3"
 # keeping old code running requires more precise pinning
 [feature.polars12.dependencies]
 polars = "==1.2.1"
-
-[feature.connectorx033.target.linux-64.dependencies]
-connectorx = "==0.3.3"
-[feature.connectorx033.target.osx-64.dependencies]
-connectorx = "==0.3.3"
-[feature.connectorx033.target.win-64.dependencies]
-connectorx = "==0.3.3"
 
 [environments]
 default = [
@@ -274,7 +271,6 @@ py310pdsa1all = [
   "pd1",
   "sa1",
   "polars12",
-  "connectorx033",
   "connectorx",
   "all-tests",
   "pdtransform-old",
@@ -291,7 +287,6 @@ py311pdsa1all = [
   "pd1",
   "sa1",
   "polars12",
-  "connectorx033",
   "connectorx",
   "all-tests",
   "pdtransform-old",
@@ -322,4 +317,44 @@ py312ibm = [
   "ibm-db",
   "all-tests",
   "pdtransform-old",
+]
+py311cs = ["py311", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec"]
+py313cs = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec"]
+py310pdt = [
+  "py310",
+  "dev",
+  "zookeeper",
+  "pd2",
+  "sa2",
+  "duckdb1",
+  "pdtransform-new",
+]
+py313pdt = [
+  "py313",
+  "dev",
+  "zookeeper",
+  "pd2",
+  "sa2",
+  "duckdb1",
+  "pdtransform-new",
+]
+py311cspdt = [
+  "py311",
+  "dev",
+  "zookeeper",
+  "pd2",
+  "sa2",
+  "duckdb1",
+  "colspec",
+  "pdtransform-new",
+]
+py313cspdt = [
+  "py313",
+  "dev",
+  "zookeeper",
+  "pd2",
+  "sa2",
+  "duckdb1",
+  "colspec",
+  "pdtransform-new",
 ]
