@@ -31,6 +31,15 @@ _TABLE_SPACE_KEYWORD_MAP = {
 
 
 class IBMDB2CompressionTypes(str, Enum):
+    """
+    Enum for the compression methods for IBM DB2 tables. ``VALUE COMPRESSION`` can
+    be combined with one of the other compression methods.
+
+    See the `IBM DB2 documentation\
+     <https://www.ibm.com/docs/en/db2/12.1.0?topic=compression-table>`_
+    for more details.
+    """
+
     NO_COMPRESSION = ""
     ROW_COMPRESSION = "COMPRESS YES"
     STATIC_ROW_COMPRESSION = "COMPRESS YES STATIC"
@@ -41,20 +50,28 @@ class IBMDB2CompressionTypes(str, Enum):
 @dataclass(frozen=True)
 class IBMDB2MaterializationDetails(BaseMaterializationDetails):
     """
-    :param compression: Specify the compression methods to be applied to the table.
-        Possible values include
-        compression="COMPRESS YES STATIC"
-        compression="COMPRESS YES"
-        compression="COMPRESS YES ADAPTIVE"
-        compression="VALUE COMPRESSION"
-        A list containing combining one of the first three with the last value, e.g.
-        compression=["COMPRESS YES ADAPTIVE", "VALUE COMPRESSION"]
+    Materialization details specific to IBM DB2.
 
-        compression="" will result in no compression
+    :param compression: Specify the compression methods to be applied to the table.
+        For possible values see :py:class:`IBMDB2CompressionTypes`.
     :param table_space_data: The DB2 table space where the data is  stored.
     :param table_space_index: The DB2 table space where the partitioned index is stored.
     :param table_space_long: The DB2 table spaces where the values of any long columns
         are stored.
+
+    Example
+    -------
+
+    .. code-block:: yaml
+
+      materialization_details:
+        __any__:
+          compression: ["COMPRESS YES ADAPTIVE", "VALUE COMPRESSION"]
+          table_space_data: "USERSPACE1"
+        no_compression:
+          # user-defined tag. Inherits table_space_data from __any__
+          # but overwrites compression.
+          compression: ""
     """
 
     def __post_init__(self):
@@ -80,7 +97,11 @@ class IBMDB2TableStore(SQLTableStore):
     Requires `ibm-db-sa <https://pypi.org/project/ibm-db-sa/>`_ to be installed.
 
     Takes the same arguments as
-    :py:class:`SQLTableStore <pydiverse.pipedag.backend.table.SQLTableStore>`
+    :py:class:`SQLTableStore <pydiverse.pipedag.backend.table.SQLTableStore>`.
+
+    Supports the :py:class:`IBMDB2MaterializationDetails\
+    <pydiverse.pipedag.backend.table.sql.dialects.ibm_db2.IBMDB2MaterializationDetails>`
+    materialization details.
     """
 
     _dialect_name = "ibm_db_sa"

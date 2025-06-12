@@ -28,6 +28,8 @@ from pydiverse.pipedag.materialize.details import (
 @dataclass(frozen=True)
 class PostgresMaterializationDetails(BaseMaterializationDetails):
     """
+    Materialization details specific to PostgreSQL.
+
     :param unlogged: Whether to use `unlogged`_ tables or not.
         This reduces safety in case of a crash or unclean shutdown, but can
         significantly increase write performance.
@@ -35,6 +37,21 @@ class PostgresMaterializationDetails(BaseMaterializationDetails):
     .. _unlogged:
         https://www.postgresql.org/docs/9.5/sql-createtable.html
         #SQL-CREATETABLE-UNLOGGED
+
+    Example
+    -------
+
+    .. code-block:: yaml
+
+        materialization_details:
+            __any__:
+                unlogged: true
+            my_label:
+                unlogged: false
+
+    For more general information on materialization details, see
+    ``materialization_details`` parameter of
+    :py:class:`SQLTableStore <pydiverse.pipedag.backend.table.SQLTableStore>`.
     """
 
     def __post_init__(self):
@@ -48,7 +65,11 @@ class PostgresTableStore(SQLTableStore):
     SQLTableStore that supports `PostgreSQL <https://postgresql.org>`_.
 
     Takes the same arguments as
-    :py:class:`SQLTableStore <pydiverse.pipedag.backend.table.SQLTableStore>`
+    :py:class:`SQLTableStore <pydiverse.pipedag.backend.table.SQLTableStore>`.
+
+    Supports the :py:class:`PostgresMaterializationDetails\
+    <pydiverse.pipedag.backend.table.sql.dialects.postgres.PostgresMaterializationDetails>`
+    materialization details.
     """
 
     _dialect_name = "postgresql"
