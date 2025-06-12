@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import warnings
@@ -6,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 import sqlalchemy as sa
 
+from pydiverse.common import Dtype
 from pydiverse.pipedag import Table
 from pydiverse.pipedag.backend.table.sql.hooks import (
     IbisTableHook,
@@ -13,7 +17,6 @@ from pydiverse.pipedag.backend.table.sql.hooks import (
     PolarsTableHook,
 )
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
-from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.container import Schema
 from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
 
@@ -74,7 +77,7 @@ class PandasTableHook(PandasTableHook):
         store: DuckDBTableStore,
         table: Table[pd.DataFrame],
         schema: Schema,
-        dtypes: dict[str, DType],
+        dtypes: dict[str, Dtype],
     ):
         engine = store.engine
         dtypes = cls._get_dialect_dtypes(dtypes, table)

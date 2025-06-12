@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -8,6 +11,7 @@ from typing import Any
 import pandas as pd
 import sqlalchemy as sa
 
+from pydiverse.common import Dtype, String
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateTableWithSuffix,
     LockSourceTable,
@@ -16,7 +20,6 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
 from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook
 from pydiverse.pipedag.backend.table.sql.reflection import PipedagDB2Reflection
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
-from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.container import Schema, Table
 from pydiverse.pipedag.materialize.details import (
     BaseMaterializationDetails,
@@ -192,15 +195,15 @@ class IBMDB2TableStore(SQLTableStore):
     def _get_compression(
         self, materialization_details_label: str | None
     ) -> str | list[str] | None:
-        compression: IBMDB2CompressionTypes | list[
-            IBMDB2CompressionTypes
-        ] | None = IBMDB2MaterializationDetails.get_attribute_from_dict(
-            self.materialization_details,
-            materialization_details_label,
-            self.default_materialization_details,
-            "compression",
-            self.strict_materialization_details,
-            self.logger,
+        compression: IBMDB2CompressionTypes | list[IBMDB2CompressionTypes] | None = (
+            IBMDB2MaterializationDetails.get_attribute_from_dict(
+                self.materialization_details,
+                materialization_details_label,
+                self.default_materialization_details,
+                "compression",
+                self.strict_materialization_details,
+                self.logger,
+            )
         )
         if isinstance(compression, list):
             return [c.value for c in compression]
@@ -245,7 +248,7 @@ class IBMDB2TableStore(SQLTableStore):
 @IBMDB2TableStore.register_table(pd)
 class PandasTableHook(PandasTableHook):
     @classmethod
-    def _get_dialect_dtypes(cls, dtypes: dict[str, DType], table: Table[pd.DataFrame]):
+    def _get_dialect_dtypes(cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame]):
         # Default string target is CLOB which can't be used for indexing.
         # -> Convert indexed string columns to VARCHAR(256)
         index_columns = set()
@@ -262,7 +265,7 @@ class PandasTableHook(PandasTableHook):
                     else sa.String(length=32_672)
                 )
                 for name, dtype in dtypes.items()
-                if dtype == DType.STRING
+                if dtype == String()
             }
         )
 
@@ -273,7 +276,7 @@ class PandasTableHook(PandasTableHook):
         df: pd.DataFrame,
         table: Table[pd.DataFrame],
         schema: Schema,
-        dtypes: dict[str, DType],
+        dtypes: dict[str, Dtype],
     ):
         suffix = store.get_create_table_suffix(
             resolve_materialization_details_label(table)

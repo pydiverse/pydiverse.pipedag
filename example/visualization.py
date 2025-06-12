@@ -1,10 +1,13 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import tempfile
 
+from pydiverse.common.util.structlog import setup_logging
 from pydiverse.pipedag import Flow, GroupNode, Stage, VisualizationStyle, materialize
 from pydiverse.pipedag.core.config import create_basic_pipedag_config
-from pydiverse.pipedag.util.structlog import setup_logging
 
 
 @materialize

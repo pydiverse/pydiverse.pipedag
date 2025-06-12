@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import pandas as pd
@@ -151,9 +154,9 @@ def test_input_versions_blob():
             assert len(other_blobs) == 3
             # this exception fails on different input because the hashes change and thus
             # the file name changes
-            assert not any(
-                isinstance(x, Exception) for x in other_blobs.values()
-            ), "expected to fail on third call"
+            assert not any(isinstance(x, Exception) for x in other_blobs.values()), (
+                "expected to fail on third call"
+            )
             assert blobs == other_blobs
 
     def get_flow():
@@ -204,7 +207,7 @@ def test_input_versions_other_instance_table(per_user):
             )
             other_tbls[
                 "x"
-            ].original.schema = f'{other_database}.{other_tbls["x"].original.schema}'
+            ].original.schema = f"{other_database}.{other_tbls['x'].original.schema}"
             return Table(
                 sa.select(
                     tbls["x"].outerjoin(
@@ -310,7 +313,7 @@ def test_input_versions_other_instance_locking(per_user):
         other_cfg: ConfigContext,
     ):
         _ = other_cfg
-        # other_tbls["x"] might be destoryed by a race condition since we can't keep
+        # other_tbls["x"] might be destroyed by a race condition since we can't keep
         # locks between both runs because we lock the other instance again
         if run > 1 and isinstance(other_tbls["x"], pd.DataFrame):
             return Table(tbls["x"].merge(other_tbls["x"], on="a"), name="res")

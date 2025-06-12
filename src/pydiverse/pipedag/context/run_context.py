@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import dataclasses
@@ -18,6 +21,8 @@ import attrs
 import msgpack
 import structlog
 
+from pydiverse.common.util import Disposable
+from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.context.context import (
     BaseAttrsContext,
     BaseContext,
@@ -26,11 +31,9 @@ from pydiverse.pipedag.context.context import (
 )
 from pydiverse.pipedag.context.trace_hook import TraceHook
 from pydiverse.pipedag.errors import LockError, RemoteProcessError, StageError
-from pydiverse.pipedag.util import Disposable
 from pydiverse.pipedag.util.ipc import IPCServer
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag._typing import T
     from pydiverse.pipedag.backend import BaseLockManager, LockState
     from pydiverse.pipedag.core import Flow, Stage, Subflow, Task
     from pydiverse.pipedag.materialize import Blob, Table
@@ -142,7 +145,7 @@ class RunContextServer(IPCServer):
 
     def __enter__(self):
         super().__enter__()
-        from pydiverse.pipedag.backend import LockState
+        from pydiverse.pipedag.backend.lock import LockState
 
         # INITIALIZE EVERYTHING
         with self.lock_manager("_pipedag_setup_"):
@@ -734,7 +737,7 @@ class StageLockStateHandler(Disposable):
         self, stage: Stage, old_state: LockState, new_state: LockState
     ):
         """Internal listener that gets notified when the state of a lock changes"""
-        from pydiverse.pipedag.backend import LockState
+        from pydiverse.pipedag.backend.lock import LockState
         from pydiverse.pipedag.core import Stage
 
         if not isinstance(stage, Stage):

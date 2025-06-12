@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import pandas as pd
@@ -67,7 +70,7 @@ def main():
 
 
 if __name__ == "__main__":
-    from pydiverse.pipedag.util.structlog import setup_logging
+    from pydiverse.common.util.structlog import setup_logging
 
     setup_logging()  # you can setup the logging and/or structlog libraries as you wish
     main()

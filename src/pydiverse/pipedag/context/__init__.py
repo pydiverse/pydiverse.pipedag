@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 from pydiverse.pipedag.context.context import (
@@ -5,6 +8,7 @@ from pydiverse.pipedag.context.context import (
     DAGContext,
     StageLockContext,
     TaskContext,
+    default_config_dict,
 )
 from pydiverse.pipedag.context.run_context import (
     FinalTaskState,
@@ -20,4 +24,5 @@ __all__ = [
     "RunContextServer",
     "StageLockContext",
     "FinalTaskState",
+    "default_config_dict",
 ]

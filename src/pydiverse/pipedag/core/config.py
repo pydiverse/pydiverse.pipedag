@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import copy
@@ -13,7 +16,7 @@ import sqlalchemy as sa
 import structlog
 import yaml
 
-from pydiverse.pipedag.util.deep_merge import deep_merge
+from pydiverse.common.util import deep_merge
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.context import ConfigContext
@@ -133,28 +136,12 @@ class PipedagConfig:
 
         # TODO: Check that this function only gets called in the main interpreter.
         #       Otherwise certain environment variables might get expanded incorrectly.
-        from pydiverse.pipedag.context import ConfigContext
+        from pydiverse.pipedag.context import ConfigContext, default_config_dict
 
         config = self.__get_merged_config_dict(
             instance=instance,
             flow=flow,
-            default={
-                "fail_fast": False,
-                "network_interface": "127.0.0.1",
-                "disable_kroki": True,
-                "kroki_url": "https://kroki.io",
-                "per_user_template": "{id}_{username}",
-                "strict_result_get_locking": True,
-                "cache_validation": dict(
-                    mode="normal",
-                    disable_cache_function=False,
-                    ignore_task_version=False,
-                ),
-                "stage_commit_technique": "SCHEMA_SWAP",
-                "auto_table": [],
-                "auto_blob": [],
-                "attrs": {},
-            },
+            default=default_config_dict,
         ).copy()
 
         # TODO: Delegate selecting where variables can be expanded to the

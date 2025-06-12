@@ -1,17 +1,19 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import random
 
 import structlog
 
+from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import ConfigContext, Table
 from pydiverse.pipedag.backend import SQLTableStore
-from pydiverse.pipedag.backend.table.sql.ddl import DropTable
 from pydiverse.pipedag.container import Schema
 from pydiverse.pipedag.context import TaskContext
-from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.store import mangle_table_name
-from pydiverse.pipedag.util.hashing import stable_hash
 
 
 def materialize_table(
@@ -82,14 +84,14 @@ def materialize_table(
 
     if drop_if_exists:
         if isinstance(table_store, SQLTableStore):
-            table_store.execute(DropTable(table.name, schema, if_exists=True))
+            table_store.delete_table_from_transaction(table, schema=schema)
         else:
             logger = structlog.get_logger(logger_name="Debug materialize_table")
             logger.warning(
                 "drop_if_exists not supported for non SQLTableStore table stores."
             )
     if task is None:
-        hook = table_store.get_m_table_hook(type(table.obj))
+        hook = table_store.get_m_table_hook(table)
         schema_name = (
             schema.name
             if table_store.get_schema(schema.name).get() == schema.get()

@@ -8,7 +8,7 @@ This [example](../examples.md) shows a slightly more realistic pipeline with the
 - model training
 - evaluation
 
-It requires a few data files. You can unzip [realistic_pipeline.zip](realistic_pipeline.zip) to get the data files in the 
+It requires a few data files. You can unzip [realistic_pipeline.zip](realistic_pipeline.zip) to get the data files in the
 right place to execute:
 ```bash
 unzip realistic_pipeline.zip
@@ -226,7 +226,7 @@ def get_pipeline():
 
 if __name__ == "__main__":
     import logging
-    from pydiverse.pipedag.util.structlog import setup_logging
+    from pydiverse.common.util.structlog import setup_logging
 
     setup_logging(log_level=logging.INFO)
 

@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import copy
@@ -14,13 +17,13 @@ import structlog
 from attrs import define, evolve, field, frozen
 from box import Box
 
-from pydiverse.pipedag.util import deep_merge
-from pydiverse.pipedag.util.import_ import import_object, load_object
+from pydiverse.common.util import deep_merge
+from pydiverse.common.util.import_ import import_object, load_object
+from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.util.naming import NameDisambiguator
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Flow, GroupNode, Stage, Task, VisualizationStyle
-    from pydiverse.pipedag._typing import T
     from pydiverse.pipedag.backend import BaseLockManager
     from pydiverse.pipedag.context.run_context import StageLockStateHandler
     from pydiverse.pipedag.engine.base import OrchestrationEngine
@@ -157,6 +160,34 @@ class GroupNodeConfig:
 class VisualizationConfig:
     styles: dict[str, VisualizationStyle] | None = None
     group_nodes: dict[str, GroupNodeConfig] | None = None
+
+
+default_config_dict = {
+    "fail_fast": False,
+    "network_interface": "127.0.0.1",
+    "disable_kroki": True,
+    "kroki_url": "https://kroki.io",
+    "per_user_template": "{id}_{username}",
+    "strict_result_get_locking": True,
+    "cache_validation": dict(
+        mode="normal",
+        disable_cache_function=False,
+        ignore_task_version=False,
+    ),
+    "stage_commit_technique": "SCHEMA_SWAP",
+    "auto_table": [],
+    "auto_blob": [],
+    "attrs": {},
+}
+
+test_store_config_dict = dict(
+    table_store={
+        "class": "pydiverse.pipedag.backend.table.SQLTableStore",
+        "args": {"url": "duckdb://"},
+    },
+    blob_store={"class": "pydiverse.pipedag.backend.blob.NoBlobStore"},
+    lock_manager={"class": "pydiverse.pipedag.backend.lock.NoLockManager"},
+)
 
 
 @frozen(slots=False)
@@ -344,27 +375,58 @@ class ConfigContext(BaseAttrsContext):
         :return:
             ConfigContext instance
         """
+        for key, value in default_config_dict.items():
+            if key not in config:
+                raise ValueError(
+                    f"Missing config key '{key}', suggested default "
+                    f"config: {default_config_dict}"
+                )
+            elif isinstance(value, dict) and isinstance(config[key], dict):
+                for key2, _ in value.items():
+                    if key2 not in config[key]:
+                        raise ValueError(
+                            f"Missing config key '{key}'.'{key2}', "
+                            f"suggested default config: "
+                            f"{default_config_dict}"
+                        )
+        for key, _ in test_store_config_dict.items():
+            if key not in config:
+                raise ValueError(
+                    f"Missing config key '{key}', suggested test "
+                    f"config: {test_store_config_dict}"
+                )
 
         # check enums
         # Alternative: could be a feature of __get_merged_config_dict
         # in case default value is set to Enum
         for parent_cfg, enum_name, enum_type in [
             (config, "stage_commit_technique", StageCommitTechnique),
-            (config["cache_validation"], "mode", CacheValidationMode),
+            (config.get("cache_validation"), "mode", CacheValidationMode),
         ]:
-            parent_cfg[enum_name] = parent_cfg[enum_name].strip().upper()
-            if not hasattr(enum_type, parent_cfg[enum_name]):
-                raise ValueError(
-                    f"Found unknown setting {enum_name}: '{parent_cfg[enum_name]}';"
-                    f" Expected one of: {', '.join([v.name for v in enum_type])}"
-                )
-        stage_commit_technique = getattr(
-            StageCommitTechnique, config["stage_commit_technique"]
+            if parent_cfg is not None and hasattr(parent_cfg, enum_name):
+                parent_cfg[enum_name] = parent_cfg[enum_name].strip().upper()
+                if not hasattr(enum_type, parent_cfg[enum_name]):
+                    raise ValueError(
+                        f"Found unknown setting {enum_name}: '{parent_cfg[enum_name]}';"
+                        f" Expected one of: {', '.join([v.name for v in enum_type])}"
+                    )
+        stage_commit_technique = (
+            getattr(StageCommitTechnique, config["stage_commit_technique"].upper())
+            if "stage_commit_technique" in config
+            else StageCommitTechnique.SCHEMA_SWAP
         )
-        cache_validation = copy.deepcopy(config["cache_validation"])
-        cache_validation["mode"] = getattr(
-            CacheValidationMode, config["cache_validation"]["mode"]
+        cache_validation = (
+            copy.deepcopy(config["cache_validation"])
+            if "cache_validation" in config
+            else {}
         )
+        cache_validation["mode"] = (
+            getattr(CacheValidationMode, config["cache_validation"]["mode"].upper())
+            if "cache_validation" in config and "mode" in config["cache_validation"]
+            else CacheValidationMode.NORMAL
+        )
+        if "disable_cache_function" not in cache_validation:
+            cache_validation["disable_cache_function"] = False
         # parsing visualization dictionaries into objects (this could be generalized
         # and possible an open source solution exists)
         from pydiverse.pipedag import VisualizationStyle
@@ -408,7 +470,7 @@ class ConfigContext(BaseAttrsContext):
             instance_name=instance,
             fail_fast=config["fail_fast"],
             strict_result_get_locking=config["strict_result_get_locking"],
-            instance_id=config["instance_id"],
+            instance_id=config.get("instance_id", "pipeline"),
             stage_commit_technique=stage_commit_technique,
             cache_validation=Box(cache_validation, frozen_box=True),
             visualization=visualization,
@@ -417,7 +479,7 @@ class ConfigContext(BaseAttrsContext):
             kroki_url=config.get("kroki_url"),
             attrs=Box(config["attrs"], frozen_box=True),
             table_hook_args=Box(
-                config["table_store"].get("hook_args", {}), frozen_box=True
+                config.get("table_store", {}).get("hook_args", {}), frozen_box=True
             ),
         )
         return config_context

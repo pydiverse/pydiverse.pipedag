@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 """Utilities for JSON to support PipeDAG objects
 
 PipeDAG objects get serialized as JSON objects with a special `__pipedag_type__`
@@ -8,11 +11,16 @@ type of the object.
 from __future__ import annotations
 
 import datetime as dt
+import importlib
 import json
 from enum import Enum
 from functools import cache
 from pathlib import Path
+from types import GenericAlias
+from typing import get_args, get_origin
 
+from pydiverse.common.util.computation_tracing import fully_qualified_name
+from pydiverse.common.util.import_ import load_object
 from pydiverse.pipedag import ConfigContext, Stage
 from pydiverse.pipedag.container import Blob, RawSql, Table
 from pydiverse.pipedag.context import RunContext
@@ -30,6 +38,13 @@ class Type(str, Enum):
     PIPEDAG_CONFIG = "pipedag_config"
     CONFIG_CONTEXT = "config_context"
 
+    # Data classes can be reconstructed
+    DATA_CLASS = "data_class"
+
+    # Types / Type Annotations can be reconstructed
+    TYPE = "type"
+    GENERIC_ALIAS = "generic_alias"
+
     # Other types we want to support
     PATHLIB_PATH = "pathlib:path"
     DT_DATE = "dt:date"
@@ -44,9 +59,7 @@ def json_default(o):
     if isinstance(o, Table):
         kwargs = {}
         if o.assumed_dependencies is not None:
-            kwargs[
-                "assumed_dependencies"
-            ] = (
+            kwargs["assumed_dependencies"] = (
                 o.assumed_dependencies
             )  # [json_default(t) for t in o.assumed_dependencies]
         return {
@@ -59,6 +72,7 @@ def json_default(o):
             "materialization_details": o.materialization_details,
             "external_schema": o.external_schema,
             "shared_lock_allowed": o.shared_lock_allowed,
+            "annotation": o.annotation,
             **kwargs,
         }
     if isinstance(o, RawSql):
@@ -67,7 +81,7 @@ def json_default(o):
             kwargs["assumed_dependencies"] = o.assumed_dependencies
         return {
             TYPE_KEY: Type.RAW_SQL,
-            "stage": o.stage.name,
+            "stage": o.stage.name if o.stage is not None else None,
             "name": o.name,
             "cache_key": o.cache_key,
             "table_names": o.table_names,
@@ -76,7 +90,7 @@ def json_default(o):
     if isinstance(o, Blob):
         return {
             TYPE_KEY: Type.BLOB,
-            "stage": o.stage.name,
+            "stage": o.stage.name if o.stage is not None else None,
             "name": o.name,
             "cache_key": o.cache_key,
         }
@@ -103,15 +117,35 @@ def json_default(o):
             TYPE_KEY: Type.PATHLIB_PATH,
             "path": str(o),
         }
+    if isinstance(o, dt.datetime):
+        return {
+            TYPE_KEY: Type.DT_DATETIME,
+            "datetime": o.isoformat(),
+        }
     if isinstance(o, dt.date):
         return {
             TYPE_KEY: Type.DT_DATE,
             "date": o.isoformat(),
         }
-    if isinstance(o, dt.datetime):
+    if isinstance(o, GenericAlias):
         return {
-            TYPE_KEY: Type.DT_DATETIME,
-            "datetime": o.isoformat(),
+            TYPE_KEY: Type.GENERIC_ALIAS,
+            "origin": get_origin(o),
+            "args": get_args(o),
+        }
+    if isinstance(o, type):
+        return {
+            TYPE_KEY: Type.TYPE,
+            "module": o.__module__,
+            "qualname": o.__qualname__,
+        }
+    if hasattr(o, "__dataclass_fields__") and not isinstance(o, type):
+        return {
+            TYPE_KEY: Type.DATA_CLASS,
+            "config_dict": {
+                "class": fully_qualified_name(o),
+                "args": o.__dict__,
+            },
         }
 
     raise TypeError(f"Object of type {type(o)} is not JSON serializable")
@@ -136,6 +170,7 @@ def json_object_hook(d: dict):
             primary_key=d["primary_key"],
             indexes=d["indexes"],
             materialization_details=d.get("materialization_details"),
+            annotation=d.get("annotation"),
         )
         tbl.stage = get_stage(d["stage"])
         tbl.cache_key = d["cache_key"]
@@ -169,6 +204,16 @@ def json_object_hook(d: dict):
         return dt.date.fromisoformat(d["date"])
     if type_ == Type.DT_DATETIME:
         return dt.datetime.fromisoformat(d["datetime"])
+    if type_ == Type.DATA_CLASS:
+        return load_object(d["config_dict"])
+    if type_ == Type.TYPE:
+        module = d["module"]
+        qualname = d["qualname"]
+        return getattr(importlib.import_module(module), qualname)
+    if type_ == Type.GENERIC_ALIAS:
+        origin = d["origin"]
+        args = tuple(d["args"])
+        return origin[args]
 
     raise ValueError(f"Invalid value for '{TYPE_KEY}' key: {type_}")
 

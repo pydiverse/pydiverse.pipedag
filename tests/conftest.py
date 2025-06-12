@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import itertools
@@ -8,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from pydiverse.pipedag.util.structlog import setup_logging
+from pydiverse.common.util.structlog import setup_logging
 
 # Load the `run_with_instances` fixture, so it gets applied to all tests
 from tests.fixtures.instances import INSTANCE_MARKS, fixture_run_with_instance

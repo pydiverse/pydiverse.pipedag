@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import random
@@ -8,6 +11,7 @@ import attr
 import pytest
 import sqlalchemy as sa
 
+from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import (
     Flow,
     GroupNode,
@@ -23,7 +27,6 @@ from pydiverse.pipedag.context.context import (
     TaskContext,
 )
 from pydiverse.pipedag.core.config import PipedagConfig
-from pydiverse.pipedag.util.hashing import stable_hash
 from tests.fixtures.instances import (
     ORCHESTRATION_INSTANCES,
     skip_instances,

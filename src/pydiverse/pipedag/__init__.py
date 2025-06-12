@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 from .container import (
@@ -14,24 +17,29 @@ from .core import (
     PipedagConfig,
     Result,
     Stage,
-    Task,
     VisualizationStyle,
+)
+from .core.task import (
+    Task,
+    TaskGetItem,
 )
 from .materialize import (
     input_stage_versions,
     materialize,
 )
-from .materialize.core import AUTO_VERSION
+from .materialize.materializing_task import AUTO_VERSION
 
 __all__ = [
     "Flow",
     "Stage",
     "materialize",
     "input_stage_versions",
-    "AUTO_VERSION",
     "Table",
     "RawSql",
     "Blob",
+    "ExternalTableReference",
+    "Task",
+    "TaskGetItem",
     "GroupNode",
     "VisualizationStyle",
     "Schema",
@@ -39,4 +47,5 @@ __all__ = [
     "PipedagConfig",
     "ConfigContext",
     "StageLockContext",
+    "AUTO_VERSION",
 ]

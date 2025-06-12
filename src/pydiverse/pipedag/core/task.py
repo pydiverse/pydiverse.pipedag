@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import inspect
@@ -6,12 +9,12 @@ from typing import TYPE_CHECKING, Any, Callable
 
 import structlog
 
+from pydiverse.common.util import deep_map
+from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import Table
 from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext, TaskContext
 from pydiverse.pipedag.context.run_context import FinalTaskState
 from pydiverse.pipedag.errors import StageError
-from pydiverse.pipedag.util import deep_map
-from pydiverse.pipedag.util.hashing import stable_hash
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import Flow, Stage

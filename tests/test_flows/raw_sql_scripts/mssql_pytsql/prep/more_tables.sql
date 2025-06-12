@@ -31,4 +31,3 @@ INNER JOIN (
   ON apgs.entity = base.entity
 CREATE INDEX raw_start_date ON {{out_schema}}.raw01A (start_date DESC)
 CREATE INDEX raw_start_date_end_date ON {{out_schema}}.raw01A (end_date, start_date DESC)
-
