@@ -414,9 +414,9 @@ class PandasTableHook(TableHook[SQLTableStore]):
             # Currently, pandas' .to_sql fails for arrow date columns.
             # -> Temporarily convert all dates to objects
             # See: https://github.com/pandas-dev/pandas/issues/53854
-            # TODO: Remove this once pandas 2.1 gets released (fixed by #53856)
-            if dtype == Date():
-                df[col] = df[col].astype(object)
+            if pd.__version__ < "2.1.3":
+                if dtype == Date():
+                    df[col] = df[col].astype(object)
 
         cls._execute_materialize(
             df,
@@ -536,16 +536,20 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
         cols, dtypes = cls._adjust_cols_retrieve(cols, dtypes, backend)
 
-        query = sa.select(*cols.values()).select_from(sql_table)
+        if cols is None:
+            query = sa.select("*").select_from(sql_table)
+        else:
+            query = sa.select(*cols.values()).select_from(sql_table)
         return query, dtypes
 
     @classmethod
     def _adjust_cols_retrieve(
         cls, cols: dict, dtypes: dict, backend: PandasBackend
-    ) -> tuple[dict, dict]:
+    ) -> tuple[dict | None, dict]:
         # in earlier times pandas only supported datetime64[ns] and thus we implemented
         # clipping in this function to avoid the creation of dtype=object columns
-        return cols, dtypes
+        return None, dtypes
+        # return cols, dtypes
 
     @classmethod
     def _execute_query_retrieve(
@@ -601,19 +605,22 @@ except ImportError as e:
 @SQLTableStore.register_table(polars)
 class PolarsTableHook(TableHook[SQLTableStore]):
     @classmethod
-    def download_table(cls, query: Any, connection_uri: str) -> polars.DataFrame:
+    def download_table(
+        cls, query: str, connection_uri: str, store: SQLTableStore
+    ) -> polars.DataFrame:
         """
         Provide hook that allows to override the default
         download of polars tables from the tablestore.
         """
-        # TODO: consider using arrow_odbc or adbc-driver-postgresql together with:
-        # Cursor.fetchallarrow()
 
-        # This implementation requires connectorx which does not work for duckdb
-        # and osx-arm64.
-        # Attention: In case this call fails, we simply fall-back to pandas hook.
-        df = polars.read_database_uri(query, connection_uri)
-        return df
+        # We try to use arrow_odbc (see mssql) or adbc (e.g. adbc-driver-postgresql)
+        # if possible. Duckdb also has its own implementation.
+        try:
+            return polars.read_database_uri(query, connection_uri, engine="adbc")
+        except:  # noqa
+            # This implementation requires connectorx which does not work for duckdb.
+            # Attention: In case this call fails, we simply fall-back to pandas hook.
+            return polars.read_database_uri(query, connection_uri)
 
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanResult:
@@ -716,7 +723,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
     @classmethod
     def _execute_query(cls, query: str, connection_uri: str, store: SQLTableStore):
         try:
-            df = cls.download_table(query, connection_uri)
+            df = cls.download_table(query, connection_uri, store)
             return df
         except (RuntimeError, ModuleNotFoundError) as e:
             logger = structlog.get_logger(logger_name=cls.__name__)

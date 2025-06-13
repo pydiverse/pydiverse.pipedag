@@ -3,13 +3,18 @@
 
 from __future__ import annotations
 
+import dataclasses
+import importlib
 import re
 from collections.abc import Iterable
+from dataclasses import dataclass, field
 from typing import Any
 
 import pandas as pd
+import pyodbc
 import sqlalchemy as sa
 import sqlalchemy.dialects.mssql
+from sqlalchemy import URL, Engine
 
 from pydiverse.common import Datetime, Dtype
 from pydiverse.pipedag.backend.table.sql.ddl import (
@@ -17,7 +22,11 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateAlias,
     _mssql_update_definition,
 )
-from pydiverse.pipedag.backend.table.sql.hooks import IbisTableHook, PandasTableHook
+from pydiverse.pipedag.backend.table.sql.hooks import (
+    IbisTableHook,
+    PandasTableHook,
+    PolarsTableHook,
+)
 from pydiverse.pipedag.backend.table.sql.reflection import PipedagMSSqlReflection
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.container import RawSql, Schema, Table
@@ -305,6 +314,112 @@ class PandasTableHook(PandasTableHook):
 
 
 try:
+    import polars
+except ImportError:
+    polars = None
+
+
+def reflect_pyodbc_column_types(query: str, odbc_string: str):
+    """Reflect the column types of a query using pyodbc."""
+    import pyodbc
+
+    with pyodbc.connect(odbc_string) as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(f"SELECT TOP 0 * FROM ({query}) as A")
+            column_types = [
+                {
+                    "name": d[0],  # column name
+                    "sql_type": d[1],  # ODBC SQL type code, e.g. -5 for BIGINT
+                    "precision": d[4],  # column_size
+                    "scale": d[5],  # decimal_digits
+                    "nullable": d[6],  # 1 = nullable, 0 = NOT NULL
+                }
+                for d in cursor.description
+            ]
+    return column_types
+
+
+@MSSqlTableStore.register_table(polars)
+class PolarsTableHook(PolarsTableHook):
+    @classmethod
+    def _adjust_cols_retrieve(
+        cls, cols: dict, dtypes: dict
+    ) -> tuple[dict | None, dict]:
+        arrow_odbc = True
+        max_string_length = 256
+        if arrow_odbc:
+            # arrow-odbc does not handle VARCHAR(MAX) columns well, so we need to cut
+            # strings
+            if any(isinstance(col.type, sa.String) for col in cols.values()):
+                return {
+                    name: sa.cast(
+                        sa.func.substring(col, 1, max_string_length).label(name),
+                        sa.String(max_string_length),
+                    )
+                    if isinstance(col.type, sa.String)
+                    else col
+                    for name, col in cols.items()
+                }, dtypes
+        return None, dtypes
+
+    @classmethod
+    def _read_db_query(cls, store: SQLTableStore, table: Table, stage_name: str | None):
+        table_name, schema = store.resolve_alias(table, stage_name)
+        arrow_odbc = True
+
+        if arrow_odbc:
+            sql_table = store.reflect_table(table_name, schema).alias("tbl")
+
+            cols = {col.name: col for col in sql_table.columns}
+            dtypes = {name: Dtype.from_sql(col.type) for name, col in cols.items()}
+
+            cols, dtypes = cls._adjust_cols_retrieve(cols, dtypes)
+            if cols is not None:
+                return sa.select(*cols.values()).select_from(sql_table)
+        else:
+            sql_table = sa.table(table_name, schema=schema)
+        query = sa.select("*").select_from(sql_table)
+
+        return query
+
+    @classmethod
+    def download_table(
+        cls, query: str, connection_uri: str, store: SQLTableStore
+    ) -> polars.DataFrame:
+        engine = store.engine
+        arrow_odbc = True
+
+        if arrow_odbc:
+            try:
+                odbc_string = ConnectionString.from_url(engine.url).odbc_string
+
+                # we need to avoid VARCHAR(MAX) columns since arrow-odbc does not
+                # handle them well
+                # dtypes = {}  # TODO: allow user to provide custom dtypes
+                # column_types = reflect_pyodbc_column_types(query, odbc_string)
+
+                import polars as pl
+
+                df = pl.concat(
+                    pl.read_database(
+                        query=query,
+                        connection=odbc_string,
+                        iter_batches=True,
+                        batch_size=65536,
+                        # schema_overrides=dtypes,
+                        execute_options={"map_schema": map_pyarrow_schema_for_polars},
+                    ),
+                    rechunk=True,
+                )
+
+                return df
+            except Exception as e:  # noqa
+                pass
+
+        return super().download_table(query, connection_uri, store)
+
+
+try:
     import ibis
 except ImportError:
     ibis = None
@@ -322,3 +437,246 @@ class IbisTableHook(IbisTableHook):
             port=url.port,
             database=url.database,
         )
+
+
+DEFAULT_PORT = 1433
+MSSQL_DRIVER_REGEX = re.compile(r"ODBC Driver ([0-9]+) for SQL Server")
+ODBC_CONNECTION_FIELD_KEYMAP = {
+    "server": "host",
+    "pwd": "password",
+    "uid": "username",
+    "trustservercertificate": "insecure",
+}
+TRUTH_STR_VALUES = ("y", "yes", "t", "true", "True", "on", "1", "1.0")
+FALSE_STR_VALUES = ("n", "no", "f", "false", "False", "off", "0", "0.0")
+
+TRUTH_VALUES = (*TRUTH_STR_VALUES, True, 1.0)
+FALSE_VALUES = (*FALSE_STR_VALUES, False, 0.0)
+
+NA_VALUES: list[Any] = ["nan", "NaN", "NaT", "NULL", "null", float("nan")]
+
+
+def _latest_mssql_driver() -> str:
+    # Get all drivers
+    drivers = pyodbc.drivers()
+
+    # Filter by SQL drivers and get their versions
+    mssql_driver_versions = []
+    for driver in drivers:
+        match = MSSQL_DRIVER_REGEX.match(driver)
+        if match:
+            mssql_driver_versions.append(int(match.groups()[0]))
+    if len(mssql_driver_versions) == 0:
+        raise ValueError("No ODBC driver for SQL Server found.")
+
+    # Return driver name of latest version
+    latest_version = max(mssql_driver_versions)
+    return f"ODBC Driver {latest_version} for SQL Server"
+
+
+@dataclass
+class ConnectionString:
+    """Utility class for handling parameters of a database connection string.
+
+    You typically initialize this connection string manually by passing values for at
+    least ``host`` and ``database``. Afterwards, you will want to either...
+
+    - create a :class:`~sqlalchemy.Engine` by using :meth:`sqlalchemy_url` or
+    - create a connection with e.g. :mod:`pyodbc` by using ``str(self)``
+
+    Note:
+        You often have to either disable encryption or allow insecure connections
+        within corporate networks.
+    """
+
+    #: The host of the database instance. Might be a hostname or an IP address.
+    host: str
+    #: The name of the database to connect to in the database instance.
+    database: str = "tempdb"
+    #: The port to connect to.
+    port: int | None = DEFAULT_PORT
+    #: The name of the ODBC driver to use for connecting to the database.
+    driver: str = field(default_factory=_latest_mssql_driver)
+
+    #: The username for connecting to the database (if not using Windows Auth).
+    username: str | None = None
+    #: The password of the user to authenticate with (if not using Windows Auth).
+    password: str | None = None
+
+    #: Whether to encrypt communication with the database in exchange for performance.
+    encrypt: bool = True
+    #: Whether to skip server certificate validation for TLS-encrypted communication.
+    insecure: bool = False
+
+    @classmethod
+    def from_engine(cls, engine: Engine) -> ConnectionString:
+        return ConnectionString.from_url(engine.url)
+
+    @classmethod
+    def from_url(cls, url: URL) -> ConnectionString:
+        """Parse a ConnectionString from an url.
+
+        Args:
+            url: URL to parse; both sqlalchemy and odbc url formats are valid
+
+        Returns:
+            ConnectionString parsed from url
+        """
+        # url is a sqlalchemy url
+        query = {k.lower(): v for k, v in url.query.items()}
+
+        kwargs = {}
+        if query.get("driver") is not None:
+            kwargs["driver"] = query["driver"]
+        if query.get("encrypt") is not None:
+            kwargs["encrypt"] = (
+                query["encrypt"].lower() not in FALSE_STR_VALUES  # type: ignore
+            )
+        if query.get("trustservercertificate") is not None:
+            kwargs["insecure"] = (
+                query["trustservercertificate"].lower()  # type: ignore
+                in TRUTH_STR_VALUES
+            )
+
+        return ConnectionString(
+            host=url.host or "localhost",
+            database=url.database or "tempdb",
+            port=url.port,
+            username=url.username,
+            password=url.password if url.username is not None else None,
+            **kwargs,  # type: ignore
+        )
+
+    @classmethod
+    def _from_odbc_string(cls, odbc_string: str):
+        """Parse a ConnectionString from the fields of an odbc dictionary string.
+
+        Args:
+            odbc_string: odbc connection dictionary string
+
+        Returns:
+            ConnectionString parsed from the odbc connection arguments
+        """
+        kwargs: dict[str, Any] = {}
+        for entry in odbc_string.split(";"):
+            key_val = entry.split("=")
+            assert len(key_val) == 2
+            adjusted_key = ODBC_CONNECTION_FIELD_KEYMAP.get(
+                key_val[0].lower(), key_val[0].lower()
+            )
+            if adjusted_key == "trusted_connection":
+                continue  # we can determine this key from username presence
+            kwargs[adjusted_key] = key_val[1]
+
+        if "driver" in kwargs:
+            kwargs["driver"] = kwargs["driver"].replace("{", "").replace("}", "")
+        kwargs["encrypt"] = kwargs.get("encrypt", "").lower() not in FALSE_STR_VALUES
+        kwargs["insecure"] = kwargs.get("insecure", "").lower() in TRUTH_STR_VALUES
+
+        return ConnectionString(
+            **kwargs,
+        )
+
+    def with_database(self, /, database: str) -> ConnectionString:
+        """Obtain a copy of the connection string reference a different database.
+
+        The returned connection string connects to the same database instance as the
+        original connection string and uses the same connection parameters.
+
+        Args:
+            database: The name of the database that the connection string should
+                reference.
+
+        Returns:
+            The new connection string.
+        """
+        return dataclasses.replace(self, database=database)
+
+    @property
+    def driver_version(self) -> int:
+        """The version of the ODBC driver referenced by the connection string."""
+        match = MSSQL_DRIVER_REGEX.match(self.driver)
+        if match is None:
+            raise ValueError(f"Cannot determine driver version from '{self.driver}'.")
+        return int(match.groups()[0])
+
+    @property
+    def odbc_string(self) -> str:
+        """The ODBC connection string to use for :mod:`pyodbc` and :mod:`arrow-odbc`."""
+        params = {
+            "Driver": "{" + self.driver + "}",
+            "Server": (f"{self.host},{self.port}" if self.port else self.host),
+            "Database": self.database,
+            "Encrypt": "yes" if self.encrypt else "no",
+            "TrustServerCertificate": "yes" if self.insecure else "no",
+        }
+        if self.username is None:
+            params["Trusted_Connection"] = "yes"
+        else:
+            params["UID"] = self.username
+            if self.password is not None:
+                params["PWD"] = self.password
+        return ";".join(f"{k}={v}" for k, v in params.items())
+
+    def fine_grained_odbc_string(
+        self, multiple_active_result_sets: bool = False
+    ) -> str:
+        """Construct an ODBC connection string with more more fine-grained control."""
+        return (
+            self.odbc_string
+            + f";MARS_Connection={'yes' if multiple_active_result_sets else 'no'}"
+        )
+
+    @property
+    def sqlalchemy_url(self) -> URL:
+        """The connection string as a URL for SQLAlchemy.
+
+        This URL should be used when calling :meth:`sqlalchemy.create_engine`.
+
+        Note:
+            This method intentionally does NOT create a URL with the format
+            ``mssql+pyodbc:///?odbc_connect={odbc_args}`` since this does not allow for
+            accessing the ``database`` property of an engine URL in SQLAlchemy.
+        """
+        query = {
+            "driver": self.driver,
+            "Encrypt": "yes" if self.encrypt else "no",
+            "TrustServerCertificate": "yes" if self.insecure else "no",
+        }
+        if self.username is None:
+            query["Trusted_Authentication"] = "yes"
+        return URL.create(
+            drivername="mssql+pyodbc",
+            username=self.username,
+            password=self.password,
+            host=self.host,
+            port=self.port,
+            database=self.database,
+            query=query,
+        )
+
+
+try:
+    import pyarrow as pa
+except ImportError:
+    pa = importlib.import_module("pyarrow")
+    pa.Schema = None
+
+
+def map_pyarrow_schema_for_polars(schema: pa.Schema) -> pa.Schema:
+    """This is necessary since, by default, arrow-odbc loads all DATETIME2 columns with
+    nanosecond precision before potentially casting them to microsecond precision (as
+    specified in the polars schema), which results in overflows.
+
+    Hence, we have to tell arrow-odbc to load the fields only in microsecond precision.
+    """
+    assert pa.schema is not None, "please install pyarrow"
+    mapped_fields = [
+        (
+            field.with_type(pa.timestamp("us"))
+            if field.type == pa.timestamp("ns")
+            else field
+        )
+        for field in list(schema)
+    ]
+    return pa.schema(mapped_fields, schema.metadata)

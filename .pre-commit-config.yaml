@@ -37,7 +37,7 @@ repos:
         entry: pixi run -e lint taplo format
         language: system
         types: [toml]
-      # pre-commit-hooks
+        exclude: ^pixi\.toml$  # environments should be one-liners
       - id: trailing-whitespace-fixer
         name: trailing-whitespace-fixer
         entry: pixi run -e lint trailing-whitespace-fixer

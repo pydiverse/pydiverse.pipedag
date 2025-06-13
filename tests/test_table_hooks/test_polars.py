@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 from pydiverse.pipedag import (
@@ -16,7 +14,10 @@ from pydiverse.pipedag import (
     materialize,
 )
 from pydiverse.pipedag.backend.table.sql.hooks import PolarsTableHook
-from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
+from pydiverse.pipedag.backend.table.sql.sql import (
+    DISABLE_DIALECT_REGISTRATION,
+    SQLTableStore,
+)
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
@@ -42,16 +43,27 @@ def test_table_store():
             pl.DataFrame(
                 {
                     "col": [0, 1, 2, 3],
+                    "str_col": ["a", "abc", "".join("x" for _ in range(1024)), None],
                 }
             )
         )
 
     @materialize()
     def expected_out_table():
+        expected_length = 1024
+        store = ConfigContext.get().store.table_store
+        if store.engine.dialect.name == "mssql":
+            expected_length = 256
         return Table(
             pl.DataFrame(
                 {
                     "col": [0, 1, 2, 3],
+                    "str_col": [
+                        "a",
+                        "abc",
+                        "".join("x" for _ in range(expected_length)),
+                        None,
+                    ],
                     "x": [1, 1, 1, 1],
                     "y": [2, 2, 2, 2],
                 }
@@ -192,8 +204,9 @@ def test_custom_download():
         @classmethod
         def download_table(
             cls,
-            query: Any,
+            query: str,
             connection_uri: str,
+            store: SQLTableStore,
         ):
             # to simplify this test with various dependencies and platforms, it is
             # easier to use pandas:

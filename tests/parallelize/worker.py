@@ -23,13 +23,13 @@ def start_worker(
         def write(*_):
             pass
 
-    # TODO: find a way to fix assert inspection code of pytest raised in threads
-    # The following code meant to do this, but prevents tests from running at all.
-    # # register dummy terminal reporter since it is needed by pytest even with
-    # # plugins:"no:terminal" option
-    # from _pytest.terminal import TerminalReporter
-    # terminal_reporter = TerminalReporter(config, DontPrint())
-    # config.pluginmanager.register(terminal_reporter, "terminalreporter")
+    # fix assert inspection code of pytest raised in threads
+    # register dummy terminal reporter since it is needed by pytest even with
+    # plugins:"no:terminal" option
+    from _pytest.terminal import TerminalReporter
+
+    terminal_reporter = TerminalReporter(config, DontPrint())
+    config.pluginmanager.register(terminal_reporter, "terminalreporter")
 
     # Remove workers option to prevent triggering main plugin
     config.option.workers = None
@@ -79,9 +79,20 @@ class Worker:
         self.send("logreport", report=data)
 
     @pytest.hookimpl
+    def pytest_report_teststatus(self, report):
+        """Overriding this hook is important with our custom terminal reporter.
+
+        Otherwise, this hook will return None and multi-tests will abort after
+        running first test. Unfortunately, this is silent and looks as everything
+        is good. There were just hardly any tests run.
+        """
+        from _pytest.terminal import pytest_report_teststatus
+
+        return pytest_report_teststatus(report)
+
+    @pytest.hookimpl
     def pytest_runtestloop(self, session):
         self.session_items = {item.nodeid: item for item in session.items}
-
         should_terminate = False
         while not should_terminate:
             command, args = self.work_queue.get()
