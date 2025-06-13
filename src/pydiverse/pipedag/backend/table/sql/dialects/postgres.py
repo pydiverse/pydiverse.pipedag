@@ -1,8 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 import csv
 from dataclasses import dataclass
 from io import StringIO
@@ -201,7 +199,11 @@ class PolarsTableHook(hooks.PolarsTableHook):
 
         df = table.obj
         try:
-            df = cls._apply_materialize_annotation(df, table)
+            from pydiverse.pipedag.backend.table.sql.hooks import (
+                _polars_apply_materialize_annotation,
+            )
+
+            df = _polars_apply_materialize_annotation(df, table)(df, table)
         except Exception as e:
             logger = structlog.get_logger(logger_name=cls.__name__)
             logger.error(

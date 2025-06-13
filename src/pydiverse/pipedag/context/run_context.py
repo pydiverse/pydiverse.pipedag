@@ -1,8 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 import dataclasses
 import functools
 import pickle
@@ -29,14 +27,69 @@ from pydiverse.pipedag.context.context import (
     ConfigContext,
     StageLockContext,
 )
-from pydiverse.pipedag.context.trace_hook import TraceHook
 from pydiverse.pipedag.errors import LockError, RemoteProcessError, StageError
 from pydiverse.pipedag.util.ipc import IPCServer
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.backend import BaseLockManager, LockState
+    from pydiverse.pipedag.context.trace_hook import TraceHook
     from pydiverse.pipedag.core import Flow, Stage, Subflow, Task
     from pydiverse.pipedag.materialize import Blob, Table
+
+
+# States
+
+
+class StageState(Enum):
+    UNINITIALIZED = 0
+    INITIALIZING = 1
+    READY = 2
+    COMMITTING = 3
+    COMMITTED = 4
+
+    FAILED = 127
+
+
+class FinalTaskState(Enum):
+    UNKNOWN = 0
+
+    COMPLETED = 1
+    CACHE_VALID = 2
+    FAILED = 10
+
+    def is_successful(self) -> bool:
+        return self in (FinalTaskState.COMPLETED, FinalTaskState.CACHE_VALID)
+
+    def is_failure(self) -> bool:
+        return self in (FinalTaskState.FAILED,)
+
+
+class MemoState(Enum):
+    NONE = 0
+    WAITING = 1
+
+    FAILED = 127
+
+
+# Deferred Table Store operations
+
+
+@dataclasses.dataclass
+class DeferredTableStoreOp:
+    class Condition(Enum):
+        ON_STAGE_CHANGED = 0
+        """Some table produced in the stage is determined to be cache invalid"""
+
+        ON_STAGE_ABORT = 1
+        """The stage has finished running and all tables are still cache valid"""
+
+        ON_STAGE_COMMIT = 2
+        """The stage has finished running and some tables weren't cache valid"""
+
+    fn_name: str
+    condition: Condition
+    args: tuple | list = ()
+    kwargs: dict = dataclasses.field(default_factory=dict)
 
 
 def synchronized(lock_attr: str):
@@ -70,7 +123,7 @@ class RunContextServer(IPCServer):
     and deserialization in case of multi-node execution of tasks in pipedag graph.
     """
 
-    def __init__(self, subflow: Subflow, trace_hook: TraceHook):
+    def __init__(self, subflow: "Subflow", trace_hook: "TraceHook"):
         config_ctx = ConfigContext.get()
         interface = config_ctx.network_interface
 
@@ -566,17 +619,17 @@ class RunContext(BaseContext):
 
     # STAGE: Reference Counting
 
-    def get_stage_ref_count(self, stage: Stage) -> int:
+    def get_stage_ref_count(self, stage: "Stage") -> int:
         return self._request("get_stage_ref_count", stage.id)
 
     # STAGE: State
 
-    def get_stage_state(self, stage: Stage) -> StageState:
+    def get_stage_state(self, stage: "Stage") -> StageState:
         value = self._request("get_stage_state", stage.id)
         return StageState(value)
 
     @contextmanager
-    def init_stage(self, stage: Stage):
+    def init_stage(self, stage: "Stage"):
         can_continue = self._request("enter_init_stage", stage.id)
         if not can_continue:
             yield False
@@ -592,7 +645,7 @@ class RunContext(BaseContext):
             self._request("exit_init_stage", stage.id, True)
 
     @contextmanager
-    def commit_stage(self, stage: Stage):
+    def commit_stage(self, stage: "Stage"):
         can_continue = self._request("enter_commit_stage", stage.id)
         if not can_continue:
             yield False
@@ -609,40 +662,40 @@ class RunContext(BaseContext):
 
     # STAGE: Lock
 
-    def acquire_stage_lock(self, stage: Stage):
+    def acquire_stage_lock(self, stage: "Stage"):
         self._request("acquire_stage_lock", stage.id)
 
-    def release_stage_lock(self, stage: Stage):
+    def release_stage_lock(self, stage: "Stage"):
         self._request("release_stage_lock", stage.id)
 
-    def validate_stage_lock(self, stage: Stage):
+    def validate_stage_lock(self, stage: "Stage"):
         self._request("validate_stage_lock", stage.id)
 
     # DEFERRED TABLE STORE OPERATIONS
 
-    def defer_table_store_op(self, stage: Stage, op: DeferredTableStoreOp):
+    def defer_table_store_op(self, stage: "Stage", op: DeferredTableStoreOp):
         """Defer running a table store operation until a specific stage event"""
         return self._request("defer_table_store_op", stage.id, op)
 
-    def has_stage_changed(self, stage: Stage) -> bool:
+    def has_stage_changed(self, stage: "Stage") -> bool:
         """Check if a stage has changed and still is 100% cache valid"""
         return self._request("has_stage_changed", stage.id)
 
-    def set_stage_has_changed(self, stage: Stage):
+    def set_stage_has_changed(self, stage: "Stage"):
         """Inform the run context that a stage isn't 100% cache valid anymore"""
         return self._request("set_stage_has_changed", stage.id)
 
     # TASK
 
-    def did_finish_task(self, task: Task, final_state: FinalTaskState):
+    def did_finish_task(self, task: "Task", final_state: FinalTaskState):
         self._request("did_finish_task", task.id, final_state.value)
 
-    def get_task_states(self) -> dict[Task, FinalTaskState]:
+    def get_task_states(self) -> dict["Task", FinalTaskState]:
         states = [FinalTaskState(value) for value in self._request("get_task_states")]
         return {task: states[task.id] for task in self.flow.tasks}
 
     @contextmanager
-    def task_memo(self, task: Task, cache_key: str):
+    def task_memo(self, task: "Task", cache_key: str):
         success, memo = self._request("enter_task_memo", task.id, cache_key)
 
         try:
@@ -653,13 +706,13 @@ class RunContext(BaseContext):
         else:
             self._request("exit_task_memo", task.id, cache_key, True)
 
-    def store_task_memo(self, task: Task, cache_key: str, result: Any):
+    def store_task_memo(self, task: "Task", cache_key: str, result: Any):
         self._request("store_task_memo", task.id, cache_key, result)
 
     # TABLE / BLOB: Names
 
     def add_names(
-        self, stage: Stage, tables: list[Table], blobs: list[Blob]
+        self, stage: "Stage", tables: list["Table"], blobs: list["Blob"]
     ) -> tuple[bool, tuple[str, ...], tuple[str, ...]]:
         response = self._request(
             "add_names",
@@ -674,7 +727,7 @@ class RunContext(BaseContext):
         else:
             return False, response["table_duplicates"], response["blob_duplicates"]
 
-    def remove_names(self, stage: Stage, tables: list[Table], blobs: list[Blob]):
+    def remove_names(self, stage: "Stage", tables: list["Table"], blobs: list["Blob"]):
         self._request(
             "remove_names",
             stage.id,
@@ -685,7 +738,7 @@ class RunContext(BaseContext):
 
     # LOCAL TABLE CACHE
 
-    def should_store_table_in_cache(self, table: Table):
+    def should_store_table_in_cache(self, table: "Table"):
         return self._request("should_store_table_in_cache", table.stage.id, table.name)
 
 
@@ -702,15 +755,17 @@ class DematerializeRunContext(BaseAttrsContext):
 
     _context_var = RunContext._context_var
 
-    flow: Flow
+    flow: "Flow"
 
-    def get_stage_state(self, stage: Stage) -> StageState:
+    def get_stage_state(self, stage: "Stage") -> StageState:
+        _ = stage
         return StageState.COMMITTED
 
-    def validate_stage_lock(self, stage: Stage):
+    def validate_stage_lock(self, stage: "Stage"):
         pass
 
-    def should_store_table_in_cache(self, table: Table):
+    def should_store_table_in_cache(self, table: "Table"):
+        _ = table
         return False
 
 
@@ -723,7 +778,7 @@ class StageLockStateHandler(Disposable):
     or externally UNLOCKED).
     """
 
-    def __init__(self, lock_manager: BaseLockManager):
+    def __init__(self, lock_manager: "BaseLockManager"):
         self.logger = structlog.get_logger(logger_name=type(self).__name__)
         self.lock_manager = lock_manager
         self.lock_manager.add_lock_state_listener(self._lock_state_listener)
@@ -734,7 +789,7 @@ class StageLockStateHandler(Disposable):
         super().dispose()
 
     def _lock_state_listener(
-        self, stage: Stage, old_state: LockState, new_state: LockState
+        self, stage: "Stage", old_state: "LockState", new_state: "LockState"
     ):
         """Internal listener that gets notified when the state of a lock changes"""
         from pydiverse.pipedag.backend.lock import LockState
@@ -781,61 +836,6 @@ class StageLockStateHandler(Disposable):
 
             else:
                 raise ValueError(f"Invalid state '{state}'.")
-
-
-# States
-
-
-class StageState(Enum):
-    UNINITIALIZED = 0
-    INITIALIZING = 1
-    READY = 2
-    COMMITTING = 3
-    COMMITTED = 4
-
-    FAILED = 127
-
-
-class FinalTaskState(Enum):
-    UNKNOWN = 0
-
-    COMPLETED = 1
-    CACHE_VALID = 2
-    FAILED = 10
-
-    def is_successful(self) -> bool:
-        return self in (FinalTaskState.COMPLETED, FinalTaskState.CACHE_VALID)
-
-    def is_failure(self) -> bool:
-        return self in (FinalTaskState.FAILED,)
-
-
-class MemoState(Enum):
-    NONE = 0
-    WAITING = 1
-
-    FAILED = 127
-
-
-# Deferred Table Store operations
-
-
-@dataclasses.dataclass
-class DeferredTableStoreOp:
-    class Condition(Enum):
-        ON_STAGE_CHANGED = 0
-        """Some table produced in the stage is determined to be cache invalid"""
-
-        ON_STAGE_ABORT = 1
-        """The stage has finished running and all tables are still cache valid"""
-
-        ON_STAGE_COMMIT = 2
-        """The stage has finished running and some tables weren't cache valid"""
-
-    fn_name: str
-    condition: Condition
-    args: tuple | list = ()
-    kwargs: dict = dataclasses.field(default_factory=dict)
 
 
 # msgpack hooks

@@ -1,8 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 import inspect
 from functools import total_ordering
 from typing import TYPE_CHECKING
@@ -70,7 +68,7 @@ class Stage:
         self.force_committed = force_committed
         self._did_enter = False
 
-    def __lt__(self, other: Stage):
+    def __lt__(self, other: "Stage"):
         # Essentially stage name is all that matters and should be unique per flow.
         # In case of comparing stages among different flows or pipeline instances,
         # the caller needs to check whether those are different. The stage links to
@@ -78,7 +76,7 @@ class Stage:
         # caller wants from the comparison operators.
         return self.name < other.name
 
-    def __eq__(self, other: Stage):
+    def __eq__(self, other: "Stage"):
         # Essentially stage name is all that matters and should be unique per flow.
         # See __lt__ for more details.
         if not isinstance(other, Stage):
@@ -231,7 +229,7 @@ class Stage:
         yield from self.barrier_tasks
         yield self.commit_task
 
-    def is_inner(self, other: Stage):
+    def is_inner(self, other: "Stage"):
         outer = self.outer_stage
         while outer is not None:
             if outer == other:
@@ -251,7 +249,7 @@ class Stage:
 
 
 class CommitStageTask(Task):
-    def __init__(self, stage: Stage, flow: Flow):
+    def __init__(self, stage: Stage, flow: "Flow"):
         # Because the CommitStageTask doesn't get added to the stage.tasks list,
         # we can't call the super initializer.
         self.name = f"Commit '{stage.name}'"

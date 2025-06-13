@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 # this code is inspired by https://github.com/dmgass/baseline/ but uses separate JSON
-from __future__ import annotations
-
 # files and supports parameterized tests
 import json
 import os.path

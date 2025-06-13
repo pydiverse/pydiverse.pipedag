@@ -1,7 +1,5 @@
 # Copyright (c) QuantCo and pydiverse contributors 2024-2025
 # SPDX-License-Identifier: BSD-3-Clause
-from __future__ import annotations
-
 import functools
 import operator
 import types
@@ -22,7 +20,11 @@ except ImportError:
     cs = types.ModuleType("pydiverse.colspec")
     fn = lambda *args, **kwargs: (lambda *args, **kwargs: None)  # noqa: E731
     cs.__getattr__ = lambda name: object if name in ["ColSpec", "Collection"] else fn
-    pdt = None
+    pdt = types.ModuleType("pydiverse.colspec")
+    pdt.Table = None
+    pdt.verb = lambda fn: fn
+    pdt.SqlAlchemy = None
+    pdt.Polars = None
 
 
 pytestmark = [

@@ -86,6 +86,10 @@ jobs:
         environment:
           - py311cs
           - py313cs
+          - py311csdy
+          - py313csdy
+          - py311dy
+          - py313dy
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}

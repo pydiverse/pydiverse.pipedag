@@ -1,8 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
-
-from __future__ import annotations
-
+import types
 import warnings
 
 import pandas as pd
@@ -175,7 +173,8 @@ try:
     import pydiverse.transform as pdt
 except ImportError as e:
     warnings.warn(str(e), ImportWarning)
-    pdt = None
+    pdt = types.ModuleType("pydiverse.transform")
+    pdt.Table = None
 
 
 @DictTableStore.register_table(pdt)

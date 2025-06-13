@@ -1,10 +1,9 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 import re
 import time
+import types
 import typing
 import warnings
 from typing import Any
@@ -880,7 +879,6 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
 
 # region PYDIVERSE TRANSFORM
 
-
 try:
     # optional dependency to pydiverse-transform
     import pydiverse.transform as pdt
@@ -912,7 +910,8 @@ try:
             ) from None
 except ImportError as e:
     warnings.warn(str(e), ImportWarning)
-    pdt = None
+    pdt = types.ModuleType("pydiverse.transform")
+    pdt.Table = None
     pdt_old = None
     pdt_new = None
 
@@ -1095,7 +1094,9 @@ try:
     import ibis
 except ImportError as e:
     warnings.warn(str(e), ImportWarning)
-    ibis = None
+    ibis = types.ModuleType("ibis")
+    ibis.api = types.ModuleType("ibis.api")
+    ibis.api.Table = None
 
 
 @SQLTableStore.register_table(ibis)

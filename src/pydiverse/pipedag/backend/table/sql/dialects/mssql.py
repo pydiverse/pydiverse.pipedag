@@ -1,17 +1,14 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 import dataclasses
-import importlib
 import re
+import types
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
 import pandas as pd
-import pyodbc
 import sqlalchemy as sa
 import sqlalchemy.dialects.mssql
 from sqlalchemy import URL, Engine
@@ -442,7 +439,7 @@ class IbisTableHook(IbisTableHook):
 try:
     import pyarrow as pa
 except ImportError:
-    pa = importlib.import_module("pyarrow")
+    pa = types.ModuleType("pyarrow")
     pa.Schema = None
 
 
@@ -483,6 +480,8 @@ NA_VALUES: list[Any] = ["nan", "NaN", "NaT", "NULL", "null", float("nan")]
 
 
 def _latest_mssql_driver() -> str:
+    import pyodbc
+
     # Get all drivers
     drivers = pyodbc.drivers()
 
@@ -535,11 +534,11 @@ class ConnectionString:
     insecure: bool = False
 
     @classmethod
-    def from_engine(cls, engine: Engine) -> ConnectionString:
+    def from_engine(cls, engine: Engine) -> "ConnectionString":
         return ConnectionString.from_url(engine.url)
 
     @classmethod
-    def from_url(cls, url: URL) -> ConnectionString:
+    def from_url(cls, url: URL) -> "ConnectionString":
         """Parse a ConnectionString from an url.
 
         Args:
@@ -603,7 +602,7 @@ class ConnectionString:
             **kwargs,
         )
 
-    def with_database(self, /, database: str) -> ConnectionString:
+    def with_database(self, /, database: str) -> "ConnectionString":
         """Obtain a copy of the connection string reference a different database.
 
         The returned connection string connects to the same database instance as the

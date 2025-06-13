@@ -1,8 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 import copy
 import typing
 from collections.abc import Iterable
@@ -21,6 +19,35 @@ from pydiverse.pipedag.util import normalize_name
 if TYPE_CHECKING:
     from pydiverse.pipedag.core.stage import Stage
     from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
+
+
+@frozen
+class Schema:
+    """
+    Class for holding a schema name with separable prefix and suffix.
+
+    Attributes
+    ----------
+    name : str
+        The schema name.
+    prefix : str
+        The prefix to be added to the schema name.
+    suffix : str
+        The suffix to be added to the schema name.
+    """
+
+    name: str
+    prefix: str = ""
+    suffix: str = ""
+
+    def get(self) -> str:
+        """
+        Get the schema name with prefix and suffix.
+        """
+        return self.prefix + self.name + self.suffix
+
+    def __str__(self):
+        return self.get()
 
 
 @total_ordering
@@ -153,7 +180,7 @@ class Table(Generic[T]):
             raise TypeError(f"Table name must be of instance 'str' not {type(value)}.")
         self._name = normalize_name(value)
 
-    def copy_without_obj(self) -> Table:
+    def copy_without_obj(self) -> "Table":
         obj = self.obj
         self.obj = None
         self_copy = copy.deepcopy(self)
@@ -328,7 +355,7 @@ class Table(Generic[T]):
                 return False
         return self.name < other.name
 
-    def __eq__(self, other: Table):
+    def __eq__(self, other: "Table"):
         if not isinstance(other, Table):
             return False
         return self.name == other.name and (
@@ -488,7 +515,7 @@ class RawSql:
             return table_name
         return default
 
-    def copy_without_obj(self) -> RawSql:
+    def copy_without_obj(self) -> "RawSql":
         obj = self.loaded_tables
         self.loaded_tables = None
         self_copy = copy.deepcopy(self)
@@ -555,7 +582,7 @@ class Blob(Generic[T]):
     def name(self, value):
         self._name = normalize_name(value)
 
-    def copy_without_obj(self) -> Blob:
+    def copy_without_obj(self) -> "Blob":
         obj = self.obj
         self.obj = None
         self_copy = copy.deepcopy(self)
@@ -629,35 +656,6 @@ class ExternalTableReference:
 
     def __repr__(self):
         return f"<ExternalTableReference: {hex(id(self))} (schema: {self.schema})>"
-
-
-@frozen
-class Schema:
-    """
-    Class for holding a schema name with separable prefix and suffix.
-
-    Attributes
-    ----------
-    name : str
-        The schema name.
-    prefix : str
-        The prefix to be added to the schema name.
-    suffix : str
-        The suffix to be added to the schema name.
-    """
-
-    name: str
-    prefix: str = ""
-    suffix: str = ""
-
-    def get(self) -> str:
-        """
-        Get the schema name with prefix and suffix.
-        """
-        return self.prefix + self.name + self.suffix
-
-    def __str__(self):
-        return self.get()
 
 
 def attach_annotation(annotation: type, arg):

@@ -1,11 +1,10 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 import json
 import os
 import shutil
+import types
 from pathlib import Path
 from typing import Any
 
@@ -231,7 +230,8 @@ try:
                 "pydiverse.transform 0.2.0 - 0.2.2 isn't supported"
             ) from None
 except ImportError:
-    pdt = None
+    pdt = types.ModuleType("pydiverse.transform")
+    pdt.Table = None
     pdt_old = None
     pdt_new = None
 

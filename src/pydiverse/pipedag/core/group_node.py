@@ -1,8 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -174,13 +172,13 @@ class GroupNode:
         self._ctx.__exit__()
         del self._ctx
 
-    def add_stage(self, stage: Stage):
+    def add_stage(self, stage: "Stage"):
         self.stages.add(stage)
 
     def add_task(self, task: Task):
         self.tasks.add(task)
 
-    def is_content_hidden(self, get_style: Callable[[GroupNode], VisualizationStyle]):
+    def is_content_hidden(self, get_style: Callable[["GroupNode"], VisualizationStyle]):
         # recursive lookup for style.hide_content==True
         obj = self
         if get_style(obj).hide_content or False:
@@ -194,7 +192,7 @@ class GroupNode:
 
 
 class BarrierTask(Task):
-    def __init__(self, group_node: GroupNode, stage: Stage, flow: Flow, prefix=""):
+    def __init__(self, group_node: GroupNode, stage: "Stage", flow: "Flow", prefix=""):
         # Because the BarrierTask doesn't get added to the stage.tasks list,
         # we can't call the super initializer.
         self.prefix = prefix

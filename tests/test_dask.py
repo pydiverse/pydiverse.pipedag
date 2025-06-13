@@ -1,15 +1,17 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 import io
 import pickle
 from io import BytesIO
 
-import dask
 import structlog
 from _pytest.capture import EncodedFile
+
+try:
+    import dask
+except ImportError:
+    dask = None
 
 
 class A(io.TextIOWrapper):

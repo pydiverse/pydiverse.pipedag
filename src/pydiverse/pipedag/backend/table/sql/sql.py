@@ -1,8 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 import json
 import textwrap
 import time
@@ -190,7 +188,7 @@ class SQLTableStore(BaseTableStore):
     METADATA_SCHEMA = "pipedag_metadata"
     LOCK_SCHEMA = "pipedag_locks"
 
-    __registered_dialects: dict[str, type[SQLTableStore]] = {}
+    __registered_dialects: dict[str, type["SQLTableStore"]] = {}
     _dialect_name: str
 
     def __new__(cls, engine_url: str, *args, **kwargs):

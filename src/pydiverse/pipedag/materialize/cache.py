@@ -1,8 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 import itertools
 from dataclasses import dataclass
 from functools import cached_property
@@ -35,7 +33,7 @@ class ImperativeMaterializationState:
 
 @dataclass(frozen=True)
 class TaskCacheInfo:
-    task: MaterializingTask
+    task: "MaterializingTask"
     input_hash: str
     cache_fn_hash: str
     cache_key: str
@@ -48,7 +46,7 @@ class TaskCacheInfo:
         return ImperativeMaterializationState()
 
 
-def task_cache_key(task: MaterializingTask, input_hash: str, cache_fn_hash: str):
+def task_cache_key(task: "MaterializingTask", input_hash: str, cache_fn_hash: str):
     """Cache key used to judge cache validity of the current task output.
 
     Also referred to as `task_hash`.

@@ -1,8 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 import hashlib
 import threading
 import time
@@ -39,7 +37,7 @@ class DatabaseLockManager(BaseLockManager):
     PostgreSQL, Microsoft SQL Server, IBM DB2.
     """
 
-    __registered_dialects: dict[str, type[DatabaseLockManager]] = {}
+    __registered_dialects: dict[str, type["DatabaseLockManager"]] = {}
     _dialect_name: str
 
     def __new__(cls, engine: sa.Engine, *args, **kwargs):

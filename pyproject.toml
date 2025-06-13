@@ -69,7 +69,6 @@ target-version = "py38"
 
 [tool.ruff.isort]
 known-first-party = ["pydiverse"]
-required-imports = ["from __future__ import annotations"]
 
 [build-system]
 requires = ["hatchling"]

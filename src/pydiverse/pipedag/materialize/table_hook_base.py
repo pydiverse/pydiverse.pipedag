@@ -1,13 +1,11 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 import sys
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Generic
+from typing import Any, Generic
 
 from typing_extensions import Self
 
@@ -16,15 +14,10 @@ from pydiverse.common.util.computation_tracing import ComputationTracer
 from pydiverse.pipedag import Table
 from pydiverse.pipedag._typing import T, TableHookResolverT
 from pydiverse.pipedag.context import RunContext
-
-if TYPE_CHECKING:
-    from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
-
-
-class AutoVersionSupport(Enum):
-    NONE = 0
-    LAZY = 1
-    TRACE = 2
+from pydiverse.pipedag.materialize.materializing_task import (
+    AutoVersionSupport,
+    MaterializingTask,
+)
 
 
 class CanResult(Enum):
@@ -201,7 +194,7 @@ class TableHookResolver:
     _states: dict[int, ClassState] = {}
 
     @classmethod
-    def _resolver_state(cls: TableHookResolver):
+    def _resolver_state(cls: "TableHookResolver"):
         state = cls._states.get(id(cls))
         if state is None:
             state = cls._states[id(cls)] = cls.ClassState()
@@ -209,7 +202,7 @@ class TableHookResolver:
 
     @classmethod
     def register_table(
-        cls: TableHookResolver,
+        cls: "TableHookResolver",
         *requirements: Any,
         replace_hooks: list[type[TableHook]] | None = None,
     ):

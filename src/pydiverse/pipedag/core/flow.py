@@ -1,8 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 import base64
 import random
 from collections import defaultdict
@@ -22,13 +20,13 @@ from pydiverse.pipedag.context import (
 )
 from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.context.trace_hook import TraceHook
+from pydiverse.pipedag.core import GroupNode, Result, Stage, Task
 from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.core.group_node import BarrierTask, VisualizationStyle
 from pydiverse.pipedag.core.task import TaskGetItem
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag.core import GroupNode, Result, Stage, Task
     from pydiverse.pipedag.core.stage import CommitStageTask
     from pydiverse.pipedag.engine import OrchestrationEngine
 
@@ -232,7 +230,7 @@ class Flow:
 
         return explicit_graph
 
-    def get_subflow(self, *components: Task | TaskGetItem | Stage) -> Subflow:
+    def get_subflow(self, *components: Task | TaskGetItem | Stage) -> "Subflow":
         from pydiverse.pipedag import Stage, Task
         from pydiverse.pipedag.core.task import TaskGetItem
 
@@ -254,7 +252,7 @@ class Flow:
         self,
         *components: Task | TaskGetItem | Stage,
         config: ConfigContext = None,
-        orchestration_engine: OrchestrationEngine = None,
+        orchestration_engine: "OrchestrationEngine" = None,
         trace_hook: TraceHook = None,
         fail_fast: bool | None = None,
         cache_validation_mode: CacheValidationMode | None = None,

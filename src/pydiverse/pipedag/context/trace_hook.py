@@ -1,16 +1,15 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 import structlog
 
+from pydiverse.pipedag._typing import Materializable
+from pydiverse.pipedag.context import RunContext, RunContextServer
+
 if TYPE_CHECKING:
     from pydiverse.pipedag import Result, Table, Task
-    from pydiverse.pipedag._typing import Materializable
-    from pydiverse.pipedag.context import RunContext, RunContextServer
     from pydiverse.pipedag.materialize.cache import TaskCacheInfo
     from pydiverse.pipedag.materialize.metadata import TaskMetadata
 
@@ -34,7 +33,7 @@ class TraceHook:
         """
         pass
 
-    def run_complete(self, result: Result):
+    def run_complete(self, result: "Result"):
         """
         Called after completion of pipedag run when result is available.
         """
@@ -63,7 +62,7 @@ class TraceHook:
         """
         pass
 
-    def task_begin(self, task: Task):
+    def task_begin(self, task: "Task"):
         """
         Called at beginning of task execution.
 
@@ -74,10 +73,10 @@ class TraceHook:
 
     def task_cache_status(
         self,
-        task: Task,
+        task: "Task",
         input_hash: str,
         cache_fn_hash: str,
-        cache_metadata: TaskMetadata | None = None,
+        cache_metadata: "TaskMetadata | None" = None,
         cached_output: Materializable | None = None,
         cache_valid: bool | None = None,
         lazy: bool | None = None,
@@ -92,7 +91,7 @@ class TraceHook:
         """
         pass
 
-    def task_pre_call(self, task: Task):
+    def task_pre_call(self, task: "Task"):
         """
         Called before call of task function.
 
@@ -100,7 +99,7 @@ class TraceHook:
         """
         pass
 
-    def task_post_call(self, task: Task):
+    def task_post_call(self, task: "Task"):
         """
         Called after call of task function.
 
@@ -108,7 +107,7 @@ class TraceHook:
         """
         pass
 
-    def task_complete(self, task: Task, result: Result):
+    def task_complete(self, task: "Task", result: "Result"):
         """
         Called after task completion.
 
@@ -119,12 +118,12 @@ class TraceHook:
 
     def query_cache_status(
         self,
-        task: Task,
-        table: Table,
-        task_cache_info: TaskCacheInfo,
+        task: "Task",
+        table: "Table",
+        task_cache_info: "TaskCacheInfo",
         query_hash: str,
         query_str: str,
-        cache_metadata: TaskMetadata | None = None,
+        cache_metadata: "TaskMetadata | None" = None,
         cache_valid: bool | None = None,
     ):
         """
@@ -136,19 +135,19 @@ class TraceHook:
         """
         pass
 
-    def query_complete(self, task: Task, table: Table):
+    def query_complete(self, task: "Task", table: "Table"):
         """
         Called after query completion in case query is not cache valid.
         """
         pass
 
-    def cache_init_transfer(self, task: Task, table: Table):
+    def cache_init_transfer(self, task: "Task", table: "Table"):
         """
         Called when preparing transfer from cached table to transactions schema.
         """
         pass
 
-    def cache_pre_transfer(self, table: Table):
+    def cache_pre_transfer(self, table: "Table"):
         """
         Called before transferring cached table to transaction schema.
 
@@ -156,7 +155,7 @@ class TraceHook:
         """
         pass
 
-    def cache_post_transfer(self, table: Table):
+    def cache_post_transfer(self, table: "Table"):
         """
         Called after transferring cached table to transaction schema.
 
@@ -181,7 +180,7 @@ class PrintTraceHook(TraceHook):
         self.run_context = run_context
         self.logger.debug("run_init_context", run_context=run_context)
 
-    def run_complete(self, result: Result):
+    def run_complete(self, result: "Result"):
         self.logger.debug("run_complete", result=result)
 
     def stage_post_init(self, stage_id: int, success: bool):
@@ -202,15 +201,15 @@ class PrintTraceHook(TraceHook):
     def stage_post_commit(self, stage_id: int, success: bool):
         self.logger.debug("stage_post_commit", stage_id=stage_id, success=success)
 
-    def task_begin(self, task: Task):
+    def task_begin(self, task: "Task"):
         self.logger.debug("task_begin", task=task)
 
     def task_cache_status(
         self,
-        task: Task,
+        task: "Task",
         input_hash: str,
         cache_fn_hash: str,
-        cache_metadata: TaskMetadata | None = None,
+        cache_metadata: "TaskMetadata | None" = None,
         cached_output: Materializable | None = None,
         cache_valid: bool | None = None,
         lazy: bool | None = None,
@@ -226,23 +225,23 @@ class PrintTraceHook(TraceHook):
             lazy=lazy,
         )
 
-    def task_pre_call(self, task: Task):
+    def task_pre_call(self, task: "Task"):
         self.logger.debug("task_pre_call", task=task)
 
-    def task_post_call(self, task: Task):
+    def task_post_call(self, task: "Task"):
         self.logger.debug("task_post_call", task=task)
 
-    def task_complete(self, task: Task, result: Result):
+    def task_complete(self, task: "Task", result: "Result"):
         self.logger.debug("task_complete", task=task, result=result)
 
     def query_cache_status(
         self,
-        task: Task,
-        table: Table,
-        task_cache_info: TaskCacheInfo,
+        task: "Task",
+        table: "Table",
+        task_cache_info: "TaskCacheInfo",
         query_hash: str,
         query_str: str,
-        cache_metadata: TaskMetadata | None = None,
+        cache_metadata: "TaskMetadata | None" = None,
         cache_valid: bool | None = None,
     ):
         self.logger.debug(
@@ -257,14 +256,14 @@ class PrintTraceHook(TraceHook):
             cache_valid=cache_valid,
         )
 
-    def query_complete(self, task: Task, table: Table):
+    def query_complete(self, task: "Task", table: "Table"):
         self.logger.debug("query_complete", task=task, table=table)
 
-    def cache_init_transfer(self, task: Task, table: Table):
+    def cache_init_transfer(self, task: "Task", table: "Table"):
         self.logger.debug("cache_init_transfer", task=task, table=table)
 
-    def cache_pre_transfer(self, table: Table):
+    def cache_pre_transfer(self, table: "Table"):
         self.logger.debug("cache_pre_transfer", table=table)
 
-    def cache_post_transfer(self, table: Table):
+    def cache_post_transfer(self, table: "Table"):
         self.logger.debug("cache_post_transfer", table=table)

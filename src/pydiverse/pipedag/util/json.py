@@ -8,8 +8,6 @@ key to identify them when decoding. The associated value encodes the
 type of the object.
 """
 
-from __future__ import annotations
-
 import datetime as dt
 import importlib
 import json
@@ -139,6 +137,19 @@ def json_default(o):
             "module": o.__module__,
             "qualname": o.__qualname__,
         }
+    try:
+        # provide better error message in case of pdt.Table
+        import pydiverse.transform as pdt
+
+        if isinstance(o, pdt.Table):
+            raise TypeError(
+                "pydiverse.transform.Table is not supposed to be JSON serialized. "
+                "It should be a pipedag Table instead."
+                "Consider adding pydiverse.transform.Table to your auto_table setting "
+                "in the PipedagConfig."
+            )
+    except ImportError:
+        pass
     if hasattr(o, "__dataclass_fields__") and not isinstance(o, type):
         return {
             TYPE_KEY: Type.DATA_CLASS,
@@ -147,6 +158,28 @@ def json_default(o):
                 "args": o.__dict__,
             },
         }
+    try:
+        # provide better error message in case of pdt.Table
+        import polars as pl
+
+        if isinstance(o, pl.DataFrame | pl.LazyFrame):
+            raise TypeError(
+                "Polars Tables are not supposed to be JSON serialized. "
+                "It should be a pipedag Table instead."
+                "Consider adding polars.DataFrame and polars.LazyFrame to your "
+                "auto_table setting in the PipedagConfig."
+            )
+    except ImportError:
+        pass
+    import pandas as pd
+
+    if isinstance(o, pd.DataFrame):
+        raise TypeError(
+            "Pandas Tables are not supposed to be JSON serialized. "
+            "It should be a pipedag Table instead."
+            "Consider adding pandas.DataFrame to your "
+            "auto_table setting in the PipedagConfig."
+        )
 
     raise TypeError(f"Object of type {type(o)} is not JSON serializable")
 

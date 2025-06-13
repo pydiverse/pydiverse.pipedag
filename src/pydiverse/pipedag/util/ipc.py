@@ -1,8 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 import ipaddress
 import os
 import struct
@@ -17,6 +15,49 @@ import structlog
 from cryptography.fernet import Fernet
 
 from pydiverse.pipedag.errors import IPCError
+
+
+class IPCClient:
+    def __init__(self, addr: str, fernet: Fernet, msg_default=None, msg_ext_hook=None):
+        self.logger = structlog.get_logger(logger_name=type(self).__name__)
+        self.addr = addr
+        self._fernet = fernet
+        self.msg_default = msg_default
+        self.msg_ext_hook = msg_ext_hook
+
+        self.socket = self._connect()
+
+    def _connect(self):
+        self.logger.debug("Opening client connection", addr=self.addr)
+        return pynng.Req0(dial=self.addr, resend_time=30_000)
+
+    def request(self, payload: Any) -> Any:
+        with self.socket.new_context() as socket:
+            self.logger.debug("Client request", payload=payload)
+            nonce = uuid.uuid4().bytes[:16]
+            msg = msgpack.packb((nonce, payload), default=self.msg_default)
+            msg = self._fernet.encrypt(msg)
+            socket.send(msg)
+
+            response = socket.recv()
+            response = self._fernet.decrypt(response)
+            response = msgpack.unpackb(
+                response, use_list=False, ext_hook=self.msg_ext_hook
+            )
+            self.logger.debug("Client got response", response=response)
+            return response
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state["socket"]
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.logger = self.logger.bind(
+            thread=threading.get_ident(),
+        )
+        self.socket = self._connect()
 
 
 class IPCServer(threading.Thread):
@@ -205,49 +246,6 @@ class IPCServer(threading.Thread):
             msg_default=self.msg_default,
             msg_ext_hook=self.msg_ext_hook,
         )
-
-
-class IPCClient:
-    def __init__(self, addr: str, fernet: Fernet, msg_default=None, msg_ext_hook=None):
-        self.logger = structlog.get_logger(logger_name=type(self).__name__)
-        self.addr = addr
-        self._fernet = fernet
-        self.msg_default = msg_default
-        self.msg_ext_hook = msg_ext_hook
-
-        self.socket = self._connect()
-
-    def _connect(self):
-        self.logger.debug("Opening client connection", addr=self.addr)
-        return pynng.Req0(dial=self.addr, resend_time=30_000)
-
-    def request(self, payload: Any) -> Any:
-        with self.socket.new_context() as socket:
-            self.logger.debug("Client request", payload=payload)
-            nonce = uuid.uuid4().bytes[:16]
-            msg = msgpack.packb((nonce, payload), default=self.msg_default)
-            msg = self._fernet.encrypt(msg)
-            socket.send(msg)
-
-            response = socket.recv()
-            response = self._fernet.decrypt(response)
-            response = msgpack.unpackb(
-                response, use_list=False, ext_hook=self.msg_ext_hook
-            )
-            self.logger.debug("Client got response", response=response)
-            return response
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        del state["socket"]
-        return state
-
-    def __setstate__(self, state):
-        self.__dict__.update(state)
-        self.logger = self.logger.bind(
-            thread=threading.get_ident(),
-        )
-        self.socket = self._connect()
 
 
 if __name__ == "__main__":

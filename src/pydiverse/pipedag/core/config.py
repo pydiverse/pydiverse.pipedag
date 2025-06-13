@@ -1,8 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 import copy
 import getpass
 import itertools
@@ -54,7 +52,7 @@ class PipedagConfig:
         * The user folder
     """
 
-    default: PipedagConfig
+    default: "PipedagConfig"
 
     def __init__(self, path: str | Path | dict[str, Any]):
         self.path = None
@@ -118,7 +116,7 @@ class PipedagConfig:
         instance: str | None = None,
         flow: str | None = None,
         per_user: bool = False,
-    ) -> ConfigContext:
+    ) -> "ConfigContext":
         """
         Constructs a :py:class:`ConfigContext`.
         For more details how the specific ConfigContext instance is constructed,

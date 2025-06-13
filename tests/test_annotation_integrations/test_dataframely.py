@@ -1,8 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2024-2025
 # SPDX-License-Identifier: BSD-3-Clause
-from __future__ import annotations
-
-import importlib
+import types
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
@@ -24,7 +22,7 @@ except ImportError:
     class DyDummyClass:
         pass
 
-    dy = importlib.import_module("dataframely")
+    dy = types.ModuleType("dataframely")
     dy.DataFrame = DyDataFrame
     dy.LazyFrame = DyDataFrame
     dy.FailureInfo = None

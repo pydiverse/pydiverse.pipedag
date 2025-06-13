@@ -1,8 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 import copy
 import threading
 from collections.abc import Mapping
@@ -88,9 +86,9 @@ class BaseAttrsContext(BaseContext):
 class DAGContext(BaseAttrsContext):
     """Context during DAG definition"""
 
-    flow: Flow
-    stage: Stage
-    group_node: GroupNode
+    flow: "Flow"
+    stage: "Stage"
+    group_node: "GroupNode"
 
     _context_var = ContextVar("dag_context")
 
@@ -103,8 +101,8 @@ class TaskContext(BaseContext):
     It also serves as a place to store temporary state while processing a task.
     """
 
-    task: Task
-    input_tables: list[Table] = None
+    task: "Task"
+    input_tables: list["Table"] = None
     is_cache_valid: bool | None = None
     name_disambiguator: NameDisambiguator = field(factory=NameDisambiguator)
     override_version: str | None = None
@@ -158,8 +156,8 @@ class GroupNodeConfig:
 
 @dataclass(frozen=True)
 class VisualizationConfig:
-    styles: dict[str, VisualizationStyle] | None = None
-    group_nodes: dict[str, GroupNodeConfig] | None = None
+    styles: dict[str, "VisualizationStyle"] | None = None
+    group_nodes: dict[str, "GroupNodeConfig"] | None = None
 
 
 default_config_dict = {
@@ -257,8 +255,30 @@ class ConfigContext(BaseAttrsContext):
     _is_evolved: bool = False  # if True, _config_dict might be out of date
 
     @cached_property
+    def logger(self):
+        return structlog.get_logger(logger_name=type(self).__name__, id=id(self))
+
+    @cached_property
     def auto_table(self) -> tuple[type, ...]:
-        return tuple(map(import_object, self._config_dict.get("auto_table", ())))
+        def exists(t: str) -> bool:
+            """Check if the table class exists."""
+            try:
+                import_object(t)
+                return True
+            except (ImportError, AttributeError):
+                self.logger.exception(
+                    "Configuration option auto_table in PipedagConfig included "
+                    f"class which does not exist: {t}"
+                )
+                return False
+
+        return tuple(
+            [
+                import_object(t)
+                for t in self._config_dict.get("auto_table", ())
+                if exists(t)
+            ]
+        )
 
     @cached_property
     def auto_blob(self) -> tuple[type, ...]:
@@ -307,7 +327,7 @@ class ConfigContext(BaseAttrsContext):
             local_table_cache=local_table_cache,
         )
 
-    def evolve(self, **changes) -> ConfigContext:
+    def evolve(self, **changes) -> "ConfigContext":
         """Create a new config context instance with the changes applied.
 
         Because ConfigContext is immutable, this is the only valid way to derive a
@@ -335,11 +355,11 @@ class ConfigContext(BaseAttrsContext):
 
         return evolved
 
-    def create_lock_manager(self) -> BaseLockManager:
+    def create_lock_manager(self) -> "BaseLockManager":
         with self:  # ensure that DatabaseLockManager uses correct engine
             return load_object(self._config_dict["lock_manager"])
 
-    def create_orchestration_engine(self) -> OrchestrationEngine:
+    def create_orchestration_engine(self) -> "OrchestrationEngine":
         return load_object(self._config_dict["orchestration"])
 
     def _close(self):
@@ -573,7 +593,7 @@ class StageLockContext(BaseContext):
             df = result.get(task_x)
     """
 
-    lock_state_handlers: [StageLockStateHandler]
+    lock_state_handlers: ["StageLockStateHandler"]
 
     _context_var = ContextVar("stage_lock_context")
 

@@ -1,14 +1,13 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from __future__ import annotations
-
 import copy
 import functools
 import inspect
 import typing
 import uuid
 from collections.abc import Iterable
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable
 
 import sqlalchemy as sa
@@ -35,10 +34,200 @@ from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.core import UnboundTask
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.cache import TaskCacheInfo, task_cache_key
-from pydiverse.pipedag.materialize.table_hook_base import AutoVersionSupport, TableHook
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.materialize.store import PipeDAGStore
+    from pydiverse.pipedag.materialize.table_hook_base import TableHook
+
+
+class AutoVersionSupport(Enum):
+    NONE = 0
+    LAZY = 1
+    TRACE = 2
+
+
+class UnboundMaterializingTask(UnboundTask):
+    """A materializing task without any bound arguments.
+
+    Instances of this class get initialized using the
+    :py:func:`@materialize <pydiverse.pipedag.materialize>` decorator.
+    By calling this object inside a ``with Flow(...)`` context,
+    a :py:class:`~.MaterializingTask` gets created that binds the provided
+    arguments to the task.
+
+    >>> @materialize
+    ... def some_task(arg):
+    ...     ...
+    ...
+    >>> type(some_task)
+    <class 'pydiverse.pipedag.materialize.core.UnboundMaterializingTask'>
+
+    >>> with Flow() as f:
+    ...     with Stage("stage"):
+    ...         x = some_task(...)
+    ...
+    >>> type(x)
+    <class 'pydiverse.pipedag.materialize.core.MaterializingTask'>
+
+    When you call a `UnboundMaterializingTask` outside a flow definition context,
+    then the original function (that was decorated with :py:func:`@materialize
+    <pydiverse.pipedag.materialize>`) gets called. The only difference being, that
+    any :py:class:`~.Table`, :py:class:`~.Blob` or :py:class:`~.RawSql` objects
+    returned from the task get replaced with the object that they wrap:
+
+    >>> import pandas as pd
+    >>>
+    >>> @materialize(input_type=pd.DataFrame)
+    ... def double_it(df):
+    ...     return Table(df * 2)
+    ...
+    >>> x = pd.DataFrame({"x": [0, 1, 2, 3]})
+    >>> double_it(x)
+       x
+    0  0
+    1  2
+    2  4
+    3  6
+
+
+    """
+
+    def __init__(
+        self,
+        fn: Callable,
+        *,
+        name: str | None = None,
+        input_type: type | None = None,
+        version: str | None = None,
+        cache: Callable[..., Any] | None = None,
+        lazy: bool = False,
+        group_node_tag: str | None = None,
+        nout: int = 1,
+        add_input_source: bool = False,
+        ordering_barrier: bool | dict[str, Any] = False,
+        call_context: Callable[[], Any] | None = None,
+    ):
+        super().__init__(
+            MaterializationWrapper(fn),
+            name=name,
+            nout=nout,
+        )
+
+        self._bound_task_type = MaterializingTask
+        self._original_fn = fn
+
+        self.input_type = input_type
+        self.version = version
+        self.cache = cache
+        self.lazy = lazy
+        self.group_node_tag = group_node_tag
+        self.add_input_source = add_input_source
+        self.call_context = call_context
+
+        if isinstance(ordering_barrier, bool):
+            group_node_args = {"ordering_barrier": ordering_barrier}
+        elif isinstance(ordering_barrier, dict):
+            group_node_args = ordering_barrier.copy()
+            if "ordering_barrier" not in group_node_args:
+                group_node_args["ordering_barrier"] = True
+
+            group_node_keys = {"ordering_barrier", "label", "style", "style_tag"}
+            unexpected_keys = set(ordering_barrier.keys()) - group_node_keys
+            if unexpected_keys:
+                raise ValueError(
+                    "If ordering_barrier is a dictionary, it must only contain keys "
+                    "that are valid parameters of class GroupNode constructor."
+                    f"{unexpected_keys} are unexpected."
+                )
+        else:
+            raise ValueError(
+                "The ordering_barrier parameter must be a boolean or a dictionary."
+            )
+        self.group_node_args = group_node_args
+
+        if version is AUTO_VERSION:
+            if input_type is None:
+                # The input_type is used to determine which type of auto versioning
+                # to use (either not supported, lazy or tracing)
+                raise ValueError("Auto-versioning task must specify an input type")
+            if lazy:
+                raise ValueError(
+                    "Task can't be lazy and auto-versioning at the same time"
+                )
+
+    def __call__(self, *args, **kwargs) -> "MaterializingTask":
+        if self.group_node_args["ordering_barrier"]:
+            from pydiverse.pipedag import GroupNode
+
+            with GroupNode(**self.group_node_args):
+                return super().__call__(*args, **kwargs)  # type: ignore
+        return super().__call__(*args, **kwargs)  # type: ignore
+
+    def _call_original_function(self, *args, **kwargs):
+        try:
+            task_context = TaskContext.get()  # this may raise Lookup Error
+
+            # this is a subtask call. Thus we demand identical input_types
+            sub_task: MaterializingTask = task_context.task  # type: ignore
+            if (
+                sub_task.input_type is not None
+                and self.input_type is not None
+                and sub_task.input_type != self.input_type
+            ):
+                raise RuntimeError(
+                    f"Subtask input type {self.input_type} does not match parent task "
+                    f"input type {sub_task.input_type}: "
+                    f"task={self}, sub_task={sub_task}"
+                )
+        except LookupError:
+            # this is expected when calling the task outside of flow declaration
+            pass
+        result = self._original_fn(*args, **kwargs)
+
+        def unwrap_mutator(x):
+            if isinstance(x, (Table, Blob)):
+                return x.obj
+            if isinstance(x, RawSql):
+                return x.sql
+            return x
+
+        return deep_map(result, unwrap_mutator)
+
+
+class MaterializingTaskGetItem(TaskGetItem):
+    """Object that represents a subset of a :py:class:`~.MaterializingTask` output.
+
+    Instances of this class get initialized by calling
+    :py:class:`MaterializingTask.__getitem__`.
+    """
+
+    def __init__(
+        self,
+        task: "MaterializingTask",
+        parent: "MaterializingTask | MaterializingTaskGetItem",
+        item: Any,
+    ):
+        super().__init__(task, parent, item)
+
+    def __getitem__(self, item) -> "MaterializingTaskGetItem":
+        """
+        Same as :py:meth:`MaterializingTask.__getitem__`,
+        except that it allows you to further refine the selection.
+        """
+        return super().__getitem__(item)
+
+    def get_output_from_store(
+        self, as_type: type = None, ignore_position_hashes: bool = False
+    ) -> Any:
+        """
+        Same as :py:meth:`MaterializingTask.get_output_from_store()`,
+        except that it only loads the required subset of the output.
+        """
+        from pydiverse.pipedag.materialize.core import _get_output_from_store
+
+        return _get_output_from_store(
+            self, as_type, ignore_position_hashes=ignore_position_hashes
+        )
 
 
 class MaterializingTask(Task):
@@ -573,7 +762,7 @@ class MaterializationWrapper:
     def compute_auto_version(
         self,
         task: MaterializingTask,
-        store: PipeDAGStore,
+        store: "PipeDAGStore",
         bound: inspect.BoundArguments,
     ) -> str:
         # Decide on which type of auto versioning to use.
@@ -603,8 +792,8 @@ class MaterializationWrapper:
     def compute_auto_version_lazy(
         self,
         task: MaterializingTask,
-        hook: type[TableHook],
-        store: PipeDAGStore,
+        hook: type["TableHook"],
+        store: "PipeDAGStore",
         bound: inspect.BoundArguments,
     ) -> str:
         args, kwargs = store.dematerialize_task_inputs(
@@ -641,8 +830,8 @@ class MaterializationWrapper:
     def compute_auto_version_trace(
         self,
         task: MaterializingTask,
-        hook: type[TableHook],
-        store: PipeDAGStore,
+        hook: type["TableHook"],
+        store: "PipeDAGStore",
         bound: inspect.BoundArguments,
     ) -> str | None:
         computation_tracer = hook.get_computation_tracer()
@@ -692,7 +881,7 @@ class MaterializationWrapper:
         )
 
     def _auto_version_prepare_and_check_task_output(
-        self, task: MaterializingTask, store: PipeDAGStore, output
+        self, task: MaterializingTask, store: "PipeDAGStore", output
     ):
         task_cache_info = TaskCacheInfo(
             task=task,
@@ -724,187 +913,3 @@ class MaterializationWrapper:
             raise ValueError(f"Task with version={AUTO_VERSION} can't return Blobs.")
 
         return output, tables
-
-
-class UnboundMaterializingTask(UnboundTask):
-    """A materializing task without any bound arguments.
-
-    Instances of this class get initialized using the
-    :py:func:`@materialize <pydiverse.pipedag.materialize>` decorator.
-    By calling this object inside a ``with Flow(...)`` context,
-    a :py:class:`~.MaterializingTask` gets created that binds the provided
-    arguments to the task.
-
-    >>> @materialize
-    ... def some_task(arg):
-    ...     ...
-    ...
-    >>> type(some_task)
-    <class 'pydiverse.pipedag.materialize.core.UnboundMaterializingTask'>
-
-    >>> with Flow() as f:
-    ...     with Stage("stage"):
-    ...         x = some_task(...)
-    ...
-    >>> type(x)
-    <class 'pydiverse.pipedag.materialize.core.MaterializingTask'>
-
-    When you call a `UnboundMaterializingTask` outside a flow definition context,
-    then the original function (that was decorated with :py:func:`@materialize
-    <pydiverse.pipedag.materialize>`) gets called. The only difference being, that
-    any :py:class:`~.Table`, :py:class:`~.Blob` or :py:class:`~.RawSql` objects
-    returned from the task get replaced with the object that they wrap:
-
-    >>> import pandas as pd
-    >>>
-    >>> @materialize(input_type=pd.DataFrame)
-    ... def double_it(df):
-    ...     return Table(df * 2)
-    ...
-    >>> x = pd.DataFrame({"x": [0, 1, 2, 3]})
-    >>> double_it(x)
-       x
-    0  0
-    1  2
-    2  4
-    3  6
-
-
-    """
-
-    def __init__(
-        self,
-        fn: Callable,
-        *,
-        name: str | None = None,
-        input_type: type | None = None,
-        version: str | None = None,
-        cache: Callable[..., Any] | None = None,
-        lazy: bool = False,
-        group_node_tag: str | None = None,
-        nout: int = 1,
-        add_input_source: bool = False,
-        ordering_barrier: bool | dict[str, Any] = False,
-        call_context: Callable[[], Any] | None = None,
-    ):
-        super().__init__(
-            MaterializationWrapper(fn),
-            name=name,
-            nout=nout,
-        )
-
-        self._bound_task_type = MaterializingTask
-        self._original_fn = fn
-
-        self.input_type = input_type
-        self.version = version
-        self.cache = cache
-        self.lazy = lazy
-        self.group_node_tag = group_node_tag
-        self.add_input_source = add_input_source
-        self.call_context = call_context
-
-        if isinstance(ordering_barrier, bool):
-            group_node_args = {"ordering_barrier": ordering_barrier}
-        elif isinstance(ordering_barrier, dict):
-            group_node_args = ordering_barrier.copy()
-            if "ordering_barrier" not in group_node_args:
-                group_node_args["ordering_barrier"] = True
-
-            group_node_keys = {"ordering_barrier", "label", "style", "style_tag"}
-            unexpected_keys = set(ordering_barrier.keys()) - group_node_keys
-            if unexpected_keys:
-                raise ValueError(
-                    "If ordering_barrier is a dictionary, it must only contain keys "
-                    "that are valid parameters of class GroupNode constructor."
-                    f"{unexpected_keys} are unexpected."
-                )
-        else:
-            raise ValueError(
-                "The ordering_barrier parameter must be a boolean or a dictionary."
-            )
-        self.group_node_args = group_node_args
-
-        if version is AUTO_VERSION:
-            if input_type is None:
-                # The input_type is used to determine which type of auto versioning
-                # to use (either not supported, lazy or tracing)
-                raise ValueError("Auto-versioning task must specify an input type")
-            if lazy:
-                raise ValueError(
-                    "Task can't be lazy and auto-versioning at the same time"
-                )
-
-    def __call__(self, *args, **kwargs) -> MaterializingTask:
-        if self.group_node_args["ordering_barrier"]:
-            from pydiverse.pipedag import GroupNode
-
-            with GroupNode(**self.group_node_args):
-                return super().__call__(*args, **kwargs)  # type: ignore
-        return super().__call__(*args, **kwargs)  # type: ignore
-
-    def _call_original_function(self, *args, **kwargs):
-        try:
-            task_context = TaskContext.get()  # this may raise Lookup Error
-
-            # this is a subtask call. Thus we demand identical input_types
-            sub_task: MaterializingTask = task_context.task  # type: ignore
-            if (
-                sub_task.input_type is not None
-                and self.input_type is not None
-                and sub_task.input_type != self.input_type
-            ):
-                raise RuntimeError(
-                    f"Subtask input type {self.input_type} does not match parent task "
-                    f"input type {sub_task.input_type}: "
-                    f"task={self}, sub_task={sub_task}"
-                )
-        except LookupError:
-            # this is expected when calling the task outside of flow declaration
-            pass
-        result = self._original_fn(*args, **kwargs)
-
-        def unwrap_mutator(x):
-            if isinstance(x, (Table, Blob)):
-                return x.obj
-            if isinstance(x, RawSql):
-                return x.sql
-            return x
-
-        return deep_map(result, unwrap_mutator)
-
-
-class MaterializingTaskGetItem(TaskGetItem):
-    """Object that represents a subset of a :py:class:`~.MaterializingTask` output.
-
-    Instances of this class get initialized by calling
-    :py:class:`MaterializingTask.__getitem__`.
-    """
-
-    def __init__(
-        self,
-        task: MaterializingTask,
-        parent: MaterializingTask | MaterializingTaskGetItem,
-        item: Any,
-    ):
-        super().__init__(task, parent, item)
-
-    def __getitem__(self, item) -> MaterializingTaskGetItem:
-        """
-        Same as :py:meth:`MaterializingTask.__getitem__`,
-        except that it allows you to further refine the selection.
-        """
-        return super().__getitem__(item)
-
-    def get_output_from_store(
-        self, as_type: type = None, ignore_position_hashes: bool = False
-    ) -> Any:
-        """
-        Same as :py:meth:`MaterializingTask.get_output_from_store()`,
-        except that it only loads the required subset of the output.
-        """
-        from pydiverse.pipedag.materialize.core import _get_output_from_store
-
-        return _get_output_from_store(
-            self, as_type, ignore_position_hashes=ignore_position_hashes
-        )
