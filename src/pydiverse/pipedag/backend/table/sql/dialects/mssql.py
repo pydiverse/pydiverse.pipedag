@@ -439,6 +439,32 @@ class IbisTableHook(IbisTableHook):
         )
 
 
+try:
+    import pyarrow as pa
+except ImportError:
+    pa = importlib.import_module("pyarrow")
+    pa.Schema = None
+
+
+def map_pyarrow_schema_for_polars(schema: pa.Schema) -> pa.Schema:
+    """This is necessary since, by default, arrow-odbc loads all DATETIME2 columns with
+    nanosecond precision before potentially casting them to microsecond precision (as
+    specified in the polars schema), which results in overflows.
+
+    Hence, we have to tell arrow-odbc to load the fields only in microsecond precision.
+    """
+    assert pa.schema is not None, "please install pyarrow"
+    mapped_fields = [
+        (
+            field.with_type(pa.timestamp("us"))
+            if field.type == pa.timestamp("ns")
+            else field
+        )
+        for field in list(schema)
+    ]
+    return pa.schema(mapped_fields, schema.metadata)
+
+
 DEFAULT_PORT = 1433
 MSSQL_DRIVER_REGEX = re.compile(r"ODBC Driver ([0-9]+) for SQL Server")
 ODBC_CONNECTION_FIELD_KEYMAP = {
@@ -654,29 +680,3 @@ class ConnectionString:
             database=self.database,
             query=query,
         )
-
-
-try:
-    import pyarrow as pa
-except ImportError:
-    pa = importlib.import_module("pyarrow")
-    pa.Schema = None
-
-
-def map_pyarrow_schema_for_polars(schema: pa.Schema) -> pa.Schema:
-    """This is necessary since, by default, arrow-odbc loads all DATETIME2 columns with
-    nanosecond precision before potentially casting them to microsecond precision (as
-    specified in the polars schema), which results in overflows.
-
-    Hence, we have to tell arrow-odbc to load the fields only in microsecond precision.
-    """
-    assert pa.schema is not None, "please install pyarrow"
-    mapped_fields = [
-        (
-            field.with_type(pa.timestamp("us"))
-            if field.type == pa.timestamp("ns")
-            else field
-        )
-        for field in list(schema)
-    ]
-    return pa.schema(mapped_fields, schema.metadata)
