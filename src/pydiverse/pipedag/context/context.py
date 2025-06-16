@@ -3,12 +3,14 @@
 
 import copy
 import threading
+import typing
 from collections.abc import Mapping
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
 from threading import Lock
+from types import GenericAlias
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import structlog
@@ -186,6 +188,21 @@ test_store_config_dict = dict(
     blob_store={"class": "pydiverse.pipedag.backend.blob.NoBlobStore"},
     lock_manager={"class": "pydiverse.pipedag.backend.lock.NoLockManager"},
 )
+
+
+def strip_none(annotation):
+    if isinstance(annotation, GenericAlias):
+        args = typing.get_args(annotation)
+        if len(args) == 2 and args[1] is type(None):
+            # Remove None from the annotation
+            return args[0]
+    return annotation
+
+
+def strip_args(annotation):
+    if isinstance(annotation, GenericAlias):
+        return typing.get_origin(annotation)
+    return annotation
 
 
 @frozen(slots=False)
@@ -546,22 +563,25 @@ class ConfigContext(BaseAttrsContext):
         )
         for m in value:
             annotation = class_type.__annotations__[m]
-            if annotation.startswith("dict[") and not isinstance(value[m], dict):
+            annotation = strip_none(annotation)
+            if isinstance(strip_args(annotation), dict) and not isinstance(
+                value[m], dict
+            ):
                 raise ValueError(
                     f"Expected dictionary for '{m}' within '{within}.{key}', "
                     f"found {type(value[m])}"
                 )
-            if annotation.startswith("bool") and not isinstance(value[m], bool):
+            if isinstance(annotation, bool) and not isinstance(value[m], bool):
                 raise ValueError(
                     f"Expected boolean for '{m}' within '{within}.{key}', "
                     f"found {type(value[m])}"
                 )
-            if annotation.startswith("str") and not isinstance(value[m], str):
+            if isinstance(annotation, str) and not isinstance(value[m], str):
                 raise ValueError(
                     f"Expected string for '{m}' within '{within}.{key}', "
                     f"found {type(value[m])}"
                 )
-            if annotation.startswith("int") and not isinstance(value[m], int):
+            if isinstance(annotation, int) and not isinstance(value[m], int):
                 raise ValueError(
                     f"Expected integer for '{m}' within '{within}.{key}', "
                     f"found {type(value[m])}"
