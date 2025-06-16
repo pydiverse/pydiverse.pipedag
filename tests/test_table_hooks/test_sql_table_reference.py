@@ -84,7 +84,14 @@ def test_smoke_table_reference():
         assert f.run().successful
 
 
-@pytest.mark.polars
+try:
+    import polars as pl
+except ImportError:
+    pl = None
+
+
+@skip_instances("parquet_backend")
+@pytest.mark.skipif(pl is None, reason="polars is needed for this test")
 def test_table_store():
     @materialize(version="1.1")
     def in_table():

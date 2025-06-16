@@ -21,6 +21,7 @@ except ImportError:
 
 # connectorx and thus ibis have trouble with db2+ibm_db:// URLs and mssql
 @skip_instances("ibm_db2", "mssql")
+@pytest.mark.skipif(ibis is None, reason="ibis not installed")
 def test_table_store():
     IbisTable = ibis.api.Table
 
