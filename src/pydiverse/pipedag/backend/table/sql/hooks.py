@@ -1151,7 +1151,7 @@ class IbisTableHook(TableHook[SQLTableStore]):
             try:
                 tbl = conn.table(
                     table_name,
-                    schema=schema,
+                    database=schema,
                 )
                 break
             except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):

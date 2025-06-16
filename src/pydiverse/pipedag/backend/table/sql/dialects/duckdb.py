@@ -142,4 +142,4 @@ except ImportError:
 class IbisTableHook(IbisTableHook):
     @classmethod
     def _conn(cls, store: DuckDBTableStore):
-        return ibis.duckdb._from_url(str(store.engine_url))
+        return ibis.duckdb.from_connection(store.engine.raw_connection())
