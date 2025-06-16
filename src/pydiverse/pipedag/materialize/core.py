@@ -11,7 +11,6 @@ import sqlalchemy as sa
 
 from pydiverse.common.util import deep_map
 from pydiverse.common.util.hashing import stable_hash
-from pydiverse.pipedag import Stage
 from pydiverse.pipedag._typing import CallableT
 from pydiverse.pipedag.container import Blob, RawSql, Table
 from pydiverse.pipedag.context import ConfigContext, TaskContext
@@ -24,7 +23,7 @@ from pydiverse.pipedag.materialize.materializing_task import (
 from pydiverse.pipedag.util.json import PipedagJSONEncoder
 
 if TYPE_CHECKING:
-    pass
+    from pydiverse.pipedag import Stage
 
 
 @overload
@@ -757,7 +756,7 @@ def _get_output_from_store(
 
 
 class PseudoStage:
-    def __init__(self, stage: Stage, did_commit: bool):
+    def __init__(self, stage: "Stage", did_commit: bool):
         self._stage = stage
         self._name = stage.name
         self._transaction_name = stage.name

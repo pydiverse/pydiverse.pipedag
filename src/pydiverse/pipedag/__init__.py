@@ -1,6 +1,22 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
+# In order to avoid circular dependencies, we use the following import order:
+# - Containers
+# - Contexts
+# - Task
+# - Materialize
+# - Core:
+#   * PipedagConfig (rather independent from other core)
+#   * GroupNode (connected to task)
+#   * VisualizationStyle (connected to GroupNode)
+#   * Stage (needed by Flow)
+#   * Result (needed by Flow)
+#   * Flow (needs a lot of the above)
+# - Engine
+# - Backends
+
+
 from . import backend
 from .container import (
     Blob,

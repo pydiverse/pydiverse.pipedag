@@ -24,6 +24,7 @@ from pydiverse.pipedag import (
 )
 from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
+from pydiverse.pipedag.engine import dask
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
@@ -352,6 +353,7 @@ def test_pandas_table_hook_postgres_null_string():
 
 
 @with_instances("postgres", "local_table_store")
+@pytest.mark.skipif(dask.dask is None, reason="AUTO_VERSION for pandas requires dask")
 class TestPandasAutoVersion:
     def test_smoke(self, mocker):
         should_swap_inputs = False

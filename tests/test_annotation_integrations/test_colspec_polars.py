@@ -127,8 +127,8 @@ def test_filter_without_filter_without_rule_violation():
         assert isinstance(out, SimpleCollection)
         assert_frame_equal(out.first, first)
         assert_frame_equal(out.second, second)
-        assert failure["first"].select(pl.len()).collect().item() == 0
-        assert failure["second"].select(pl.len()).collect().item() == 0
+        assert failure.first.select(pl.len()).collect().item() == 0
+        assert failure.second.select(pl.len()).collect().item() == 0
 
     with Flow() as flow:
         with Stage("s01"):

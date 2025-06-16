@@ -675,7 +675,14 @@ def test_cache_validation_mode_assert(
         flow.run(**kwargs)
 
 
+try:
+    import dask
+except ImportError:
+    dask = None
+
+
 @with_instances("postgres", "local_table_cache")
+@pytest.mark.skipif(dask is None, reason="AUTO_VERSION for pandas requires dask")
 @pytest.mark.parametrize("ignore_task_version", [True, False])
 @pytest.mark.parametrize("disable_cache_function", [True, False])
 @pytest.mark.parametrize(
@@ -891,6 +898,7 @@ def test_cache_validation_mode(
 
 
 @skip_instances("postgres", "local_table_cache", "snowflake")
+@pytest.mark.skipif(dask is None, reason="AUTO_VERSION for pandas requires dask")
 @pytest.mark.parametrize("ignore_task_version", [False])
 @pytest.mark.parametrize("disable_cache_function", [False])
 @pytest.mark.parametrize(

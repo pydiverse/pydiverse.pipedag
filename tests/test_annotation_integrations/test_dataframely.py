@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 import types
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import Generic, Mapping, TypeVar
 
 import polars as pl
 import pytest
@@ -13,6 +13,7 @@ from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
 
 try:
     import dataframely as dy
+    from dataframely._polars import FrameType
 except ImportError:
     T = TypeVar("T")
 
@@ -22,6 +23,7 @@ except ImportError:
     class DyDummyClass:
         pass
 
+    FrameType = None
     dy = types.ModuleType("dataframely")
     dy.DataFrame = DyDataFrame
     dy.LazyFrame = DyDataFrame
@@ -90,11 +92,19 @@ class MyCollection(dy.Collection):
             self.second, on=self.common_primary_keys(), how="full", coalesce=True
         ).filter((pl.col("b") > pl.col("b_right")).fill_null(True))
 
+    @classmethod
+    def _init(cls, data: Mapping[str, FrameType], /):
+        return cls(**{k: v.lazy() for k, v in data.items()})
+
 
 @dataclass
 class SimpleCollection(dy.Collection):
     first: dy.LazyFrame[MyFirstColSpec]
     second: dy.LazyFrame[MySecondColSpec]
+
+    @classmethod
+    def _init(cls, data: Mapping[str, FrameType], /):
+        return cls(**{k: v.lazy() for k, v in data.items()})
 
 
 # ------------------------------------------------------------------------------------ #
@@ -140,7 +150,7 @@ def get_data(name: str):
 
 @materialize(nout=3, input_type=pl.LazyFrame)
 def exec_filter_polars(c: dy.Collection):
-    out, failure = c.filter_polars()
+    out, failure = c.filter(c.__dict__)
     return (
         out,
         SimpleCollection(**{name: f._df for name, f in failure.items()}),
@@ -161,8 +171,8 @@ def test_filter_without_filter_without_rule_violation():
         assert isinstance(out, SimpleCollection)
         assert_frame_equal(out.first, first)
         assert_frame_equal(out.second, second)
-        assert failure["first"].select(pl.len()).collect().item() == 0
-        assert failure["second"].select(pl.len()).collect().item() == 0
+        assert failure.first.select(pl.len()).collect().item() == 0
+        assert failure.second.select(pl.len()).collect().item() == 0
 
     with Flow() as flow:
         with Stage("s01"):

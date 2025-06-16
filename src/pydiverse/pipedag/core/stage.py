@@ -8,12 +8,13 @@ from typing import TYPE_CHECKING
 import structlog
 
 from pydiverse.pipedag.context import ConfigContext, DAGContext
+from pydiverse.pipedag.core.group_node import GroupNode
 from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import StageError
 from pydiverse.pipedag.util import normalize_name
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag import Flow, GroupNode
+    from pydiverse.pipedag import Flow
 
 
 @total_ordering

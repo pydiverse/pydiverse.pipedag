@@ -1099,7 +1099,7 @@ except ImportError as e:
     ibis.api.Table = None
 
 
-@SQLTableStore.register_table(ibis)
+@SQLTableStore.register_table(ibis.api.Table)
 class IbisTableHook(TableHook[SQLTableStore]):
     @classmethod
     def conn(cls, store: SQLTableStore):

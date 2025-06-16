@@ -19,10 +19,6 @@ from typing import get_args, get_origin
 
 from pydiverse.common.util.computation_tracing import fully_qualified_name
 from pydiverse.common.util.import_ import load_object
-from pydiverse.pipedag import ConfigContext, Stage
-from pydiverse.pipedag.container import Blob, RawSql, Table
-from pydiverse.pipedag.context import RunContext
-from pydiverse.pipedag.core.config import PipedagConfig
 
 TYPE_KEY = "__pipedag_type__"
 
@@ -54,6 +50,10 @@ class Type(str, Enum):
 
 def json_default(o):
     """Encode `Table`, `RawSql`, 'Stage', and `Blob` objects"""
+    from pydiverse.pipedag import ConfigContext, Stage
+    from pydiverse.pipedag.container import Blob, RawSql, Table
+    from pydiverse.pipedag.core.config import PipedagConfig
+
     if isinstance(o, Table):
         kwargs = {}
         if o.assumed_dependencies is not None:
@@ -186,6 +186,11 @@ def json_default(o):
 
 def json_object_hook(d: dict):
     """Decode json with `Table` and `Blob` objects"""
+    from pydiverse.pipedag import ConfigContext
+    from pydiverse.pipedag.container import Blob, RawSql, Table
+    from pydiverse.pipedag.context import RunContext
+    from pydiverse.pipedag.core.config import PipedagConfig
+
     if TYPE_KEY not in d:
         return d
 

@@ -21,9 +21,7 @@ from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import (
     Blob,
     ConfigContext,
-    Flow,
     RawSql,
-    Stage,
     Table,
     Task,
     TaskGetItem,
@@ -36,6 +34,7 @@ from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.cache import TaskCacheInfo, task_cache_key
 
 if TYPE_CHECKING:
+    from pydiverse.pipedag.core import Flow, Stage
     from pydiverse.pipedag.materialize.store import PipeDAGStore
     from pydiverse.pipedag.materialize.table_hook_base import TableHook
 
@@ -247,8 +246,8 @@ class MaterializingTask(Task):
         self,
         unbound_task: UnboundMaterializingTask,
         bound_args: inspect.BoundArguments,
-        flow: Flow,
-        stage: Stage,
+        flow: "Flow",
+        stage: "Stage",
     ):
         super().__init__(unbound_task, bound_args, flow, stage)
 
