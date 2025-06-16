@@ -16,8 +16,7 @@
 # - Engine
 # - Backends
 
-
-from . import backend
+# isort: skip_file
 from .container import (
     Blob,
     ExternalTableReference,
@@ -26,14 +25,6 @@ from .container import (
     Table,
 )
 from .context import ConfigContext, StageLockContext
-from .core import (
-    Flow,
-    GroupNode,
-    PipedagConfig,
-    Result,
-    Stage,
-    VisualizationStyle,
-)
 from .core.task import (
     Task,
     TaskGetItem,
@@ -43,6 +34,15 @@ from .materialize import (
     materialize,
 )
 from .materialize.materializing_task import AUTO_VERSION
+from .core import (
+    PipedagConfig,
+    GroupNode,
+    VisualizationStyle,
+    Stage,
+    Result,
+    Flow,
+)
+from . import backend
 
 __all__ = [
     "Flow",
