@@ -7,7 +7,7 @@ services:
     ports:
       - "6543:5432"
   mssql:
-    image: mcr.microsoft.com/azure-sql-edge
+    image: "mcr.microsoft.com/mssql/server:2022-latest"
     environment:
       ACCEPT_EULA: Y
       SA_PASSWORD: PydiQuant27
