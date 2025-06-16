@@ -119,7 +119,7 @@ def main():
 
 
 if __name__ == "__main__":
-    setup_logging()  # you can setup the logging and/or structlog libraries as you wish
+    setup_logging()  # you can set up the logging and/or structlog libraries as you wish
     main()
 ```
 For SQLAlchemy >= 2.0, you can use sa.Alias instead of sa.sql.expression.Alias.
@@ -136,7 +136,7 @@ def main():
     ...
 ```
 
-For a more sophisiticated setup with a `pipedag.yaml` configuration file and with a separate database
+For a more sophisticated setup with a `pipedag.yaml` configuration file and with a separate database
 (i.e. containerized Postgres), please look [here](https://pydiversepipedag.readthedocs.io/en/latest/database_testing.html).
 
 ## Troubleshooting
@@ -151,8 +151,8 @@ its own `odbcinst` executable and that shows odbc config files are expected in `
 problem. Try `python -c 'import pyodbc;print(pyodbc.drivers())'` and see whether you get more than an empty list.
 Furthermore, make sure you use 127.0.0.1 instead of localhost. It seems that /etc/hosts is ignored.
 
-### Incompatibility with specific pydiverse.transform Versions
+### Incompatibility with specific `pydiverse.transform` Versions
 
-pydiverse.pipedag currently doesn't support pydiverse.transform Versions (0.2.0, 0.2.1, 0.2.2), due to major
+pydiverse.pipedag currently doesn't support `pydiverse.transform` Versions (0.2.0, 0.2.1, 0.2.2), due to major
 differences to pdt 0.2.3 and pdt <0.2.
-However it does still work with pdt <0.2.
+However, it does still work with pdt <0.2.
