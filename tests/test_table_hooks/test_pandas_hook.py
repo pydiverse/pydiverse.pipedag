@@ -3,6 +3,7 @@
 
 import datetime as dt
 import string
+import sys
 from typing import Any
 
 import pandas as pd
@@ -239,7 +240,9 @@ class TestPandasTableHookNumpy:
 
         @materialize(input_type=pl.DataFrame)
         def assert_expected(in_df):
-            pl.testing.assert_frame_equal(in_df, df_expected, check_dtype=False)
+            import polars.testing as pl_testing
+
+            pl_testing.assert_frame_equal(in_df, df_expected, check_dtype=False)
 
         with Flow() as f:
             with Stage("stage"):
@@ -354,6 +357,11 @@ def test_pandas_table_hook_postgres_null_string():
 
 @with_instances("postgres", "local_table_store")
 @pytest.mark.skipif(dask.dask is None, reason="AUTO_VERSION for pandas requires dask")
+@pytest.mark.skipif(
+    sys.version_info >= (3, 13),
+    reason="Pandas AUTO_VERSION ComputationTracer might be deprecated since it is "
+    "hard to maintain",
+)
 class TestPandasAutoVersion:
     def test_smoke(self, mocker):
         should_swap_inputs = False
