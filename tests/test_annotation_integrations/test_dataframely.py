@@ -21,7 +21,8 @@ except ImportError:
         pass
 
     class DyDummyClass:
-        pass
+        def __init__(self, *args, **kwargs):
+            pass
 
     FrameType = None
     dy = types.ModuleType("dataframely")
@@ -29,7 +30,10 @@ except ImportError:
     dy.LazyFrame = DyDataFrame
     dy.FailureInfo = None
     dy.Column = None
-    dy.Collection = None
+    dy.Collection = object
+    dy.Schema = object
+    dy.filter = lambda: lambda fn: fn  # noqa
+    dy.rule = lambda: lambda fn: fn  # noqa
     for _type in [
         "Int8",
         "Int16",
