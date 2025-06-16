@@ -20,19 +20,20 @@ concurrency:
 jobs:
   lint:
     name: Pre-commit Checks
+    timeout-minutes: 5
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
       - name: Checkout branch
-        uses: actions/checkout@v4
-
-      - name: Install Python 3.9
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.9
-
-      - name: Linting - Run pre-commit checks
-        uses: pre-commit/action@v3.0.1
+        uses: actions/checkout@eef61447b9ff4aafe5dcd4e0bbf5d482be7e7871 # v4.2.1
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@19eac09b398e3d0c747adc7921926a6d802df4da # v0.8.1
+      - name: Install repository
+        # needed for generate-col-ops hook
+        run: pixi run postinstall
+      - name: pre-commit
+        run: pixi run pre-commit run -a --color=always --show-diff-on-failure
+      - name: Check pyproject.toml dependencies
+        run: pixi run check-deps
 
   smoke_test:
     name: Smoke Test
