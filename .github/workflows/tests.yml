@@ -174,7 +174,10 @@ jobs:
         os:
           - ubuntu-latest
         environment:
+          - py310dapre
+          - py313dapre
           - py311all
+          - py311pdsa1all
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
