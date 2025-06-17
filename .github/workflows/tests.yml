@@ -121,7 +121,7 @@ jobs:
       environment: ${{ matrix.environment }}
       docker-services: |
         zoo
-      pytest-arguments: --duckdb --polars --ibis --pdtransform --no-postgres
+      pytest-arguments: --duckdb -m duckdb --polars --ibis --pdtransform --no-postgres
 
   db2_test:
     name: DB2 Tests
@@ -141,7 +141,7 @@ jobs:
         zoo
         ibm_db2
       # --polars and --ibis not supported
-      pytest-arguments: --ibm_db2 --pdtransform --no-postgres
+      pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform --no-postgres
 
   mssql_test:
     name: MSSql Tests
@@ -162,7 +162,7 @@ jobs:
       docker-services: |
         mssql
         zoo
-      pytest-arguments: --mssql --polars --ibis --pdtransform --no-postgres
+      pytest-arguments: --mssql -m mssql --polars --ibis --pdtransform --no-postgres
 
   orchestration_test:
     name: Orchestration Tests
