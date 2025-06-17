@@ -37,7 +37,13 @@ def setup_environ():
 
 setup_environ()
 
-log_level = logging.INFO if not os.environ.get("DEBUG", "") else logging.DEBUG
+log_level = (
+    logging.ERROR
+    if os.environ.get("ERROR_ONLY", "0") != "0"
+    else logging.INFO
+    if not os.environ.get("DEBUG", "")
+    else logging.DEBUG
+)
 setup_logging(log_level=log_level)
 
 
