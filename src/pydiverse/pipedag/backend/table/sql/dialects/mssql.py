@@ -11,7 +11,6 @@ from typing import Any
 import pandas as pd
 import sqlalchemy as sa
 import sqlalchemy.dialects.mssql
-from sqlalchemy import URL, Engine
 
 from pydiverse.common import Datetime, Dtype
 from pydiverse.pipedag.backend.table.sql.ddl import (
@@ -32,6 +31,13 @@ from pydiverse.pipedag.materialize.details import (
     BaseMaterializationDetails,
     resolve_materialization_details_label,
 )
+
+try:
+    from sqlalchemy import URL, Connection, Engine
+except ImportError:
+    # For compatibility with sqlalchemy < 2.0
+    from sqlalchemy.engine import URL, Engine
+    from sqlalchemy.engine.base import Connection
 
 
 @dataclass(frozen=True)
@@ -294,7 +300,7 @@ class MSSqlTableStore(SQLTableStore):
         metadata: Any,
         src_schema: Schema,
         dest_schema: Schema,
-        conn: sa.Connection,
+        conn: Connection,
     ):
         type_: str = metadata
 

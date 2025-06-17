@@ -45,6 +45,14 @@ from sqlalchemy.sql.type_api import TypeEngine
 from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import Schema
 
+try:
+    from sqlalchemy import Connection, Engine
+except ImportError:
+    # For compatibility with sqlalchemy < 2.0
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.engine.base import Connection
+
+
 # Postgres truncates identifiers at 63 characters
 # MSSQL does not allow identifiers longer than 128 characters
 MAX_LENGTH_PK = 63
@@ -70,14 +78,14 @@ class DropSchema(DDLElement):
 
 
 class RenameSchema(DDLElement):
-    def __init__(self, from_: Schema, to: Schema, engine: sa.Engine):
+    def __init__(self, from_: Schema, to: Schema, engine: Engine):
         self.from_ = from_
         self.to = to
         self.engine = engine
 
 
 class DropSchemaContent(DDLElement):
-    def __init__(self, schema: Schema, engine: sa.Engine):
+    def __init__(self, schema: Schema, engine: Engine):
         self.schema = schema
         self.engine = engine
 
@@ -1340,7 +1348,7 @@ def _get_nullable_change_statements(change, compiler):
 
 
 def _mssql_update_definition(
-    conn: sa.Connection,
+    conn: Connection,
     name: str,
     old_schema: Schema,
     new_schema: Schema,

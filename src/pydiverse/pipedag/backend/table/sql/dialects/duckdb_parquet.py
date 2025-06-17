@@ -33,6 +33,16 @@ try:
 except ImportError:
     duckdb = None
 
+try:
+    from sqlalchemy import Select, TextClause
+    from sqlalchemy import Text as SqlText
+except ImportError:
+    # For compatibility with sqlalchemy < 2.0
+    from sqlalchemy.sql.expression import TextClause
+    from sqlalchemy.sql.selectable import Select
+
+    SqlText = TextClause  # this is what sa.text() returns
+
 
 class ParquetTableStore(DuckDBTableStore):
     """Table store that materializes tables as parquet files.
@@ -690,7 +700,7 @@ class SQLAlchemyTableHook(sql_hooks.SQLAlchemyTableHook):
         cls,
         table_name: str,
         schema: Schema,
-        query: sa.Select | sa.TextClause | sa.Text,
+        query: Select | TextClause | SqlText,
         store: ParquetTableStore,
         suffix: str,
         unlogged: bool,

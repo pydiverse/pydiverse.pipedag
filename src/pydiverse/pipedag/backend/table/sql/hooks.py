@@ -39,6 +39,16 @@ except ImportError:
     pl = None
 
 # region SQLALCHEMY
+try:
+    from sqlalchemy import Connection, Select, TextClause
+    from sqlalchemy import Text as SqlText
+except ImportError:
+    # For compatibility with sqlalchemy < 2.0
+    from sqlalchemy.engine.base import Connection
+    from sqlalchemy.sql.expression import TextClause
+    from sqlalchemy.sql.selectable import Select
+
+    SqlText = TextClause  # this is what sa.text() returns
 
 
 def _polars_apply_retrieve_annotation(df, table, intentionally_empty: bool = False):
@@ -186,7 +196,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         cls,
         table_name: str,
         schema: Schema,
-        query: sa.Select | sa.TextClause | sa.Text,
+        query: Select | TextClause | SqlText,
         store: SQLTableStore,
         suffix: str,
         unlogged: bool,
@@ -207,7 +217,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         cls,
         table_name: str,
         schema: Schema,
-        query: sa.Select | sa.TextClause | sa.Text,
+        query: Select | TextClause | SqlText,
         store: SQLTableStore,
     ):
         _ = store
@@ -330,7 +340,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         name: str,
         schema: str,
         dtypes: dict[str, Dtype],
-        conn: sa.Connection,
+        conn: Connection,
         early: bool,
     ):
         """
@@ -349,7 +359,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def download_table(
-        cls, query: Any, conn: sa.Connection, dtypes: dict[str, Dtype] | None = None
+        cls, query: Any, conn: Connection, dtypes: dict[str, Dtype] | None = None
     ) -> pd.DataFrame:
         """
         Provide hook that allows to override the default
@@ -716,7 +726,7 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         return q
 
     @classmethod
-    def _compile_query(cls, store: SQLTableStore, query: sa.Select) -> str:
+    def _compile_query(cls, store: SQLTableStore, query: Select) -> str:
         return str(query.compile(store.engine, compile_kwargs={"literal_binds": True}))
 
     @classmethod

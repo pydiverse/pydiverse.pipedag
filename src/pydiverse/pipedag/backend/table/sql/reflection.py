@@ -1,22 +1,26 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-import sqlalchemy as sa
+try:
+    from sqlalchemy import Engine
+except ImportError:
+    # For compatibility with sqlalchemy < 2.0
+    from sqlalchemy.engine import Engine
 
 
 class PipedagDB2Reflection:
     @staticmethod
-    def get_alias_names(engine: sa.Engine, schema: str) -> list[str]:
+    def get_alias_names(engine: Engine, schema: str) -> list[str]:
         """Returns all aliases in a schema"""
         return PipedagDB2Reflection._get_tabname(engine, schema, "A")
 
     @staticmethod
-    def get_nickname_names(engine: sa.Engine, schema: str) -> list[str]:
+    def get_nickname_names(engine: Engine, schema: str) -> list[str]:
         """Returns all nicknames in a schema"""
         return PipedagDB2Reflection._get_tabname(engine, schema, "N")
 
     @staticmethod
-    def _get_tabname(engine: sa.Engine, schema: str, _type: str):
+    def _get_tabname(engine: Engine, schema: str, _type: str):
         schema = engine.dialect.denormalize_name(schema)
         query = f"""
         SELECT TABNAME
@@ -29,7 +33,7 @@ class PipedagDB2Reflection:
         return list(aliases)
 
     @staticmethod
-    def get_all_objects(engine: sa.Engine, schema: str):
+    def get_all_objects(engine: Engine, schema: str):
         schema = engine.dialect.denormalize_name(schema)
         query = f"""
         SELECT TABNAME, TYPE
@@ -41,7 +45,7 @@ class PipedagDB2Reflection:
         return {name: type_.strip() for name, type_ in result}
 
     @staticmethod
-    def resolve_alias(engine: sa.Engine, name: str, schema: str) -> tuple[str, str]:
+    def resolve_alias(engine: Engine, name: str, schema: str) -> tuple[str, str]:
         """Recursively resolves an alias
 
         :returns: A tuple (table_name, schema)
@@ -81,7 +85,7 @@ class PipedagDB2Reflection:
 
 class PipedagMSSqlReflection:
     @staticmethod
-    def get_alias_names(engine: sa.Engine, schema: str):
+    def get_alias_names(engine: Engine, schema: str):
         query = f"""
         SELECT syn.name
         FROM sys.synonyms AS syn
@@ -96,7 +100,7 @@ class PipedagMSSqlReflection:
 
     @staticmethod
     def resolve_alias(
-        engine: sa.Engine, name: str, schema: str
+        engine: Engine, name: str, schema: str
     ) -> tuple[str, str] | tuple[None, None]:
         from sqlalchemy.dialects.mssql.base import _schema_elements
 
@@ -120,7 +124,7 @@ class PipedagMSSqlReflection:
         return name, schema
 
     @staticmethod
-    def get_procedure_names(engine: sa.Engine, schema: str):
+    def get_procedure_names(engine: Engine, schema: str):
         query = f"""
         SELECT obj.name
         FROM sys.objects AS obj
@@ -135,7 +139,7 @@ class PipedagMSSqlReflection:
         return result
 
     @staticmethod
-    def get_function_names(engine: sa.Engine, schema: str):
+    def get_function_names(engine: Engine, schema: str):
         query = f"""
         SELECT obj.name
         FROM sys.objects AS obj

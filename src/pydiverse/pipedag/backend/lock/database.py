@@ -18,6 +18,14 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
 from pydiverse.pipedag.container import Schema
 from pydiverse.pipedag.errors import LockError
 
+try:
+    from sqlalchemy import Connection, Engine
+except ImportError:
+    # For compatibility with sqlalchemy < 2.0
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.engine.base import Connection
+
+
 DISABLE_DIALECT_REGISTRATION = "__DISABLE_DIALECT_REGISTRATION"
 
 
@@ -40,7 +48,7 @@ class DatabaseLockManager(BaseLockManager):
     __registered_dialects: dict[str, type["DatabaseLockManager"]] = {}
     _dialect_name: str
 
-    def __new__(cls, engine: sa.Engine, *args, **kwargs):
+    def __new__(cls, engine: Engine, *args, **kwargs):
         if cls != DatabaseLockManager:
             return super().__new__(cls)
 
@@ -80,7 +88,7 @@ class DatabaseLockManager(BaseLockManager):
 
     def __init__(
         self,
-        engine: sa.Engine,
+        engine: Engine,
         instance_id: str,
         lock_schema: Schema | None = None,
         create_lock_schema: bool = True,
@@ -242,7 +250,7 @@ class PostgresLock(Lock):
     https://www.postgresql.org/docs/current/functions-admin.html#FUNCTIONS-ADVISORY-LOCKS
     """
 
-    def __init__(self, name: str, connection: sa.Connection):
+    def __init__(self, name: str, connection: Connection):
         self.name = name
 
         digest = hashlib.sha256(name.encode("utf-8")).digest()
@@ -295,7 +303,7 @@ class MSSqlLock(Lock):
     https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-getapplock-transact-sql?view=sql-server-ver15
     """
 
-    def __init__(self, name: str, connection: sa.Connection):
+    def __init__(self, name: str, connection: Connection):
         self.name = name
         self._connection = connection
         self._locked = False
@@ -363,7 +371,7 @@ class DB2Lock(Lock):
     not suitable for fine grain locking.
     """
 
-    def __init__(self, table: str, schema: str, engine: sa.Engine):
+    def __init__(self, table: str, schema: str, engine: Engine):
         self._engine = engine
         self._connection = None
         self._locked = False

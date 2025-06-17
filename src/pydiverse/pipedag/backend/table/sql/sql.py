@@ -47,6 +47,13 @@ from pydiverse.pipedag.materialize.metadata import (
 )
 from pydiverse.pipedag.materialize.store import BaseTableStore
 
+try:
+    from sqlalchemy import Connection, Engine
+except ImportError:
+    # For compatibility with sqlalchemy < 2.0
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.engine.base import Connection
+
 DISABLE_DIALECT_REGISTRATION = "__DISABLE_DIALECT_REGISTRATION"
 
 
@@ -432,7 +439,7 @@ class SQLTableStore(BaseTableStore):
         )
 
     @contextmanager
-    def engine_connect(self) -> sa.Connection:
+    def engine_connect(self) -> Connection:
         with self.engine.connect() as conn:
             yield conn
             if sa.__version__ >= "2.0.0":
@@ -1372,7 +1379,7 @@ class SQLTableStore(BaseTableStore):
         metadata: Any,
         src_schema: Schema,
         dest_schema: Schema,
-        conn: sa.Connection,
+        conn: Connection,
     ):
         """Copy a generic object from one schema to another.
 
@@ -1664,7 +1671,7 @@ class SQLTableStore(BaseTableStore):
 
     # DatabaseLockManager
 
-    def get_engine_for_locking(self) -> sa.Engine:
+    def get_engine_for_locking(self) -> Engine:
         return self._create_engine()
 
     def get_lock_schema(self) -> Schema:
