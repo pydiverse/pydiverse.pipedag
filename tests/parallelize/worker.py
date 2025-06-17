@@ -116,15 +116,7 @@ class Worker:
 
     def run_one_test(self, session, item, next_item):
         self.send("DEBUG_start_test", nodeid=item.nodeid)
-        self.logger.info(
-            "Running test",
-            nodeid=item.nodeid,
-        )
         item.ihook.pytest_runtest_protocol(item=item, nextitem=next_item)
-        self.logger.info(
-            "Stopping test",
-            nodeid=item.nodeid,
-        )
         if session.shouldfail:
             raise session.Failed(session.shouldfail)
         if session.shouldstop:

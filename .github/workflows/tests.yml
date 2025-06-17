@@ -35,8 +35,26 @@ jobs:
       - name: Check pyproject.toml dependencies
         run: pixi run check-deps
 
+  one_test:
+    name: One Test
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        environment:
+          - py313cs
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      docker-services: |
+        postgres
+        zoo
+      pytest-arguments: tests/test_flows/test_source_invalidation.py::test_source_invalidation
+
   smoke_test:
     name: Smoke Test
+    needs: [colspec_test]  # TODO: remove
     strategy:
       matrix:
         os:
@@ -79,7 +97,8 @@ jobs:
 
   colspec_test:
     name: ColSpec Tests
-    needs: [smoke_test]
+    needs: [one_test]
+#    needs: [smoke_test]  # TODO: reactivate
     strategy:
       matrix:
         os:
