@@ -153,10 +153,8 @@ jobs:
         environment:
           - py310all
           - py311all
-          - py310pdt
-          - py313pdt
-          - py311cspdt
-          - py313cspdt
+          - py310mssqlpdt
+          - py313mssqlpdt
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
