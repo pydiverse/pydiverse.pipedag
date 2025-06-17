@@ -117,7 +117,7 @@ jobs:
       docker-services: |
         postgres
         zoo
-      pytest-arguments: --duckdb --polars --ibis
+      pytest-arguments: --pdtransform
 
 
   duckdb_test:

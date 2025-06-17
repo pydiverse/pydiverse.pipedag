@@ -105,7 +105,7 @@ def data_with_filter_with_rule_violation() -> tuple[pdt.Table, pdt.Table]:
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(
-    pdt.Table is not None, reason="pydiverse.transform needs to be installed"
+    pdt.Table is None, reason="pydiverse.transform needs to be installed"
 )
 def test_dataclass():
     first, second = data_without_filter_without_rule_violation()
@@ -154,7 +154,7 @@ def exec_filter(c: cs.Collection):
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(
-    pdt.Table is not None, reason="pydiverse.transform needs to be installed"
+    pdt.Table is None, reason="pydiverse.transform needs to be installed"
 )
 def test_filter_without_filter_without_rule_violation():
     @materialize(input_type=pl.LazyFrame)
@@ -179,7 +179,7 @@ def test_filter_without_filter_without_rule_violation():
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(
-    pdt.Table is not None, reason="pydiverse.transform needs to be installed"
+    pdt.Table is None, reason="pydiverse.transform needs to be installed"
 )
 def test_filter_without_filter_with_rule_violation():
     @materialize(input_type=pl.LazyFrame)
@@ -204,7 +204,7 @@ def test_filter_without_filter_with_rule_violation():
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(
-    pdt.Table is not None, reason="pydiverse.transform needs to be installed"
+    pdt.Table is None, reason="pydiverse.transform needs to be installed"
 )
 def test_filter_with_filter_without_rule_violation():
     @materialize(input_type=pl.LazyFrame)
@@ -235,7 +235,7 @@ def test_filter_with_filter_without_rule_violation():
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(
-    pdt.Table is not None, reason="pydiverse.transform needs to be installed"
+    pdt.Table is None, reason="pydiverse.transform needs to be installed"
 )
 def test_filter_with_filter_with_rule_violation():
     @materialize(input_type=pl.LazyFrame)
