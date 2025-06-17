@@ -148,8 +148,8 @@ class PrefectOneEngine(OrchestrationEngine):
 
 @requires(prefect, ImportError("Module 'prefect' not installed"))
 @requires(
-    prefect_version in SpecifierSet("~=2.0"),
-    ImportWarning(f"Requires prefect version 2.x (found {prefect_version})"),
+    prefect_version in SpecifierSet(">=2.0,<4.0"),
+    ImportWarning(f"Requires prefect version 2.x or 3.x (found {prefect_version})"),
 )
 class PrefectTwoEngine(OrchestrationEngine):
     """
@@ -266,7 +266,8 @@ class PrefectTwoEngine(OrchestrationEngine):
 
 if prefect_version in SpecifierSet("~=1.0"):
     PrefectEngine = PrefectOneEngine
-elif prefect_version in SpecifierSet("~=2.0"):
+elif prefect_version in SpecifierSet(">=2.0,<4.0"):
+    # prefect 2 and 3 are not that different
     PrefectEngine = PrefectTwoEngine
 else:
     from abc import ABC
