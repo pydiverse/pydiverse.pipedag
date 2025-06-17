@@ -32,6 +32,12 @@ from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
 from tests.util.spy import spy_task
 from tests.util.sql import get_config_with_table_store
 
+try:
+    from sqlalchemy import Connection
+except ImportError:
+    # For compatibility with sqlalchemy < 2.0
+    from sqlalchemy.engine.base import Connection
+
 # disable duckdb for now, since they have a bug in version 0.9.2 that needs fixing
 pytestmark = [with_instances(tuple(set(DATABASE_INSTANCES) - {"duckdb"}))]
 pd_version = Version(pd.__version__)
@@ -138,6 +144,9 @@ class TestPandasTableHookNumpy:
 
         assert f.run().successful
 
+    @pytest.mark.skipif(
+        pd.__version__ < "2.", reason="datetime64[us] requires pandas 2"
+    )
     def test_datetime(self):
         df = pd.DataFrame(
             {
@@ -426,7 +435,7 @@ class TestPandasCustomHook:
                 name: str,
                 schema: str,
                 dtypes: dict[str, Dtype],
-                conn: sa.Connection,
+                conn: Connection,
                 early: bool,
             ):
                 df["custom_upload"] = True
@@ -467,7 +476,7 @@ class TestPandasCustomHook:
             def download_table(
                 cls,
                 query: Any,
-                conn: sa.Connection,
+                conn: Connection,
                 dtypes: dict[str, Dtype] | None = None,
             ):
                 df = super().download_table(query, conn, dtypes)

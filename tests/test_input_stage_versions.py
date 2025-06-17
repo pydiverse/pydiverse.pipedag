@@ -26,6 +26,12 @@ from tests.fixtures.instances import (
 from tests.util import swallowing_raises
 from tests.util import tasks_library as m
 
+try:
+    from sqlalchemy import Alias
+except ImportError:
+    # For compatibility with sqlalchemy < 2.0
+    from sqlalchemy.sql import alias as Alias
+
 pytestmark = [with_instances(ALL_INSTANCES, ORCHESTRATION_INSTANCES)]
 
 
@@ -140,8 +146,8 @@ def test_input_versions_blob():
 
     @input_stage_versions(input_type=pd.DataFrame)
     def validate_stage(
-        tbls: dict[str, sa.Alias],
-        other_tbls: dict[str, sa.Alias],
+        tbls: dict[str, Alias],
+        other_tbls: dict[str, Alias],
         blobs: dict[str, dict],
         other_blobs: dict[str, dict],
     ):
@@ -192,8 +198,8 @@ def test_input_versions_other_instance_table(per_user):
 
     @input_stage_versions(input_type=sa.Table, lazy=True, lock_source_stages=False)
     def join_across_stage_versions(
-        tbls: dict[str, sa.Alias],
-        other_tbls: dict[str, sa.Alias],
+        tbls: dict[str, Alias],
+        other_tbls: dict[str, Alias],
         other_cfg: ConfigContext,
     ):
         if run > 1:
