@@ -958,7 +958,7 @@ class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
         table = table.copy_without_obj()
         if isinstance(t._impl, PandasTableImpl):
             table.obj = t >> collect()
-            hook = store.get_m_table_hook(pd.DataFrame)
+            hook = store.get_m_table_hook(table)
             return hook.materialize(store, table, stage_name)
         if isinstance(t._impl, SQLTableImpl):
             table.obj = t._impl.build_select()
