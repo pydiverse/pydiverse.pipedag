@@ -64,6 +64,6 @@ jobs:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
           ERROR_ONLY: 0
-          DEBUG: ""
+          LOG_TEST_NAME: 1
         run: |
           pixi run -e ${{ inputs.environment }} pytest tests ${RUNNER_DEBUG:+-v} --color=yes --workers=${{ inputs.workers }} ${{ inputs.pytest-arguments }}

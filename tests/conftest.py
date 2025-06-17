@@ -41,7 +41,7 @@ log_level = (
     logging.ERROR
     if os.environ.get("ERROR_ONLY", "0") != "0"
     else logging.INFO
-    if not os.environ.get("DEBUG", "")
+    if os.environ.get("DEBUG", "0") == "0"
     else logging.DEBUG
 )
 setup_logging(log_level=log_level)
@@ -53,7 +53,10 @@ setup_logging(log_level=log_level)
 @pytest.fixture(autouse=True, scope="function")
 def structlog_test_info(request):
     """Add testcase information to structlog context"""
-    if not os.environ.get("DEBUG", ""):
+    if (
+        os.environ.get("DEBUG", "0") == "0"
+        and os.environ.get("LOG_TEST_NAME", "0") == "0"
+    ):
         yield
         return
 
