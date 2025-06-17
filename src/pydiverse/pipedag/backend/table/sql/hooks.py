@@ -850,6 +850,12 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def materialize(cls, store, table: Table[Tibble], stage_name):
+        warnings.warn(
+            "tidypolars support is deprecated since tidypolars does not work "
+            "with current version of polars",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         t = table.obj
         table = table.copy_without_obj()
         table.obj = t.to_polars()
@@ -865,6 +871,12 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         stage_name: str | None,
         as_type: type[Tibble],
     ) -> Tibble:
+        warnings.warn(
+            "tidypolars support is deprecated since tidypolars does not work "
+            "with current version of polars",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         polars_hook = store.get_r_table_hook(pl.DataFrame)
         df = polars_hook.retrieve(store, table, stage_name, as_type)
         return tidypolars.from_polars(df)
