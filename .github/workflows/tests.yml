@@ -191,7 +191,7 @@ jobs:
           - ubuntu-latest
         environment:
           - py310dapre
-          - py313dapre
+          - py312dapre
           - py311all
           - py311pdsa1all
     uses: ./.github/workflows/test.yml
