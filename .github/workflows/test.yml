@@ -63,8 +63,9 @@ jobs:
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          PREFECT_API_URL: http://127.0.0.1:4200/api
+          PREFECT_SERVER_ALLOW_EPHEMERAL_MODE: false
           ERROR_ONLY: 1
           LOG_TEST_NAME: 0
-          PREFECT_SERVER_ALLOW_EPHEMERAL_MODE: false
         run: |
           pixi run -e ${{ inputs.environment }} pytest tests ${RUNNER_DEBUG:+-v} --color=yes --workers=${{ inputs.workers }} ${{ inputs.pytest-arguments }}
