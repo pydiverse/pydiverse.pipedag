@@ -224,7 +224,7 @@ class PolarsTableHook(hooks.PolarsTableHook):
                 _polars_apply_materialize_annotation,
             )
 
-            df = _polars_apply_materialize_annotation(df, table)(df, table)
+            df = _polars_apply_materialize_annotation(df, table)
         except Exception as e:
             logger = structlog.get_logger(logger_name=cls.__name__)
             logger.error(

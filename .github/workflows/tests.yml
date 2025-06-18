@@ -54,7 +54,6 @@ jobs:
 
   smoke_test:
     name: Smoke Test
-    needs: [orchestration_test]  # todo: remove
     strategy:
       matrix:
         os:
@@ -184,7 +183,7 @@ jobs:
 
   orchestration_test:
     name: Orchestration Tests
-#    needs: [smoke_test]  # TODO: reactivate
+    needs: [smoke_test]
     strategy:
       matrix:
         os:
