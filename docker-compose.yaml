@@ -32,3 +32,8 @@ services:
       UPDATEAVAIL: NO
     ports:
       - 50000:50000
+  prefect:
+    image: prefecthq/prefect:3-python3.12
+    command: prefect server start --host 0.0.0.0
+    ports:
+      - "4200:4200"

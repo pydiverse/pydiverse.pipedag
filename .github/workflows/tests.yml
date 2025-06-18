@@ -198,6 +198,7 @@ jobs:
       os: ${{ matrix.os }}
       environment: ${{ matrix.environment }}
       docker-services: |
+        prefect
         postgres
         zoo
       pytest-arguments: --dask --prefect -m "dask or prefect"
