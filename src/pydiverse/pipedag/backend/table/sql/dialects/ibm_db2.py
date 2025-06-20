@@ -267,7 +267,9 @@ class IBMDB2TableStore(SQLTableStore):
 @IBMDB2TableStore.register_table(pd)
 class PandasTableHook(PandasTableHook):
     @classmethod
-    def _get_dialect_dtypes(cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame]):
+    def _get_dialect_dtypes(
+        cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame]
+    ) -> dict[str, sa.types.TypeEngine]:
         # Default string target is CLOB which can't be used for indexing.
         # -> Convert indexed string columns to VARCHAR(256)
         index_columns = set()
@@ -276,7 +278,7 @@ class PandasTableHook(PandasTableHook):
         if primary_key := table.primary_key:
             index_columns |= set(primary_key)
 
-        return ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
+        sql_dtypes = ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
             {
                 name: (
                     sa.String(length=256)
@@ -287,6 +289,9 @@ class PandasTableHook(PandasTableHook):
                 if dtype == String()
             }
         )
+        if table.type_map:
+            sql_dtypes.update(table.type_map)
+        return sql_dtypes
 
     @classmethod
     def _dialect_create_empty_table(
@@ -295,7 +300,7 @@ class PandasTableHook(PandasTableHook):
         df: pd.DataFrame,
         table: Table[pd.DataFrame],
         schema: Schema,
-        dtypes: dict[str, Dtype],
+        dtypes: dict[str, sa.types.TypeEngine],
     ):
         suffix = store.get_create_table_suffix(
             resolve_materialization_details_label(table)

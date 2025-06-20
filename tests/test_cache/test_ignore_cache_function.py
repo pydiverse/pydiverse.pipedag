@@ -275,6 +275,8 @@ def ref(tbl):
 @skip_instances(
     "mssql",
     "mssql_pytsql",
+    "mssql_nobulk",
+    "mssql_noaodbc",
     "mssql_columnstore",
     "ibm_db2",
     "ibm_db2_avoid_schema",

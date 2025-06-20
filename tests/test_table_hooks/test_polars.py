@@ -1,7 +1,9 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
+from typing import Any
 
 import pytest
+from pandas.core.dtypes.base import ExtensionDtype
 
 from pydiverse.pipedag import (
     AUTO_VERSION,
@@ -197,19 +199,21 @@ def test_custom_download():
 
     cfg = get_config_with_table_store(ConfigContext.get(), TestTableStore)
 
+    import numpy as np
+
     @TestTableStore.register_table(pl, replace_hooks=[PolarsTableHook])
     class CustomPolarsDownloadTableHook(PolarsTableHook):
-        @classmethod
         def download_table(
             cls,
-            query: str,
-            connection_uri: str,
+            query: Any,
             store: SQLTableStore,
-        ):
+            dtypes: dict[str, ExtensionDtype | np.dtype] | None = None,
+        ) -> pl.DataFrame:
             # to simplify this test with various dependencies and platforms, it is
             # easier to use pandas:
             import pandas as pd
 
+            connection_uri = store.engine_url.render_as_string(hide_password=False)
             pandas_df = pd.read_sql(query, con=connection_uri)
             # # pl.read_database_uri fails for duckdb and osx-arm64
             # # (newer conda-forge builds for connectorx for osx-arm64 are broken)

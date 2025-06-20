@@ -1,8 +1,9 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
-
+import importlib
 import warnings
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import sqlalchemy as sa
@@ -71,16 +72,14 @@ class PandasTableHook(PandasTableHook):
     @classmethod
     def _execute_materialize(
         cls,
-        df: pd.DataFrame,
-        store: DuckDBTableStore,
         table: Table[pd.DataFrame],
+        store: DuckDBTableStore,
         schema: Schema,
         dtypes: dict[str, Dtype],
     ):
+        df = table.obj
         engine = store.engine
         dtypes = cls._get_dialect_dtypes(dtypes, table)
-        if table.type_map:
-            dtypes.update(table.type_map)
 
         store.check_materialization_details_supported(
             resolve_materialization_details_label(table)
@@ -110,25 +109,35 @@ class PandasTableHook(PandasTableHook):
 
 
 try:
-    import polars
+    import polars as pl
 except ImportError as e:
     warnings.warn(str(e), ImportWarning)
-    polars = None
+    pl = importlib.import_module("polars")
+    pl.DataType = None
+    pl.DataFrame = None
+    pl.LazyFrame = None
 
 
-@DuckDBTableStore.register_table(polars, duckdb)
+@DuckDBTableStore.register_table(pl.DataFrame, duckdb)
 class PolarsTableHook(PolarsTableHook):
     @classmethod
     def download_table(
-        cls, query: str, connection_uri: str, store: SQLTableStore
-    ) -> polars.DataFrame:
+        cls,
+        query: Any,
+        store: SQLTableStore,
+        dtypes: dict[str, pl.DataType] | None = None,
+    ) -> pl.DataFrame:
+        assert dtypes is None, (
+            "Polars reads SQL schema and loads the data in reasonable types."
+            "Thus, manual dtype manipulation can only done via query or afterwards."
+        )
         engine = store.engine
         # Connectorx doesn't support duckdb.
         # Instead, we load it like this:  DuckDB -> PyArrow -> Polars
         conn = engine.raw_connection()
         pl_table = conn.sql(query).arrow()
 
-        df = polars.from_arrow(pl_table)
+        df = pl.from_arrow(pl_table)
         return df
 
 

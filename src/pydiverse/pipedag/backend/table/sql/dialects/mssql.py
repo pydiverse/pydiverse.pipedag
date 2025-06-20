@@ -1,18 +1,21 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
-
+import copy
 import dataclasses
+import importlib
 import re
 import types
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import sqlalchemy as sa
 import sqlalchemy.dialects.mssql
+from pandas.core.dtypes.base import ExtensionDtype
 
-from pydiverse.common import Datetime, Dtype
+from pydiverse.common import Datetime, Dtype, PandasBackend
 from pydiverse.pipedag.backend.table.sql.ddl import (
     AddClusteredColumnstoreIndex,
     ChangeColumnTypes,
@@ -81,6 +84,18 @@ class MSSqlTableStore(SQLTableStore):
         is to split up monolithic blocks of dynamic sql statements into defined
         transformations with dynamic aspects written in python.
 
+    :param disable_arrow_odbc:
+        By default we try to use arrow-odbc to read data from Microsoft SQL Server.
+        However, pyarrow has problems with long string columns.
+        If you want to disable this, set this parameter to ``True``.
+
+    :param disable_bulk_insert:
+        By default we try to use bulk insert to write data to Microsoft SQL Server.
+        Unfortunately, the bcp command line tool and bulk insert libraries like
+        bcpandas have trouble with corner cases like linebreaks or other special
+        characters in string columns.
+        If you want to disable this, set this parameter to ``True``.
+
     :param pytsql_isolate_top_level_statements:
         This parameter is handed over to `pytsql.executes`_ and causes the script to
         be split in top level statements that are sent to sqlalchemy separately.
@@ -104,11 +119,15 @@ class MSSqlTableStore(SQLTableStore):
         self,
         *args,
         disable_pytsql: bool = False,
+        disable_arrow_odbc: bool = False,
+        disable_bulk_insert: bool = False,
         pytsql_isolate_top_level_statements: bool = True,
         max_query_print_length: int = 500000,
         **kwargs,
     ):
         self.disable_pytsql = disable_pytsql
+        self.disable_arrow_odbc = disable_arrow_odbc
+        self.disable_bulk_insert = disable_bulk_insert
         self.pytsql_isolate_top_level_statements = pytsql_isolate_top_level_statements
         self.max_query_print_length = max_query_print_length
 
@@ -353,24 +372,196 @@ class MSSqlTableStore(SQLTableStore):
         )
 
 
-@MSSqlTableStore.register_table(pd)
-class PandasTableHook(PandasTableHook):
+try:
+    import polars as pl
+except ImportError:
+    pl = importlib.import_module("polars")
+    pl.DataType = None
+    pl.DataFrame = None
+    pl.LazyFrame = None
+
+
+class DataframeMsSQLTableHook:
     @classmethod
-    def _get_dialect_dtypes(cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame]):
-        _ = table
-        return ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
+    def dialect_has_adbc_driver(cls):
+        # MSSQL does not support ADBC drivers, so far.
+        return False
+
+    @classmethod
+    def _get_dialect_dtypes(
+        cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame]
+    ) -> dict[str, sa.types.TypeEngine]:
+        sql_dtypes = ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
             {
                 name: sa.dialects.mssql.DATETIME2()
                 for name, dtype in dtypes.items()
                 if dtype == Datetime()
             }
         )
+        if table.type_map:
+            sql_dtypes.update(table.type_map)
+        return sql_dtypes
+
+    @classmethod
+    def upload_table_bulk_insert(
+        cls,
+        table: Table[pd.DataFrame],
+        schema: Schema,
+        dtypes: dict[str, sa.types.TypeEngine],
+        store: SQLTableStore,
+        early: bool,
+    ):
+        df = table.obj
+        schema_name = schema.get()
+        from bcpandas import SqlCreds, to_sql
+
+        creds = SqlCreds.from_engine(store.engine)
+        url = store.engine_url.render_as_string()
+        if "&" in url:
+            creds.odbc_kwargs = {
+                x.split("=")[0]: x.split("=")[1]
+                for x in url.split("&")[1:]
+                if len(x.split("=")) == 2
+            }
+        # attention: the `(lambda col: lambda...)(copy.copy(col))` part looks odd but is
+        # needed to ensure loop iterations create lambdas working on different columns
+        df_out = df.assign(
+            **{
+                col: (
+                    lambda col: lambda df: df[col]
+                    .map({True: 1, False: 0})
+                    .astype(pd.Int8Dtype())
+                )(copy.copy(col))
+                for col, dtype in df.dtypes[
+                    (df.dtypes == "bool[pyarrow]") | (df.dtypes == "bool")
+                ].items()
+            }
+        ).assign(
+            **{
+                col: (lambda col: lambda df: df[col])(copy.copy(col))
+                .str.replace("\n", "\\n", regex=False)
+                .str.replace("\t", "\\t", regex=False)
+                .str.replace("\r", "\\r", regex=False)
+                for col, dtype in df.dtypes[
+                    (df.dtypes == "object")
+                    | (df.dtypes == "string")
+                    | (df.dtypes == "string[pyarrow]")
+                ].items()
+            }
+        )
+        to_sql(
+            df_out,
+            table.name,
+            creds,
+            schema=schema_name,
+            index=False,
+            if_exists="append" if early else "fail",
+            batch_size=min(len(df), 100_000),
+            dtype=dtypes,
+            delimiter="\t",
+            quotechar="\1",
+        )
+
+    @classmethod
+    def download_table_arrow_odbc(
+        cls,
+        query: Any,
+        store: SQLTableStore,
+        dtypes: dict[str, pl.DataFrame] | None = None,
+    ) -> pl.DataFrame:
+        assert dtypes is None, (
+            "Pyarrow reads SQL schema and loads the data in reasonable types."
+            "Thus, manual dtype manipulation can only done via query or afterwards."
+        )
+        engine = store.engine
+
+        odbc_string = ConnectionString.from_url(engine.url).odbc_string
+
+        # we need to avoid VARCHAR(MAX) columns since arrow-odbc does not
+        # handle them well
+        # dtypes = {}  # TODO: allow user to provide custom dtypes
+        # column_types = reflect_pyodbc_column_types(query, odbc_string)
+
+        df = pl.concat(
+            pl.read_database(
+                query=query,
+                connection=odbc_string,
+                iter_batches=True,
+                batch_size=65536,
+                # schema_overrides=dtypes,
+                execute_options={"map_schema": map_pyarrow_schema_for_polars},
+            ),
+            rechunk=True,
+        )
+
+        return df
 
 
-try:
-    import polars
-except ImportError:
-    polars = None
+@MSSqlTableStore.register_table(pd)
+class PandasTableHook(DataframeMsSQLTableHook, PandasTableHook):
+    @classmethod
+    def _adjust_cols_retrieve(
+        cls, store: MSSqlTableStore, cols: dict, dtypes: dict, backend: PandasBackend
+    ) -> tuple[dict | None, dict]:
+        assert isinstance(store, MSSqlTableStore)
+        arrow_odbc = not store.disable_arrow_odbc
+        max_string_length = 256
+        if arrow_odbc:
+            # arrow-odbc does not handle VARCHAR(MAX) columns well, so we need to cut
+            # strings
+            if any(isinstance(col.type, sa.String) for col in cols.values()):
+                return {
+                    name: sa.cast(
+                        sa.func.substring(col, 1, max_string_length).label(name),
+                        sa.String(max_string_length),
+                    )
+                    if isinstance(col.type, sa.String)
+                    else col
+                    for name, col in cols.items()
+                }, dtypes
+        return None, dtypes
+
+    @classmethod
+    def download_table(
+        cls,
+        query: Any,
+        store: SQLTableStore,
+        dtypes: dict[str, ExtensionDtype | np.dtype] | None = None,
+    ) -> pd.DataFrame:
+        assert isinstance(store, MSSqlTableStore)
+        arrow_odbc = not store.disable_arrow_odbc
+
+        if arrow_odbc:
+            try:
+                pl_df = cls.download_table_arrow_odbc(query, store, dtypes=None)
+                df = pl_df.to_pandas()
+                df = cls._fix_dtypes(df, dtypes)
+            except Exception as e:  # noqa
+                store.logger.warning(
+                    "Failed to download table using arrow-odbc, falling back to "
+                    "sqlalchemy/pandas."
+                )
+
+        return super().download_table(query, store, dtypes)
+
+    @classmethod
+    def upload_table(
+        cls,
+        table: Table[pd.DataFrame],
+        schema: Schema,
+        dtypes: dict[str, sa.types.TypeEngine],
+        store: SQLTableStore,
+        early: bool,
+    ):
+        if not store.disable_bulk_insert:
+            try:
+                return cls.upload_table_bulk_insert(table, schema, dtypes, store, early)
+            except:  # noqa
+                store.logger.warning(
+                    "Failed to upload table using bulk insert, falling back to pandas."
+                )
+        # TODO: consider using arrow-odbc for uploading
+        super().upload_table(table, schema, dtypes, store, early)
 
 
 def reflect_pyodbc_column_types(query: str, odbc_string: str):
@@ -393,84 +584,55 @@ def reflect_pyodbc_column_types(query: str, odbc_string: str):
     return column_types
 
 
-@MSSqlTableStore.register_table(polars)
-class PolarsTableHook(PolarsTableHook):
-    @classmethod
-    def _adjust_cols_retrieve(
-        cls, cols: dict, dtypes: dict
-    ) -> tuple[dict | None, dict]:
-        arrow_odbc = True
-        max_string_length = 256
-        if arrow_odbc:
-            # arrow-odbc does not handle VARCHAR(MAX) columns well, so we need to cut
-            # strings
-            if any(isinstance(col.type, sa.String) for col in cols.values()):
-                return {
-                    name: sa.cast(
-                        sa.func.substring(col, 1, max_string_length).label(name),
-                        sa.String(max_string_length),
-                    )
-                    if isinstance(col.type, sa.String)
-                    else col
-                    for name, col in cols.items()
-                }, dtypes
-        return None, dtypes
-
-    @classmethod
-    def _read_db_query(cls, store: SQLTableStore, table: Table, stage_name: str | None):
-        table_name, schema = store.resolve_alias(table, stage_name)
-        arrow_odbc = True
-
-        if arrow_odbc:
-            sql_table = store.reflect_table(table_name, schema).alias("tbl")
-
-            cols = {col.name: col for col in sql_table.columns}
-            dtypes = {name: Dtype.from_sql(col.type) for name, col in cols.items()}
-
-            cols, dtypes = cls._adjust_cols_retrieve(cols, dtypes)
-            if cols is not None:
-                return sa.select(*cols.values()).select_from(sql_table)
-        else:
-            sql_table = sa.table(table_name, schema=schema)
-        query = sa.select("*").select_from(sql_table)
-
-        return query
-
+@MSSqlTableStore.register_table(pl.DataFrame)
+class PolarsTableHook(DataframeMsSQLTableHook, PolarsTableHook):
     @classmethod
     def download_table(
-        cls, query: str, connection_uri: str, store: SQLTableStore
-    ) -> polars.DataFrame:
-        engine = store.engine
-        arrow_odbc = True
+        cls,
+        query: Any,
+        store: SQLTableStore,
+        dtypes: dict[str, pl.DataFrame] | None = None,
+    ) -> pl.DataFrame:
+        assert dtypes is None, (
+            "Pyarrow reads SQL schema and loads the data in reasonable types."
+            "Thus, manual dtype manipulation can only be done via query or afterwards."
+        )
+        assert isinstance(store, MSSqlTableStore)
+        arrow_odbc = not store.disable_arrow_odbc
 
         if arrow_odbc:
             try:
-                odbc_string = ConnectionString.from_url(engine.url).odbc_string
-
-                # we need to avoid VARCHAR(MAX) columns since arrow-odbc does not
-                # handle them well
-                # dtypes = {}  # TODO: allow user to provide custom dtypes
-                # column_types = reflect_pyodbc_column_types(query, odbc_string)
-
-                import polars as pl
-
-                df = pl.concat(
-                    pl.read_database(
-                        query=query,
-                        connection=odbc_string,
-                        iter_batches=True,
-                        batch_size=65536,
-                        # schema_overrides=dtypes,
-                        execute_options={"map_schema": map_pyarrow_schema_for_polars},
-                    ),
-                    rechunk=True,
+                return cls.download_table_arrow_odbc(query, store, dtypes)
+            except Exception as e:  # noqa
+                store.logger.warning(
+                    "Failed to download table using arrow-odbc, falling back to "
+                    "sqlalchemy/polars which currently uses pandas in the back."
                 )
 
-                return df
-            except Exception as e:  # noqa
-                pass
+        return super().download_table(query, store, dtypes)
 
-        return super().download_table(query, connection_uri, store)
+    @classmethod
+    def upload_table(
+        cls,
+        table: Table[pl.DataFrame],
+        schema: Schema,
+        dtypes: dict[str, sa.types.TypeEngine],
+        store: SQLTableStore,
+        early: bool,
+    ):
+        """
+        Provide hook that allows to override the default
+        upload of polars tables to the tablestore.
+        """
+        if not store.disable_bulk_insert:
+            try:
+                return cls.upload_table_bulk_insert(table, schema, dtypes, store, early)
+            except:  # noqa
+                store.logger.warning(
+                    "Failed to upload table using bulk insert, falling back to arrow "
+                    "odbc."
+                )
+        super().upload_table(table, schema, dtypes, store, early)
 
 
 try:

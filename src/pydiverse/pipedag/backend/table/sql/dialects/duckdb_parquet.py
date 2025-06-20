@@ -511,9 +511,15 @@ class PandasTableHook(TableHook[ParquetTableStore]):
         table: Table,
         stage_name: str | None,
         as_type: type,
+        limit: int | None = None,
     ):
         path = store.get_table_path(table, lookup_schema=True)
-        df = pd.read_parquet(path)
+        import pyarrow.dataset as ds
+
+        if limit is not None:
+            df = ds.dataset(path).scanner().head(limit).to_pandas()
+        else:
+            df = pd.read_parquet(path)
         import pyarrow.parquet
 
         schema = pyarrow.parquet.read_schema(path)
@@ -617,9 +623,10 @@ class PolarsTableHook(TableHook[ParquetTableStore]):
         table: Table,
         stage_name: str | None,
         as_type: type,
+        limit: int | None = None,
     ):
         file_path = store.get_table_path(table)
-        df = polars.read_parquet(file_path)
+        df = polars.read_parquet(file_path, n_rows=limit)
         df = sql_hooks._polars_apply_retrieve_annotation(df, table)
         if issubclass(as_type, polars.LazyFrame):
             return df.lazy()
@@ -658,8 +665,7 @@ class LazyPolarsTableHook(PolarsTableHook):
         as_type: type[polars.LazyFrame],
     ) -> polars.LazyFrame:
         path = store.get_table_path(table)
-        df = polars.scan_parquet(path)
-        df = df.limit(0).collect()
+        df = polars.read_parquet(path, n_rows=0)
         df = sql_hooks._polars_apply_retrieve_annotation(
             df, table, intentionally_empty=True
         )

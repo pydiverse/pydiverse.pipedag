@@ -7,7 +7,7 @@ from io import StringIO
 from typing import Any
 
 import pandas as pd
-import structlog
+import sqlalchemy as sa
 
 from pydiverse.common import Dtype
 from pydiverse.pipedag.backend.table.sql import hooks
@@ -151,15 +151,13 @@ class PandasTableHook(hooks.PandasTableHook):
     @classmethod
     def _execute_materialize(
         cls,
-        df: pd.DataFrame,
-        store: PostgresTableStore,
         table: Table[pd.DataFrame],
+        store: PostgresTableStore,
         schema: Schema,
         dtypes: dict[str, Dtype],
     ):
-        dtypes = {name: dtype.to_sql() for name, dtype in dtypes.items()}
-        if table.type_map:
-            dtypes.update(table.type_map)
+        df = table.obj
+        dtypes = cls._get_dialect_dtypes(dtypes, table)
 
         # Create empty table
         cls._dialect_create_empty_table(store, df, table, schema, dtypes)
@@ -210,66 +208,45 @@ class PandasTableHook(hooks.PandasTableHook):
 @PostgresTableStore.register_table(pl)
 class PolarsTableHook(hooks.PolarsTableHook):
     @classmethod
-    def materialize(
-        cls, store: PostgresTableStore, table: Table[pl.DataFrame], stage_name: str
+    def upload_table(
+        cls,
+        table: Table[pl.DataFrame],
+        schema: Schema,
+        dtypes: dict[str, sa.types.TypeEngine],
+        store: SQLTableStore,
+        early: bool,
     ):
-        if not store.use_adbc:
-            super().materialize(store, table, stage_name)
+        if not early:
+            cls._dialect_create_empty_table(store, table, schema, dtypes)
+        df = table.obj  # type: pl.DataFrame
 
-        import adbc_driver_postgresql.dbapi
-
-        df = table.obj
-        try:
-            from pydiverse.pipedag.backend.table.sql.hooks import (
-                _polars_apply_materialize_annotation,
-            )
-
-            df = _polars_apply_materialize_annotation(df, table)
-        except Exception as e:
-            logger = structlog.get_logger(logger_name=cls.__name__)
-            logger.error(
-                "Failed to apply materialize annotation for table %s: %s",
-                table.name,
-                e,
-            )
-
-        schema = store.get_schema(stage_name)
-        dtypes = {
-            name: Dtype.from_polars(dtype).to_sql()
-            for name, dtype in df.collect_schema().items()
-        }
-
-        if table.type_map:
-            dtypes.update(table.type_map)
+        # COPY data
+        # TODO: For python 3.12, there is csv.QUOTE_STRINGS
+        #       This would make everything a bit safer, because then we could
+        #       represent the string "\\N" (backslash + capital n).
+        s_buf = StringIO()
+        df.to_csv(
+            s_buf,
+            na_rep="\\N",
+            header=False,
+            index=False,
+            quoting=csv.QUOTE_MINIMAL,
+        )
+        s_buf.seek(0)
 
         engine = store.engine
         table_name = engine.dialect.identifier_preparer.quote(table.name)
         schema_name = engine.dialect.identifier_preparer.format_schema(schema.get())
 
-        conn = adbc_driver_postgresql.dbapi.connect(
-            engine.url.render_as_string(hide_password=False)
-        )
-
-        if isinstance(df, pl.LazyFrame):
-            df = df.collect()
-
-        # Create empty table
-        df.slice(0, 0).write_database(
-            f"{schema_name}.{table_name}",
-            conn,
-            if_table_exists="replace",
-            engine="adbc",
-        )
-        store.add_indexes_and_set_nullable(
-            table, schema, on_empty_table=True, table_cols=df.columns
-        )
-
-        if store.get_unlogged(resolve_materialization_details_label(table)):
-            store.execute(ChangeTableLogged(table.name, schema, False))
-
-        df.write_database(
-            f"{schema_name}.{table_name}",
-            conn,
-            if_table_exists="append",
-            engine="adbc",
-        )
+        dbapi_conn = engine.raw_connection()
+        try:
+            with dbapi_conn.cursor() as cur:
+                sql = (
+                    f"COPY {schema_name}.{table_name} FROM STDIN"
+                    " WITH (FORMAT CSV, NULL '\\N')"
+                )
+                store.logger.info("Executing bulk load", query=sql)
+                cur.copy_expert(sql=sql, file=s_buf)
+            dbapi_conn.commit()
+        finally:
+            dbapi_conn.close()

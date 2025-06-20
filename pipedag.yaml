@@ -113,6 +113,26 @@ instances:
     blob_store:
       blob_store_connection: no_blob
 
+  mssql_nobulk:
+    instance_id: pd_mssql_nobulk
+    table_store:
+      table_store_connection: mssql
+      args:
+        disable_pytsql: true
+        disable_bulk_insert: true
+    blob_store:
+      blob_store_connection: no_blob
+
+  mssql_noaodbc:
+    instance_id: pd_mssql_noaodbc
+    table_store:
+      table_store_connection: mssql
+      args:
+        disable_pytsql: true
+        disable_arrow_odbc: true
+    blob_store:
+      blob_store_connection: no_blob
+
   mssql_columnstore:
     instance_id: pd_mssql_columnstore
     table_store:

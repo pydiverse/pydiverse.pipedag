@@ -39,6 +39,7 @@ from pydiverse.pipedag.context.context import (
 )
 from pydiverse.pipedag.context.run_context import DeferredTableStoreOp
 from pydiverse.pipedag.errors import CacheError
+from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
 from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import (
     LazyTableMetadata,
@@ -730,7 +731,11 @@ class SQLTableStore(BaseTableStore):
 
     def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
         _ = is_sql
-        return table.nullable is not None or table.non_nullable is not None
+        return (
+            table.nullable is not None
+            or table.non_nullable is not None
+            or self.get_unlogged(resolve_materialization_details_label(table))
+        )
 
     def add_indexes_and_set_nullable(
         self,

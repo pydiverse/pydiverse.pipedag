@@ -6,14 +6,15 @@ import string
 import sys
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
 import sqlalchemy as sa
 from packaging.version import Version
+from pandas.core.dtypes.base import ExtensionDtype
 
 import tests.util.tasks_library as m
-from pydiverse.common import Dtype
 from pydiverse.pipedag import (
     AUTO_VERSION,
     ConfigContext,
@@ -23,6 +24,7 @@ from pydiverse.pipedag import (
     Table,
     materialize,
 )
+from pydiverse.pipedag.backend import SQLTableStore
 from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
 from pydiverse.pipedag.engine import dask
@@ -31,12 +33,6 @@ from pydiverse.pipedag.engine import dask
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
 from tests.util.spy import spy_task
 from tests.util.sql import get_config_with_table_store
-
-try:
-    from sqlalchemy import Connection
-except ImportError:
-    # For compatibility with sqlalchemy < 2.0
-    from sqlalchemy.engine.base import Connection
 
 # disable duckdb for now, since they have a bug in version 0.9.2 that needs fixing
 pytestmark = [with_instances(tuple(set(DATABASE_INSTANCES) - {"duckdb"}))]
@@ -288,6 +284,15 @@ class TestPandasTableHookArrow:
 
         @materialize(input_type=(pd.DataFrame, "arrow"))
         def assert_expected(in_df):
+            if ConfigContext.get().store.table_store.engine.dialect.name == "mssql":
+                # these are unavoidable differences when using bcp for writing tables
+                df["str"] = df["str"].replace("", pd.NA)
+                df["str"] = (
+                    df["str"]
+                    .str.replace("\t", "\\t", regex=False)
+                    .str.replace("\n", "\\n", regex=False)
+                    .str.replace("\r", "\\r", regex=False)
+                )
             pd.testing.assert_frame_equal(in_df, df, check_dtype=False)
             allowed_dtypes = set(df.dtypes)
             # Prefer StringDtype("pyarrow") over ArrowDtype(pa.string()) for now.
@@ -431,15 +436,15 @@ class TestPandasCustomHook:
             @classmethod
             def upload_table(
                 cls,
-                df: pd.DataFrame,
-                name: str,
+                table: Table[pd.DataFrame],
                 schema: str,
-                dtypes: dict[str, Dtype],
-                conn: Connection,
+                dtypes: dict[str, sa.types.TypeEngine],
+                store: SQLTableStore,
                 early: bool,
             ):
+                df = table.obj
                 df["custom_upload"] = True
-                super().upload_table(df, name, schema, dtypes, conn, early)
+                super().upload_table(table, schema, dtypes, store, early)
 
         df = pd.DataFrame(
             {
@@ -476,10 +481,10 @@ class TestPandasCustomHook:
             def download_table(
                 cls,
                 query: Any,
-                conn: Connection,
-                dtypes: dict[str, Dtype] | None = None,
-            ):
-                df = super().download_table(query, conn, dtypes)
+                store: SQLTableStore,
+                dtypes: dict[str, ExtensionDtype | np.dtype] | None = None,
+            ) -> pd.DataFrame:
+                df = super().download_table(query, store, dtypes)
                 df["custom_download"] = True
                 return df
 

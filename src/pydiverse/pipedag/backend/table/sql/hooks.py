@@ -6,18 +6,21 @@ import time
 import types
 import typing
 import warnings
+from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
 import sqlalchemy as sa
 import sqlalchemy.exc
-import structlog
 from packaging.version import Version
+from pandas.core.dtypes.base import ExtensionDtype
 
 from pydiverse.common import Date, Dtype, PandasBackend
 from pydiverse.common.util.computation_tracing import ComputationTracer
 from pydiverse.pipedag import ConfigContext
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.table.sql.ddl import (
+    ChangeTableLogged,
     CreateTableAsSelect,
     InsertIntoSelect,
 )
@@ -40,11 +43,10 @@ except ImportError:
 
 # region SQLALCHEMY
 try:
-    from sqlalchemy import Connection, Select, TextClause
+    from sqlalchemy import Select, TextClause
     from sqlalchemy import Text as SqlText
 except ImportError:
     # For compatibility with sqlalchemy < 2.0
-    from sqlalchemy.engine.base import Connection
     from sqlalchemy.sql.expression import TextClause
     from sqlalchemy.sql.selectable import Select
 
@@ -54,36 +56,37 @@ except ImportError:
 def _polars_apply_retrieve_annotation(df, table, intentionally_empty: bool = False):
     try:
         import dataframely as dy
-
-        if isinstance(table.annotation, typing.GenericAlias) and issubclass(
-            typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
-        ):
-            anno_args = typing.get_args(table.annotation)
-            if len(anno_args) == 1:
-                column_spec = anno_args[0]
-                if issubclass(column_spec, dy.Schema | dy.Collection):
-                    df = column_spec.cast(df)
     except ImportError:
         # If dataframely is not installed, we can't apply the annotation.
-        pass
+        return df
+
+    if isinstance(table.annotation, typing.GenericAlias) and issubclass(
+        typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
+    ):
+        anno_args = typing.get_args(table.annotation)
+        if len(anno_args) == 1:
+            column_spec = anno_args[0]
+            if issubclass(column_spec, dy.Schema | dy.Collection):
+                df = column_spec.cast(df)
     return df
 
 
 def _polars_apply_materialize_annotation(df, table):
     try:
         import dataframely as dy
-
-        if isinstance(table.annotation, typing.GenericAlias) and issubclass(
-            typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
-        ):
-            anno_args = typing.get_args(table.annotation)
-            if len(anno_args) == 1:
-                column_spec = anno_args[0]
-                if issubclass(column_spec, dy.Schema | dy.Collection):
-                    df = column_spec.validate(df, cast=True)
     except ImportError:
         # If dataframely is not installed, we can't apply the annotation.
-        pass
+        return df
+
+    if isinstance(table.annotation, typing.GenericAlias) and issubclass(
+        typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
+    ):
+        anno_args = typing.get_args(table.annotation)
+        if len(anno_args) == 1:
+            column_spec = anno_args[0]
+            if issubclass(column_spec, dy.Schema | dy.Collection):
+                df = column_spec.validate(df, cast=True)
+
     return df
 
 
@@ -236,7 +239,9 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         table: Table,
         stage_name: str | None,
         as_type: type[sa.Table],
+        limit: int | None = None,
     ) -> sa.sql.expression.Selectable:
+        assert limit is None, "SQLAlchemyTableHook does not support limit in retrieve."
         table_name, schema = store.resolve_alias(table, stage_name)
         try:
             alias_name = TaskContext.get().name_disambiguator.get_name(table_name)
@@ -319,8 +324,105 @@ except ImportError:
     pd = None
 
 
+class DataframeSqlTableHook:
+    """
+    Base class for hooks that handle pandas or polars DataFrames.
+    Provides common functionality for uploading and downloading tables.
+    """
+
+    @classmethod
+    def dialect_has_adbc_driver(cls):
+        # by default, we assume an ADBC driver exists
+        return True
+
+    @classmethod
+    def download_table(
+        cls,
+        query: Any,
+        store: SQLTableStore,
+        dtypes: dict[str, ExtensionDtype | np.dtype] | None = None,
+    ) -> Any:
+        raise NotImplementedError("This method must be implemented by subclasses.")
+
+    @classmethod
+    def upload_table(
+        cls,
+        table: Table[pd.DataFrame],
+        schema: Schema,
+        dtypes: dict[str, sa.types.TypeEngine],
+        store: SQLTableStore,
+        early: bool,
+    ):
+        """
+        Provide hook that allows to override the default
+        upload of pandas/polars tables to the tablestore.
+        """
+        raise NotImplementedError("This method must be implemented by subclasses.")
+
+    @classmethod
+    def _get_dialect_dtypes(
+        cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame]
+    ) -> dict[str, sa.types.TypeEngine]:
+        """
+        Convert dtypes to SQLAlchemy types.
+        """
+        sql_dtypes = {name: dtype.to_sql() for name, dtype in dtypes.items()}
+        if table.type_map:
+            sql_dtypes.update(table.type_map)
+        return sql_dtypes
+
+    @classmethod
+    def _dialect_create_empty_table(
+        cls,
+        store: SQLTableStore,
+        table: Table[pd.DataFrame],
+        schema: Schema,
+        dtypes: dict[str, sa.types.TypeEngine],
+    ):
+        """
+        Create an empty table in the database.
+        """
+        raise NotImplementedError("This method must be implemented by subclasses.")
+
+    @classmethod
+    def get_columns(cls, df):
+        return df.columns
+
+    @classmethod
+    def _execute_materialize(
+        cls,
+        table: Table,
+        store: SQLTableStore,
+        schema: Schema,
+        dtypes: dict[str, Dtype],
+    ):
+        df = table.obj
+        dtypes = cls._get_dialect_dtypes(dtypes, table)
+
+        store.check_materialization_details_supported(
+            resolve_materialization_details_label(table)
+        )
+
+        if early := store.dialect_requests_empty_creation(table, is_sql=False):
+            cls._dialect_create_empty_table(store, table, schema, dtypes)
+            store.add_indexes_and_set_nullable(
+                table, schema, on_empty_table=True, table_cols=cls.get_columns(df)
+            )
+            if store.get_unlogged(resolve_materialization_details_label(table)):
+                store.execute(ChangeTableLogged(table.name, schema, False))
+
+        cls.upload_table(table, schema, dtypes, store, early)
+        store.add_indexes_and_set_nullable(
+            table,
+            schema,
+            on_empty_table=False if early else None,
+            table_cols=cls.get_columns(df),
+        )
+        store.optional_pause_for_db_transactionality("table_create")
+
+
 @SQLTableStore.register_table(pd)
-class PandasTableHook(TableHook[SQLTableStore]):
+class PandasTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
     """
     Allows overriding the default dtype backend to use by setting the `dtype_backend`
     argument in the `hook_args` section of the table store config::
@@ -336,43 +438,62 @@ class PandasTableHook(TableHook[SQLTableStore]):
     @classmethod
     def upload_table(
         cls,
-        df: pd.DataFrame,
-        name: str,
-        schema: str,
-        dtypes: dict[str, Dtype],
-        conn: Connection,
+        table: Table[pd.DataFrame],
+        schema: Schema,
+        dtypes: dict[str, sa.types.TypeEngine],
+        store: SQLTableStore,
         early: bool,
     ):
         """
         Provide hook that allows to override the default
         upload of pandas/polars tables to the tablestore.
         """
-        df.to_sql(
-            name,
-            conn,
-            schema=schema,
-            index=False,
-            dtype=dtypes,
-            chunksize=100_000,
-            if_exists="append" if early else "fail",
-        )
+        df = table.obj
+        schema_name = schema.get()
+        with store.engine_connect() as conn:
+            with conn.begin():
+                if early:
+                    store.lock_table(table, schema_name, conn)
+                df.to_sql(
+                    table.name,
+                    conn,
+                    schema=schema_name,
+                    index=False,
+                    dtype=dtypes,
+                    chunksize=100_000,
+                    if_exists="append" if early else "fail",
+                )
 
     @classmethod
     def download_table(
-        cls, query: Any, conn: Connection, dtypes: dict[str, Dtype] | None = None
+        cls,
+        query: Any,
+        store: SQLTableStore,
+        dtypes: dict[str, ExtensionDtype | np.dtype] | None = None,
     ) -> pd.DataFrame:
         """
         Provide hook that allows to override the default
         download of pandas tables from the tablestore.
         Also serves as fallback for polars download.
         """
-        if PandasTableHook.pd_version >= Version("2.0"):
-            df = pd.read_sql(query, con=conn, dtype=dtypes)
-        else:
-            df = pd.read_sql(query, con=conn)
-            if dtypes is not None:
-                for col, dtype in dtypes.items():
-                    df[col] = df[col].astype(dtype)
+        with store.engine.connect() as conn:
+            if PandasTableHook.pd_version >= Version("2.0"):
+                df = pd.read_sql(query, con=conn, dtype=dtypes)
+            else:
+                df = pd.read_sql(query, con=conn)
+                df = cls._fix_dtypes(df, dtypes)
+            return df
+
+    @classmethod
+    def _fix_dtypes(
+        cls,
+        df: pd.DataFrame,
+        dtypes: dict[str, ExtensionDtype | np.dtype] | None = None,
+    ) -> pd.DataFrame:
+        # df = df.copy(deep=False)  would be costly and is typically not needed
+        if dtypes is not None:
+            for col, dtype in dtypes.items():
+                df[col] = df[col].astype(dtype)
         return df
 
     @classmethod
@@ -427,28 +548,25 @@ class PandasTableHook(TableHook[SQLTableStore]):
                 if dtype == Date():
                     df[col] = df[col].astype(object)
 
+        table = table.copy_without_obj()
+        table.obj = df
+
         cls._execute_materialize(
-            df,
-            store=store,
             table=table,
+            store=store,
             schema=schema,
             dtypes=dtypes,
         )
 
     @classmethod
-    def _get_dialect_dtypes(cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame]):
-        _ = table
-        return {name: dtype.to_sql() for name, dtype in dtypes.items()}
-
-    @classmethod
     def _dialect_create_empty_table(
         cls,
         store: SQLTableStore,
-        df: pd.DataFrame,
         table: Table[pd.DataFrame],
         schema: Schema,
-        dtypes: dict[str, Dtype],
+        dtypes: dict[str, sa.types.TypeEngine],
     ):
+        df = table.obj  # type: pd.DataFrame
         df[:0].to_sql(
             table.name,
             store.engine,
@@ -458,48 +576,13 @@ class PandasTableHook(TableHook[SQLTableStore]):
         )
 
     @classmethod
-    def _execute_materialize(
-        cls,
-        df: pd.DataFrame,
-        store: SQLTableStore,
-        table: Table[pd.DataFrame],
-        schema: Schema,
-        dtypes: dict[str, Dtype],
-    ):
-        dtypes = cls._get_dialect_dtypes(dtypes, table)
-        if table.type_map:
-            dtypes.update(table.type_map)
-
-        store.check_materialization_details_supported(
-            resolve_materialization_details_label(table)
-        )
-
-        if early := store.dialect_requests_empty_creation(table, is_sql=False):
-            cls._dialect_create_empty_table(store, df, table, schema, dtypes)
-            store.add_indexes_and_set_nullable(
-                table, schema, on_empty_table=True, table_cols=df.columns
-            )
-
-        with store.engine_connect() as conn:
-            with conn.begin():
-                if early:
-                    store.lock_table(table, schema, conn)
-                cls.upload_table(df, table.name, schema.get(), dtypes, conn, early)
-        store.add_indexes_and_set_nullable(
-            table,
-            schema,
-            on_empty_table=False if early else None,
-            table_cols=df.columns,
-        )
-        store.optional_pause_for_db_transactionality("table_create")
-
-    @classmethod
     def retrieve(
         cls,
         store: SQLTableStore,
         table: Table,
         stage_name: str | None,
         as_type: type[pd.DataFrame] | tuple | dict,
+        limit: int | None = None,
     ) -> pd.DataFrame:
         # Config
         if PandasTableHook.pd_version >= Version("2.0"):
@@ -524,7 +607,9 @@ class PandasTableHook(TableHook[SQLTableStore]):
         backend = PandasBackend(backend_str)
 
         # Retrieve
-        query, dtypes = cls._build_retrieve_query(store, table, stage_name, backend)
+        query, dtypes = cls._build_retrieve_query(
+            store, table, stage_name, backend, limit
+        )
         dataframe = cls._execute_query_retrieve(store, query, dtypes, backend)
         return dataframe
 
@@ -535,6 +620,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
         table: Table,
         stage_name: str | None,
         backend: PandasBackend,
+        limit: int | None = None,
     ) -> tuple[Any, dict[str, Dtype]]:
         table_name, schema = store.resolve_alias(table, stage_name)
 
@@ -543,17 +629,19 @@ class PandasTableHook(TableHook[SQLTableStore]):
         cols = {col.name: col for col in sql_table.columns}
         dtypes = {name: Dtype.from_sql(col.type) for name, col in cols.items()}
 
-        cols, dtypes = cls._adjust_cols_retrieve(cols, dtypes, backend)
+        cols, dtypes = cls._adjust_cols_retrieve(store, cols, dtypes, backend)
 
         if cols is None:
             query = sa.select("*").select_from(sql_table)
         else:
             query = sa.select(*cols.values()).select_from(sql_table)
+        if limit is not None:
+            query = store.get_limit_query(query, rows=limit)
         return query, dtypes
 
     @classmethod
     def _adjust_cols_retrieve(
-        cls, cols: dict, dtypes: dict, backend: PandasBackend
+        cls, store: SQLTableStore, cols: dict, dtypes: dict, backend: PandasBackend
     ) -> tuple[dict | None, dict]:
         # in earlier times pandas only supported datetime64[ns] and thus we implemented
         # clipping in this function to avoid the creation of dtype=object columns
@@ -570,8 +658,7 @@ class PandasTableHook(TableHook[SQLTableStore]):
     ) -> pd.DataFrame:
         dtypes = {name: dtype.to_pandas(backend) for name, dtype in dtypes.items()}
 
-        with store.engine.connect() as conn:
-            return cls.download_table(query, conn, dtypes)
+        return cls.download_table(query, store, dtypes)
 
     # Auto Version
 
@@ -612,24 +699,160 @@ except ImportError as e:
 
 
 @SQLTableStore.register_table(polars)
-class PolarsTableHook(TableHook[SQLTableStore]):
+class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
+    @dataclass  # consider using pydantic instead
+    class Config:
+        disable_materialize_annotation_action: bool = False
+        disable_retrieve_annotation_action: bool = False
+        fault_tolerant_annotation_action: bool = False
+
+    @classmethod
+    def cfg(cls):
+        ret = PolarsTableHook.Config()
+        if hook_args := ConfigContext.get().table_hook_args.get("polars", None):
+            for key, value in hook_args.items():
+                if hasattr(ret, key):
+                    if type(getattr(ret, key)) is not type(value):
+                        raise TypeError(
+                            f"Invalid type for polars hook argument '{key}': "
+                            f"expected {type(getattr(ret, key))}, got {type(value)}"
+                        )
+                    setattr(ret, key, value)
+                else:
+                    raise ValueError(
+                        f"Unknown polars hook argument '{key}' in table_hook_args."
+                    )
+        return ret
+
+    @classmethod
+    def _dialect_create_empty_table(
+        cls,
+        store: SQLTableStore,
+        table: Table[pl.DataFrame],
+        schema: Schema,
+        dtypes: dict[str, sa.types.TypeEngine],
+    ):
+        df = table.obj  # type: pl.DataFrame
+        pd_df = df.to_pandas(use_pyarrow_extension_array=True, zero_copy_only=True)
+        pd_df[:0].to_sql(
+            table.name,
+            store.engine,
+            schema=schema.get(),
+            index=False,
+            dtype=dtypes,
+        )
+        # _ = dtypes  # unfortunately, we don't know how to set dtypes with polars, yet
+        # engine = store.engine
+        # table_name = engine.dialect.identifier_preparer.quote(table.name)
+        # schema_name = engine.dialect.identifier_preparer.format_schema(schema.get())
+        # connection_uri = store.engine_url.render_as_string(hide_password=False)
+        # df.slice(0, 0).write_database(
+        #     f"{schema_name}.{table_name}",
+        #     connection_uri,
+        #     if_table_exists="replace",
+        #     engine="adbc",
+        # )
+
+    @classmethod
+    def upload_table(
+        cls,
+        table: Table[pl.DataFrame],
+        schema: Schema,
+        dtypes: dict[str, sa.types.TypeEngine],
+        store: SQLTableStore,
+        early: bool,
+    ):
+        # use ADBC for writing by default
+        df = table.obj  # type: pl.DataFrame
+        engine = store.engine
+        table_name = engine.dialect.identifier_preparer.quote(table.name)
+        schema_name = engine.dialect.identifier_preparer.format_schema(schema.get())
+        if not early:
+            # as long as we don't know how to provide dtypes to write_database, we need
+            # to create the table first
+            cls._dialect_create_empty_table(store, table, schema, dtypes)
+        if cls.dialect_has_adbc_driver():
+            try:
+                # try using ADBC, first
+                return df.write_database(
+                    f"{schema_name}.{table_name}",
+                    engine.url.render_as_string(hide_password=False),
+                    if_table_exists="append",
+                    engine="adbc",
+                )
+            except Exception as e:  # noqa
+                store.logger.warning(
+                    "Failed writing table using ADBC, falling back to sqlalchemy: %s",
+                    table.name,
+                )
+        df.write_database(
+            f"{schema_name}.{table_name}",
+            engine,
+            if_table_exists="append",
+        )
+
     @classmethod
     def download_table(
-        cls, query: str, connection_uri: str, store: SQLTableStore
-    ) -> polars.DataFrame:
+        cls,
+        query: Any,
+        store: SQLTableStore,
+        dtypes: dict[str, pl.DataType] | None = None,
+    ) -> pl.DataFrame:
         """
         Provide hook that allows to override the default
         download of polars tables from the tablestore.
         """
-
+        assert dtypes is None, (
+            "Polars reads SQL schema and loads the data in reasonable types."
+            "Thus, manual dtype manipulation can only done via query or afterwards."
+        )
         # We try to use arrow_odbc (see mssql) or adbc (e.g. adbc-driver-postgresql)
         # if possible. Duckdb also has its own implementation.
-        try:
-            return polars.read_database_uri(query, connection_uri, engine="adbc")
-        except:  # noqa
-            # This implementation requires connectorx which does not work for duckdb.
-            # Attention: In case this call fails, we simply fall-back to pandas hook.
-            return polars.read_database_uri(query, connection_uri)
+        connection_uri = store.engine_url.render_as_string(hide_password=False)
+        if cls.dialect_has_adbc_driver():
+            try:
+                df = polars.read_database_uri(query, connection_uri, engine="adbc")
+                return cls._fix_dtypes(df, dtypes)
+            except:  # noqa
+                store.logger.warning(
+                    "Failed retrieving query using ADBC, falling back to Pandas: %s",
+                    query,
+                )
+        # This implementation requires connectorx which does not work for duckdb.
+        # Attention: In case this call fails, we simply fall-back to pandas hook.
+        df = polars.read_database_uri(query, connection_uri)
+        return cls._fix_dtypes(df, dtypes)
+
+    @classmethod
+    def _execute_materialize_polars(
+        cls,
+        table: Table,
+        store: SQLTableStore,
+        stage_name: str,
+    ):
+        df = table.obj
+        schema = store.get_schema(stage_name)
+        dtypes = {
+            name: Dtype.from_polars(dtype)
+            for name, dtype in df.collect_schema().items()
+        }
+
+        if isinstance(df, pl.LazyFrame):
+            df = df.collect()
+
+        table = table.copy_without_obj()
+        table.obj = df
+        cls._execute_materialize(table, store, schema, dtypes)
+
+    @classmethod
+    def _fix_dtypes(
+        cls, df: pl.DataFrame, dtypes: dict[str, pl.DataType] | None = None
+    ) -> pl.DataFrame:
+        if dtypes is not None:
+            return df.with_columns(
+                **{col: df[col].cast(dtype) for col, dtype in dtypes.items()}
+            )
+        return df
 
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanResult:
@@ -649,38 +872,30 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         # for materialization.
 
         df = table.obj
-        schema = store.get_schema(stage_name)
 
         if store.print_materialize:
+            schema = store.get_schema(stage_name)
             store.logger.info(
                 f"Writing table '{schema.get()}.{table.name}'", table_obj=table.obj
             )
 
-        dtypes = dict(zip(df.columns, map(Dtype.from_polars, df.dtypes)))
-
+        cfg = cls.cfg()
         try:
-            df = _polars_apply_materialize_annotation(df, table)
+            if not cfg.disable_materialize_annotation_action:
+                df = _polars_apply_materialize_annotation(df, table)
             e = None
         except Exception as e:
-            logger = structlog.get_logger(logger_name=cls.__name__)
-            logger.error(
+            store.logger.error(
                 "Failed to apply materialize annotation for table %s: %s",
                 table.name,
                 e,
             )
         finally:
-            pd_df = df.to_pandas(use_pyarrow_extension_array=True, zero_copy_only=True)
-            pandas_hook = store.get_m_table_hook(Table(pd_df))
-            ret = pandas_hook.materialize_(
-                df=pd_df,
-                dtypes=dtypes,
-                store=store,
-                table=table,
-                schema=schema,
-            )
-            if e:
+            table = table.copy_without_obj()
+            table.obj = df
+            cls._execute_materialize_polars(table, store, stage_name)
+            if e and not cfg.fault_tolerant_annotation_action:
                 raise e
-        return ret
 
     @classmethod
     def retrieve(
@@ -689,25 +904,12 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         table: Table,
         stage_name: str | None,
         as_type: type[polars.DataFrame],
+        limit: int | None = None,
     ) -> polars.DataFrame:
-        query = cls._read_db_query(store, table, stage_name)
-        query = cls._compile_query(store, query)
-        connection_uri = store.engine_url.render_as_string(hide_password=False)
-        try:
-            df = cls._execute_query(query, connection_uri, store)
-        except (RuntimeError, ModuleNotFoundError) as e:
-            logger = structlog.get_logger(logger_name=cls.__name__)
-            logger.error(
-                "Fallback via Pandas since Polars failed to execute query on "
-                "database %s: %s",
-                store.engine_url.render_as_string(hide_password=True),
-                e,
-            )
-            pandas_hook = store.get_r_table_hook(pd.DataFrame)
-            with store.engine.connect() as conn:
-                pd_df = pandas_hook.download_table(query, conn)
-            df = polars.from_pandas(pd_df)
-        df = _polars_apply_retrieve_annotation(df, table)
+        cfg = cls.cfg()
+        df = cls._execute_query(store, table, stage_name, dtypes=None, limit=limit)
+        if not cfg.disable_retrieve_annotation_action:
+            df = _polars_apply_retrieve_annotation(df, table)
         df = df.with_columns(pl.col(pl.Datetime).dt.replace_time_zone(None))
         return df
 
@@ -717,11 +919,19 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         return super().auto_table(obj)
 
     @classmethod
-    def _read_db_query(cls, store: SQLTableStore, table: Table, stage_name: str | None):
+    def _read_db_query(
+        cls,
+        store: SQLTableStore,
+        table: Table,
+        stage_name: str | None,
+        limit: int | None = None,
+    ):
         table_name, schema = store.resolve_alias(table, stage_name)
 
         t = sa.table(table_name, schema=schema)
         q = sa.select("*").select_from(t)
+        if limit is not None:
+            q = q.limit(limit)
 
         return q
 
@@ -730,24 +940,34 @@ class PolarsTableHook(TableHook[SQLTableStore]):
         return str(query.compile(store.engine, compile_kwargs={"literal_binds": True}))
 
     @classmethod
-    def _execute_query(cls, query: str, connection_uri: str, store: SQLTableStore):
+    def _execute_query(
+        cls,
+        store: SQLTableStore,
+        table: Table,
+        stage_name: str,
+        dtypes: dict[str, pl.DataType] | None = None,
+        limit: int | None = None,
+    ) -> pl.DataFrame:
+        query = cls._read_db_query(store, table, stage_name, limit)
+        query = cls._compile_query(store, query)
         try:
-            df = cls.download_table(query, connection_uri, store)
-            return df
+            df = cls.download_table(query, store, dtypes)
         except (RuntimeError, ModuleNotFoundError) as e:
-            logger = structlog.get_logger(logger_name=cls.__name__)
-            engine = sa.create_engine(connection_uri)
-            logger.error(
+            store.logger.error(
                 "Fallback via Pandas since Polars failed to execute query on "
                 "database %s: %s",
-                engine.url.render_as_string(hide_password=True),
+                store.engine_url.render_as_string(hide_password=True),
                 e,
             )
-            pandas_hook = store.get_r_table_hook(pd.DataFrame)
-            with engine.connect() as conn:
-                pd_df = pandas_hook.download_table(query, conn)
-            engine.dispose()
-            return polars.from_pandas(pd_df)
+            pandas_hook = store.get_r_table_hook(pd.DataFrame)  # type: PandasTableHook
+            backend = PandasBackend.ARROW
+            query, dtypes = pandas_hook._build_retrieve_query(
+                store, table, stage_name, backend
+            )
+            dtypes = {name: dtype.to_pandas(backend) for name, dtype in dtypes.items()}
+            pd_df = pandas_hook.download_table(query, store, dtypes)
+            df = polars.from_pandas(pd_df)
+        return df
 
 
 @SQLTableStore.register_table(polars)
@@ -779,14 +999,10 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         table: Table,
         stage_name: str | None,
         as_type: type[polars.DataFrame],
+        limit: int | None = None,
     ) -> polars.LazyFrame:
         polars_hook = store.get_r_table_hook(pl.DataFrame)
-        result = polars_hook.retrieve(
-            store=store,
-            table=table,
-            stage_name=stage_name,
-            as_type=as_type,
-        )
+        result = polars_hook.retrieve(store, table, stage_name, as_type, limit)
 
         return result.lazy()
 
@@ -798,16 +1014,8 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         stage_name: str,
         as_type: type[polars.LazyFrame],
     ) -> polars.LazyFrame:
-        polars_hook = store.get_r_table_hook(pl.DataFrame)
-
-        # Retrieve with LIMIT 0 -> only get schema but no data
-        query = polars_hook._read_db_query(store, table, stage_name)
-        query = query.where(sa.false())  # LIMIT 0
-        query = polars_hook._compile_query(store, query)
-        connection_uri = store.engine_url.render_as_string(hide_password=False)
-
-        df = polars_hook._execute_query(query, connection_uri, store)
-        df = _polars_apply_retrieve_annotation(df, table)
+        polars_hook = store.get_r_table_hook(pl.DataFrame)  # type: PolarsTableHook
+        df = polars_hook.retrieve(store, table, stage_name, as_type, limit=0)
 
         # Create lazy frame where each column is identified by:
         #     stage name, table name, column name
@@ -880,6 +1088,7 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         table: Table,
         stage_name: str | None,
         as_type: type[Tibble],
+        limit: int | None = None,
     ) -> Tibble:
         warnings.warn(
             "tidypolars support is deprecated since tidypolars does not work "
@@ -888,7 +1097,7 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
             stacklevel=2,
         )
         polars_hook = store.get_r_table_hook(pl.DataFrame)
-        df = polars_hook.retrieve(store, table, stage_name, as_type)
+        df = polars_hook.retrieve(store, table, stage_name, as_type, limit)
         return tidypolars.from_polars(df)
 
     @classmethod
@@ -983,17 +1192,18 @@ class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
         table: Table,
         stage_name: str | None,
         as_type: type[T],
+        limit: int | None = None,
     ) -> T:
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
 
         if issubclass(as_type, PandasTableImpl):
             hook = store.get_r_table_hook(pd.DataFrame)
-            df = hook.retrieve(store, table, stage_name, pd.DataFrame)
+            df = hook.retrieve(store, table, stage_name, pd.DataFrame, limit)
             return pdt.Table(PandasTableImpl(table.name, df))
         if issubclass(as_type, SQLTableImpl):
             hook = store.get_r_table_hook(sa.Table)
-            sa_tbl = hook.retrieve(store, table, stage_name, sa.Table)
+            sa_tbl = hook.retrieve(store, table, stage_name, sa.Table, limit)
             return pdt.Table(SQLTableImpl(store.engine, sa_tbl))
         raise NotImplementedError
 
@@ -1065,6 +1275,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         table: Table,
         stage_name: str | None,
         as_type: type[T],
+        limit: int | None = None,
     ) -> T:
         from pydiverse.transform.extended import Pandas, Polars, SqlAlchemy
 
@@ -1072,11 +1283,11 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             import polars as pl
 
             hook = store.get_r_table_hook(pl.LazyFrame)
-            lf = hook.retrieve(store, table, stage_name, pl.DataFrame)
+            lf = hook.retrieve(store, table, stage_name, pl.DataFrame, limit)
             return pdt.Table(lf, name=table.name)
         elif issubclass(as_type, SqlAlchemy):
             hook = store.get_r_table_hook(sa.Table)
-            sa_tbl = hook.retrieve(store, table, stage_name, sa.Table)
+            sa_tbl = hook.retrieve(store, table, stage_name, sa.Table, limit)
             return pdt.Table(
                 sa_tbl.original.name,
                 SqlAlchemy(store.engine, schema=sa_tbl.original.schema),
@@ -1085,7 +1296,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             import pandas as pd
 
             hook = store.get_r_table_hook(pd.DataFrame)
-            df = hook.retrieve(store, table, stage_name, pd.DataFrame)
+            df = hook.retrieve(store, table, stage_name, pd.DataFrame, limit)
             return pdt.Table(df, name=table.name)
 
         raise NotImplementedError
@@ -1165,7 +1376,9 @@ class IbisTableHook(TableHook[SQLTableStore]):
         table: Table,
         stage_name: str | None,
         as_type: type[ibis.api.Table],
+        limit: int | None = None,
     ) -> ibis.api.Table:
+        assert limit is None, "IbisTableHook does not support limit in retrieve."
         conn = cls.conn(store)
         table_name, schema = store.resolve_alias(table, stage_name)
         for retry_iteration in range(4):

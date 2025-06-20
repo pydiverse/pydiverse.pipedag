@@ -159,8 +159,11 @@ class PandasTableHook(TableHook[DictTableStore]):
         store.store[stage_name][table.name] = table.obj
 
     @classmethod
-    def retrieve(cls, store, table, stage_name, as_type):
-        return store.store[stage_name][table.name].copy()
+    def retrieve(cls, store, table, stage_name, as_type, limit: int | None = None):
+        df = store.store[stage_name][table.name]
+        if limit:
+            df = df[:limit]
+        return df.copy()
 
     @classmethod
     def auto_table(cls, obj: pd.DataFrame):
@@ -181,7 +184,12 @@ except ImportError as e:
 class PydiverseTransformTableHook(TableHook[DictTableStore]):
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanResult:
-        from pydiverse.transform._internal.pipe.verbs import build_query
+        import pydiverse.transform as pdt
+        from pydiverse.transform.extended import build_query
+
+        if not isinstance(tbl, pdt.Table):
+            # Not a pydiverse transform table
+            return CanResult.NO
 
         query = tbl.obj >> build_query()
         if query is None:
@@ -198,10 +206,9 @@ class PydiverseTransformTableHook(TableHook[DictTableStore]):
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        # TODO: this is old pydiverse transform. This needs to be updated!
-        from pydiverse.transform.eager import PandasTableImpl
+        from pydiverse.transform import Pandas, Polars
 
-        return issubclass(type_, PandasTableImpl)
+        return type_ is Polars or type_ is Pandas
 
     @classmethod
     def materialize(
@@ -210,18 +217,23 @@ class PydiverseTransformTableHook(TableHook[DictTableStore]):
         table: Table[pdt.Table],
         stage_name,
     ):
-        from pydiverse.transform.core.verbs import collect
+        from pydiverse.transform.extended import Pandas, collect
 
-        table.obj = table.obj >> collect()
+        table.obj = table.obj >> collect(Pandas)
         # noinspection PyTypeChecker
         return PandasTableHook.materialize(store, table, stage_name)
 
     @classmethod
-    def retrieve(cls, store, table, stage_name, as_type):
-        from pydiverse.transform.eager import PandasTableImpl
+    def retrieve(cls, store, table, stage_name, as_type, limit: int | None = None):
+        df = PandasTableHook.retrieve(store, table, stage_name, pd.DataFrame, limit)
+        from pydiverse.transform import Polars
 
-        df = PandasTableHook.retrieve(store, table, stage_name, pd.DataFrame)
-        return pdt.Table(PandasTableImpl(table.name, df))
+        if as_type is Polars:
+            import polars as pl
+
+            return pdt.Table(pl.from_pandas(df), name=table.name)
+        else:
+            return pdt.Table(df, name=table.name)
 
     @classmethod
     def auto_table(cls, obj: pdt.Table):

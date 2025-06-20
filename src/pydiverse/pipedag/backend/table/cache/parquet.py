@@ -113,6 +113,7 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         table: Table,
         stage_name: str | None,
         as_type: type[pd.DataFrame],
+        limit: int | None = None,
     ) -> pd.DataFrame:
         # Determine dtype backend for pandas >= 2.0
         # [this is similar to the PandasTableHook found in SQLTableStore]
@@ -131,7 +132,7 @@ class PandasTableHook(TableHook[ParquetTableCache]):
             # for use_nullable_dtypes=False, returned types are mostly numpy backed
             # extension dtypes
             ret = cls._retrieve(
-                store, table, use_nullable_dtypes=backend_str != "arrow"
+                store, table, limit, use_nullable_dtypes=backend_str != "arrow"
             )
             # use_nullable_dtypes=False may still return string[python] even though we
             # expect and sometimes get string[pyarrow]
@@ -140,7 +141,7 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         else:
             dtype_backend_map = {"arrow": "pyarrow", "numpy": "numpy_nullable"}
             ret = cls._retrieve(
-                store, table, dtype_backend=dtype_backend_map[backend_str]
+                store, table, limit, dtype_backend=dtype_backend_map[backend_str]
             )
 
         # Prefer StringDtype("pyarrow") over ArrowDtype(pa.string()) for now.
@@ -152,9 +153,15 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         return ret
 
     @classmethod
-    def _retrieve(cls, store, table, **pandas_kwargs):
+    def _retrieve(cls, store, table, limit: int | None = None, **pandas_kwargs):
         path = store.get_table_path(table, ".parquet")
-        return pd.read_parquet(path, **pandas_kwargs)
+        import pyarrow.dataset as ds
+
+        if limit is not None:
+            # TODO: pandas_kwargs are currently ignored
+            return ds.dataset(path).scanner().head(limit).to_pandas()
+        else:
+            return pd.read_parquet(path, **pandas_kwargs)
 
 
 try:
@@ -195,9 +202,10 @@ class PolarsTableHook(TableHook[ParquetTableCache]):
         table: Table,
         stage_name: str | None,
         as_type: type,
+        limit: int | None = None,
     ):
         path = store.get_table_path(table, ".parquet")
-        df = polars.read_parquet(path)
+        df = polars.read_parquet(path, n_rows=limit)
         df = sql_hooks._polars_apply_retrieve_annotation(df, table)
         if issubclass(as_type, polars.LazyFrame):
             return df.lazy()
@@ -282,12 +290,13 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
         table: Table,
         stage_name: str | None,
         as_type: type,
+        limit: int | None = None,
     ):
         from pydiverse.transform.eager import PandasTableImpl
 
         if isinstance(as_type, PandasTableImpl):
             hook = store.get_r_table_hook(pd.DataFrame)
-            df = hook.retrieve(store, table, stage_name, pd.DataFrame)
+            df = hook.retrieve(store, table, stage_name, pd.DataFrame, limit)
             return pdt.Table(PandasTableImpl(table.name, df))
 
         raise ValueError(f"Invalid type {as_type}")
@@ -342,6 +351,7 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
         table: Table,
         stage_name: str | None,
         as_type: type,
+        limit: int | None = None,
     ):
         from pydiverse.transform.extended import Polars
 
@@ -349,7 +359,7 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
             import polars as pl
 
             hook = store.get_r_table_hook(pl.LazyFrame)
-            df = hook.retrieve(store, table, stage_name, pd.DataFrame)
+            df = hook.retrieve(store, table, stage_name, pd.DataFrame, limit)
             return pdt.Table(df)
 
         raise ValueError(f"Invalid type {as_type}")

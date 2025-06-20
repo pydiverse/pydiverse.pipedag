@@ -53,7 +53,7 @@ pydantic = ">=1.10.9,<2"
 
 [feature.prefect3.dependencies]
 prefect = ">=3.4.6,<4a0"
-python = "<3.13"  # prefect requires `whenever` which does not exist for osx-arm64
+whenever = ">=0.8.5,<1.0"
 
 [feature.snowflake.dependencies]
 snowflake-sqlalchemy = ">=1.6.1"
@@ -73,9 +73,10 @@ ibis-mssql = ">=10.5.0"
 ibis-postgres = ">=10.5.0"
 
 [feature.mssql.dependencies]
-arrow-odbc = ">=7.0.4"
-pyodbc = ">=4.0.35"
-pytsql = ">=1.1.4"
+arrow-odbc = ">=8.1.1,<9"
+pyodbc = ">=5.2.0,<6"
+pytsql = ">=1.4.0,<2"
+bcpandas = ">=2.6.3,<3"
 
 [feature.pdtransform-new.dependencies]
 pydiverse-transform = ">=0.5.2,<0.6"
@@ -182,7 +183,7 @@ py311pdsa1 = ["py311", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx", "
 py310all = ["py310", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake"]
 py311all = ["py311", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake"]
 py312all = ["py312", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake"]
-py313all = ["py313", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "filelock", "dask", "pd2", "sa2", "snowflake"]
+py313all = ["py313", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake"]
 py310pdsa1all = ["py310", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx", "all-tests", "mssql", "pdtransform-old", "filelock", "dask", "prefect2", "snowflake"]
 py311pdsa1all = ["py311", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx", "all-tests", "mssql", "pdtransform-old", "filelock", "dask", "prefect2", "snowflake"]
 py310ibm = ["py310", "dev", "zookeeper", "pd2", "sa2", "dask", "ibm-db", "all-tests", "mssql", "pdtransform-old"]
@@ -198,6 +199,6 @@ py313cspdt = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "
 py311csdy = ["py311", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "dataframely"]
 py313csdy = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "dataframely"]
 py310dapre = ["py310", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "dask", "prefect3", "pd2", "sa2"]
-py312dapre = ["py312", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "dask", "prefect3", "pd2", "sa2"]
+py313dapre = ["py313", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "dask", "prefect3", "pd2", "sa2"]
 py310mssqlpdt = ["py310", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "mssql", "pdtransform-new"]
 py313mssqlpdt = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "mssql", "pdtransform-new"]

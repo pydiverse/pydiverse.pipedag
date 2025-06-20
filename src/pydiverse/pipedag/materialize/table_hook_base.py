@@ -89,6 +89,7 @@ class TableHook(Generic[TableHookResolverT], ABC):
         table: Table,
         stage_name: str | None,
         as_type: type[T] | tuple | dict[str, Any],
+        limit: int | None = None,
     ) -> T:
         """Retrieve a table from the store
 
@@ -97,6 +98,8 @@ class TableHook(Generic[TableHookResolverT], ABC):
         :param stage_name: The name of the stage from which te table should
             be retrieved
         :param as_type: The type as which the table is to be retrieved
+        :param limit: The maximum number of rows to retrieve
+            (won't work for SQL references types)
         :return: The retrieved table (converted to the correct type)
         """
 
