@@ -297,7 +297,6 @@ class PandasTableHook(PandasTableHook):
     def _dialect_create_empty_table(
         cls,
         store: SQLTableStore,
-        df: pd.DataFrame,
         table: Table[pd.DataFrame],
         schema: Schema,
         dtypes: dict[str, sa.types.TypeEngine],

@@ -160,7 +160,7 @@ class PandasTableHook(hooks.PandasTableHook):
         dtypes = cls._get_dialect_dtypes(dtypes, table)
 
         # Create empty table
-        cls._dialect_create_empty_table(store, df, table, schema, dtypes)
+        cls._dialect_create_empty_table(store, table, schema, dtypes)
         store.add_indexes_and_set_nullable(
             table, schema, on_empty_table=True, table_cols=df.columns
         )
@@ -225,12 +225,11 @@ class PolarsTableHook(hooks.PolarsTableHook):
         #       This would make everything a bit safer, because then we could
         #       represent the string "\\N" (backslash + capital n).
         s_buf = StringIO()
-        df.to_csv(
+        df.write_csv(
             s_buf,
-            na_rep="\\N",
-            header=False,
-            index=False,
-            quoting=csv.QUOTE_MINIMAL,
+            null_value="\\N",
+            include_header=False,
+            quote_style="necessary",
         )
         s_buf.seek(0)
 

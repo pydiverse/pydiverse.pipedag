@@ -86,7 +86,7 @@ class PandasTableHook(PandasTableHook):
         )
 
         # Create empty table with correct schema
-        cls._dialect_create_empty_table(store, df, table, schema, dtypes)
+        cls._dialect_create_empty_table(store, table, schema, dtypes)
         store.add_indexes_and_set_nullable(
             table, schema, on_empty_table=True, table_cols=df.columns
         )
