@@ -203,6 +203,7 @@ def test_custom_download():
 
     @TestTableStore.register_table(pl, replace_hooks=[PolarsTableHook])
     class CustomPolarsDownloadTableHook(PolarsTableHook):
+        @classmethod
         def download_table(
             cls,
             query: Any,
