@@ -50,7 +50,7 @@ jobs:
       docker-services: |
         mssql
         zoo
-      pytest-arguments: tests/test_cache/test_basic_cache_invalidation.py::test_change_task_version_table
+      pytest-arguments: -m mssql --mssql tests/test_cache/test_basic_cache_invalidation.py::test_change_task_version_table
 
   smoke_test:
     name: Smoke Test
