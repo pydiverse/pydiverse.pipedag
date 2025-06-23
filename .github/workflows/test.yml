@@ -55,6 +55,7 @@ jobs:
           echo /opt/mssql-tools18/bin >> $GITHUB_PATH
 
       - name: Test BCP
+        if: ${{ contains(inputs.docker-services, 'mssql') }}
         run: bcp -v
 
       - name: Wait for Docker Servers
