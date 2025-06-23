@@ -35,26 +35,26 @@ jobs:
       - name: Check pyproject.toml dependencies
         run: pixi run check-deps
 
-  one_test:
-    name: One Test
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-        environment:
-          - py310mssqlpdt
-    uses: ./.github/workflows/test.yml
-    with:
-      os: ${{ matrix.os }}
-      environment: ${{ matrix.environment }}
-      docker-services: |
-        mssql
-        zoo
-      pytest-arguments: -m mssql --mssql tests/test_cache/test_basic_cache_invalidation.py::test_change_task_version_table
+#  one_test:
+#    name: One Test
+#    strategy:
+#      matrix:
+#        os:
+#          - ubuntu-latest
+#        environment:
+#          - py310mssqlpdt
+#    uses: ./.github/workflows/test.yml
+#    with:
+#      os: ${{ matrix.os }}
+#      environment: ${{ matrix.environment }}
+#      docker-services: |
+#        mssql
+#        zoo
+#      pytest-arguments: -m mssql --mssql tests/test_cache/test_basic_cache_invalidation.py::test_change_task_version_table
 
   smoke_test:
     name: Smoke Test
-    needs: [one_test]  # todo: remove
+#    needs: [one_test]
     strategy:
       matrix:
         os:
