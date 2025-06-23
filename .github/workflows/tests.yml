@@ -42,7 +42,7 @@ jobs:
         os:
           - ubuntu-latest
         environment:
-          - py313cs
+          - py310mssqlpdt
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
