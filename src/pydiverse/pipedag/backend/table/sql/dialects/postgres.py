@@ -3,7 +3,7 @@
 
 import csv
 from dataclasses import dataclass
-from io import StringIO
+from io import BytesIO, StringIO
 from typing import Any
 
 import pandas as pd
@@ -224,7 +224,7 @@ class PolarsTableHook(hooks.PolarsTableHook):
         # TODO: For python 3.12, there is csv.QUOTE_STRINGS
         #       This would make everything a bit safer, because then we could
         #       represent the string "\\N" (backslash + capital n).
-        s_buf = StringIO()
+        s_buf = BytesIO()
         df.write_csv(
             s_buf,
             null_value="\\N",
