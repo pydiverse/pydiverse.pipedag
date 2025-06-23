@@ -438,10 +438,12 @@ class DataframeMsSQLTableHook:
             }
         ).assign(
             **{
-                col: (lambda col: lambda df: df[col])(copy.copy(col))
-                .str.replace("\n", "\\n", regex=False)
-                .str.replace("\t", "\\t", regex=False)
-                .str.replace("\r", "\\r", regex=False)
+                col: (
+                    lambda col: lambda df: df[col]
+                    .str.replace("\n", "\\n", regex=False)
+                    .str.replace("\t", "\\t", regex=False)
+                    .str.replace("\r", "\\r", regex=False)
+                )(copy.copy(col))
                 for col, dtype in df.dtypes[
                     (df.dtypes == "object")
                     | (df.dtypes == "string")
@@ -556,8 +558,8 @@ class PandasTableHook(DataframeMsSQLTableHook, PandasTableHook):
         if not store.disable_bulk_insert:
             try:
                 return cls.upload_table_bulk_insert(table, schema, dtypes, store, early)
-            except:  # noqa
-                store.logger.warning(
+            except Exception as e:  # noqa
+                store.logger.exception(
                     "Failed to upload table using bulk insert, falling back to pandas."
                 )
         # TODO: consider using arrow-odbc for uploading

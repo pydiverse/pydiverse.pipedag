@@ -333,6 +333,9 @@ class TestPandasTableHookArrow:
 
         @materialize(input_type=(pd.DataFrame, "arrow"))
         def assert_expected(in_df):
+            if ConfigContext.get().store.table_store.engine.dialect.name == "mssql":
+                # these are unavoidable differences when using bcp for writing tables
+                df["str"] = df["str"].replace("", pd.NA)
             pd.testing.assert_frame_equal(in_df, df, check_dtype=False)
 
         with Flow() as f:
