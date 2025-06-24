@@ -627,7 +627,7 @@ class PolarsTableHook(TableHook[ParquetTableStore]):
     ):
         file_path = store.get_table_path(table)
         df = polars.read_parquet(file_path, n_rows=limit)
-        df = sql_hooks._polars_apply_retrieve_annotation(df, table)
+        df = sql_hooks._polars_apply_retrieve_annotation(df, table, store)
         if issubclass(as_type, polars.LazyFrame):
             return df.lazy()
         return df
@@ -667,7 +667,7 @@ class LazyPolarsTableHook(PolarsTableHook):
         path = store.get_table_path(table)
         df = polars.read_parquet(path, n_rows=0)
         df = sql_hooks._polars_apply_retrieve_annotation(
-            df, table, intentionally_empty=True
+            df, table, store, intentionally_empty=True
         )
 
         # Create lazy frame where each column is identified by:

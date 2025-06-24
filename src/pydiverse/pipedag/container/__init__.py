@@ -660,7 +660,7 @@ class ExternalTableReference:
 
 def attach_annotation(annotation: type, arg):
     """Recursive traversal for attaching type annotations to correct container."""
-    if isinstance(annotation, typing.GenericAlias):
+    if typing.get_origin(annotation) is not None:
         anno_origin = typing.get_origin(annotation)
         anno_args = typing.get_args(annotation)
         if (

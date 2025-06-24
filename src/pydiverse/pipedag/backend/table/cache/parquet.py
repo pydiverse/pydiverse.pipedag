@@ -206,7 +206,7 @@ class PolarsTableHook(TableHook[ParquetTableCache]):
     ):
         path = store.get_table_path(table, ".parquet")
         df = polars.read_parquet(path, n_rows=limit)
-        df = sql_hooks._polars_apply_retrieve_annotation(df, table)
+        df = sql_hooks._polars_apply_retrieve_annotation(df, table, store)
         if issubclass(as_type, polars.LazyFrame):
             return df.lazy()
         return df

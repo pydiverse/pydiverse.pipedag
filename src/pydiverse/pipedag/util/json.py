@@ -14,7 +14,6 @@ import json
 from enum import Enum
 from functools import cache
 from pathlib import Path
-from types import GenericAlias
 from typing import get_args, get_origin
 
 from pydiverse.common.util.computation_tracing import fully_qualified_name
@@ -125,7 +124,9 @@ def json_default(o):
             TYPE_KEY: Type.DT_DATE,
             "date": o.isoformat(),
         }
-    if isinstance(o, GenericAlias):
+    if get_origin(o) is not None:
+        # must be GenericAlias
+        # somehow isinstance(o, GenericAlias) did not work reliably
         return {
             TYPE_KEY: Type.GENERIC_ALIAS,
             "origin": get_origin(o),

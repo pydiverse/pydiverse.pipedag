@@ -36,10 +36,16 @@ from pydiverse.pipedag.materialize.table_hook_base import (
     TableHook,
 )
 
+# optional imports
 try:
     import polars as pl
 except ImportError:
     pl = None
+
+try:
+    import dataframely as dy
+except ImportError:
+    dy = None
 
 # region SQLALCHEMY
 try:
@@ -53,32 +59,59 @@ except ImportError:
     SqlText = TextClause  # this is what sa.text() returns
 
 
-def _polars_apply_retrieve_annotation(df, table, intentionally_empty: bool = False):
-    try:
-        import dataframely as dy
-    except ImportError:
+def _polars_apply_retrieve_annotation(
+    df, table, store, intentionally_empty: bool = False
+):
+    if dy is None:
         # If dataframely is not installed, we can't apply the annotation.
         return df
 
-    if isinstance(table.annotation, typing.GenericAlias) and issubclass(
+    fault_tolerant = False
+
+    if typing.get_origin(table.annotation) is not None and issubclass(
         typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
     ):
         anno_args = typing.get_args(table.annotation)
         if len(anno_args) == 1:
             column_spec = anno_args[0]
             if issubclass(column_spec, dy.Schema | dy.Collection):
-                df = column_spec.cast(df)
+                try:
+                    df = column_spec.cast(df)
+                except pl.exceptions.InvalidOperationError as e:
+                    df, failure = column_spec.filter(df, cast=True)
+                    with pl.Config() as cfg:
+                        cfg.set_tbl_cols(15)
+                        cfg.set_tbl_width_chars(120)
+                        try:
+                            fail_df = str(failure._lf.head(5).collect())
+                        except:  # noqa
+                            fail_df = str(failure.invalid().head(5))
+                    if fault_tolerant:
+                        store.logger.error(
+                            "Failed casting polars input to correct column "
+                            "specification",
+                            table=table.name,
+                            col_spec=column_spec.__name__,
+                            failure_counts=failure.counts(),
+                            fail_df=fail_df,
+                            exception=e,
+                        )
+                    else:
+                        raise ValueError(
+                            f"Failed casting polars input {table.name} to "
+                            f"{column_spec.__name__}; "
+                            f"Failure counts: {failure.counts()}; "
+                            f"Invalid:\n{fail_df}"
+                        ) from e
     return df
 
 
 def _polars_apply_materialize_annotation(df, table):
-    try:
-        import dataframely as dy
-    except ImportError:
+    if dy is None:
         # If dataframely is not installed, we can't apply the annotation.
         return df
 
-    if isinstance(table.annotation, typing.GenericAlias) and issubclass(
+    if typing.get_origin(table.annotation) is not None and issubclass(
         typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
     ):
         anno_args = typing.get_args(table.annotation)
@@ -691,14 +724,7 @@ class PandasTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
 # region POLARS
 
 
-try:
-    import polars
-except ImportError as e:
-    warnings.warn(str(e), ImportWarning)
-    polars = None
-
-
-@SQLTableStore.register_table(polars)
+@SQLTableStore.register_table(pl)
 class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
     @dataclass  # consider using pydantic instead
     class Config:
@@ -811,7 +837,7 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         connection_uri = store.engine_url.render_as_string(hide_password=False)
         if cls.dialect_has_adbc_driver():
             try:
-                df = polars.read_database_uri(query, connection_uri, engine="adbc")
+                df = pl.read_database_uri(query, connection_uri, engine="adbc")
                 return cls._fix_dtypes(df, dtypes)
             except:  # noqa
                 store.logger.warning(
@@ -820,7 +846,7 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
                 )
         # This implementation requires connectorx which does not work for duckdb.
         # Attention: In case this call fails, we simply fall-back to pandas hook.
-        df = polars.read_database_uri(query, connection_uri)
+        df = pl.read_database_uri(query, connection_uri)
         return cls._fix_dtypes(df, dtypes)
 
     @classmethod
@@ -859,14 +885,14 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         # there is a separate hook for LazyFrame
         type_ = type(tbl.obj)
         # attention: tidypolars.Tibble is subclass of polars DataFrame
-        return CanResult.new(issubclass(type_, polars.DataFrame))
+        return CanResult.new(issubclass(type_, pl.DataFrame))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        return type_ == polars.DataFrame
+        return type_ == pl.DataFrame
 
     @classmethod
-    def materialize(cls, store, table: Table[polars.DataFrame], stage_name: str):
+    def materialize(cls, store, table: Table[pl.DataFrame], stage_name: str):
         # Materialization for polars happens by first converting the dataframe to
         # a pyarrow backed pandas dataframe, and then calling the PandasTableHook
         # for materialization.
@@ -883,19 +909,20 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         try:
             if not cfg.disable_materialize_annotation_action:
                 df = _polars_apply_materialize_annotation(df, table)
-            e = None
+            ex = None
         except Exception as e:
             store.logger.error(
                 "Failed to apply materialize annotation for table %s: %s",
                 table.name,
                 e,
             )
+            ex = e
         finally:
             table = table.copy_without_obj()
             table.obj = df
             cls._execute_materialize_polars(table, store, stage_name)
-            if e and not cfg.fault_tolerant_annotation_action:
-                raise e
+            if ex and not cfg.fault_tolerant_annotation_action:
+                raise ex
 
     @classmethod
     def retrieve(
@@ -903,18 +930,18 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         store: SQLTableStore,
         table: Table,
         stage_name: str | None,
-        as_type: type[polars.DataFrame],
+        as_type: type[pl.DataFrame],
         limit: int | None = None,
-    ) -> polars.DataFrame:
+    ) -> pl.DataFrame:
         cfg = cls.cfg()
         df = cls._execute_query(store, table, stage_name, dtypes=None, limit=limit)
         if not cfg.disable_retrieve_annotation_action:
-            df = _polars_apply_retrieve_annotation(df, table)
+            df = _polars_apply_retrieve_annotation(df, table, store)
         df = df.with_columns(pl.col(pl.Datetime).dt.replace_time_zone(None))
         return df
 
     @classmethod
-    def auto_table(cls, obj: polars.DataFrame):
+    def auto_table(cls, obj: pl.DataFrame):
         # currently, we don't know how to store a table name inside polars dataframe
         return super().auto_table(obj)
 
@@ -966,25 +993,28 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
             )
             dtypes = {name: dtype.to_pandas(backend) for name, dtype in dtypes.items()}
             pd_df = pandas_hook.download_table(query, store, dtypes)
-            df = polars.from_pandas(pd_df)
+            df = pl.from_pandas(pd_df)
         return df
 
 
-@SQLTableStore.register_table(polars)
+@SQLTableStore.register_table(pl)
 class LazyPolarsTableHook(TableHook[SQLTableStore]):
     auto_version_support = AutoVersionSupport.LAZY
 
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanResult:
         type_ = type(tbl.obj)
-        return CanResult.new(type_ == polars.LazyFrame)
+        return CanResult.new(type_ == pl.LazyFrame)
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        return type_ == polars.LazyFrame
+        if dy is not None and issubclass(type_, dy.LazyFrame):
+            # optionally support input_type=dy.LazyFrame
+            return True
+        return type_ == pl.LazyFrame
 
     @classmethod
-    def materialize(cls, store, table: Table[polars.LazyFrame], stage_name):
+    def materialize(cls, store, table: Table[pl.LazyFrame], stage_name):
         t = table.obj
         table = table.copy_without_obj()
         table.obj = t.collect()
@@ -998,9 +1028,9 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         store: SQLTableStore,
         table: Table,
         stage_name: str | None,
-        as_type: type[polars.DataFrame],
+        as_type: type[pl.DataFrame],
         limit: int | None = None,
-    ) -> polars.LazyFrame:
+    ) -> pl.LazyFrame:
         polars_hook = store.get_r_table_hook(pl.DataFrame)
         result = polars_hook.retrieve(store, table, stage_name, as_type, limit)
 
@@ -1012,8 +1042,8 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         store: SQLTableStore,
         table: Table,
         stage_name: str,
-        as_type: type[polars.LazyFrame],
-    ) -> polars.LazyFrame:
+        as_type: type[pl.LazyFrame],
+    ) -> pl.LazyFrame:
         polars_hook = store.get_r_table_hook(pl.DataFrame)  # type: PolarsTableHook
         df = polars_hook.retrieve(store, table, stage_name, as_type, limit=0)
 
@@ -1031,7 +1061,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
             schema[qualified_name] = col.dtype
             rename[qualified_name] = col.name
 
-        lf = polars.LazyFrame(schema=schema).rename(rename)
+        lf = pl.LazyFrame(schema=schema).rename(rename)
         return lf
 
     @classmethod
@@ -1041,7 +1071,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         :return: string representation of the operations performed on this object.
         :raises TypeError: if the object doesn't support automatic versioning.
         """
-        if not isinstance(obj, polars.LazyFrame):
+        if not isinstance(obj, pl.LazyFrame):
             raise TypeError("Expected LazyFrame")
         return str(obj.serialize())
 
@@ -1055,7 +1085,7 @@ except ImportError as e:
     Tibble = None
 
 
-@SQLTableStore.register_table(tidypolars, polars)
+@SQLTableStore.register_table(tidypolars, pl)
 class TidyPolarsTableHook(TableHook[SQLTableStore]):
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanResult:
