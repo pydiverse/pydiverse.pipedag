@@ -64,6 +64,12 @@ class MSSqlTableStore(SQLTableStore):
     """
     SQLTableStore that supports `Microsoft SQL Server`_.
 
+    Requires ODBC driver for Microsoft SQL Server to be installed.
+    https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server
+    For default arguments, both msodbcsql and mssql-tools need to be installed.
+    Debug installation issues with `odbcinst -j`. On Linux, conda-forge pyodbc package
+    expects ini files in different location than Microsoft installs it (symlink helps).
+
     Supports the :py:class:`MSSqlMaterializationDetails\
     <pydiverse.pipedag.backend.table.sql.dialects.mssql.MSSqlMaterializationDetails>`
     materialization details.
@@ -95,6 +101,8 @@ class MSSqlTableStore(SQLTableStore):
         bcpandas have trouble with corner cases like linebreaks or other special
         characters in string columns.
         If you want to disable this, set this parameter to ``True``.
+        If installed, bulk insert is done with mssqlkit (not open source). Otherwise,
+        bcpandas is used.
 
     :param pytsql_isolate_top_level_statements:
         This parameter is handed over to `pytsql.executes`_ and causes the script to
@@ -405,64 +413,85 @@ class DataframeMsSQLTableHook:
     @classmethod
     def upload_table_bulk_insert(
         cls,
-        table: Table[pd.DataFrame],
+        table: Table[pd.DataFrame | pl.DataFrame],
         schema: Schema,
         dtypes: dict[str, sa.types.TypeEngine],
         store: SQLTableStore,
         early: bool,
     ):
-        df = table.obj
+        df = table.obj  # type: pd.DataFrame | pl.DataFrame
         schema_name = schema.get()
-        from bcpandas import SqlCreds, to_sql
 
-        creds = SqlCreds.from_engine(store.engine)
-        url = store.engine_url.render_as_string()
-        if "&" in url:
-            creds.odbc_kwargs = {
-                x.split("=")[0]: x.split("=")[1]
-                for x in url.split("&")[1:]
-                if len(x.split("=")) == 2
-            }
-        # attention: the `(lambda col: lambda...)(copy.copy(col))` part looks odd but is
-        # needed to ensure loop iterations create lambdas working on different columns
-        df_out = df.assign(
-            **{
-                col: (
-                    lambda col: lambda df: df[col]
-                    .map({True: 1, False: 0})
-                    .astype(pd.Int8Dtype())
-                )(copy.copy(col))
-                for col, dtype in df.dtypes[
-                    (df.dtypes == "bool[pyarrow]") | (df.dtypes == "bool")
-                ].items()
-            }
-        ).assign(
-            **{
-                col: (
-                    lambda col: lambda df: df[col]
-                    .str.replace("\n", "\\n", regex=False)
-                    .str.replace("\t", "\\t", regex=False)
-                    .str.replace("\r", "\\r", regex=False)
-                )(copy.copy(col))
-                for col, dtype in df.dtypes[
-                    (df.dtypes == "object")
-                    | (df.dtypes == "string")
-                    | (df.dtypes == "string[pyarrow]")
-                ].items()
-            }
-        )
-        to_sql(
-            df_out,
-            table.name,
-            creds,
-            schema=schema_name,
-            index=False,
-            if_exists="append" if early else "fail",
-            batch_size=min(len(df), 100_000),
-            dtype=dtypes,
-            delimiter="\t",
-            quotechar="\1",
-        )
+        mssqlkit = False
+        try:
+            import quantcore.mssqlkit as mss
+
+            mssqlkit = True
+        except ImportError:
+            store.logger.debug(
+                "mssqlkit not installed, falling back to bcpandas. "
+                "This is expected since mssqlkit is not open source."
+            )
+
+        if mssqlkit:
+            mss.table.bulk_upload(
+                engine=store.table_store.engine,
+                table_name=f"{schema_name}.{table.name}",
+                data=df,
+            )
+        else:
+            # use bcpandas
+            from bcpandas import SqlCreds, to_sql
+
+            creds = SqlCreds.from_engine(store.engine)
+            url = store.engine_url.render_as_string()
+            if "&" in url:
+                creds.odbc_kwargs = {
+                    x.split("=")[0]: x.split("=")[1]
+                    for x in url.split("&")[1:]
+                    if len(x.split("=")) == 2
+                }
+            # attention: the `(lambda col: lambda...)(copy.copy(col))` part looks odd
+            # but is needed to ensure loop iterations create lambdas working on
+            # different columns
+            df_out = df.assign(
+                **{
+                    col: (
+                        lambda col: lambda df: df[col]
+                        .map({True: 1, False: 0})
+                        .astype(pd.Int8Dtype())
+                    )(copy.copy(col))
+                    for col, dtype in df.dtypes[
+                        (df.dtypes == "bool[pyarrow]") | (df.dtypes == "bool")
+                    ].items()
+                }
+            ).assign(
+                **{
+                    col: (
+                        lambda col: lambda df: df[col]
+                        .str.replace("\n", "\\n", regex=False)
+                        .str.replace("\t", "\\t", regex=False)
+                        .str.replace("\r", "\\r", regex=False)
+                    )(copy.copy(col))
+                    for col, dtype in df.dtypes[
+                        (df.dtypes == "object")
+                        | (df.dtypes == "string")
+                        | (df.dtypes == "string[pyarrow]")
+                    ].items()
+                }
+            )
+            to_sql(
+                df_out,
+                table.name,
+                creds,
+                schema=schema_name,
+                index=False,
+                if_exists="append" if early else "fail",
+                batch_size=min(len(df), 100_000),
+                dtype=dtypes,
+                delimiter="\t",
+                quotechar="\1",
+            )
 
     @classmethod
     def download_table_arrow_odbc(
