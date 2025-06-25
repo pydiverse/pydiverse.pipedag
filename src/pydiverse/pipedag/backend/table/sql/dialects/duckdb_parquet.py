@@ -594,9 +594,11 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
         store: ParquetTableStore,
         table: Table,
         stage_name: str,
+        as_type: type,
         dtypes: dict[str, pl.DataType] | None = None,
         limit: int | None = None,
     ) -> pl.DataFrame:
+        _ = as_type
         file_path = store.get_table_path(table)
         df = pl.read_parquet(file_path, n_rows=limit)
         return df

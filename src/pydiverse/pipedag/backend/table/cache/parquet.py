@@ -165,25 +165,25 @@ class PandasTableHook(TableHook[ParquetTableCache]):
 
 
 try:
-    import polars
+    import polars as pl
 except ImportError:
-    polars = None
+    pl = None
 
 
-@ParquetTableCache.register_table(polars)
-class PolarsTableHook(TableHook[ParquetTableCache]):
+@ParquetTableCache.register_table(pl)
+class PolarsTableHook(sql_hooks.PolarsTableHook):
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanResult:
         type_ = type(tbl.obj)
-        return CanResult.new(issubclass(type_, (polars.DataFrame, polars.LazyFrame)))
+        return CanResult.new(issubclass(type_, (pl.DataFrame, pl.LazyFrame)))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        return issubclass(type_, (polars.DataFrame, polars.LazyFrame))
+        return issubclass(type_, (pl.DataFrame, pl.LazyFrame))
 
     @classmethod
     def materialize(
-        cls, store: ParquetTableCache, table: Table[polars.DataFrame], stage_name: str
+        cls, store: ParquetTableCache, table: Table[pl.DataFrame], stage_name: str
     ):
         path = store.get_table_path(table, ".parquet")
         df = table.obj
@@ -196,18 +196,19 @@ class PolarsTableHook(TableHook[ParquetTableCache]):
         # within polars table hook of actual table store
 
     @classmethod
-    def retrieve(
+    def _execute_query(
         cls,
         store: ParquetTableCache,
         table: Table,
-        stage_name: str | None,
+        stage_name: str,
         as_type: type,
+        dtypes: dict[str, pl.DataType] | None = None,
         limit: int | None = None,
-    ):
+    ) -> pl.DataFrame:
+        _ = as_type
         path = store.get_table_path(table, ".parquet")
-        df = polars.read_parquet(path, n_rows=limit)
-        df = sql_hooks._polars_apply_retrieve_annotation(df, table, store)
-        if issubclass(as_type, polars.LazyFrame):
+        df = pl.read_parquet(path, n_rows=limit)
+        if issubclass(as_type, pl.LazyFrame):
             return df.lazy()
         return df
 

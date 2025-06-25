@@ -936,7 +936,9 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         limit: int | None = None,
     ) -> pl.DataFrame:
         cfg = cls.cfg()
-        df = cls._execute_query(store, table, stage_name, dtypes=None, limit=limit)
+        df = cls._execute_query(
+            store, table, stage_name, as_type, dtypes=None, limit=limit
+        )
         if not cfg.disable_retrieve_annotation_action:
             try:
                 df = _polars_apply_retrieve_annotation(df, table, store)
@@ -984,9 +986,11 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         store: SQLTableStore,
         table: Table,
         stage_name: str,
+        as_type: type,
         dtypes: dict[str, pl.DataType] | None = None,
         limit: int | None = None,
     ) -> pl.DataFrame:
+        _ = as_type
         query = cls._read_db_query(store, table, stage_name, limit)
         query = cls._compile_query(store, query)
         try:

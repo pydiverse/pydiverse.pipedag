@@ -171,6 +171,7 @@ def test_dataclass():
     assert_frame_equal(c.second, second)
 
 
+@pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
 def test_enum_violation():
     second = pl.LazyFrame(
         {"a": [2, 3, 4, 5], "b": [0, 1, 2, 3], "c": ["z", "y", "y", "x"]}
