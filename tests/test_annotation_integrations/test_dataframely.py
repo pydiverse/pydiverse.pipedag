@@ -6,9 +6,10 @@ from typing import Generic, Mapping, TypeVar
 
 import polars as pl
 import pytest
+import structlog
 from polars.testing import assert_frame_equal
 
-from pydiverse.pipedag import Flow, Stage, materialize
+from pydiverse.pipedag import ConfigContext, Flow, Stage, materialize
 from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.errors import HookCheckException
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
@@ -418,6 +419,212 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
     else:
         ret = flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
         assert ret.successful
+
+
+@pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
+@pytest.mark.parametrize(
+    "with_filter, with_violation, validate_get_data",
+    [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
+)
+def test_annotations_not_fail_fast(
+    with_filter: bool, with_violation: bool, validate_get_data: bool
+):
+    if validate_get_data:
+
+        @materialize(nout=2)
+        def get_anno_data(
+            name: str,
+        ) -> tuple[dy.LazyFrame[MyFirstColSpec], dy.LazyFrame[MySecondColSpec]]:
+            return globals()[f"data_{name}"]()
+    else:
+
+        @materialize(nout=2)
+        def get_anno_data(name: str) -> tuple[pl.LazyFrame, pl.LazyFrame]:
+            return globals()[f"data_{name}"]()
+
+    @materialize(input_type=pl.LazyFrame)
+    def consumer(
+        first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]
+    ):
+        assert first.collect_schema() == pl.Schema(
+            [("a", pl.Int64), ("b", pl.Int64), ("c", pl.Enum(categories=["x", "y"]))]
+        )
+        assert second.collect_schema() == pl.Schema(
+            [("a", pl.Int64), ("b", pl.Int64), ("c", pl.Enum(categories=["x", "y"]))]
+        )
+        assert len(first.collect()) == 3
+        assert len(second.collect()) in [3, 4, 5]
+
+        assert MyFirstColSpec.is_valid(first)
+        assert MySecondColSpec.is_valid(second)
+
+    @materialize(input_type=dy.LazyFrame)
+    def consumer2(
+        first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]
+    ):
+        assert first.collect_schema() == pl.Schema(
+            [("a", pl.Int64), ("b", pl.Int64), ("c", pl.Enum(categories=["x", "y"]))]
+        )
+        assert second.collect_schema() == pl.Schema(
+            [("a", pl.Int64), ("b", pl.Int64), ("c", pl.Enum(categories=["x", "y"]))]
+        )
+        assert len(first.collect()) == 3
+        assert len(second.collect()) in [3, 4, 5]
+
+    with Flow() as flow:
+        name = (
+            f"with{'out' if not with_filter else ''}_filter"
+            f"_with{'out' if not with_violation else ''}_rule_violation"
+        )
+        with Stage("s01"):
+            first, second = get_anno_data(name)
+            consumer(first, second)
+        with Stage("s02"):
+            consumer2(first, second)
+
+    with ConfigContext.get().evolve(fail_fast=False):
+        result = flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+    if with_violation:
+        assert not result.successful
+    else:
+        assert result.successful
+
+
+def log_function(name):
+    print("hello " + name)
+    import logging
+    import sys
+
+    import structlog
+
+    sys.stdout.write("hi1\n")
+    sys.stderr.write("hi2\n")
+    logging.getLogger().info("hi3\n")
+    logging.getLogger().error("hi4\n")
+    structlog.WriteLogger().info("hi5")
+    structlog.WriteLogger().error("hi6")
+    structlog.getLogger().info("hi7\n")
+    structlog.getLogger().error("hi8\n")
+    sys.stdout.flush()
+    sys.stderr.flush()
+
+
+def test_log_capturing(capfd):
+    import structlog
+
+    with structlog.testing.capture_logs() as logs:
+        log_function("Tom")
+
+    out, err = capfd.readouterr()
+    assert err == "hi2\n"
+    assert out == "hello Tom\nhi1\nhi5\nhi6\n"
+    assert logs == [
+        {"event": "hi3\n", "log_level": "info", "logger": "root"},
+        {"event": "hi4\n", "log_level": "error", "logger": "root"},
+        {"event": "hi7\n", "log_level": "info"},
+        {"event": "hi8\n", "log_level": "error"},
+    ]
+
+
+@pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
+@pytest.mark.parametrize(
+    "with_filter, with_violation, validate_get_data",
+    [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
+)
+def test_annotations_fault_tolerant(
+    with_filter: bool, with_violation: bool, validate_get_data: bool
+):
+    if validate_get_data:
+
+        @materialize(nout=2)
+        def get_anno_data(
+            name: str,
+        ) -> tuple[dy.LazyFrame[MyFirstColSpec], dy.LazyFrame[MySecondColSpec]]:
+            return globals()[f"data_{name}"]()
+    else:
+
+        @materialize(nout=2)
+        def get_anno_data(name: str) -> tuple[pl.LazyFrame, pl.LazyFrame]:
+            return globals()[f"data_{name}"]()
+
+    @materialize(input_type=pl.LazyFrame)
+    def consumer(
+        first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]
+    ):
+        assert first.collect_schema() == pl.Schema(
+            [("a", pl.Int64), ("b", pl.Int64), ("c", pl.Enum(categories=["x", "y"]))]
+        )
+        assert second.collect_schema() == pl.Schema(
+            [
+                ("a", pl.Int64),
+                ("b", pl.Int64),
+                (
+                    "c",
+                    pl.Enum(categories=["x", "y"])
+                    if not with_filter or not with_violation
+                    else pl.String,
+                ),
+            ]
+        )
+        assert len(first.collect()) == 3
+        assert len(second.collect()) in [3, 4, 5]
+
+        if with_violation:
+            if with_filter:
+                MyFirstColSpec.validate(first)
+                with pytest.raises(
+                    dy.exc.RuleValidationError, match="3 rules failed validation"
+                ):
+                    MySecondColSpec.validate(second, cast=True)
+            else:
+                with pytest.raises(
+                    dy.exc.RuleValidationError, match="1 rules failed validation"
+                ):
+                    MyFirstColSpec.validate(first)
+                with pytest.raises(
+                    dy.exc.RuleValidationError, match="2 rules failed validation"
+                ):
+                    MySecondColSpec.validate(second)
+        else:
+            assert MyFirstColSpec.is_valid(first)
+            assert MySecondColSpec.is_valid(second)
+
+    @materialize(input_type=dy.LazyFrame)
+    def consumer2(
+        first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]
+    ):
+        assert len(first.collect()) == 3
+        assert len(second.collect()) in [3, 4, 5]
+
+    with Flow() as flow:
+        name = (
+            f"with{'out' if not with_filter else ''}_filter"
+            f"_with{'out' if not with_violation else ''}_rule_violation"
+        )
+        with Stage("s01"):
+            first, second = get_anno_data(name)
+            consumer(first, second)
+        with Stage("s02"):
+            consumer2(first, second)
+
+    with structlog.testing.capture_logs() as logs:
+        with ConfigContext.get().evolve(
+            table_hook_args=dict(polars=dict(fault_tolerant_annotation_action=True))
+        ):
+            result = flow.run(
+                cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID
+            )
+    assert result.successful
+    failures = [
+        c
+        for c in logs
+        if c["event"] == "Failed to apply materialize annotation for table"
+    ]
+    if with_violation and validate_get_data:
+        assert len(failures) == 1 if with_filter else 2
+        assert all(
+            "failed validation with My" in failure["exception"] for failure in failures
+        )
 
 
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")

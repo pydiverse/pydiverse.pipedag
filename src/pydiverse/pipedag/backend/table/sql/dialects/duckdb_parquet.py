@@ -565,138 +565,46 @@ class PandasTableHook(TableHook[ParquetTableStore]):
 
 
 try:
-    import polars
+    import polars as pl
 except ImportError:
-    polars = None
+    pl = None
 
 
-@ParquetTableStore.register_table(polars, duckdb)
-class PolarsTableHook(TableHook[ParquetTableStore]):
-    @classmethod
-    def can_materialize(cls, tbl: Table) -> CanResult:
-        type_ = type(tbl.obj)
-        return CanResult.new(issubclass(type_, polars.DataFrame))
-
-    @classmethod
-    def can_retrieve(cls, type_) -> bool:
-        return issubclass(type_, polars.DataFrame)
-
-    # this hook is identical to parquet based local table cache
-    # it will ask the store for get_table_path()
-    @classmethod
-    def materialize(
-        cls,
-        store: ParquetTableStore,
-        table: Table[polars.DataFrame | polars.LazyFrame],
-        stage_name: str,
-    ):
+@ParquetTableStore.register_table(pl, duckdb)
+class PolarsTableHook(sql_hooks.PolarsTableHook):
+    def _execute_materialize_polars(table, store, stage_name):
+        _ = stage_name
         file_path = store.get_table_path(table)
         schema = store.get_schema(table.stage.current_name)
         df = table.obj
-        if isinstance(df, polars.LazyFrame):
-            df = df.collect()
 
         if store.print_materialize:
             store.logger.info(
-                f"Writing polars table '{schema.get()}.{table.name}'",
+                f"Writing polars table '{schema.get()}.{table.name}' to parquet",
                 file_path=file_path,
-                table_obj=df,
             )
-
-        try:
-            df = sql_hooks._polars_apply_materialize_annotation(df, table, store)
-            exception = None
-        except Exception as e:
-            # still write the table before raising exception
-            exception = e
         df.write_parquet(file_path)
         store.execute(
             CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path))
         )
-        if exception:
-            raise exception
 
     @classmethod
-    def retrieve(
-        cls,
-        store: ParquetTableStore,
-        table: Table,
-        stage_name: str | None,
-        as_type: type,
-        limit: int | None = None,
-    ):
-        file_path = store.get_table_path(table)
-        df = polars.read_parquet(file_path, n_rows=limit)
-        df = sql_hooks._polars_apply_retrieve_annotation(df, table, store)
-        if issubclass(as_type, polars.LazyFrame):
-            return df.lazy()
-        return df
-
-    @classmethod
-    def auto_table(cls, obj: pd.DataFrame):
-        return sql_hooks.PolarsTableHook.auto_table(obj)
-
-    @classmethod
-    def get_computation_tracer(cls):
-        return sql_hooks.PolarsTableHook.ComputationTracer()
-
-
-@ParquetTableStore.register_table(polars)
-class LazyPolarsTableHook(PolarsTableHook):
-    # TODO: it might simplify things if auto_version_support was a function call
-    # that takes input_type as a parameter
-    auto_version_support = AutoVersionSupport.LAZY
-
-    @classmethod
-    def can_materialize(cls, tbl: Table) -> CanResult:
-        type_ = type(tbl.obj)
-        return CanResult.new(issubclass(type_, polars.LazyFrame))
-
-    @classmethod
-    def can_retrieve(cls, type_) -> bool:
-        return issubclass(type_, polars.LazyFrame)
-
-    @classmethod
-    def retrieve_for_auto_versioning_lazy(
+    def _execute_query(
         cls,
         store: ParquetTableStore,
         table: Table,
         stage_name: str,
-        as_type: type[polars.LazyFrame],
-    ) -> polars.LazyFrame:
-        path = store.get_table_path(table)
-        df = polars.read_parquet(path, n_rows=0)
-        df = sql_hooks._polars_apply_retrieve_annotation(
-            df, table, store, intentionally_empty=True
-        )
+        dtypes: dict[str, pl.DataType] | None = None,
+        limit: int | None = None,
+    ) -> pl.DataFrame:
+        file_path = store.get_table_path(table)
+        df = pl.read_parquet(file_path, n_rows=limit)
+        return df
 
-        # Create lazy frame where each column is identified by:
-        #     stage name, table name, column name
-        # We then rename all columns to match the names of the table.
-        #
-        # This allows us to properly trace the origin of each column in
-        # the output `.serialize` back to the table where it originally came from.
 
-        schema = {}
-        rename = {}
-        for col in df:
-            qualified_name = f"[{table.stage.name}].[{table.name}].[{col.name}]"
-            schema[qualified_name] = col.dtype
-            rename[qualified_name] = col.name
-
-        lf = polars.LazyFrame(schema=schema).rename(rename)
-        return lf
-
-    @classmethod
-    def get_auto_version_lazy(cls, obj) -> str:
-        """
-        :param obj: object returned from task
-        :return: string representation of the operations performed on this object.
-        :raises TypeError: if the object doesn't support automatic versioning.
-        """
-        if not isinstance(obj, polars.LazyFrame):
-            raise TypeError("Expected LazyFrame")
-        return str(obj.serialize())
+@ParquetTableStore.register_table(pl)
+class LazyPolarsTableHook(sql_hooks.LazyPolarsTableHook):
+    pass
 
 
 @ParquetTableStore.register_table()

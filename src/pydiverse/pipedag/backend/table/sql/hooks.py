@@ -67,8 +67,6 @@ def _polars_apply_retrieve_annotation(
         # If dataframely is not installed, we can't apply the annotation.
         return df
 
-    fault_tolerant = False
-
     if typing.get_origin(table.annotation) is not None and issubclass(
         typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
     ):
@@ -87,23 +85,12 @@ def _polars_apply_retrieve_annotation(
                             fail_df = str(failures._lf.head(5).collect())
                         except:  # noqa
                             fail_df = str(failures.invalid().head(5))
-                    if fault_tolerant:
-                        store.logger.error(
-                            "Failed casting polars input to correct column "
-                            "specification",
-                            table=table.name,
-                            col_spec=column_spec.__name__,
-                            failure_counts=failures.counts(),
-                            fail_df=fail_df,
-                            exception=e,
-                        )
-                    else:
-                        raise HookCheckException(
-                            f"Failed casting polars input '{table.name}' to "
-                            f"{column_spec.__name__}; "
-                            f"Failure counts: {failures.counts()}; "
-                            f"\nInvalid:\n{fail_df}"
-                        ) from e
+                    raise HookCheckException(
+                        f"Failed casting polars input '{table.name}' to "
+                        f"{column_spec.__name__}; "
+                        f"Failure counts: {failures.counts()}; "
+                        f"\nInvalid:\n{fail_df}"
+                    ) from e
     return df
 
 
@@ -111,8 +98,6 @@ def _polars_apply_materialize_annotation(df, table, store):
     if dy is None:
         # If dataframely is not installed, we can't apply the annotation.
         return df
-
-    fault_tolerant = False
 
     if typing.get_origin(table.annotation) is not None and issubclass(
         typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
@@ -130,21 +115,12 @@ def _polars_apply_materialize_annotation(df, table, store):
                             fail_df = str(failures._lf.head(5).collect())
                         except:  # noqa
                             fail_df = str(failures.invalid().head(5))
-                    if fault_tolerant:
-                        store.logger.error(
-                            "Task output table does not meet column specification",
-                            table=table.name,
-                            col_spec=column_spec.__name__,
-                            failure_counts=failures.counts(),
-                            fail_df=fail_df,
-                        )
-                    else:
-                        raise HookCheckException(
-                            f"Polars task output {table.name} failed "
-                            f"validation with {column_spec.__name__}; "
-                            f"Failure counts: {failures.counts()}; "
-                            f"\nInvalid:\n{fail_df}"
-                        )
+                    raise HookCheckException(
+                        f"Polars task output {table.name} failed "
+                        f"validation with {column_spec.__name__}; "
+                        f"Failure counts: {failures.counts()}; "
+                        f"\nInvalid:\n{fail_df}"
+                    )
 
     return df
 
@@ -938,9 +914,9 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
             ex = None
         except Exception as e:
             store.logger.error(
-                "Failed to apply materialize annotation for table %s: %s",
-                table.name,
-                e,
+                "Failed to apply materialize annotation for table",
+                table=table.name,
+                exception=str(e),
             )
             ex = e
         finally:
@@ -962,7 +938,17 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         cfg = cls.cfg()
         df = cls._execute_query(store, table, stage_name, dtypes=None, limit=limit)
         if not cfg.disable_retrieve_annotation_action:
-            df = _polars_apply_retrieve_annotation(df, table, store)
+            try:
+                df = _polars_apply_retrieve_annotation(df, table, store)
+            except Exception as e:
+                store.logger.error(
+                    "Failed to apply retrieve annotation for table",
+                    table=table.name,
+                    exception=e,
+                )
+                if not cfg.fault_tolerant_annotation_action:
+                    raise e
+
         df = df.with_columns(pl.col(pl.Datetime).dt.replace_time_zone(None))
         return df
 
