@@ -10,6 +10,7 @@ from polars.testing import assert_frame_equal
 
 from pydiverse.pipedag import Flow, Stage, materialize
 from pydiverse.pipedag.context.context import CacheValidationMode
+from pydiverse.pipedag.errors import HookCheckException
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
 
 try:
@@ -397,12 +398,13 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
             consumer2(first, second)
 
     if with_violation and validate_get_data:
-        from dataframely.exc import RuleValidationError
-
         # Validation at end of get_anno_data task fails
         with pytest.raises(
-            RuleValidationError,
-            match=f"{3 if with_filter else 1} rules failed validation",
+            HookCheckException,
+            match="failed validation with MyFirstColSpec; Failure counts: "
+            "{'b|min': 1, 'c|nullability': 1, 'c|dtype': 1};"
+            if with_filter
+            else "{'primary_key': 2};",
         ):
             flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
     elif with_violation and not validate_get_data and with_filter:

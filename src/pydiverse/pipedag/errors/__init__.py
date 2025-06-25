@@ -53,6 +53,13 @@ class RemoteProcessError(IPCError):
     """
 
 
+class HookCheckException(Exception):
+    """
+    Exception raised if a hook check fails. It is caught to surface as a
+    normal task failure.
+    """
+
+
 __all__ = [
     "FlowError",
     "StageError",

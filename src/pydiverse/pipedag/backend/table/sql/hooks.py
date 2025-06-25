@@ -29,6 +29,7 @@ from pydiverse.pipedag.backend.table.sql.sql import (
 )
 from pydiverse.pipedag.container import ExternalTableReference, Schema, Table
 from pydiverse.pipedag.context import TaskContext
+from pydiverse.pipedag.errors import HookCheckException
 from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
 from pydiverse.pipedag.materialize.table_hook_base import (
     AutoVersionSupport,
@@ -78,38 +79,40 @@ def _polars_apply_retrieve_annotation(
                 try:
                     df = column_spec.cast(df)
                 except pl.exceptions.InvalidOperationError as e:
-                    df, failure = column_spec.filter(df, cast=True)
+                    df, failures = column_spec.filter(df, cast=True)
                     with pl.Config() as cfg:
                         cfg.set_tbl_cols(15)
                         cfg.set_tbl_width_chars(120)
                         try:
-                            fail_df = str(failure._lf.head(5).collect())
+                            fail_df = str(failures._lf.head(5).collect())
                         except:  # noqa
-                            fail_df = str(failure.invalid().head(5))
+                            fail_df = str(failures.invalid().head(5))
                     if fault_tolerant:
                         store.logger.error(
                             "Failed casting polars input to correct column "
                             "specification",
                             table=table.name,
                             col_spec=column_spec.__name__,
-                            failure_counts=failure.counts(),
+                            failure_counts=failures.counts(),
                             fail_df=fail_df,
                             exception=e,
                         )
                     else:
-                        raise ValueError(
-                            f"Failed casting polars input {table.name} to "
+                        raise HookCheckException(
+                            f"Failed casting polars input '{table.name}' to "
                             f"{column_spec.__name__}; "
-                            f"Failure counts: {failure.counts()}; "
-                            f"Invalid:\n{fail_df}"
+                            f"Failure counts: {failures.counts()}; "
+                            f"\nInvalid:\n{fail_df}"
                         ) from e
     return df
 
 
-def _polars_apply_materialize_annotation(df, table):
+def _polars_apply_materialize_annotation(df, table, store):
     if dy is None:
         # If dataframely is not installed, we can't apply the annotation.
         return df
+
+    fault_tolerant = False
 
     if typing.get_origin(table.annotation) is not None and issubclass(
         typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
@@ -118,7 +121,30 @@ def _polars_apply_materialize_annotation(df, table):
         if len(anno_args) == 1:
             column_spec = anno_args[0]
             if issubclass(column_spec, dy.Schema | dy.Collection):
-                df = column_spec.validate(df, cast=True)
+                df, failures = column_spec.filter(df, cast=True)
+                if len(failures) > 0:
+                    with pl.Config() as cfg:
+                        cfg.set_tbl_cols(15)
+                        cfg.set_tbl_width_chars(120)
+                        try:
+                            fail_df = str(failures._lf.head(5).collect())
+                        except:  # noqa
+                            fail_df = str(failures.invalid().head(5))
+                    if fault_tolerant:
+                        store.logger.error(
+                            "Task output table does not meet column specification",
+                            table=table.name,
+                            col_spec=column_spec.__name__,
+                            failure_counts=failures.counts(),
+                            fail_df=fail_df,
+                        )
+                    else:
+                        raise HookCheckException(
+                            f"Polars task output {table.name} failed "
+                            f"validation with {column_spec.__name__}; "
+                            f"Failure counts: {failures.counts()}; "
+                            f"\nInvalid:\n{fail_df}"
+                        )
 
     return df
 
@@ -908,7 +934,7 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         cfg = cls.cfg()
         try:
             if not cfg.disable_materialize_annotation_action:
-                df = _polars_apply_materialize_annotation(df, table)
+                df = _polars_apply_materialize_annotation(df, table, store)
             ex = None
         except Exception as e:
             store.logger.error(

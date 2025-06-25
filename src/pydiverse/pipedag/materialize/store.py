@@ -17,7 +17,12 @@ from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.core.task import Task, TaskGetItem
-from pydiverse.pipedag.errors import CacheError, DuplicateNameError, StageError
+from pydiverse.pipedag.errors import (
+    CacheError,
+    DuplicateNameError,
+    HookCheckException,
+    StageError,
+)
 from pydiverse.pipedag.materialize.cache import TaskCacheInfo, lazy_table_cache_key
 from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import (
@@ -870,7 +875,7 @@ class PipeDAGStore(Disposable):
 
         # Materialize
         self._check_names(task, tables, blobs)
-        self._store_task_transaction(
+        check_failures = self._store_task_transaction(
             task,
             tables,
             raw_sqls,
@@ -882,6 +887,12 @@ class PipeDAGStore(Disposable):
             self.blob_store.store_blob,
             store_metadata,
         )
+        if len(check_failures) > 0:
+            self.logger.error(
+                f"{len(check_failures)} output validation checks failed",
+                failures=check_failures,
+            )
+            raise check_failures[0][1]
 
         return value
 
@@ -1016,17 +1027,22 @@ class PipeDAGStore(Disposable):
         store_raw_sql: Callable[[RawSql], None],
         store_blob: Callable[[Blob], None],
         store_metadata: Callable[[], None],
-    ):
+    ) -> list[tuple[Table, Exception]]:
         stage = task.stage
         ctx = RunContext.get()
 
         stored_tables = []
         stored_blobs = []
+        check_failures = []
 
         try:
             for table in tables:
                 ctx.validate_stage_lock(stage)
-                store_table(table)
+                try:
+                    store_table(table)
+                except HookCheckException as e:
+                    check_failures.append((table, e))
+
                 stored_tables.append(table)
             for blob in blobs:
                 ctx.validate_stage_lock(stage)
@@ -1040,6 +1056,9 @@ class PipeDAGStore(Disposable):
             store_metadata()
 
         except Exception as e:
+            if ConfigContext.get().fail_fast:
+                raise e
+
             # Failed - Roll back everything
             for table in stored_tables:
                 self.table_store.delete_table_from_transaction(table)
@@ -1048,6 +1067,8 @@ class PipeDAGStore(Disposable):
 
             ctx.remove_names(stage, tables, blobs)
             raise e
+
+        return check_failures
 
     # ### Cache ### #
 

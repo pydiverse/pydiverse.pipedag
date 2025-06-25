@@ -604,7 +604,7 @@ class PolarsTableHook(TableHook[ParquetTableStore]):
             )
 
         try:
-            df = sql_hooks._polars_apply_materialize_annotation(df, table)
+            df = sql_hooks._polars_apply_materialize_annotation(df, table, store)
             exception = None
         except Exception as e:
             # still write the table before raising exception
