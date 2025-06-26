@@ -224,7 +224,7 @@ def test_filter_without_filter_without_rule_violation():
         first, second = data_without_filter_without_rule_violation()
 
         assert isinstance(out, SimpleCollection)
-        assert_frame_equal(out.first, first)
+        assert_frame_equal(out.first, first.cast(dict(b=pl.Int16)))
         assert_frame_equal(out.second, second)
         assert failure.first.select(pl.len()).collect().item() == 0
         assert failure.second.select(pl.len()).collect().item() == 0
@@ -272,7 +272,9 @@ def test_filter_with_filter_without_rule_violation():
         assert isinstance(out, MyCollection)
         assert_frame_equal(
             out.first,
-            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(dict(c=enum)),
+            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(
+                dict(b=pl.Int16, c=enum)
+            ),
         )
         assert_frame_equal(
             out.second,
@@ -307,7 +309,9 @@ def test_filter_with_filter_with_rule_violation():
         assert isinstance(out, MyCollection)
         assert_frame_equal(
             out.first,
-            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(dict(c=enum)),
+            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(
+                dict(b=pl.Int16, c=enum)
+            ),
         )
         assert_frame_equal(
             out.second,
@@ -355,7 +359,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
         first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]
     ):
         assert first.collect_schema() == pl.Schema(
-            [("a", pl.Int64), ("b", pl.Int64), ("c", pl.Enum(categories=["x", "y"]))]
+            [("a", pl.Int64), ("b", pl.Int16), ("c", pl.Enum(categories=["x", "y"]))]
         )
         assert second.collect_schema() == pl.Schema(
             [("a", pl.Int64), ("b", pl.Int64), ("c", pl.Enum(categories=["x", "y"]))]
@@ -381,7 +385,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
         first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]
     ):
         assert first.collect_schema() == pl.Schema(
-            [("a", pl.Int64), ("b", pl.Int64), ("c", pl.Enum(categories=["x", "y"]))]
+            [("a", pl.Int64), ("b", pl.Int16), ("c", pl.Enum(categories=["x", "y"]))]
         )
         assert second.collect_schema() == pl.Schema(
             [("a", pl.Int64), ("b", pl.Int64), ("c", pl.Enum(categories=["x", "y"]))]
@@ -449,7 +453,7 @@ def test_annotations_not_fail_fast(
         first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]
     ):
         assert first.collect_schema() == pl.Schema(
-            [("a", pl.Int64), ("b", pl.Int64), ("c", pl.Enum(categories=["x", "y"]))]
+            [("a", pl.Int64), ("b", pl.Int16), ("c", pl.Enum(categories=["x", "y"]))]
         )
         assert second.collect_schema() == pl.Schema(
             [("a", pl.Int64), ("b", pl.Int64), ("c", pl.Enum(categories=["x", "y"]))]
@@ -465,7 +469,7 @@ def test_annotations_not_fail_fast(
         first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]
     ):
         assert first.collect_schema() == pl.Schema(
-            [("a", pl.Int64), ("b", pl.Int64), ("c", pl.Enum(categories=["x", "y"]))]
+            [("a", pl.Int64), ("b", pl.Int16), ("c", pl.Enum(categories=["x", "y"]))]
         )
         assert second.collect_schema() == pl.Schema(
             [("a", pl.Int64), ("b", pl.Int64), ("c", pl.Enum(categories=["x", "y"]))]
@@ -490,25 +494,6 @@ def test_annotations_not_fail_fast(
         assert not result.successful
     else:
         assert result.successful
-
-
-def log_function(name):
-    print("hello " + name)
-    import logging
-    import sys
-
-    import structlog
-
-    sys.stdout.write("hi1\n")
-    sys.stderr.write("hi2\n")
-    logging.getLogger().info("hi3\n")
-    logging.getLogger().error("hi4\n")
-    structlog.WriteLogger().info("hi5")
-    structlog.WriteLogger().error("hi6")
-    structlog.getLogger().info("hi7\n")
-    structlog.getLogger().error("hi8\n")
-    sys.stdout.flush()
-    sys.stderr.flush()
 
 
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
@@ -537,7 +522,7 @@ def test_annotations_fault_tolerant(
         first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]
     ):
         assert first.collect_schema() == pl.Schema(
-            [("a", pl.Int64), ("b", pl.Int64), ("c", pl.Enum(categories=["x", "y"]))]
+            [("a", pl.Int64), ("b", pl.Int16), ("c", pl.Enum(categories=["x", "y"]))]
         )
         assert second.collect_schema() == pl.Schema(
             [
@@ -655,7 +640,9 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
                 out, _ = coll.filter(coll.__dict__, cast=True)
                 assert_frame_equal(
                     out.first,
-                    pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(dict(c=enum)),
+                    pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(
+                        dict(b=pl.Int16, c=enum)
+                    ),
                 )
                 assert_frame_equal(
                     out.second,

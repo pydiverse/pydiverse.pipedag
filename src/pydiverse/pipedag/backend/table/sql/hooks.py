@@ -1,6 +1,7 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
+import inspect
 import re
 import time
 import types
@@ -48,6 +49,11 @@ try:
 except ImportError:
     dy = None
 
+try:
+    import pydiverse.colspec as cs
+except ImportError:
+    cs = None
+
 # region SQLALCHEMY
 try:
     from sqlalchemy import Select, TextClause
@@ -63,21 +69,18 @@ except ImportError:
 def _polars_apply_retrieve_annotation(
     df, table, store, intentionally_empty: bool = False
 ):
-    if dy is None:
-        # If dataframely is not installed, we can't apply the annotation.
-        return df
-
-    if typing.get_origin(table.annotation) is not None and issubclass(
-        typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
-    ):
-        anno_args = typing.get_args(table.annotation)
-        if len(anno_args) == 1:
-            column_spec = anno_args[0]
-            if issubclass(column_spec, dy.Schema | dy.Collection):
+    if cs is not None:
+        if inspect.isclass(table.annotation) and issubclass(
+            table.annotation, cs.ColSpec
+        ):
+            column_spec = table.annotation  # type: cs.ColSpec
+            if dy is not None:
+                # Try colspec polars specific operation which uses dataframely
+                # in the back (casting is not done by SQL based colspec)
                 try:
-                    df = column_spec.cast(df)
+                    df = column_spec.cast_polars(df)
                 except pl.exceptions.InvalidOperationError as e:
-                    df, failures = column_spec.filter(df, cast=True)
+                    df, failures = column_spec.filter_polars(df, cast=True)
                     with pl.Config() as cfg:
                         cfg.set_tbl_cols(15)
                         cfg.set_tbl_width_chars(120)
@@ -91,22 +94,67 @@ def _polars_apply_retrieve_annotation(
                         f"Failure counts: {failures.counts()}; "
                         f"\nInvalid:\n{fail_df}"
                     ) from e
+    if dy is not None:
+        if typing.get_origin(table.annotation) is not None and issubclass(
+            typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
+        ):
+            anno_args = typing.get_args(table.annotation)
+            if len(anno_args) == 1:
+                column_spec = anno_args[0]
+                if issubclass(column_spec, dy.Schema):
+                    try:
+                        df = column_spec.cast(df)
+                    except pl.exceptions.InvalidOperationError as e:
+                        df, failures = column_spec.filter(df, cast=True)
+                        with pl.Config() as cfg:
+                            cfg.set_tbl_cols(15)
+                            cfg.set_tbl_width_chars(120)
+                            try:
+                                fail_df = str(failures._lf.head(5).collect())
+                            except:  # noqa
+                                fail_df = str(failures.invalid().head(5))
+                        raise HookCheckException(
+                            f"Failed casting polars input '{table.name}' to "
+                            f"{column_spec.__name__}; "
+                            f"Failure counts: {failures.counts()}; "
+                            f"\nInvalid:\n{fail_df}"
+                        ) from e
     return df
 
 
 def _polars_apply_materialize_annotation(df, table, store):
-    if dy is None:
-        # If dataframely is not installed, we can't apply the annotation.
-        return df
-
-    if typing.get_origin(table.annotation) is not None and issubclass(
-        typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
-    ):
-        anno_args = typing.get_args(table.annotation)
-        if len(anno_args) == 1:
-            column_spec = anno_args[0]
-            if issubclass(column_spec, dy.Schema | dy.Collection):
-                df, failures = column_spec.filter(df, cast=True)
+    if dy is not None:
+        if typing.get_origin(table.annotation) is not None and issubclass(
+            typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
+        ):
+            anno_args = typing.get_args(table.annotation)
+            if len(anno_args) == 1:
+                column_spec = anno_args[0]
+                if issubclass(column_spec, dy.Schema):
+                    df, failures = column_spec.filter(df, cast=True)
+                    if len(failures) > 0:
+                        with pl.Config() as cfg:
+                            cfg.set_tbl_cols(15)
+                            cfg.set_tbl_width_chars(120)
+                            try:
+                                fail_df = str(failures._lf.head(5).collect())
+                            except:  # noqa
+                                fail_df = str(failures.invalid().head(5))
+                        raise HookCheckException(
+                            f"Polars task output {table.name} failed "
+                            f"validation with {column_spec.__name__}; "
+                            f"Failure counts: {failures.counts()}; "
+                            f"\nInvalid:\n{fail_df}"
+                        )
+    if cs is not None:
+        if inspect.isclass(table.annotation) and issubclass(
+            table.annotation, cs.ColSpec
+        ):
+            column_spec = table.annotation
+            if dy is not None:
+                # Try colspec polars specific operation which uses dataframely
+                # in the back
+                df, failures = column_spec.filter_polars(df, cast=True)
                 if len(failures) > 0:
                     with pl.Config() as cfg:
                         cfg.set_tbl_cols(15)
@@ -121,6 +169,24 @@ def _polars_apply_materialize_annotation(df, table, store):
                         f"Failure counts: {failures.counts()}; "
                         f"\nInvalid:\n{fail_df}"
                     )
+            elif pdt_new is not None:
+                tbl, failures = column_spec.filter(pdt.Table(df), cast=True)
+                if len(failures) > 0:
+                    with pl.Config() as cfg:
+                        cfg.set_tbl_cols(15)
+                        cfg.set_tbl_width_chars(120)
+                        fail_df = str(
+                            failures.debug_invalid_rows
+                            >> pdt.slice_head(5)
+                            >> pdt.export(Polars(lazy=False))
+                        )
+                    raise HookCheckException(
+                        f"Polars task output {table.name} failed "
+                        f"validation with {column_spec.__name__}; "
+                        f"Failure counts: {failures.counts()}; "
+                        f"\nInvalid:\n{fail_df}"
+                    )
+                df = tbl >> pdt.export(Polars(lazy=False))
 
     return df
 
