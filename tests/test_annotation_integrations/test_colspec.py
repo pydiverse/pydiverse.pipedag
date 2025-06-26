@@ -15,6 +15,7 @@ from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
 
 try:
     import pydiverse.colspec as cs
+    import pydiverse.common as pdc
     import pydiverse.transform as pdt
 except ImportError:
     cs = types.ModuleType("pydiverse.colspec")
@@ -25,6 +26,7 @@ except ImportError:
     pdt.verb = lambda fn: fn
     pdt.SqlAlchemy = None
     pdt.Polars = None
+    pdc = None
 
 
 pytestmark = [
@@ -40,11 +42,13 @@ pytestmark = [
 class MyFirstColSpec(cs.ColSpec):
     a = cs.Integer(primary_key=True)
     b = cs.Integer()
+    c = cs.String  # cs.Enum(["x", "y"], nullable=True)
 
 
 class MySecondColSpec(cs.ColSpec):
     a = cs.Integer(primary_key=True)
     b = cs.Integer(min=1)
+    c = cs.String(nullable=False)  # cs.Enum(["x", "y"], nullable=False)
 
 
 @dataclass
@@ -80,26 +84,43 @@ class SimpleCollection(cs.Collection):
 
 
 def data_without_filter_without_rule_violation() -> tuple[pdt.Table, pdt.Table]:
-    first = pdt.Table({"a": [1, 2, 3], "b": [1, 2, 3]}, name="first")
-    second = pdt.Table({"a": [1, 2, 3], "b": [1, 2, 3]}, name="second")
+    first = pdt.Table(
+        {"a": [1, 2, 3], "b": [1, 2, 3], "c": ["x", "y", None]}, name="first"
+    )
+    second = pdt.Table(
+        {"a": [1, 2, 3], "b": [1, 2, 3], "c": ["x", "y", "x"]}, name="second"
+    )
     return first, second
 
 
 def data_without_filter_with_rule_violation() -> tuple[pdt.Table, pdt.Table]:
-    first = pdt.Table({"a": [1, 2, 1], "b": [1, 2, 3]}, name="first")
-    second = pdt.Table({"a": [1, 2, 3], "b": [0, 1, 2]}, name="second")
+    first = pdt.Table(
+        {"a": [1, 2, 1], "b": [1, 2, 3], "c": ["x", "y", None]}, name="first"
+    )
+    second = pdt.Table(
+        {"a": [1, 2, 3], "b": [0, 1, 2], "c": [None, "y", "x"]}, name="second"
+    )
     return first, second
 
 
 def data_with_filter_without_rule_violation() -> tuple[pdt.Table, pdt.Table]:
-    first = pdt.Table({"a": [1, 2, 3], "b": [1, 1, 3]}, name="first")
-    second = pdt.Table({"a": [2, 3, 4, 5], "b": [1, 2, 3, 4]}, name="second")
+    first = pdt.Table(
+        {"a": [1, 2, 3], "b": [1, 1, 3], "c": ["x", "y", None]}, name="first"
+    )
+    second = pdt.Table(
+        {"a": [2, 3, 4, 5], "b": [1, 2, 3, 4], "c": ["x", "y", "x", "x"]}, name="second"
+    )
     return first, second
 
 
 def data_with_filter_with_rule_violation() -> tuple[pdt.Table, pdt.Table]:
-    first = pdt.Table({"a": [1, 2, 3], "b": [1, 2, 3]}, name="first")
-    second = pdt.Table({"a": [2, 3, 4, 5], "b": [0, 1, 2, 3]}, name="second")
+    first = pdt.Table(
+        {"a": [1, 2, 3], "b": [1, 2, 3], "c": ["x", "y", None]}, name="first"
+    )
+    second = pdt.Table(
+        {"a": [2, 3, 4, 5, 6], "b": [0, 1, 2, 3, -1], "c": [None, "y", "y", "x", "z"]},
+        name="second",
+    )
     return first, second
 
 
@@ -136,7 +157,7 @@ def materialize_tbl(tbl: pdt.Table, table_prefix: str | None = None):
 def exec_filter(c: cs.Collection):
     cfg = cs.config.Config.default
     cfg.materialize_hook = lambda df, table_prefix: df >> materialize_tbl(table_prefix)
-    out, failure = c.filter(cfg=cfg)
+    out, failure = c.filter(cfg=cfg, cast=True)
     return (
         out,
         SimpleCollection(
@@ -190,7 +211,7 @@ def test_filter_without_filter_with_rule_violation():
         assert len(out.first.collect()) == 1
         assert len(out.second.collect()) == 2
         assert failure_counts.first == {"_primary_key_": 2}
-        assert failure_counts.second == {"b|min": 1}
+        assert failure_counts.second == {"b|min": 1, "c|nullability": 1}
 
     with Flow() as flow:
         with Stage("s01"):
@@ -212,8 +233,14 @@ def test_filter_with_filter_without_rule_violation():
         # first, second = data_with_filter_without_rule_violation()
 
         assert isinstance(out, MyCollection)
-        assert_frame_equal(out.first, pl.LazyFrame({"a": [3], "b": [3]}))
-        assert_frame_equal(out.second, pl.LazyFrame({"a": [3], "b": [2]}))
+        assert_frame_equal(
+            out.first,
+            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(dict(c=pl.String)),
+        )
+        assert_frame_equal(
+            out.second,
+            pl.LazyFrame({"a": [3], "b": [2], "c": ["y"]}).cast(dict(c=pl.String)),
+        )
         assert failure_counts.first == {
             "equal_primary_keys": 1,
             "first_b_greater_second_b": 1,
@@ -243,12 +270,21 @@ def test_filter_with_filter_with_rule_violation():
         # first, second = data_with_filter_with_rule_violation()
 
         assert isinstance(out, MyCollection)
-        assert_frame_equal(out.first, pl.LazyFrame({"a": [3], "b": [3]}))
-        assert_frame_equal(out.second, pl.LazyFrame({"a": [3], "b": [1]}))
-        assert failure_counts.first == {
+        assert_frame_equal(
+            out.first,
+            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(dict(c=pl.String)),
+        )
+        assert_frame_equal(
+            out.second,
+            pl.LazyFrame({"a": [3], "b": [1], "c": ["y"]}).cast(dict(c=pl.String)),
+        )
+        assert failure_counts.first == {"equal_primary_keys": 2}
+        assert failure_counts.second == {
+            "b|min": 2,
+            "c|nullability": 1,
+            # "c|dtype": 1,  # Enum currently doesn't work in pydiverse transform
             "equal_primary_keys": 2,
         }
-        assert failure_counts.second == {"b|min": 1, "equal_primary_keys": 2}
 
     with Flow() as flow:
         with Stage("s01"):

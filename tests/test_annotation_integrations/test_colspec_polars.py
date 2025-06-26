@@ -34,11 +34,13 @@ pytestmark = [
 class MyFirstColSpec(cs.ColSpec):
     a = cs.Integer(primary_key=True)
     b = cs.Integer()
+    c = cs.Enum(["x", "y"], nullable=True)
 
 
 class MySecondColSpec(cs.ColSpec):
     a = cs.Integer(primary_key=True)
     b = cs.Integer(min=1)
+    c = cs.Enum(["x", "y"], nullable=False)
 
 
 @dataclass
@@ -68,27 +70,46 @@ class SimpleCollection(cs.Collection):
 # ------------------------------------------------------------------------------------ #
 
 
+enum = pl.Enum(["x", "y"])
+
+
 def data_without_filter_without_rule_violation() -> tuple[pl.LazyFrame, pl.LazyFrame]:
-    first = pl.LazyFrame({"a": [1, 2, 3], "b": [1, 2, 3]})
-    second = pl.LazyFrame({"a": [1, 2, 3], "b": [1, 2, 3]})
+    first = pl.LazyFrame({"a": [1, 2, 3], "b": [1, 2, 3], "c": ["x", "y", None]}).cast(
+        dict(c=enum)
+    )
+    second = pl.LazyFrame({"a": [1, 2, 3], "b": [1, 2, 3], "c": ["x", "y", "x"]}).cast(
+        dict(c=enum)
+    )
     return first, second
 
 
 def data_without_filter_with_rule_violation() -> tuple[pl.LazyFrame, pl.LazyFrame]:
-    first = pl.LazyFrame({"a": [1, 2, 1], "b": [1, 2, 3]})
-    second = pl.LazyFrame({"a": [1, 2, 3], "b": [0, 1, 2]})
+    first = pl.LazyFrame({"a": [1, 2, 1], "b": [1, 2, 3], "c": ["x", "y", None]}).cast(
+        dict(c=enum)
+    )
+    second = pl.LazyFrame({"a": [1, 2, 3], "b": [0, 1, 2], "c": [None, "y", "x"]}).cast(
+        dict(c=enum)
+    )
     return first, second
 
 
 def data_with_filter_without_rule_violation() -> tuple[pl.LazyFrame, pl.LazyFrame]:
-    first = pl.LazyFrame({"a": [1, 2, 3], "b": [1, 1, 3]})
-    second = pl.LazyFrame({"a": [2, 3, 4, 5], "b": [1, 2, 3, 4]})
+    first = pl.LazyFrame({"a": [1, 2, 3], "b": [1, 1, 3], "c": ["x", "y", None]}).cast(
+        dict(c=enum)
+    )
+    second = pl.LazyFrame(
+        {"a": [2, 3, 4, 5], "b": [1, 2, 3, 4], "c": ["x", "y", "x", "x"]}
+    ).cast(dict(c=enum))
     return first, second
 
 
 def data_with_filter_with_rule_violation() -> tuple[pl.LazyFrame, pl.LazyFrame]:
-    first = pl.LazyFrame({"a": [1, 2, 3], "b": [1, 2, 3]})
-    second = pl.LazyFrame({"a": [2, 3, 4, 5], "b": [0, 1, 2, 3]})
+    first = pl.LazyFrame({"a": [1, 2, 3], "b": [1, 2, 3], "c": ["x", "y", None]}).cast(
+        dict(c=enum)
+    )
+    second = pl.LazyFrame(
+        {"a": [2, 3, 4, 5, 6], "b": [0, 1, 2, 3, -1], "c": [None, "y", "y", "x", "z"]}
+    )
     return first, second
 
 
@@ -99,6 +120,33 @@ def test_dataclass():
     assert_frame_equal(c.second, second)
 
 
+@pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
+@pytest.mark.skipif(dy is None, reason="dataframely needs to be installed")
+def test_enum_violation():
+    second = pl.LazyFrame(
+        {"a": [2, 3, 4, 5], "b": [0, 1, 2, 3], "c": ["z", "y", "y", "x"]}
+    )
+    # it is expected that cast fails on invalid enum value
+    with pytest.raises(
+        pl.exceptions.InvalidOperationError,
+        match="conversion from `str` to `enum` failed in column 'c' "
+        "for 1 out of 4 values",
+    ):
+        MySecondColSpec.cast_polars(second).collect()
+    x, y = MySecondColSpec.filter_polars(second, cast=True)
+    assert len(x) == 3
+    assert len(y.invalid()) == 1
+
+    class DummyCollection(cs.Collection):
+        second: MySecondColSpec
+
+    x, y = DummyCollection.filter_polars_data(dict(second=second), cast=True)
+    x = x.second.collect()
+    y = y["second"]
+    assert len(x) == 3
+    assert len(y.invalid()) == 1
+
+
 @materialize(nout=2)
 def get_data(name: str):
     return globals()[f"data_{name}"]()
@@ -106,7 +154,7 @@ def get_data(name: str):
 
 @materialize(nout=3, input_type=pl.LazyFrame)
 def exec_filter_polars(c: cs.Collection):
-    out, failure = c.filter_polars()
+    out, failure = c.filter_polars(cast=True)
     return (
         out,
         SimpleCollection(**{name: f._df for name, f in failure.items()}),
@@ -122,6 +170,7 @@ def exec_filter_polars(c: cs.Collection):
 def test_filter_without_filter_without_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
+        out = out.cast_polars()
         first, second = data_without_filter_without_rule_violation()
 
         assert isinstance(out, SimpleCollection)
@@ -151,7 +200,7 @@ def test_filter_without_filter_with_rule_violation():
         assert len(out.first.collect()) == 1
         assert len(out.second.collect()) == 2
         assert failure_counts.first == {"primary_key": 2}
-        assert failure_counts.second == {"b|min": 1}
+        assert failure_counts.second == {"b|min": 1, "c|nullability": 1}
 
     with Flow() as flow:
         with Stage("s01"):
@@ -168,11 +217,18 @@ def test_filter_without_filter_with_rule_violation():
 def test_filter_with_filter_without_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
+        out = out.cast_polars()
         # first, second = data_with_filter_without_rule_violation()
 
         assert isinstance(out, MyCollection)
-        assert_frame_equal(out.first, pl.LazyFrame({"a": [3], "b": [3]}))
-        assert_frame_equal(out.second, pl.LazyFrame({"a": [3], "b": [2]}))
+        assert_frame_equal(
+            out.first,
+            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(dict(c=enum)),
+        )
+        assert_frame_equal(
+            out.second,
+            pl.LazyFrame({"a": [3], "b": [2], "c": ["y"]}).cast(dict(c=enum)),
+        )
         assert failure_counts.first == {
             "equal_primary_keys": 1,
             "first_b_greater_second_b": 1,
@@ -197,13 +253,25 @@ def test_filter_with_filter_without_rule_violation():
 def test_filter_with_filter_with_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
+        out = out.cast_polars()
         # first, second = data_with_filter_with_rule_violation()
 
         assert isinstance(out, MyCollection)
-        assert_frame_equal(out.first, pl.LazyFrame({"a": [3], "b": [3]}))
-        assert_frame_equal(out.second, pl.LazyFrame({"a": [3], "b": [1]}))
+        assert_frame_equal(
+            out.first,
+            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(dict(c=enum)),
+        )
+        assert_frame_equal(
+            out.second,
+            pl.LazyFrame({"a": [3], "b": [1], "c": ["y"]}).cast(dict(c=enum)),
+        )
         assert failure_counts.first == {"equal_primary_keys": 2}
-        assert failure_counts.second == {"b|min": 1, "equal_primary_keys": 2}
+        assert failure_counts.second == {
+            "b|min": 1,
+            "c|nullability": 1,
+            "c|dtype": 1,
+            "equal_primary_keys": 2,
+        }
 
     with Flow() as flow:
         with Stage("s01"):

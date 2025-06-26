@@ -15488,7 +15488,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-20.0.0-py311h38be061_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-core-20.0.0-py311h4854187_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pydot-4.0.0-py311h38be061_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.1-pyhd8ed1ab_0.conda
@@ -15705,7 +15705,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pyarrow-20.0.0-py311h6eed73b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pyarrow-core-20.0.0-py311he02522f_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pydot-4.0.0-py311h6eed73b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.1-pyhd8ed1ab_0.conda
@@ -15904,7 +15904,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyarrow-20.0.0-py311ha1ab1f8_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyarrow-core-20.0.0-py311he04fa90_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pydot-4.0.0-py311h267d04e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.1-pyhd8ed1ab_0.conda
@@ -16080,7 +16080,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/pyarrow-20.0.0-py311h1ea47a8_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pyarrow-core-20.0.0-py311hdea38fa_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pydot-4.0.0-py311h1ea47a8_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.1-pyhd8ed1ab_0.conda
@@ -16311,7 +16311,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-20.0.0-py311h38be061_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-core-20.0.0-py311h4854187_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pydot-4.0.0-py311h38be061_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.1-pyhd8ed1ab_0.conda
@@ -16529,7 +16529,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pyarrow-20.0.0-py311h6eed73b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pyarrow-core-20.0.0-py311he02522f_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pydot-4.0.0-py311h6eed73b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.1-pyhd8ed1ab_0.conda
@@ -16729,7 +16729,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyarrow-20.0.0-py311ha1ab1f8_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyarrow-core-20.0.0-py311he04fa90_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pydot-4.0.0-py311h267d04e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.1-pyhd8ed1ab_0.conda
@@ -16906,7 +16906,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/pyarrow-20.0.0-py311h1ea47a8_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pyarrow-core-20.0.0-py311hdea38fa_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pydot-4.0.0-py311h1ea47a8_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.1-pyhd8ed1ab_0.conda
@@ -17136,7 +17136,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-20.0.0-py311h38be061_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-core-20.0.0-py311h4854187_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-transform-0.5.2-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pydot-4.0.0-py311h38be061_0.conda
@@ -17354,7 +17354,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pyarrow-20.0.0-py311h6eed73b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pyarrow-core-20.0.0-py311he02522f_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-transform-0.5.2-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pydot-4.0.0-py311h6eed73b_0.conda
@@ -17554,7 +17554,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyarrow-20.0.0-py311ha1ab1f8_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyarrow-core-20.0.0-py311he04fa90_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-transform-0.5.2-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pydot-4.0.0-py311h267d04e_0.conda
@@ -17731,7 +17731,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/pyarrow-20.0.0-py311h1ea47a8_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pyarrow-core-20.0.0-py311hdea38fa_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-transform-0.5.2-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pydot-4.0.0-py311h1ea47a8_0.conda
@@ -26782,7 +26782,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-20.0.0-py313h78bf25f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-core-20.0.0-py313he5f92c8_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pydot-4.0.0-py313h78bf25f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.1-pyhd8ed1ab_0.conda
@@ -26999,7 +26999,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pyarrow-20.0.0-py313habf4b1d_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pyarrow-core-20.0.0-py313hc71e1e6_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pydot-4.0.0-py313habf4b1d_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.1-pyhd8ed1ab_0.conda
@@ -27198,7 +27198,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyarrow-20.0.0-py313h39782a4_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyarrow-core-20.0.0-py313hf9431ad_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pydot-4.0.0-py313h8f79df9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.1-pyhd8ed1ab_0.conda
@@ -27374,7 +27374,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/pyarrow-20.0.0-py313hfa70ccb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pyarrow-core-20.0.0-py313he812468_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pydot-4.0.0-py313hfa70ccb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.1-pyhd8ed1ab_0.conda
@@ -27603,7 +27603,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-20.0.0-py313h78bf25f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-core-20.0.0-py313he5f92c8_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pydot-4.0.0-py313h78bf25f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.1-pyhd8ed1ab_0.conda
@@ -27821,7 +27821,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pyarrow-20.0.0-py313habf4b1d_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pyarrow-core-20.0.0-py313hc71e1e6_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pydot-4.0.0-py313habf4b1d_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.1-pyhd8ed1ab_0.conda
@@ -28021,7 +28021,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyarrow-20.0.0-py313h39782a4_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyarrow-core-20.0.0-py313hf9431ad_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pydot-4.0.0-py313h8f79df9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.1-pyhd8ed1ab_0.conda
@@ -28198,7 +28198,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/pyarrow-20.0.0-py313hfa70ccb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pyarrow-core-20.0.0-py313he812468_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pydot-4.0.0-py313hfa70ccb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.1-pyhd8ed1ab_0.conda
@@ -28426,7 +28426,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-20.0.0-py313h78bf25f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-core-20.0.0-py313he5f92c8_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-transform-0.5.2-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pydot-4.0.0-py313h78bf25f_0.conda
@@ -28644,7 +28644,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pyarrow-20.0.0-py313habf4b1d_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pyarrow-core-20.0.0-py313hc71e1e6_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-transform-0.5.2-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pydot-4.0.0-py313habf4b1d_0.conda
@@ -28844,7 +28844,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyarrow-20.0.0-py313h39782a4_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyarrow-core-20.0.0-py313hf9431ad_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-transform-0.5.2-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pydot-4.0.0-py313h8f79df9_0.conda
@@ -29021,7 +29021,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/pyarrow-20.0.0-py313hfa70ccb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pyarrow-core-20.0.0-py313he812468_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-transform-0.5.2-pyhe01879c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pydot-4.0.0-py313hfa70ccb_0.conda
@@ -50900,9 +50900,9 @@ packages:
   license_family: MIT
   size: 38135
   timestamp: 1745015303766
-- conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.1.1-pyh5ded981_0.conda
-  sha256: 9acb7df1f326de5109b1b74fb0f4855145e853874b8cf0da2a553bd92ac22282
-  md5: 24f79573f2ebdd2081b6018245d102b7
+- conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-colspec-0.2.1-pyhe01879c_0.conda
+  sha256: 093f927a2fd8f068f460b5a358b7259ed7d3629d2ca2fde6e0bf4d40549a673a
+  md5: aaaf74d35af54b94dd1f793a272a2302
   depends:
   - python >=3.11
   - pydiverse-common >=0.3.4,<0.4
@@ -50914,9 +50914,8 @@ packages:
   - pyarrow >=20.0.0,<21
   - dataframely >=1.1.0,<2
   license: BSD-3-Clause
-  license_family: BSD
-  size: 41519
-  timestamp: 1749658299764
+  size: 41834
+  timestamp: 1750935391220
 - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.3.4-pyhcf101f3_0.conda
   sha256: 49ce7bdff13226b65d40ce6c67b9f061855e735048bbe4cdbfc4c15059a02da2
   md5: e9520479f324c2756a1a18503e9f5ab0
