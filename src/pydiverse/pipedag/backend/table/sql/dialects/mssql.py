@@ -451,6 +451,9 @@ class DataframeMsSQLTableHook:
                     for x in url.split("&")[1:]
                     if len(x.split("=")) == 2
                 }
+            if isinstance(df, pl.DataFrame):
+                # convert polars DataFrame to pandas DataFrame
+                df = df.to_pandas()
             # attention: the `(lambda col: lambda...)(copy.copy(col))` part looks odd
             # but is needed to ensure loop iterations create lambdas working on
             # different columns

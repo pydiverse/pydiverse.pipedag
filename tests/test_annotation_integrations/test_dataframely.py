@@ -6,6 +6,7 @@ from typing import Generic, Mapping, TypeVar
 
 import polars as pl
 import pytest
+import sqlalchemy as sa
 import structlog
 from polars.testing import assert_frame_equal
 
@@ -76,7 +77,7 @@ pytestmark = [
 
 class MyFirstColSpec(dy.Schema):
     a = dy.Integer(primary_key=True)
-    b = dy.Integer()
+    b = dy.Int16()
     c = dy.Enum(["x", "y"], nullable=True)
 
 
@@ -711,3 +712,27 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
     # else:
     ret = flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
     assert ret.successful
+
+
+@pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
+def test_type_mapping():
+    @materialize(nout=2)
+    def get_anno_data() -> tuple[
+        dy.LazyFrame[MyFirstColSpec], dy.LazyFrame[MySecondColSpec]
+    ]:
+        return data_with_filter_without_rule_violation()
+
+    @materialize(input_type=sa.Table)
+    def consumer(
+        first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]
+    ):
+        assert isinstance(first.c.b.type, sa.SmallInteger)
+        assert isinstance(second.c.b.type, sa.BigInteger)
+        assert not isinstance(second.c.b.type, sa.SmallInteger)
+
+    with Flow() as flow:
+        with Stage("s01"):
+            first, second = get_anno_data()
+            consumer(first, second)
+
+    flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)

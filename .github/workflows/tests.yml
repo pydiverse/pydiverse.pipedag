@@ -173,6 +173,8 @@ jobs:
           - py311all
           - py310mssqlpdt
           - py313mssqlpdt
+          - py311mssqldy
+          - py313mssqldy
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
