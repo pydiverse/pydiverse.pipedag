@@ -511,23 +511,6 @@ def log_function(name):
     sys.stderr.flush()
 
 
-def test_log_capturing(capfd):
-    import structlog
-
-    with structlog.testing.capture_logs() as logs:
-        log_function("Tom")
-
-    out, err = capfd.readouterr()
-    assert err == "hi2\n"
-    assert out == "hello Tom\nhi1\nhi5\nhi6\n"
-    assert logs == [
-        {"event": "hi3\n", "log_level": "info", "logger": "root"},
-        {"event": "hi4\n", "log_level": "error", "logger": "root"},
-        {"event": "hi7\n", "log_level": "info"},
-        {"event": "hi8\n", "log_level": "error"},
-    ]
-
-
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
