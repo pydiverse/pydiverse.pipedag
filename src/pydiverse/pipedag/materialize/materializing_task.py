@@ -561,10 +561,25 @@ class MaterializationWrapper:
                     )
 
             if not task.lazy and not skip_cache_lookup and not force_task_execution:
+                cached_output = None
                 try:
                     cached_output, cache_metadata = store.retrieve_cached_output(
                         task, input_hash, cache_fn_hash
                     )
+                except CacheError as e:
+                    task.logger.info(
+                        "Failed to retrieve task from cache",
+                        input_hash=input_hash,
+                        cache_fn_hash=cache_fn_hash,
+                        version=task.version,
+                        cause=str(e),
+                    )
+                    TaskContext.get().is_cache_valid = False
+                    run_context.trace_hook.task_cache_status(
+                        task, input_hash, cache_fn_hash, cache_valid=False
+                    )
+
+                if cached_output is not None:
                     store.copy_cached_output_to_transaction_stage(
                         cached_output, cache_metadata, task
                     )
@@ -579,18 +594,6 @@ class MaterializationWrapper:
                         task, input_hash, cache_fn_hash, cache_metadata, cached_output
                     )
                     return cached_output
-                except CacheError as e:
-                    task.logger.info(
-                        "Failed to retrieve task from cache",
-                        input_hash=input_hash,
-                        cache_fn_hash=cache_fn_hash,
-                        version=task.version,
-                        cause=str(e),
-                    )
-                    TaskContext.get().is_cache_valid = False
-                    run_context.trace_hook.task_cache_status(
-                        task, input_hash, cache_fn_hash, cache_valid=False
-                    )
 
             if not task.lazy:
                 if assert_no_fresh_input and task.cache is not None:
