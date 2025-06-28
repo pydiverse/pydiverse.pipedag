@@ -561,7 +561,7 @@ class MaterializationWrapper:
                     )
 
             if not task.lazy and not skip_cache_lookup and not force_task_execution:
-                cached_output = None
+                cache_metadata = None
                 try:
                     cached_output, cache_metadata = store.retrieve_cached_output(
                         task, input_hash, cache_fn_hash
@@ -579,7 +579,7 @@ class MaterializationWrapper:
                         task, input_hash, cache_fn_hash, cache_valid=False
                     )
 
-                if cached_output is not None:
+                if cache_metadata is not None:
                     store.copy_cached_output_to_transaction_stage(
                         cached_output, cache_metadata, task
                     )
