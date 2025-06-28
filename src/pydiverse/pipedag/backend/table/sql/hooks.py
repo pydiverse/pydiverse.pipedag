@@ -333,6 +333,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         store: SQLTableStore,
         table: Table[sa.sql.expression.TextClause | sa.sql.expression.Selectable],
         stage_name,
+        without_config_context: bool = False,
     ):
         query = table.obj
         if isinstance(table.obj, (sa.Table, sa.sql.expression.Alias)):
@@ -379,42 +380,43 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
             cls._create_table_as_select(
                 table, schema, query, source_tables, store, suffix, unlogged
             )
-        cfg = cls.cfg()
-        invalid_rows, intermediate_tbls = None, None
-        if not cfg.disable_materialize_annotation_action:
-            try:
-                invalid_rows, intermediate_tbls = _sql_apply_materialize_annotation(
-                    table, schema, query, store, suffix, unlogged
-                )
-            except Exception as e:  # noqa
-                store.logger.error(
-                    "Failed to apply materialize annotation for table",
+        if not without_config_context:
+            cfg = cls.cfg()
+            invalid_rows, intermediate_tbls = None, None
+            if not cfg.disable_materialize_annotation_action:
+                try:
+                    invalid_rows, intermediate_tbls = _sql_apply_materialize_annotation(
+                        table, schema, query, store, suffix, unlogged
+                    )
+                except Exception as e:  # noqa
+                    store.logger.error(
+                        "Failed to apply materialize annotation for table",
+                        table=table.name,
+                        exception=str(e),
+                    )
+                    if not cfg.fault_tolerant_annotation_action:
+                        raise e
+            if cfg.cleanup_annotation_action_on_success and invalid_rows is not None:
+                store.logger.debug(
+                    "Cleaning up intermediate state after successful materialization",
                     table=table.name,
-                    exception=str(e),
                 )
-                if not cfg.fault_tolerant_annotation_action:
-                    raise e
-        if cfg.cleanup_annotation_action_on_success and invalid_rows is not None:
-            store.logger.debug(
-                "Cleaning up intermediate state after successful materialization",
-                table=table.name,
-            )
-            store.execute(
-                store.execute(DropTable(invalid_rows, schema, if_exists=True)),
-                truncate_printed_select=True,
-            )
-        if (
-            cfg.cleanup_annotation_action_intermediate_state
-            and intermediate_tbls is not None
-        ):
-            store.logger.debug(
-                "Cleaning up intermediate state after materialization",
-                table=table.name,
-            )
-            for tbl in intermediate_tbls:
-                store.drop_subquery_table(
-                    tbl, schema, neighbor_table=table, if_exists=True
+                store.execute(
+                    store.execute(DropTable(invalid_rows, schema, if_exists=True)),
+                    truncate_printed_select=True,
                 )
+            if (
+                cfg.cleanup_annotation_action_intermediate_state
+                and intermediate_tbls is not None
+            ):
+                store.logger.debug(
+                    "Cleaning up intermediate state after materialization",
+                    table=table.name,
+                )
+                for tbl in intermediate_tbls:
+                    store.drop_subquery_table(
+                        tbl, schema, neighbor_table=table, if_exists=True
+                    )
 
         store.optional_pause_for_db_transactionality("table_create")
 

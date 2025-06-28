@@ -1211,7 +1211,9 @@ class SQLTableStore(BaseTableStore):
         # Copy table via executing a select statement with respective hook
         RunContext.get().trace_hook.cache_pre_transfer(dest_tbl)
         hook = self.get_m_table_hook(dest_tbl)
-        hook.materialize(self, dest_tbl, dest_tbl.stage.transaction_name)
+        hook.materialize(
+            self, dest_tbl, dest_tbl.stage.transaction_name, without_config_context=True
+        )
         RunContext.get().trace_hook.cache_post_transfer(dest_tbl)
 
     def _deferred_copy_table(
