@@ -390,6 +390,107 @@ hook_args
 
     (default: 'numpy')
 
+  polars
+  : disable_materialize_annotation_action
+    : Disable annotation based materialize actions.
+
+    By Default, pipedag will use validation functionality of dataframely or colspec
+    in case task return arguments are annotated with column specification classes.
+    This is also a way to specify more precise datatypes when writing to database.
+    Example:
+    ```python
+    import polars as pl
+    import pydiverse.colspec as cs
+    class MyColSpec(cs.ColSpec):
+        a: cs.Int16
+        b: cs.String
+    @materialize
+    def my_task() -> MyColSpec:
+        return pl.DataFrame(dict(a=[1, 2], b=["x", "y"]))
+    ```
+
+    (default: `False`)
+
+  : disable_retrieve_annotation_action
+    : Disable annotation based retrieve actions.
+
+    By Default, pipedag will use validation functionality of dataframely or colspec
+    in case task parameters are annotated with column specification classes.
+    This is also a way to specify more precise datatypes when writing to database.
+    Example:
+    ```python
+    import polars as pl
+    import pydiverse.colspec as cs
+    class MyColSpec(cs.ColSpec):
+        a: cs.Int16
+        b: cs.String
+    @materialize(input_type=pl.DataFrame)
+    def my_task(tbl: MyColSpec) -> pl.DataFrame:
+        return tbl.filter(pl.col("a") > 0)
+    ```
+
+    (default: `False`)
+
+  : fault_tolerant_annotation_action
+    : If set to `True`, the annotation based actions will never fail.
+        Instead, an error message is printed to the log.
+
+    (default: `False`)
+
+  sql
+  : disable_materialize_annotation_action
+    : Disable annotation based materialize actions.
+
+    By Default, pipedag will use validation functionality of dataframely or colspec
+    in case task return arguments are annotated with column specification classes.
+    For `input_type=pdt.SqlAlchemy`, this is also a way to specify more precise
+    datatypes when writing to database.
+
+    Example:
+    ```python
+    import polars as pl
+    import pydiverse.colspec as cs
+    class MyColSpec(cs.ColSpec):
+        a: cs.Int16
+        b: cs.String
+    @materialize(input_type=pdt.SqlAlchemy)
+    def my_task(tbl: pdt.Table) -> MyColSpec:
+        return tbl >> mutate(a=1, b="b") >> pdt.select(tbl.a, tbl.b)
+    ```
+
+    (default: `False`)
+
+  : disable_retrieve_annotation_action
+    : Disable annotation based retrieve actions.
+
+    Currently, this has no effect for SQL based table hooks. This argument still
+    exists for consistency with polars table hooks.
+
+    (default: `False`)
+
+  : cleanup_annotation_action_on_success
+    : Whether to drop the table used for rows which failed the materialize validation.
+
+    While it is nice to clean up empty tables, the downside of this is that the presence
+    of tables in a schema varies especially with `fault_tolerant_annotation_action=True`.
+
+    (default: `False`)
+
+  : cleanup_annotation_action_intermediate_state
+    : Whether to drop intermediate tables used for validating output tables.
+
+    Some checks require subqueries to perform. Subqueries are always a risk to confuse
+    the query optimizer. Thus it is nearly always better to materialize subqueries
+    before their use. Those intermediate tables, however, are not very interesting for
+    the user. Pipedag will still print the queries that produced those intermediate tables.
+
+    (default: `True`)
+
+  : fault_tolerant_annotation_action
+    : If set to `True`, the annotation based actions will never fail.
+        Instead, an error message is printed to the log.
+
+    (default: `False`)
 
 local_table_cache
 : See [](#section-local_table_cache). *Optional*

@@ -2,10 +2,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 from tests.util.pytest_raises import swallowing_raises
-from tests.util.sql import compile_sql, select_as
+from tests.util.sql import select_as
 
 __all__ = [
     "swallowing_raises",
-    "compile_sql",
     "select_as",
 ]

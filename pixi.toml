@@ -85,7 +85,7 @@ pydiverse-transform = ">=0.5.2,<0.6"
 pydiverse-transform = "<0.2"
 
 [feature.colspec.dependencies]
-pydiverse-colspec = ">=0.2.1,<0.3"
+pydiverse-colspec = ">=0.2.2,<0.3"
 
 [feature.dataframely.dependencies]
 dataframely = ">=1.2.1,<2"

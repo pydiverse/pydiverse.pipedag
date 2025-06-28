@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.schema import DDLElement
 from sqlalchemy.sql import Select
-from sqlalchemy.sql.elements import TextClause
+from sqlalchemy.sql.elements import TextClause, TryCast
 
 __all__ = [
     "CreateSchema",
@@ -1333,6 +1333,23 @@ def visit_lock_source_table_ibm_db_sa(
     schema = preparer.format_schema(lock_source_table.schema)
 
     return f"LOCK TABLE {schema}.{name} IN SHARE MODE"
+
+
+@compiles(TryCast, "postgresql")
+def visit_try_cast_postgresql(element, compiler, **kw):
+    """
+    Compile TryCast for PostgreSQL using pg_input_is_valid function.
+
+    Uses CASE WHEN pg_input_is_valid(value, type) THEN CAST(value AS type) ELSE NULL END
+    to safely attempt casting and return NULL if the cast would fail.
+    """
+    value = compiler.process(element.clause, **kw)
+    target_type = str(element.type)
+
+    return (
+        f"CASE WHEN pg_input_is_valid({value}::VARCHAR, '{target_type}') "
+        f"THEN CAST({value} AS {target_type}) ELSE NULL END"
+    )
 
 
 def _get_nullable_change_statements(change, compiler):

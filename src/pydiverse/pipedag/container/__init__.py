@@ -5,7 +5,7 @@ import copy
 import typing
 from collections.abc import Iterable
 from functools import total_ordering
-from typing import TYPE_CHECKING, Any, Generic
+from typing import TYPE_CHECKING, Any, Generic, overload
 
 import sqlalchemy as sa
 import structlog
@@ -263,6 +263,7 @@ class Table(Generic[T]):
                             # dematerialize as sa.Table if it would transfer all rows
                             # to python when dematerializing with input_type
                             return_as_type = sa.Table
+                    return return_as_type
 
                 if isinstance(return_as_type, Iterable):
                     return_as_type = tuple(
@@ -687,3 +688,30 @@ def attach_annotation(annotation: type, arg):
                 attach_annotation(anno, value)
     if isinstance(arg, (Table, Blob, RawSql)):
         arg.annotation = annotation
+
+
+try:
+    import pydiverse.transform as pdt
+
+    @overload
+    def materialize_table(name: str | None = None, table_prefix: str | None = None): ...
+
+    @pdt.verb
+    def materialize_table(
+        tbl: pdt.Table, name: str | None = None, table_prefix: str | None = None
+    ):
+        # use imperative materialization of pipedag within pydiverse transform task
+        if name is None:
+            name = table_prefix or ""
+            name += tbl._ast.name or ""
+            name += "%%"
+        if tbl >> pdt.build_query():
+            return Table(tbl, name=name).materialize(return_as_type=pdt.SqlAlchemy)
+        return tbl >> pdt.alias()
+except ImportError:
+    # If pydiverse.transform is not available, we cannot use the materialize_table verb
+    def materialize_table(tbl: Any, table_prefix: str | None = None):
+        raise ImportError(
+            "pydiverse.transform is not available. "
+            "Please install pydiverse-transform to use materialize_table."
+        )

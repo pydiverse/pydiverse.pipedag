@@ -13,10 +13,11 @@ from pydiverse.pipedag.materialize.core import (
     input_stage_versions,
     materialize,
 )
+from pydiverse.pipedag.util.sql import compile_sql
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import ALL_INSTANCES, skip_instances, with_instances
-from tests.util import compile_sql, select_as
+from tests.util import select_as
 from tests.util import tasks_library as m
 from tests.util import tasks_library_imperative as m2
 from tests.util.spy import spy_task

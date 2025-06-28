@@ -23,6 +23,7 @@ from .container import (
     RawSql,
     Schema,
     Table,
+    materialize_table,
 )
 from .context import ConfigContext, StageLockContext
 from .core.task import (
@@ -64,4 +65,5 @@ __all__ = [
     "StageLockContext",
     "AUTO_VERSION",
     "backend",
+    "materialize_table",
 ]

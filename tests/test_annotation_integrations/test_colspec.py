@@ -11,8 +11,7 @@ import sqlalchemy as sa
 import structlog
 from polars.testing import assert_frame_equal
 
-import pydiverse.pipedag as dag
-from pydiverse.pipedag import Flow, Stage, materialize
+from pydiverse.pipedag import Flow, Stage, materialize, materialize_table
 from pydiverse.pipedag.context.context import CacheValidationMode, ConfigContext
 from pydiverse.pipedag.errors import HookCheckException
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
@@ -50,7 +49,7 @@ pytestmark = [
 
 class MyFirstColSpec(cs.ColSpec):
     a = cs.Integer(primary_key=True)
-    b = cs.Integer()
+    b = cs.Int16()  # TODO: replace with cs.Int16 once ColSpec 0.2.2 is on conda-forge
     c = cs.String  # cs.Enum(["x", "y"], nullable=True)
 
 
@@ -153,19 +152,14 @@ def get_data(name: str):
     return globals()[f"data_{name}"]()
 
 
-@pdt.verb
-def materialize_tbl(tbl: pdt.Table, table_prefix: str | None = None):
-    # use imperative materialization of pipedag within pydiverse transform task
-    name = table_prefix or ""
-    name += tbl._ast.name or ""
-    name += "%%"
-    return dag.Table(tbl, name=name).materialize()
-
-
 @materialize(nout=3, input_type=pdt.SqlAlchemy)
 def exec_filter(c: cs.Collection):
     cfg = cs.config.Config.default
-    cfg.materialize_hook = lambda df, table_prefix: df >> materialize_tbl(table_prefix)
+
+    def materialize_hook(tbl, table_prefix):
+        return tbl >> materialize_table(table_prefix)
+
+    cfg.materialize_hook = materialize_hook
     out, failure = c.filter(cfg=cfg, cast=True)
     return (
         out,
@@ -192,8 +186,13 @@ def test_filter_without_filter_without_rule_violation():
         first, second = data_without_filter_without_rule_violation()
 
         assert isinstance(out, SimpleCollection)
-        assert_frame_equal(out.first, first >> pdt.export(pdt.Polars(lazy=True)))
-        assert_frame_equal(out.second, second >> pdt.export(pdt.Polars(lazy=True)))
+        assert_frame_equal(
+            out.first.sort(by="a"),
+            (first >> pdt.export(pdt.Polars(lazy=True))).cast(dict(b=pl.Int16)),
+        )
+        assert_frame_equal(
+            out.second.sort(by="a"), second >> pdt.export(pdt.Polars(lazy=True))
+        )
         assert failure.first.select(pl.len()).collect().item() == 0
         assert failure.second.select(pl.len()).collect().item() == 0
 
@@ -244,7 +243,9 @@ def test_filter_with_filter_without_rule_violation():
         assert isinstance(out, MyCollection)
         assert_frame_equal(
             out.first,
-            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(dict(c=pl.String)),
+            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(
+                dict(b=pl.Int16, c=pl.String)
+            ),
         )
         assert_frame_equal(
             out.second,
@@ -281,7 +282,9 @@ def test_filter_with_filter_with_rule_violation():
         assert isinstance(out, MyCollection)
         assert_frame_equal(
             out.first,
-            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(dict(c=pl.String)),
+            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(
+                dict(b=pl.Int16, c=pl.String)
+            ),
         )
         assert_frame_equal(
             out.second,
@@ -326,14 +329,14 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
     else:
 
         @materialize(nout=2)
-        def get_anno_data(name: str) -> tuple[pl.LazyFrame, pl.LazyFrame]:
+        def get_anno_data(name: str) -> tuple[pdt.Table, pdt.Table]:
             return globals()[f"data_{name}"]()
 
     @materialize(input_type=pdt.Polars)
     def consumer(first: MyFirstColSpec, second: MySecondColSpec):
         assert [(c.name, c.dtype()) for c in first] == [
             ("a", pdc.Int64()),
-            ("b", pdc.Int64()),
+            ("b", pdc.Int16() if validate_get_data or dy else pdc.Int64()),
             ("c", pdc.String()),
         ]
         assert [(c.name, c.dtype()) for c in second] == [
@@ -344,6 +347,11 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
         assert len(first >> pdt.export(pdt.Polars())) == 3
         assert len(second >> pdt.export(pdt.Polars())) in [3, 4, 5]
 
+        if not validate_get_data and dy is None:
+            # colspec will not do casting without dataframely
+            # In case of validate_get_data, the type should already be
+            # smallint in the database.
+            first = first >> pdt.mutate(b=first.b.cast(pdt.Int16()))
         if not validate_get_data and with_violation:
             if with_filter:
                 # this case does not occur for polars versions since they abort in cast
@@ -358,6 +366,11 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
             ):
                 MySecondColSpec.validate(second)
         else:
+            if not validate_get_data and dy is None:
+                # colspec will not do casting without dataframely
+                # In case of validate_get_data, the type should already be
+                # smallint in the database.
+                first = first >> pdt.mutate(b=first.b.cast(pdt.Int16()))
             assert MyFirstColSpec.is_valid(first)
             assert MySecondColSpec.is_valid(second)
 
@@ -365,7 +378,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
     def consumer2(first: MyFirstColSpec, second: MySecondColSpec):
         assert [(c.name, c.dtype()) for c in first] == [
             ("a", pdc.Int64()),
-            ("b", pdc.Int64()),
+            ("b", pdc.Int16() if validate_get_data or dy else pdc.Int64()),
             ("c", pdc.String()),
         ]
         assert [(c.name, c.dtype()) for c in second] == [
@@ -441,7 +454,7 @@ def test_annotations_not_fail_fast(
     def consumer(first: MyFirstColSpec, second: MySecondColSpec):
         assert [(c.name, c.dtype()) for c in first] == [
             ("a", pdc.Int64()),
-            ("b", pdc.Int64()),
+            ("b", pdc.Int16() if validate_get_data or dy else pdc.Int64()),
             ("c", pdc.String()),
         ]
         assert [(c.name, c.dtype()) for c in second] == [
@@ -452,6 +465,11 @@ def test_annotations_not_fail_fast(
         assert len(first >> pdt.export(pdt.Polars())) == 3
         assert len(second >> pdt.export(pdt.Polars())) in [3, 4, 5]
 
+        if not validate_get_data and dy is None:
+            # colspec will not do casting without dataframely
+            # In case of validate_get_data, the type should already be
+            # smallint in the database.
+            first = first >> pdt.mutate(b=first.b.cast(pdt.Int16()))
         assert MyFirstColSpec.is_valid(first)
         assert MySecondColSpec.is_valid(second)
 
@@ -459,7 +477,7 @@ def test_annotations_not_fail_fast(
     def consumer2(first: MyFirstColSpec, second: MySecondColSpec):
         assert [(c.name, c.dtype()) for c in first] == [
             ("a", pdc.Int64()),
-            ("b", pdc.Int64()),
+            ("b", pdc.Int16() if validate_get_data or dy else pdc.Int64()),
             ("c", pdc.String()),
         ]
         assert [(c.name, c.dtype()) for c in second] == [
@@ -512,14 +530,19 @@ def test_annotations_fault_tolerant(
     else:
 
         @materialize(nout=2)
-        def get_anno_data(name: str) -> tuple[pl.LazyFrame, pl.LazyFrame]:
+        def get_anno_data(name: str) -> tuple[pdt.Table, pdt.Table]:
             return globals()[f"data_{name}"]()
 
     @materialize(input_type=pdt.Polars)
     def consumer(first: MyFirstColSpec, second: MySecondColSpec):
         assert [(c.name, c.dtype()) for c in first] == [
             ("a", pdc.Int64()),
-            ("b", pdc.Int64()),
+            (
+                "b",
+                pdc.Int16()
+                if (validate_get_data and (not with_violation or with_filter)) or dy
+                else pdc.Int64(),
+            ),
             ("c", pdc.String()),
         ]
         assert [(c.name, c.dtype()) for c in second] == [
@@ -530,6 +553,13 @@ def test_annotations_fault_tolerant(
         assert len(first >> pdt.export(pdt.Polars())) == 3
         assert len(second >> pdt.export(pdt.Polars())) in [3, 4, 5]
 
+        if (
+            not validate_get_data or (with_violation and not with_filter)
+        ) and dy is None:
+            # colspec will not do casting without dataframely
+            # In case of validate_get_data, the type should already be
+            # smallint in the database.
+            first = first >> pdt.mutate(b=first.b.cast(pdt.Int16()))
         if with_violation:
             if with_filter:
                 MyFirstColSpec.validate(first)
@@ -554,7 +584,12 @@ def test_annotations_fault_tolerant(
     def consumer2(first: MyFirstColSpec, second: MySecondColSpec):
         assert [(c.name, c.dtype()) for c in first] == [
             ("a", pdc.Int64()),
-            ("b", pdc.Int64()),
+            (
+                "b",
+                pdc.Int16()
+                if (validate_get_data and (not with_violation or with_filter)) or dy
+                else pdc.Int64(),
+            ),
             ("c", pdc.String()),
         ]
         assert [(c.name, c.dtype()) for c in second] == [
@@ -651,7 +686,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
                 assert_frame_equal(
                     out.first >> pdt.export(pdt.Polars(lazy=True)),
                     pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(
-                        dict(c=pl.String)
+                        dict(b=pl.Int16, c=pl.String)
                     ),
                 )
                 assert_frame_equal(
@@ -713,9 +748,7 @@ def test_type_mapping():
 
     @materialize(input_type=sa.Table)
     def consumer(first: MyFirstColSpec, second: MySecondColSpec):
-        # There is no casting implemented without dataframely
-        # assert isinstance(first.c.b.type, sa.SmallInteger)
-        assert isinstance(first.c.b.type, sa.BigInteger)
+        assert isinstance(first.c.b.type, sa.SmallInteger)
         assert isinstance(second.c.b.type, sa.BigInteger)
         assert not isinstance(second.c.b.type, sa.SmallInteger)
 
@@ -725,3 +758,133 @@ def test_type_mapping():
             consumer(first, second)
 
     flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+
+
+@pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
+@pytest.mark.parametrize(
+    "with_filter, with_violation, validate_get_data",
+    [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
+)
+def test_annotations_sql(
+    with_filter: bool, with_violation: bool, validate_get_data: bool
+):
+    @materialize(nout=2)
+    def load_raw_data(name: str):
+        return globals()[f"data_{name}"]()
+
+    if validate_get_data:
+
+        @materialize(nout=2, input_type=pdt.SqlAlchemy)
+        def get_anno_data_sql(
+            first: MyFirstColSpec, second: MySecondColSpec
+        ) -> tuple[MyFirstColSpec, MySecondColSpec]:
+            return first >> pdt.alias("first2"), second >> pdt.alias("second2")
+    else:
+
+        @materialize(nout=2, input_type=pdt.SqlAlchemy)
+        def get_anno_data_sql(
+            first: pdt.Table, second: pdt.Table
+        ) -> tuple[pdt.Table, pdt.Table]:
+            return first >> pdt.alias("first2"), second >> pdt.alias("second2")
+
+    def get_anno_data(name: str):
+        first, second = load_raw_data(name)
+        return get_anno_data_sql(first, second)
+
+    @materialize(input_type=pdt.SqlAlchemy)
+    def consumer(first: MyFirstColSpec, second: MySecondColSpec):
+        assert [(c.name, c.dtype()) for c in first] == [
+            ("a", pdc.Int64()),
+            (
+                "b",
+                pdc.Int16()
+                if validate_get_data and (not with_violation or with_filter)
+                else pdc.Int64(),
+            ),
+            ("c", pdc.String()),
+        ]
+        assert [(c.name, c.dtype()) for c in second] == [
+            ("a", pdc.Int64()),
+            ("b", pdc.Int64()),
+            ("c", pdc.String()),
+        ]
+        assert len(first >> pdt.export(pdt.Polars())) == 3
+        assert len(second >> pdt.export(pdt.Polars())) in [3, 4, 5]
+
+        # Conversion from sqlalchemy backend to polars backend always uses 64bit integer
+        # intentionally
+        first = (
+            first
+            >> pdt.collect(pdt.Polars())
+            >> pdt.mutate(b=first.b.cast(pdt.Int16()))
+        )
+        if not validate_get_data and with_violation:
+            if with_filter:
+                # this case does not occur for polars versions since they abort in cast
+                MyFirstColSpec.validate(first)
+            else:
+                with pytest.raises(
+                    cs.exc.RuleValidationError, match="1 rules failed validation"
+                ):
+                    MyFirstColSpec.validate(first)
+            with pytest.raises(
+                cs.exc.RuleValidationError, match="2 rules failed validation"
+            ):
+                MySecondColSpec.validate(second)
+        else:
+            assert MyFirstColSpec.is_valid(first >> pdt.collect(pdt.Polars()))
+            assert MySecondColSpec.is_valid(second >> pdt.collect(pdt.Polars()))
+
+    @materialize(input_type=pdt.Polars)
+    def consumer2(first: MyFirstColSpec, second: MySecondColSpec):
+        assert [(c.name, c.dtype()) for c in first] == [
+            ("a", pdc.Int64()),
+            (
+                "b",
+                pdc.Int16()
+                if validate_get_data and (not with_violation or with_filter)
+                else pdc.Int64(),
+            ),
+            ("c", pdc.String()),
+        ]
+        assert [(c.name, c.dtype()) for c in second] == [
+            ("a", pdc.Int64()),
+            ("b", pdc.Int64()),
+            ("c", pdc.String()),
+        ]
+        assert len(first >> pdt.export(pdt.Polars())) == 3
+        assert len(second >> pdt.export(pdt.Polars())) in [3, 4, 5]
+
+    with Flow() as flow:
+        name = (
+            f"with{'out' if not with_filter else ''}_filter"
+            f"_with{'out' if not with_violation else ''}_rule_violation"
+        )
+        with Stage("s01"):
+            first, second = get_anno_data(name)
+            consumer(first, second)
+        with Stage("s02"):
+            consumer2(first, second)
+
+    if with_violation and validate_get_data:
+        # Validation at end of get_anno_data task fails
+        with pytest.raises(
+            HookCheckException,
+            match="failed validation with MyFirstColSpec; Failure counts: "
+            "{'b|min': 1, 'c|nullability': 1};"
+            if with_filter
+            else "{'_primary_key_': 2};",
+        ):
+            flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+    elif with_violation and not validate_get_data and with_filter:
+        # # This only raises with polars operations since no cast is implemented without
+        # # dataframely
+        # with pytest.raises(
+        #     RuntimeError,
+        #     match="Failed to retrieve table '<Table 'get_anno_data",
+        # ):
+        ret = flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+        assert ret.successful
+    else:
+        ret = flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+        assert ret.successful

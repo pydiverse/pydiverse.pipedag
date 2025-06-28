@@ -22,6 +22,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateAlias,
     CreateDatabase,
     CreateSchema,
+    CreateTableAsSelect,
     DropAlias,
     DropSchema,
     DropSchemaContent,
@@ -545,6 +546,52 @@ class SQLTableStore(BaseTableStore):
                     raise
                 time.sleep(retry_iteration * retry_iteration * 1.2)
         return tbl
+
+    def rename_table(self, table: Table, to_name: str, schema: Schema):
+        """Method can be overwritten by derived table stores like ParquetTableStore."""
+        self.execute(RenameTable(table.name, to_name, schema))
+
+    def write_subquery(
+        self,
+        query: sa.Text
+        | sqlalchemy.sql.expression.Selectable
+        | sqlalchemy.sql.expression.TextClause,
+        to_name: str,
+        neighbor_table: Table,
+        *,
+        unlogged: bool = False,
+        suffix: str | None = None,
+    ):
+        """Write a query to a table in same schema as neighbor_table.
+
+        This is mainly for overriding by derived table stores like ParquetTableStore.
+        """
+        schema = self.get_schema(neighbor_table.stage.transaction_name)
+        self.execute(
+            CreateTableAsSelect(
+                to_name,
+                schema,
+                query,
+                unlogged=unlogged,
+                suffix=suffix or "",
+            )
+        )
+        return schema
+
+    def drop_subquery_table(
+        self,
+        drop_name: str,
+        schema: Schema | str,
+        neighbor_table: Table,
+        if_exists: bool = False,
+        cascade: bool = False,
+    ):
+        """Drop a table in same schema as neighbor_table.
+
+        This is mainly for overriding by derived table stores like ParquetTableStore.
+        """
+        _ = neighbor_table
+        self.execute(DropTable(drop_name, schema, if_exists=if_exists, cascade=cascade))
 
     def check_materialization_details_supported(self, label: str | None) -> None:
         if label is None:

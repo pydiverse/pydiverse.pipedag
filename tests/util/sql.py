@@ -29,11 +29,6 @@ def sql_table_expr(cols: dict):
     return sa.union_all(*queries)
 
 
-def compile_sql(query):
-    engine = ConfigContext.get().store.table_store.engine
-    return str(query.compile(engine, compile_kwargs={"literal_binds": True}))
-
-
 def get_config_with_table_store(
     base_cfg: ConfigContext, table_store_class: type[BaseTableStore]
 ):

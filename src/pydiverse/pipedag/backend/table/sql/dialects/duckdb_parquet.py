@@ -470,6 +470,85 @@ class ParquetTableStore(DuckDBTableStore):
         # ParquetTableStore does not support indexes. They are ignored.
         pass
 
+    def rename_table(self, table: Table, to_name: str, schema: Schema):
+        _ = schema  # ignore given schema
+        schema = self.get_schema(table.stage.transaction_name)
+        from_path = self.get_table_schema_path(table.name, schema)
+        to_path = self.get_table_schema_path(to_name, schema)
+        # TODO: think about how to do this with S3
+        os.rename(from_path, to_path)
+        # drop view
+        self.execute(
+            DropView(
+                table.name,
+                schema,
+            )
+        )
+        # create view again
+        self.execute(
+            CreateViewAsSelect(to_name, schema, self._read_parquet_query(to_path))
+        )
+
+    def write_subquery(
+        self,
+        query,
+        to_name,
+        neighbor_table: Table,
+        *,
+        unlogged: bool = False,
+        suffix: str | None = None,
+    ):
+        """Write a query to a table in same schema as neighbor_table.
+
+        This is mainly for overriding by derived table stores like ParquetTableStore.
+        """
+        _ = unlogged, suffix  # materialization details not used by ParquetTableStore
+        schema = self.get_schema(neighbor_table.stage.transaction_name)
+        file_path = self.get_table_schema_path(to_name, schema)
+        self.execute(
+            [
+                CopySelectTo(
+                    file_path,
+                    "PARQUET",
+                    query,
+                ),
+                CreateViewAsSelect(
+                    to_name, schema, self._read_parquet_query(file_path)
+                ),
+            ]
+        )
+        return schema
+
+    def drop_subquery_table(
+        self,
+        drop_name: str,
+        schema: Schema | str,
+        neighbor_table: Table,
+        if_exists: bool = False,
+        cascade: bool = False,
+    ):
+        """Drop a table in same schema as neighbor_table.
+
+        This is mainly for overriding by derived table stores like ParquetTableStore.
+        """
+        _ = schema  # ignore given schema; use neighbor_table schema instead
+        _ = cascade
+        schema = self.get_schema(neighbor_table.stage.transaction_name)
+        drop_path = self.get_table_schema_path(drop_name, schema)
+        # TODO: think about how to do this with S3
+        try:
+            os.remove(drop_path)
+        except OSError as e:
+            if not if_exists:
+                raise e
+        # drop view
+        self.execute(
+            DropView(
+                drop_name,
+                schema,
+            )
+        )
+
 
 @ParquetTableStore.register_table(pd)
 class PandasTableHook(TableHook[ParquetTableStore]):
