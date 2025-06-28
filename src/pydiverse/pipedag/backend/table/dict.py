@@ -153,7 +153,13 @@ class PandasTableHook(TableHook[DictTableStore]):
         return type_ == pd.DataFrame
 
     @classmethod
-    def materialize(cls, store, table: Table[pd.DataFrame], stage_name):
+    def materialize(
+        cls,
+        store,
+        table: Table[pd.DataFrame],
+        stage_name,
+        without_config_context: bool = False,
+    ):
         if table.name is not None:
             table.obj.attrs["name"] = table.name
         store.store[stage_name][table.name] = table.obj
@@ -216,6 +222,7 @@ class PydiverseTransformTableHook(TableHook[DictTableStore]):
         store,
         table: Table[pdt.Table],
         stage_name,
+        without_config_context: bool = False,
     ):
         from pydiverse.transform.extended import Pandas, collect
 

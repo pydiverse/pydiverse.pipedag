@@ -565,7 +565,11 @@ class PandasTableHook(TableHook[ParquetTableStore]):
 
     @classmethod
     def materialize(
-        cls, store: ParquetTableStore, table: Table[pd.DataFrame], stage_name: str
+        cls,
+        store: ParquetTableStore,
+        table: Table[pd.DataFrame],
+        stage_name: str,
+        without_config_context: bool = False,
     ):
         file_path = store.get_table_path(table)
         schema = store.get_schema(table.stage.current_name)

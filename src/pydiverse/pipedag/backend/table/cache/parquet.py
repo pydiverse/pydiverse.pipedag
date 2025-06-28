@@ -100,7 +100,13 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         return type_ == pd.DataFrame
 
     @classmethod
-    def materialize(cls, store: ParquetTableCache, table: Table, stage_name: str):
+    def materialize(
+        cls,
+        store: ParquetTableCache,
+        table: Table,
+        stage_name: str,
+        without_config_context: bool = False,
+    ):
         path = store.get_table_path(table, ".parquet")
 
         df: pd.DataFrame = table.obj
@@ -183,7 +189,11 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
 
     @classmethod
     def materialize(
-        cls, store: ParquetTableCache, table: Table[pl.DataFrame], stage_name: str
+        cls,
+        store: ParquetTableCache,
+        table: Table[pl.DataFrame],
+        stage_name: str,
+        without_config_context: bool = False,
     ):
         path = store.get_table_path(table, ".parquet")
         df = table.obj
@@ -268,7 +278,11 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
 
     @classmethod
     def materialize(
-        cls, store: ParquetTableCache, table: Table[pdt.Table], stage_name: str
+        cls,
+        store: ParquetTableCache,
+        table: Table[pdt.Table],
+        stage_name: str,
+        without_config_context: bool = False,
     ):
         from pydiverse.transform.core.verbs import collect
         from pydiverse.transform.eager import PandasTableImpl
@@ -327,7 +341,11 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
 
     @classmethod
     def materialize(
-        cls, store: ParquetTableCache, table: Table[pdt.Table], stage_name: str
+        cls,
+        store: ParquetTableCache,
+        table: Table[pdt.Table],
+        stage_name: str,
+        without_config_context: bool = False,
     ):
         from pydiverse.transform.extended import (
             Polars,

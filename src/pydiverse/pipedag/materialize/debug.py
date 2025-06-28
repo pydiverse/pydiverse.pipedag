@@ -101,7 +101,7 @@ def materialize_table(
                 "config_context: "
                 f"{table_store.get_schema(schema_name).get()} != {schema.get()}"
             )
-        hook.materialize(table_store, table, schema_name)
+        hook.materialize(table_store, table, schema_name, without_config_context=True)
     else:
         table_store.store_table(table, task)
 

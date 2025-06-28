@@ -553,7 +553,13 @@ class ExternalTableReferenceHook(TableHook[SQLTableStore]):
         return False
 
     @classmethod
-    def materialize(cls, store: SQLTableStore, table: Table, stage_name: str):
+    def materialize(
+        cls,
+        store: SQLTableStore,
+        table: Table,
+        stage_name: str,
+        without_config_context: bool = False,
+    ):
         # For an external table reference, we don't need to materialize anything.
         # This is any table referenced by a table reference should already exist
         # in the schema.
@@ -784,7 +790,11 @@ class PandasTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
 
     @classmethod
     def materialize(
-        cls, store: SQLTableStore, table: Table[pd.DataFrame], stage_name: str
+        cls,
+        store: SQLTableStore,
+        table: Table[pd.DataFrame],
+        stage_name: str,
+        without_config_context: bool = False,
     ):
         df = table.obj.copy(deep=False)
         schema = store.get_schema(stage_name)
@@ -1130,7 +1140,13 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         return type_ == pl.DataFrame
 
     @classmethod
-    def materialize(cls, store, table: Table[pl.DataFrame], stage_name: str):
+    def materialize(
+        cls,
+        store,
+        table: Table[pl.DataFrame],
+        stage_name: str,
+        without_config_context: bool = False,
+    ):
         # Materialization for polars happens by first converting the dataframe to
         # a pyarrow backed pandas dataframe, and then calling the PandasTableHook
         # for materialization.
@@ -1266,7 +1282,13 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         return type_ == pl.LazyFrame
 
     @classmethod
-    def materialize(cls, store, table: Table[pl.LazyFrame], stage_name):
+    def materialize(
+        cls,
+        store,
+        table: Table[pl.LazyFrame],
+        stage_name,
+        without_config_context: bool = False,
+    ):
         t = table.obj
         table = table.copy_without_obj()
         table.obj = t.collect()
@@ -1349,7 +1371,13 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         return type_ == Tibble
 
     @classmethod
-    def materialize(cls, store, table: Table[Tibble], stage_name):
+    def materialize(
+        cls,
+        store,
+        table: Table[Tibble],
+        stage_name,
+        without_config_context: bool = False,
+    ):
         warnings.warn(
             "tidypolars support is deprecated since tidypolars does not work "
             "with current version of polars",
@@ -1450,7 +1478,13 @@ class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
         return issubclass(type_, SQLTableImpl)
 
     @classmethod
-    def materialize(cls, store, table: Table[pdt.Table], stage_name):
+    def materialize(
+        cls,
+        store,
+        table: Table[pdt.Table],
+        stage_name,
+        without_config_context: bool = False,
+    ):
         from pydiverse.transform.core.verbs import collect
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
@@ -1528,7 +1562,13 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         return issubclass(type_, SqlAlchemy)
 
     @classmethod
-    def materialize(cls, store, table: Table[pdt.Table], stage_name):
+    def materialize(
+        cls,
+        store,
+        table: Table[pdt.Table],
+        stage_name,
+        without_config_context: bool = False,
+    ):
         from pydiverse.transform.extended import (
             Polars,
             build_query,
@@ -1651,7 +1691,13 @@ class IbisTableHook(TableHook[SQLTableStore]):
         return True
 
     @classmethod
-    def materialize(cls, store, table: Table[ibis.api.Table], stage_name):
+    def materialize(
+        cls,
+        store,
+        table: Table[ibis.api.Table],
+        stage_name,
+        without_config_context: bool = False,
+    ):
         t = table.obj
         table = table.copy_without_obj()
         table.obj = sa.text(cls.lazy_query_str(store, t))

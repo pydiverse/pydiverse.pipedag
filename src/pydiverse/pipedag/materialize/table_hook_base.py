@@ -71,7 +71,11 @@ class TableHook(Generic[TableHookResolverT], ABC):
     @classmethod
     @abstractmethod
     def materialize(
-        cls, store: TableHookResolverT, table: Table, stage_name: str
+        cls,
+        store: TableHookResolverT,
+        table: Table,
+        stage_name: str,
+        without_config_context: bool = False,
     ) -> None:
         """Materialize a table object
 
