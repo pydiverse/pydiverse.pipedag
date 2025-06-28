@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import copy
+import inspect
 import typing
 from collections.abc import Iterable
 from functools import total_ordering
@@ -665,7 +666,8 @@ def attach_annotation(annotation: type, arg):
         anno_origin = typing.get_origin(annotation)
         anno_args = typing.get_args(annotation)
         if (
-            issubclass(anno_origin, dict)
+            inspect.isclass(anno_origin)
+            and issubclass(anno_origin, dict)
             and len(anno_args) == 2
             and isinstance(arg, dict)
         ):
@@ -673,14 +675,16 @@ def attach_annotation(annotation: type, arg):
                 attach_annotation(anno_args[0], key)
                 attach_annotation(anno_args[1], value)
         elif (
-            issubclass(anno_origin, list)
+            inspect.isclass(anno_origin)
+            and issubclass(anno_origin, list)
             and len(anno_args) == 1
             and isinstance(arg, Iterable)
         ):
             for value in arg:
                 attach_annotation(anno_args[0], value)
         elif (
-            issubclass(anno_origin, tuple)
+            inspect.isclass(anno_origin)
+            and issubclass(anno_origin, tuple)
             and isinstance(arg, typing.Sized)
             and len(anno_args) == len(arg)
         ):
