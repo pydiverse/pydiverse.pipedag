@@ -36,7 +36,7 @@ def test_smoke_table_reference():
         schema = Schema("user_controlled_schema", prefix="", suffix="")
         table_name = "external_table"
         table_store.execute(CreateSchema(schema, if_not_exists=True))
-        table_store.execute(DropTable(table_name, schema, if_exists=True))
+        table_store.execute(DropTable(table_name, schema, if_exists=True, cascade=True))
         query = sql_table_expr({"col": [0, 1, 2, 3]})
         cmds = (
             [CreateTableAsSelect, InsertIntoSelect]
