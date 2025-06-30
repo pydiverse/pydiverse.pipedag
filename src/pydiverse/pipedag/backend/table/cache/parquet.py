@@ -137,24 +137,18 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         if PandasTableHook.pd_version < Version("2.0"):
             # for use_nullable_dtypes=False, returned types are mostly numpy backed
             # extension dtypes
-            ret = cls._retrieve(
-                store, table, limit, use_nullable_dtypes=backend_str != "arrow"
-            )
+            ret = cls._retrieve(store, table, limit, use_nullable_dtypes=backend_str != "arrow")
             # use_nullable_dtypes=False may still return string[python] even though we
             # expect and sometimes get string[pyarrow]
             for col in ret.dtypes[ret.dtypes == "string[python]"].index:
                 ret[col] = ret[col].astype(pd.StringDtype("pyarrow"))
         else:
             dtype_backend_map = {"arrow": "pyarrow", "numpy": "numpy_nullable"}
-            ret = cls._retrieve(
-                store, table, limit, dtype_backend=dtype_backend_map[backend_str]
-            )
+            ret = cls._retrieve(store, table, limit, dtype_backend=dtype_backend_map[backend_str])
 
         # Prefer StringDtype("pyarrow") over ArrowDtype(pa.string()) for now.
         # We need to check this choice with future versions of pandas/pyarrow.
-        for col in ret.dtypes[
-            (ret.dtypes == "large_string[pyarrow]") | (ret.dtypes == "string[pyarrow]")
-        ].index:
+        for col in ret.dtypes[(ret.dtypes == "large_string[pyarrow]") | (ret.dtypes == "string[pyarrow]")].index:
             ret[col] = ret[col].astype(pd.StringDtype("pyarrow"))
         return ret
 
@@ -245,9 +239,7 @@ try:
             pdt_old = None
             pdt_new = pdt
         except ImportError:
-            raise NotImplementedError(
-                "pydiverse.transform 0.2.0 - 0.2.2 isn't supported"
-            ) from None
+            raise NotImplementedError("pydiverse.transform 0.2.0 - 0.2.2 isn't supported") from None
 except ImportError:
     pdt = types.ModuleType("pydiverse.transform")
     pdt.Table = None
@@ -264,11 +256,7 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
             return CanResult.NO
         from pydiverse.transform.eager import PandasTableImpl
 
-        return (
-            CanResult.YES_BUT_DONT_CACHE
-            if issubclass(type_, PandasTableImpl)
-            else CanResult.NO
-        )
+        return CanResult.YES_BUT_DONT_CACHE if issubclass(type_, PandasTableImpl) else CanResult.NO
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -292,9 +280,7 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
 
         if isinstance(t._impl, PandasTableImpl):
             table.obj = t >> collect()
-            return store.get_r_table_hook(pd.DataFrame).materialize(
-                store, table, stage_name
-            )
+            return store.get_r_table_hook(pd.DataFrame).materialize(store, table, stage_name)
 
         raise TypeError(f"Unsupported type {type(t._impl).__name__}")
 

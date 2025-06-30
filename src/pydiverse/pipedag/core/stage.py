@@ -139,10 +139,7 @@ class Stage:
 
     def __enter__(self):
         if self._did_enter:
-            raise StageError(
-                f"Stage '{self.name}' has already been entered."
-                " Can't reuse the same stage twice."
-            )
+            raise StageError(f"Stage '{self.name}' has already been entered. Can't reuse the same stage twice.")
         self._did_enter = True
 
         # Capture information from surrounding Flow or Stage block
@@ -203,9 +200,7 @@ class Stage:
 
         tasks = [task for task in self.tasks if task.name == name]
         if not tasks:
-            raise KeyError(
-                f"Couldn't find a task with name '{name}' in stage '{self.name}'."
-            )
+            raise KeyError(f"Couldn't find a task with name '{name}' in stage '{self.name}'.")
 
         if index is None:
             if len(tasks) == 1:

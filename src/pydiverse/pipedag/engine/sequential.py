@@ -39,9 +39,7 @@ class SequentialEngine(OrchestrationEngine):
                                 if in_t in results and in_t not in inputs
                             },
                             **{
-                                in_id: Table(inputs[in_t])
-                                for in_id, in_t in task.input_tasks.items()
-                                if in_t in inputs
+                                in_id: Table(inputs[in_t]) for in_id, in_t in task.input_tasks.items() if in_t in inputs
                             },
                         }
 

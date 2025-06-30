@@ -57,9 +57,7 @@ def input_task():
     return Table(dfA, "dfA"), Table(dfA, "dfB")
 
 
-def has_copy_source_fresh_input(
-    stage: Stage, attrs: dict[str, Any], pipedag_config: PipedagConfig
-):
+def has_copy_source_fresh_input(stage: Stage, attrs: dict[str, Any], pipedag_config: PipedagConfig):
     source = attrs["copy_source"]
     per_user = attrs["copy_per_user"]
     source_cfg = pipedag_config.get(instance=source, per_user=per_user)
@@ -69,9 +67,7 @@ def has_copy_source_fresh_input(
 
 
 @materialize(input_type=pd.DataFrame, cache=has_copy_source_fresh_input, version="1.0")
-def copy_filtered_inputs(
-    stage: Stage, attrs: dict[str, Any], pipedag_config: PipedagConfig
-):
+def copy_filtered_inputs(stage: Stage, attrs: dict[str, Any], pipedag_config: PipedagConfig):
     source = attrs["copy_source"]
     per_user = attrs["copy_per_user"]
     filter_cnt = attrs["copy_filter_cnt"]
@@ -92,10 +88,7 @@ def _get_source_tbls(source, per_user, stage, pipedag_config):
         schema = source_cfg.store.table_store.get_schema(stage.name)
         meta = sa.MetaData()
         meta.reflect(bind=engine, schema=schema.name)
-        tbls = {
-            tbl.name: pd.read_sql_table(tbl.name, con=engine, schema=schema.name)
-            for tbl in meta.tables.values()
-        }
+        tbls = {tbl.name: pd.read_sql_table(tbl.name, con=engine, schema=schema.name) for tbl in meta.tables.values()}
     return tbls
 
 

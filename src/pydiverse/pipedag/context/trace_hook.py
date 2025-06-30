@@ -172,9 +172,7 @@ class PrintTraceHook(TraceHook):
 
     def run_init_context_server(self, run_context_server: RunContextServer):
         self.run_context_server = run_context_server
-        self.logger.debug(
-            "run_init_context_server", run_context_server=run_context_server
-        )
+        self.logger.debug("run_init_context_server", run_context_server=run_context_server)
 
     def run_init_context(self, run_context: RunContext):
         self.run_context = run_context

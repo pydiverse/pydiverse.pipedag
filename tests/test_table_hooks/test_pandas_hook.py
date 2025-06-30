@@ -140,9 +140,7 @@ class TestPandasTableHookNumpy:
 
         assert f.run().successful
 
-    @pytest.mark.skipif(
-        pd.__version__ < "2.", reason="datetime64[us] requires pandas 2"
-    )
+    @pytest.mark.skipif(pd.__version__ < "2.", reason="datetime64[us] requires pandas 2")
     def test_datetime(self):
         df = pd.DataFrame(
             {
@@ -168,11 +166,7 @@ class TestPandasTableHookNumpy:
 
         @materialize()
         def numpy_input():
-            datetime_dtype = (
-                sa.DateTime()
-                if (get_dialect_name() != "mssql")
-                else sa.dialects.mssql.DATETIME2()
-            )
+            datetime_dtype = sa.DateTime() if (get_dialect_name() != "mssql") else sa.dialects.mssql.DATETIME2()
 
             return Table(
                 df,
@@ -225,11 +219,7 @@ class TestPandasTableHookNumpy:
 
         @materialize()
         def numpy_input():
-            datetime_dtype = (
-                sa.DateTime()
-                if (get_dialect_name() != "mssql")
-                else sa.dialects.mssql.DATETIME2()
-            )
+            datetime_dtype = sa.DateTime() if (get_dialect_name() != "mssql") else sa.dialects.mssql.DATETIME2()
 
             return Table(
                 df,
@@ -272,9 +262,7 @@ class TestPandasTableHookArrow:
                 "boolean": pd.array(Values.BOOLEAN, dtype="bool[pyarrow]"),
                 "date": pd.array(Values.DATE, dtype=pd.ArrowDtype(pa.date32())),
                 "time": pd.array(Values.TIME, dtype=pd.ArrowDtype(pa.time64("us"))),
-                "datetime": pd.array(
-                    Values.DATETIME, dtype=pd.ArrowDtype(pa.timestamp("us"))
-                ),
+                "datetime": pd.array(Values.DATETIME, dtype=pd.ArrowDtype(pa.timestamp("us"))),
             }
         )
 
@@ -321,9 +309,7 @@ class TestPandasTableHookArrow:
                 "boolean": pd.array(NoneValues.BOOLEAN, dtype="bool[pyarrow]"),
                 "date": pd.array(NoneValues.DATE, dtype=pd.ArrowDtype(pa.date32())),
                 "time": pd.array(NoneValues.TIME, dtype=pd.ArrowDtype(pa.time64("us"))),
-                "datetime": pd.array(
-                    NoneValues.DATETIME, dtype=pd.ArrowDtype(pa.timestamp("us"))
-                ),
+                "datetime": pd.array(NoneValues.DATETIME, dtype=pd.ArrowDtype(pa.timestamp("us"))),
             }
         )
 
@@ -347,10 +333,7 @@ class TestPandasTableHookArrow:
 
 
 @pytest.mark.xfail(
-    reason=(
-        "The string '\\N' can't be materialized using the "
-        "COPY FROM STDIN WITH CSV technique."
-    ),
+    reason=("The string '\\N' can't be materialized using the COPY FROM STDIN WITH CSV technique."),
     strict=True,
 )
 @with_instances("postgres")
@@ -367,17 +350,14 @@ def test_pandas_table_hook_postgres_null_string():
 
     assert df["strNA"][0] == ""
     assert pd.isna(df["strNA"][1])
-    assert df["strNA"].fillna("X")[2] == "\\N", (
-        "This is a known issue that the string '\\N' is considered NA"
-    )
+    assert df["strNA"].fillna("X")[2] == "\\N", "This is a known issue that the string '\\N' is considered NA"
 
 
 @with_instances("postgres", "local_table_store")
 @pytest.mark.skipif(dask.dask is None, reason="AUTO_VERSION for pandas requires dask")
 @pytest.mark.skipif(
     sys.version_info >= (3, 13),
-    reason="Pandas AUTO_VERSION ComputationTracer might be deprecated since it is "
-    "hard to maintain",
+    reason="Pandas AUTO_VERSION ComputationTracer might be deprecated since it is hard to maintain",
 )
 class TestPandasAutoVersion:
     def test_smoke(self, mocker):

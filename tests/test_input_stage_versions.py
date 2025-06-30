@@ -99,9 +99,7 @@ def test_input_versions_table():
     val = 12
 
     @input_stage_versions(input_type=pd.DataFrame, ordering_barrier=False)
-    def validate_stage(
-        tbls: dict[str, pd.DataFrame], other_tbls: dict[str, pd.DataFrame]
-    ):
+    def validate_stage(tbls: dict[str, pd.DataFrame], other_tbls: dict[str, pd.DataFrame]):
         if run > 1:
             assert len(tbls) == 1
             assert len(other_tbls) == 1
@@ -158,9 +156,7 @@ def test_input_versions_blob():
             assert len(other_blobs) == 3
             # this exception fails on different input because the hashes change and thus
             # the file name changes
-            assert not any(isinstance(x, Exception) for x in other_blobs.values()), (
-                "expected to fail on third call"
-            )
+            assert not any(isinstance(x, Exception) for x in other_blobs.values()), "expected to fail on third call"
             assert blobs == other_blobs
 
     def get_flow():
@@ -205,27 +201,16 @@ def test_input_versions_other_instance_table(per_user):
         if run > 1:
             # make a cross-database query to combine tables of both instances
             other_database = other_cfg.store.table_store.engine.url.database
-            assert (
-                ConfigContext.get().store.table_store.engine.url.database
-                != other_database
-            )
-            other_tbls[
-                "x"
-            ].original.schema = f"{other_database}.{other_tbls['x'].original.schema}"
+            assert ConfigContext.get().store.table_store.engine.url.database != other_database
+            other_tbls["x"].original.schema = f"{other_database}.{other_tbls['x'].original.schema}"
             return Table(
-                sa.select(
-                    tbls["x"].outerjoin(
-                        other_tbls["x"], tbls["x"].c.a == other_tbls["x"].c.a
-                    )
-                ),
+                sa.select(tbls["x"].outerjoin(other_tbls["x"], tbls["x"].c.a == other_tbls["x"].c.a)),
                 name="res",
             )
         else:
             return Table(tbls["x"], name="res")
 
-    @input_stage_versions(
-        input_type=pd.DataFrame, ordering_barrier=False, lock_source_stages=False
-    )
+    @input_stage_versions(input_type=pd.DataFrame, ordering_barrier=False, lock_source_stages=False)
     def validate_stage(
         tbls: dict[str, pd.DataFrame],
         other_tbls: dict[str, pd.DataFrame],
@@ -234,11 +219,7 @@ def test_input_versions_other_instance_table(per_user):
         _ = other_cfg
         if run > 1:
             assert 1 <= len({k for k in tbls.keys() if not k.endswith("__copy")}) <= 2
-            assert (
-                1
-                <= len({k for k in other_tbls.keys() if not k.endswith("__copy")})
-                <= 3
-            )
+            assert 1 <= len({k for k in other_tbls.keys() if not k.endswith("__copy")}) <= 3
             x = tbls["x"]
             y = other_tbls["x"]
             pd.testing.assert_frame_equal(x, y)
@@ -288,16 +269,12 @@ def test_input_versions_other_instance_table(per_user):
         run += 1
         val = -5
         f = get_flow(cfg)
-        with swallowing_raises(
-            AssertionError, match=r"\[left\]:  \[-5\]\n\[right\]: \[12\]"
-        ):
+        with swallowing_raises(AssertionError, match=r"\[left\]:  \[-5\]\n\[right\]: \[12\]"):
             f.run(config=cfg2)
         assert (
             pd.read_sql_table(
                 "x",
-                schema=cfg2.store.table_store.get_schema(
-                    f["stage"].transaction_name
-                ).get(),
+                schema=cfg2.store.table_store.get_schema(f["stage"].transaction_name).get(),
                 con=cfg2.store.table_store.engine,
             ).iloc[0, 0]
             == val

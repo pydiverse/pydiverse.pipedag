@@ -38,27 +38,19 @@ def deep_cmp(a, b):
         return all([deep_cmp(v, b[k]) for k, v in a.items()])
     if isinstance(a, GenericAlias):
         base_cmp = get_origin(a) == get_origin(b)
-        return base_cmp and all(
-            [deep_cmp(v, w) for v, w in zip(get_args(a), get_args(b))]
-        )
+        return base_cmp and all([deep_cmp(v, w) for v, w in zip(get_args(a), get_args(b))])
     if isinstance(a, Iterable):
         return all([deep_cmp(v, w) for v, w in zip(a, b)])
     if hasattr(a, "__dict__"):
 
         def fields(x):
-            return {
-                k: v
-                for k, v in x.__dict__.items()
-                if not k.startswith("_") and k != "logger"
-            }
+            return {k: v for k, v in x.__dict__.items() if not k.startswith("_") and k != "logger"}
 
         return deep_cmp(fields(a), fields(b))
     return a == b
 
 
-def check(
-    x, expected_result=None, regex: str | None = None, regex_replace: str | None = None
-):
+def check(x, expected_result=None, regex: str | None = None, regex_replace: str | None = None):
     expected_result = expected_result or x
     json_encoder = PipedagJSONEncoder()
     json_decoder = PipedagJSONDecoder()
@@ -94,9 +86,7 @@ def set_cache_key(x, k: str):
 
 
 def _cfg_ctx():
-    return ConfigContext.new(
-        default_config_dict | test_store_config_dict, "x", "y", "z"
-    )
+    return ConfigContext.new(default_config_dict | test_store_config_dict, "x", "y", "z")
 
 
 @contextlib.contextmanager
@@ -279,7 +269,5 @@ def test_json_coder_fail_local_dataclass():
     x = {
         "a": C(1, "2", [3, 4, 5]),
     }
-    with pytest.raises(
-        AttributeError, match="'function' object has no attribute '<locals>'"
-    ):
+    with pytest.raises(AttributeError, match="'function' object has no attribute '<locals>'"):
         check(x)

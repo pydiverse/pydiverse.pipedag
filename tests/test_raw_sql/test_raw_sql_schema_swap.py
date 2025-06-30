@@ -22,9 +22,7 @@ def test_raw_sql_schema_swap():
         with Stage("raw_0") as raw_0:
             sql_1 = sql_script("create_objects.sql", dir_)
         with Stage("raw_1"):
-            sql_2 = sql_script(
-                "check_objects.sql", dir_, input_stage=raw_0, depend=[sql_1]
-            )
+            sql_2 = sql_script("check_objects.sql", dir_, input_stage=raw_0, depend=[sql_1])
 
     f.run()
 

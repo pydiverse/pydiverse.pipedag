@@ -53,13 +53,9 @@ class Session:
         signal.signal(signal.SIGTERM, self.exit_gracefully)
 
     def pytest_runtestloop(self, session):
-        if (
-            session.testsfailed
-            and not session.config.option.continue_on_collection_errors
-        ):
+        if session.testsfailed and not session.config.option.continue_on_collection_errors:
             raise session.Interrupted(
-                f"{session.testsfailed} "
-                f"error{'s' if session.testsfailed != 1 else ''} during collection"
+                f"{session.testsfailed} error{'s' if session.testsfailed != 1 else ''} during collection"
             )
 
         if session.config.option.collectonly:
@@ -96,17 +92,11 @@ class Session:
                 worker.join()
                 self.running_workers.remove(worker)
             elif msg == "logstart":
-                self.config.hook.pytest_runtest_logstart(
-                    nodeid=kwargs["nodeid"], location=kwargs["location"]
-                )
+                self.config.hook.pytest_runtest_logstart(nodeid=kwargs["nodeid"], location=kwargs["location"])
             elif msg == "logfinish":
-                self.config.hook.pytest_runtest_logfinish(
-                    nodeid=kwargs["nodeid"], location=kwargs["location"]
-                )
+                self.config.hook.pytest_runtest_logfinish(nodeid=kwargs["nodeid"], location=kwargs["location"])
             elif msg == "logreport":
-                report = self.config.hook.pytest_report_from_serializable(
-                    config=self.config, data=kwargs["report"]
-                )
+                report = self.config.hook.pytest_report_from_serializable(config=self.config, data=kwargs["report"])
                 self.config.hook.pytest_runtest_logreport(report=report)
             elif msg == "DEBUG_start_group":
                 self.debug_worker_group[worker] = kwargs["group_name"]
@@ -131,10 +121,7 @@ class Session:
             msg = "No implementation for `pytest_parallelize_group_items` hook found."
             raise AssertionError(msg)
         if len(groupings) > 1:
-            msg = (
-                "Multiple implementations for `pytest_parallelize_group_items` hook"
-                " found."
-            )
+            msg = "Multiple implementations for `pytest_parallelize_group_items` hook found."
             raise AssertionError(msg)
 
         grouping = groupings[0]
@@ -142,8 +129,7 @@ class Session:
         reporter = session.config.pluginmanager.getplugin("terminalreporter")
         if reporter.showheader and not reporter.no_header:
             reporter.line(
-                f"Split tests into {len(grouping)} parallelization groups: "
-                + ", ".join(sorted(list(grouping)))
+                f"Split tests into {len(grouping)} parallelization groups: " + ", ".join(sorted(list(grouping)))
             )
 
         return grouping

@@ -65,8 +65,7 @@ def _test_lock_manager(create_lock_manager: Callable[[], BaseLockManager]):
 
                 if not sleep_event.is_set() or not unlocked_event.wait(timeout=0.025):
                     raise RuntimeError(
-                        "Second lock manager was able to acquire lock before the "
-                        "first lock manager released it."
+                        "Second lock manager was able to acquire lock before the first lock manager released it."
                     )
 
             delta = end_time - start_time

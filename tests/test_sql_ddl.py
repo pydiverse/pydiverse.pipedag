@@ -15,9 +15,7 @@ def test_insert_into():
         "Select 1 UNION ALL SELECT 2": "Select 1 INTO a.b UNION ALL SELECT 2",
         "Select 1 From X": "Select 1 INTO a.b From X",
         "Select (SELECT 1 FROM Y) From X": "Select (SELECT 1 FROM Y) INTO a.b From X",
-        "Select (SELECT (SELECT 1 FROM Z) FROM Y) From X": (
-            "Select (SELECT (SELECT 1 FROM Z) FROM Y) INTO a.b From X"
-        ),
+        "Select (SELECT (SELECT 1 FROM Z) FROM Y) From X": ("Select (SELECT (SELECT 1 FROM Z) FROM Y) INTO a.b From X"),
         "Select a.[from] from a": "Select a.[from] INTO a.b from a",
         "Select a.[ from ] from a": "Select a.[ from ] INTO a.b from a",
         'Select "from" from a': 'Select "from" INTO a.b from a',

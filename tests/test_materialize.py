@@ -119,9 +119,7 @@ def test_materialize_table_subtask_fail_input_type(imperative):
             f.run()
         except BrokenProcessPool as e:
             # TODO: find out whether we can avoid BrokenProcessPool from happening
-            raise RuntimeError(
-                "does not match parent task input type + BrokenProcessPool"
-            ) from e
+            raise RuntimeError("does not match parent task input type + BrokenProcessPool") from e
 
 
 @pytest.mark.parametrize("imperative", [False, True])
@@ -592,9 +590,7 @@ def _test_nullable_get_flow():
 
 
 @skip_instances("snowflake", "parquet_backend")
-@pytest.mark.parametrize(
-    "_get_flow", [_test_nullable_get_flow, _test_nullable_lazy_get_flow]
-)
+@pytest.mark.parametrize("_get_flow", [_test_nullable_get_flow, _test_nullable_lazy_get_flow])
 def test_nullable(_get_flow):
     f, tables = _get_flow()
 
@@ -611,20 +607,14 @@ def test_nullable(_get_flow):
         # the sum of all primary key columns
         if ConfigContext.get().store.table_store.engine.dialect.name != "duckdb":
             assert (
-                sum(
-                    col.primary_key
-                    for i in range(18)
-                    for col in result.get(tables[i], as_type=sa.Table).original.c
-                )
+                sum(col.primary_key for i in range(18) for col in result.get(tables[i], as_type=sa.Table).original.c)
                 == 9
             )
 
 
 # duckdb does not persist nullable flags over connections; snowflake is slow
 @skip_instances("duckdb", "snowflake", "parquet_backend")
-@pytest.mark.parametrize(
-    "_get_flow", [_test_nullable_get_flow, _test_nullable_lazy_get_flow]
-)
+@pytest.mark.parametrize("_get_flow", [_test_nullable_get_flow, _test_nullable_lazy_get_flow])
 def test_nullable_output(_get_flow):
     f, tables = _get_flow()
 
@@ -701,9 +691,7 @@ def _lazy_task_2():
 
 @materialize(lazy=True, input_type=sa.Table)
 def _lazy_join(src1: sa.sql.expression.Alias, src2: sa.sql.expression.Alias):
-    query = sa.select(src1.c.x, src2.c.x.label("x2")).select_from(
-        src1.outerjoin(src2, src1.c.x == src2.c.x)
-    )
+    query = sa.select(src1.c.x, src2.c.x.label("x2")).select_from(src1.outerjoin(src2, src1.c.x == src2.c.x))
     return Table(query, "t3_%%", indexes=[["x2"], ["x", "x2"]])
 
 
@@ -722,9 +710,7 @@ def _sql_task_2():
 
 @materialize(version="1.0", input_type=sa.Table)
 def _sql_join(src1: sa.sql.expression.Alias, src2: sa.sql.expression.Alias):
-    query = sa.select(src1.c.x, src2.c.x.label("x2")).select_from(
-        src1.outerjoin(src2, src1.c.x == src2.c.x)
-    )
+    query = sa.select(src1.c.x, src2.c.x.label("x2")).select_from(src1.outerjoin(src2, src1.c.x == src2.c.x))
     return Table(query, "t3_%%", indexes=[["x2"], ["x", "x2"]])
 
 

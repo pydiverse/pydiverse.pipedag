@@ -184,18 +184,12 @@ class TableHookResolver:
             # we ignore if replace_hooks are not found since they might be found in
             # base class with lower lookup priority
             if replace_hooks:
-                self.registered_table_hooks = [
-                    x for x in self.registered_table_hooks if x not in replace_hooks
-                ]
+                self.registered_table_hooks = [x for x in self.registered_table_hooks if x not in replace_hooks]
             self.registered_table_hooks.append(hook_cls)
 
         def __repr__(self):
             return "ClassState=" + str(
-                {
-                    x: getattr(self, x)
-                    for x in dir(self)
-                    if not x.startswith("_") and x != "add_hook"
-                }
+                {x: getattr(self, x) for x in dir(self) if not x.startswith("_") and x != "add_hook"}
             )
 
     _states: dict[int, ClassState] = {}
@@ -248,9 +242,7 @@ class TableHookResolver:
 
         def decorator(hook_cls):
             if not all(requirements):
-                cls.__hooks_with_unmet_requirements.append(
-                    hook_cls.__module__ + "." + hook_cls.__qualname__
-                )
+                cls.__hooks_with_unmet_requirements.append(hook_cls.__module__ + "." + hook_cls.__qualname__)
                 return requires(
                     False,
                     Exception(f"Not all requirements met for {hook_cls.__name__}"),
@@ -282,13 +274,10 @@ class TableHookResolver:
                 return hook
 
         raise TypeError(
-            f"Can't materialize Table with underlying type {type_}. "
-            + self.__hook_unmet_requirements_message()
+            f"Can't materialize Table with underlying type {type_}. " + self.__hook_unmet_requirements_message()
         )
 
-    def get_r_table_hook(
-        self: Self, type_: type[T] | tuple | dict
-    ) -> type[TableHook[Self]]:
+    def get_r_table_hook(self: Self, type_: type[T] | tuple | dict) -> type[TableHook[Self]]:
         """Get a table hook that can retrieve the specified type"""
         if isinstance(type_, tuple):
             type_ = type_[0]
@@ -306,10 +295,7 @@ class TableHookResolver:
                 self._resolver_state().r_hook_cache[type_] = hook
                 return hook
 
-        raise TypeError(
-            f"Can't retrieve Table as type {type_}. "
-            + self.__hook_unmet_requirements_message()
-        )
+        raise TypeError(f"Can't retrieve Table as type {type_}. " + self.__hook_unmet_requirements_message())
 
     def get_hook_subclass(self: Self, type_: type[T]) -> type[T]:
         """Finds a table hook that is a subclass of the provided type"""
@@ -380,18 +366,13 @@ class TableHookResolver:
         """
 
         if as_type is None:
-            raise TypeError(
-                "Missing 'as_type' argument. You must specify a type to be able "
-                "to dematerialize a Table."
-            )
+            raise TypeError("Missing 'as_type' argument. You must specify a type to be able to dematerialize a Table.")
 
         hook = self.get_r_table_hook(as_type)
         stage_name = table.stage.current_name if table.stage is not None else None
         try:
             if for_auto_versioning:
-                return hook.retrieve_for_auto_versioning_lazy(
-                    self, table, stage_name, as_type
-                )
+                return hook.retrieve_for_auto_versioning_lazy(self, table, stage_name, as_type)
 
             return hook.retrieve(self, table, stage_name, as_type)
         except Exception as e:
@@ -407,6 +388,5 @@ class TableHookResolver:
         return (
             "This is either because no TableHook has been registered for this type, "
             "or because not all requirements have been met for the corresponding hook."
-            "\nHooks with unmet requirements: "
-            + ", ".join(cls.__hooks_with_unmet_requirements)
+            "\nHooks with unmet requirements: " + ", ".join(cls.__hooks_with_unmet_requirements)
         )

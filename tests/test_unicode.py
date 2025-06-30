@@ -40,8 +40,6 @@ def test_unicode(unicode_str="äöüßéç"):
         assert result.get(x3, as_type=pd.DataFrame)["a"][0] == unicode_str
 
 
-@skip_instances(
-    "mssql", "mssql_pytsql", "mssql_nobulk", "mssql_noaodbc", "mssql_columnstore"
-)
+@skip_instances("mssql", "mssql_pytsql", "mssql_nobulk", "mssql_noaodbc", "mssql_columnstore")
 def test_unicode_beyond_mssql():
     test_unicode("λ")

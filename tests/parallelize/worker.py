@@ -9,9 +9,7 @@ import structlog
 from _pytest.config import Config
 
 
-def start_worker(
-    worker_id: int, work_queue: Queue, msg_queue: Queue, args: list, option_dict: dict
-):
+def start_worker(worker_id: int, work_queue: Queue, msg_queue: Queue, args: list, option_dict: dict):
     option_dict["plugins"].append("no:terminal")
     config = Config.fromdictargs(option_dict, args)
     config.args = args

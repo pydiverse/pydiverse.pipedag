@@ -597,9 +597,7 @@ def test_change_version_table(mocker):
 @pytest.mark.parametrize("ignore_task_version", [True, False])
 @pytest.mark.parametrize("disable_cache_function", [True, False])
 @pytest.mark.parametrize("mode", ["ASSERT_NO_FRESH_INPUT", "NORMAL"])
-def test_cache_validation_mode_assert(
-    ignore_task_version, disable_cache_function, mode
-):
+def test_cache_validation_mode_assert(ignore_task_version, disable_cache_function, mode):
     mode = getattr(CacheValidationMode, mode.upper())
     kwargs = dict(
         ignore_task_version=ignore_task_version,
@@ -609,11 +607,7 @@ def test_cache_validation_mode_assert(
     if not disable_cache_function and mode == CacheValidationMode.NORMAL:
         pytest.skip("Combination does not provoke exception")
         return
-    error = (
-        AssertionError
-        if mode == CacheValidationMode.ASSERT_NO_FRESH_INPUT
-        else ValueError
-    )
+    error = AssertionError if mode == CacheValidationMode.ASSERT_NO_FRESH_INPUT else ValueError
 
     cache_value = 0
     return_value = 0
@@ -654,11 +648,7 @@ def test_cache_validation_mode_assert(
             assert result.successful
 
     cache_value = 1  # IGNORE_FRESH_INPUT should be implied
-    if (
-        not disable_cache_function
-        and not ignore_task_version
-        and mode != CacheValidationMode.NORMAL
-    ):
+    if not disable_cache_function and not ignore_task_version and mode != CacheValidationMode.NORMAL:
         result = flow.run(
             cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID,
             disable_cache_function=False,
@@ -686,13 +676,9 @@ except ImportError:
 @pytest.mark.skipif(dask is None, reason="AUTO_VERSION for pandas requires dask")
 @pytest.mark.parametrize("ignore_task_version", [True, False])
 @pytest.mark.parametrize("disable_cache_function", [True, False])
-@pytest.mark.parametrize(
-    "mode", ["NORMAL", "IGNORE_FRESH_INPUT", "FORCE_FRESH_INPUT", "FORCE_CACHE_INVALID"]
-)
+@pytest.mark.parametrize("mode", ["NORMAL", "IGNORE_FRESH_INPUT", "FORCE_FRESH_INPUT", "FORCE_CACHE_INVALID"])
 @pytest.mark.parametrize("imperative", [False, True])
-def test_cache_validation_mode(
-    ignore_task_version, disable_cache_function, mode, imperative, mocker
-):
+def test_cache_validation_mode(ignore_task_version, disable_cache_function, mode, imperative, mocker):
     _m = m2 if imperative else m
     mode = getattr(CacheValidationMode, mode.upper())
     if disable_cache_function and mode == CacheValidationMode.NORMAL:
@@ -754,12 +740,8 @@ def test_cache_validation_mode(
             tbl.original.schema for tbl in other.values()
         }
         assert transaction_schema
-        assert transaction_schema.pop().startswith(
-            {tbl.original.schema for tbl in other.values()}.pop().split("__")[0]
-        )
-        assert (
-            len([tbl for tbl in transaction.keys() if not tbl.endswith("__copy")]) == 12
-        )
+        assert transaction_schema.pop().startswith({tbl.original.schema for tbl in other.values()}.pop().split("__")[0])
+        assert len([tbl for tbl in transaction.keys() if not tbl.endswith("__copy")]) == 12
 
     @input_stage_versions(lazy=True, input_type=sa.Table)
     def validate_stage2(
@@ -869,10 +851,7 @@ def test_cache_validation_mode(
                 for c, res in zip(cpy, [cache_value, cache_value, cache_value, 0])
             )
         else:
-            assert all(
-                result.get(c, as_type=pd.DataFrame)["x"].iloc[0] == cache_value
-                for c in cpy
-            )
+            assert all(result.get(c, as_type=pd.DataFrame)["x"].iloc[0] == cache_value for c in cpy)
         out_spy[0].assert_called_once()  # lazy task is always called
         out_spy[1].assert_called_once()  # version=None task is always called
         if disable_cache_function and mode in [
@@ -902,13 +881,9 @@ def test_cache_validation_mode(
 @pytest.mark.skipif(dask is None, reason="AUTO_VERSION for pandas requires dask")
 @pytest.mark.parametrize("ignore_task_version", [False])
 @pytest.mark.parametrize("disable_cache_function", [False])
-@pytest.mark.parametrize(
-    "mode", ["NORMAL", "IGNORE_FRESH_INPUT", "FORCE_FRESH_INPUT", "FORCE_CACHE_INVALID"]
-)
+@pytest.mark.parametrize("mode", ["NORMAL", "IGNORE_FRESH_INPUT", "FORCE_FRESH_INPUT", "FORCE_CACHE_INVALID"])
 @pytest.mark.parametrize("imperative", [True])
-def test_cache_validation_mode_reduced(
-    ignore_task_version, disable_cache_function, mode, imperative, mocker
-):
+def test_cache_validation_mode_reduced(ignore_task_version, disable_cache_function, mode, imperative, mocker):
     # Reduce combinatorial space for duckdb to avoid timeout after 10min
     # duckdb is particularly slow for those tests (~10x: 7-15s instead of 1-2s).
     # This reduced combinatorial space is even too much for snowflake. There,
@@ -916,9 +891,7 @@ def test_cache_validation_mode_reduced(
     # And even just reflecting a SQLAlchemy tables issues several of those.
     # Thus this test takes >30min alone for snowflake. In realistic scenarios,
     # the 1-2s per request should not matter too much, though.
-    test_cache_validation_mode(
-        ignore_task_version, disable_cache_function, mode, imperative, mocker
-    )
+    test_cache_validation_mode(ignore_task_version, disable_cache_function, mode, imperative, mocker)
 
 
 @pytest.mark.parametrize("n", [1, 2, 15])

@@ -250,9 +250,7 @@ class RunContextServer(IPCServer):
             exception_tb = traceback.format_exc()
             try:
                 # Add more context to exception
-                exception_with_traceback = Exception(
-                    f"{type(e).__name__}: {e}\n{exception_tb}"
-                )
+                exception_with_traceback = Exception(f"{type(e).__name__}: {e}\n{exception_tb}")
                 exception_with_traceback.__cause__ = e
                 pickled_exception = pickle.dumps(exception_with_traceback)
             except Exception as e2:
@@ -261,9 +259,7 @@ class RunContextServer(IPCServer):
                     traceback=exception_tb,
                     pickle_exception=str(e2),
                 )
-                pickled_exception = pickle.dumps(
-                    RuntimeError("failed pickling exception\n" + exception_tb)
-                )
+                pickled_exception = pickle.dumps(RuntimeError("failed pickling exception\n" + exception_tb))
 
             return [pickled_exception, None]
 
@@ -301,13 +297,9 @@ class RunContextServer(IPCServer):
 
         self._await_deferred_ts_ops(stage_id)
         if self.has_stage_changed(stage_id):
-            self._trigger_deferred_ts_ops(
-                stage_id, DeferredTableStoreOp.Condition.ON_STAGE_COMMIT
-            )
+            self._trigger_deferred_ts_ops(stage_id, DeferredTableStoreOp.Condition.ON_STAGE_COMMIT)
         else:
-            self._trigger_deferred_ts_ops(
-                stage_id, DeferredTableStoreOp.Condition.ON_STAGE_ABORT
-            )
+            self._trigger_deferred_ts_ops(stage_id, DeferredTableStoreOp.Condition.ON_STAGE_ABORT)
         self._await_deferred_ts_ops(stage_id)
 
         return self._enter_stage_state_transition(
@@ -356,10 +348,7 @@ class RunContextServer(IPCServer):
             if state == to:
                 return False
             if state == StageState.FAILED:
-                raise StageError(
-                    f"Stage '{self.stages[stage_id].name}' is in unexpected state"
-                    f" {state}"
-                )
+                raise StageError(f"Stage '{self.stages[stage_id].name}' is in unexpected state {state}")
 
     def _exit_stage_state_transition(
         self,
@@ -407,9 +396,7 @@ class RunContextServer(IPCServer):
         self.deferred_ts_ops[stage_id].append(op)
 
         if self.has_stage_changed(stage_id):
-            self._trigger_deferred_ts_ops(
-                stage_id, DeferredTableStoreOp.Condition.ON_STAGE_CHANGED
-            )
+            self._trigger_deferred_ts_ops(stage_id, DeferredTableStoreOp.Condition.ON_STAGE_CHANGED)
 
     @synchronized("deferred_ops_lock")
     def has_stage_changed(self, stage_id: int) -> bool:
@@ -418,14 +405,10 @@ class RunContextServer(IPCServer):
     @synchronized("deferred_ops_lock")
     def set_stage_has_changed(self, stage_id: int):
         self.changed_stages.add(stage_id)
-        self._trigger_deferred_ts_ops(
-            stage_id, DeferredTableStoreOp.Condition.ON_STAGE_CHANGED
-        )
+        self._trigger_deferred_ts_ops(stage_id, DeferredTableStoreOp.Condition.ON_STAGE_CHANGED)
 
     @synchronized("deferred_ops_lock")
-    def _trigger_deferred_ts_ops(
-        self, stage_id: int, condition: DeferredTableStoreOp.Condition
-    ):
+    def _trigger_deferred_ts_ops(self, stage_id: int, condition: DeferredTableStoreOp.Condition):
         # Partition deferred ops into those that should and shouldn't get executed
         deferred_ts_ops = self.deferred_ts_ops.get(stage_id, [])
 
@@ -442,9 +425,7 @@ class RunContextServer(IPCServer):
             assert callable(fn)
 
             run_context = self.__context_proxy
-            future = self.deferred_thread_pool.submit(
-                _call_with_args, fn, run_context, op.args, op.kwargs
-            )
+            future = self.deferred_thread_pool.submit(_call_with_args, fn, run_context, op.args, op.kwargs)
             self.deferred_ts_ops_futures[stage_id].append(future)
 
         # Remove ops that just have been executed
@@ -501,10 +482,7 @@ class RunContextServer(IPCServer):
 
         if memo is MemoState.WAITING:
             self.logger.info(
-                (
-                    "Task is currently being run with the same inputs."
-                    " Waiting for the other task to finish..."
-                ),
+                ("Task is currently being run with the same inputs. Waiting for the other task to finish..."),
                 task=task,
             )
         while memo is MemoState.WAITING:
@@ -788,9 +766,7 @@ class StageLockStateHandler(Disposable):
         self.lock_manager.dispose()
         super().dispose()
 
-    def _lock_state_listener(
-        self, stage: "Stage", old_state: "LockState", new_state: "LockState"
-    ):
+    def _lock_state_listener(self, stage: "Stage", old_state: "LockState", new_state: "LockState"):
         """Internal listener that gets notified when the state of a lock changes"""
         from pydiverse.pipedag.backend.lock import LockState
         from pydiverse.pipedag.core import Stage
@@ -800,14 +776,9 @@ class StageLockStateHandler(Disposable):
 
         # Logging
         if new_state == LockState.UNCERTAIN:
-            self.logger.warning(
-                f"Lock for stage '{stage.name}' transitioned to UNCERTAIN state."
-            )
+            self.logger.warning(f"Lock for stage '{stage.name}' transitioned to UNCERTAIN state.")
         if old_state == LockState.UNCERTAIN and new_state == LockState.LOCKED:
-            self.logger.info(
-                f"Lock for stage '{stage.name}' is still LOCKED (after being"
-                " UNCERTAIN)."
-            )
+            self.logger.info(f"Lock for stage '{stage.name}' is still LOCKED (after being UNCERTAIN).")
         if old_state == LockState.UNCERTAIN and new_state == LockState.INVALID:
             self.logger.error(f"Lock for stage '{stage.name}' has become INVALID.")
 
@@ -826,10 +797,7 @@ class StageLockStateHandler(Disposable):
                 raise LockError(f"Lock for stage '{stage.name}' is invalid.")
             elif state == LockState.UNCERTAIN:
                 if not did_log:
-                    self.logger.info(
-                        f"Waiting for stage '{stage.name}' lock state to"
-                        " become known again..."
-                    )
+                    self.logger.info(f"Waiting for stage '{stage.name}' lock state to become known again...")
                     did_log = True
 
                 time.sleep(0.01)

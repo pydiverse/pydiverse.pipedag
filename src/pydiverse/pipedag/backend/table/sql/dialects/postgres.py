@@ -100,9 +100,7 @@ class PostgresTableStore(SQLTableStore):
             self.logger,
         )
 
-    def lock_table(
-        self, table: Table | str, schema: Schema | str, conn: Any = None
-    ) -> list:
+    def lock_table(self, table: Table | str, schema: Schema | str, conn: Any = None) -> list:
         """
         For some dialects, it might be beneficial to lock a table before writing to it.
         """
@@ -111,15 +109,11 @@ class PostgresTableStore(SQLTableStore):
             self.execute(stmt, conn=conn)
         return [stmt]
 
-    def lock_source_table(
-        self, table: Table | str, schema: Schema | str, conn: Any = None
-    ) -> list:
+    def lock_source_table(self, table: Table | str, schema: Schema | str, conn: Any = None) -> list:
         """
         For some dialects, it might be beneficial to lock source tables before reading.
         """
-        stmt = LockSourceTable(
-            table.name if isinstance(table, Table) else table, schema
-        )
+        stmt = LockSourceTable(table.name if isinstance(table, Table) else table, schema)
         if conn is not None:
             self.execute(stmt, conn=conn)
         return [stmt]
@@ -128,16 +122,12 @@ class PostgresTableStore(SQLTableStore):
         _ = label
         return
 
-    def _set_materialization_details(
-        self, materialization_details: dict[str, dict[str | list[str]]] | None
-    ) -> None:
-        self.materialization_details = (
-            PostgresMaterializationDetails.create_materialization_details_dict(
-                materialization_details,
-                self.strict_materialization_details,
-                self.default_materialization_details,
-                self.logger,
-            )
+    def _set_materialization_details(self, materialization_details: dict[str, dict[str | list[str]]] | None) -> None:
+        self.materialization_details = PostgresMaterializationDetails.create_materialization_details_dict(
+            materialization_details,
+            self.strict_materialization_details,
+            self.default_materialization_details,
+            self.logger,
         )
 
 
@@ -161,9 +151,7 @@ class PandasTableHook(hooks.PandasTableHook):
 
         # Create empty table
         cls._dialect_create_empty_table(store, table, schema, dtypes)
-        store.add_indexes_and_set_nullable(
-            table, schema, on_empty_table=True, table_cols=df.columns
-        )
+        store.add_indexes_and_set_nullable(table, schema, on_empty_table=True, table_cols=df.columns)
 
         if store.get_unlogged(resolve_materialization_details_label(table)):
             store.execute(ChangeTableLogged(table.name, schema, False))
@@ -189,10 +177,7 @@ class PandasTableHook(hooks.PandasTableHook):
         dbapi_conn = engine.raw_connection()
         try:
             with dbapi_conn.cursor() as cur:
-                sql = (
-                    f"COPY {schema_name}.{table_name} FROM STDIN"
-                    " WITH (FORMAT CSV, NULL '\\N')"
-                )
+                sql = f"COPY {schema_name}.{table_name} FROM STDIN WITH (FORMAT CSV, NULL '\\N')"
                 store.logger.info("Executing bulk load", query=sql)
                 cur.copy_expert(sql=sql, file=s_buf)
             dbapi_conn.commit()
@@ -240,10 +225,7 @@ class PolarsTableHook(hooks.PolarsTableHook):
         dbapi_conn = engine.raw_connection()
         try:
             with dbapi_conn.cursor() as cur:
-                sql = (
-                    f"COPY {schema_name}.{table_name} FROM STDIN"
-                    " WITH (FORMAT CSV, NULL '\\N')"
-                )
+                sql = f"COPY {schema_name}.{table_name} FROM STDIN WITH (FORMAT CSV, NULL '\\N')"
                 store.logger.info("Executing bulk load", query=sql)
                 cur.copy_expert(sql=sql, file=s_buf)
             dbapi_conn.commit()

@@ -97,9 +97,7 @@ class Result:
 
         if not self.successful:
             logger = structlog.get_logger(logger_name=type(self).__name__)
-            logger.warning(
-                "Attention: getting tables from unsuccessful run is unreliable!"
-            )
+            logger.warning("Attention: getting tables from unsuccessful run is unreliable!")
 
         if self.config_context.strict_result_get_locking:
             try:

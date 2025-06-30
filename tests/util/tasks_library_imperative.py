@@ -147,16 +147,10 @@ def simple_dataframe_debug_materialize_twice():
 
 def _get_df_query():
     try:
-        unions = [
-            sa.select([sa.literal(i).label("col1"), sa.literal(str(i)).label("col2")])
-            for i in range(4)
-        ]
+        unions = [sa.select([sa.literal(i).label("col1"), sa.literal(str(i)).label("col2")]) for i in range(4)]
     except sa.exc.ArgumentError:
         # this works from sqlalchemy 2.0.0 on
-        unions = [
-            sa.select(sa.literal(i).label("col1"), sa.literal(str(i)).label("col2"))
-            for i in range(4)
-        ]
+        unions = [sa.select(sa.literal(i).label("col1"), sa.literal(str(i)).label("col2")) for i in range(4)]
     return unions[0].union_all(*unions[1:])
 
 

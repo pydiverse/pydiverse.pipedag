@@ -165,9 +165,7 @@ class CreateViewAsSelect(DDLElement):
 
 
 class CopySelectTo(DDLElement):
-    def __init__(
-        self, target: str, format_spec: str, query: Select | TextClause | sa.Text
-    ):
+    def __init__(self, target: str, format_spec: str, query: Select | TextClause | sa.Text):
         self.target = target
         self.format = format_spec
         self.query = query
@@ -300,12 +298,7 @@ def truncate_key(key_type, table_name, columns, max_length):
         pk = key_type + table_name.lower() + "_" + pk_hash
         if len(pk) > max_length:
             # hash + truncated table name
-            pk = (
-                key_type
-                + pk_hash
-                + "_"
-                + table_name.lower()[: max_length - len(key_type + pk_hash)]
-            )
+            pk = key_type + pk_hash + "_" + table_name.lower()[: max_length - len(key_type + pk_hash)]
     return pk
 
 
@@ -509,8 +502,7 @@ def visit_drop_schema_mssql(drop: DropSchema, compiler, **kw):
     if drop.cascade:
         if drop.engine is None:
             raise ValueError(
-                "Using DropSchema with cascade=True for mssql requires passing"
-                " the engine kwarg to DropSchema."
+                "Using DropSchema with cascade=True for mssql requires passing the engine kwarg to DropSchema."
             )
 
         statements.append(DropSchemaContent(drop.schema, drop.engine))
@@ -530,8 +522,7 @@ def visit_drop_schema_ibm_db_sa(drop: DropSchema, compiler, **kw):
     if drop.cascade:
         if drop.engine is None:
             raise ValueError(
-                "Using DropSchema with cascade=True for ibm_db2 requires passing"
-                " the engine kwarg to DropSchema."
+                "Using DropSchema with cascade=True for ibm_db2 requires passing the engine kwarg to DropSchema."
             )
         statements.append(DropSchemaContent(drop.schema, drop.engine))
 
@@ -583,15 +574,9 @@ def visit_rename_schema_mssql(rename: RenameSchema, compiler, **kw):
 
     table_names = inspector.get_table_names(schema=rename.from_.get())
     view_names = inspector.get_view_names(schema=rename.from_.get())
-    alias_names = PipedagMSSqlReflection.get_alias_names(
-        rename.engine, schema=rename.from_.get()
-    )
-    procedure_names = PipedagMSSqlReflection.get_procedure_names(
-        rename.engine, schema=rename.from_.get()
-    )
-    function_names = PipedagMSSqlReflection.get_function_names(
-        rename.engine, schema=rename.from_.get()
-    )
+    alias_names = PipedagMSSqlReflection.get_alias_names(rename.engine, schema=rename.from_.get())
+    procedure_names = PipedagMSSqlReflection.get_procedure_names(rename.engine, schema=rename.from_.get())
+    function_names = PipedagMSSqlReflection.get_function_names(rename.engine, schema=rename.from_.get())
 
     names_to_move.extend(table_names)
     names_to_move.extend(alias_names)
@@ -664,13 +649,9 @@ def visit_drop_schema_content_mssql(drop: DropSchemaContent, compiler, **kw):
         statements.append(DropView(view, schema=schema))
     for alias in PipedagMSSqlReflection.get_alias_names(engine, schema=schema.get()):
         statements.append(DropAlias(alias, schema=drop.schema))
-    for procedure in PipedagMSSqlReflection.get_procedure_names(
-        engine, schema=schema.get()
-    ):
+    for procedure in PipedagMSSqlReflection.get_procedure_names(engine, schema=schema.get()):
         statements.append(DropProcedure(procedure, schema=schema))
-    for function in PipedagMSSqlReflection.get_function_names(
-        engine, schema=schema.get()
-    ):
+    for function in PipedagMSSqlReflection.get_function_names(engine, schema=schema.get()):
         statements.append(DropFunction(function, schema=schema))
 
     return join_ddl_statements(statements, compiler, **kw)
@@ -693,9 +674,7 @@ def visit_drop_schema_content_ibm_db2(drop: DropSchemaContent, compiler, **kw):
         statements.append(DropView(view, schema=schema))
     for alias in PipedagDB2Reflection.get_alias_names(engine, schema=schema.get()):
         statements.append(DropAlias(alias, schema=schema))
-    for nickname in PipedagDB2Reflection.get_nickname_names(
-        engine, schema=schema.get()
-    ):
+    for nickname in PipedagDB2Reflection.get_nickname_names(engine, schema=schema.get()):
         statements.append(DropNickname(nickname, schema))
 
     return join_ddl_statements(statements, compiler, **kw)
@@ -723,14 +702,10 @@ def visit_drop_database(drop: DropDatabase, compiler, **kw):
     if drop.cascade:
         text.append("CASCADE")
     ret = " ".join(text)
-    raise NotImplementedError(
-        f"Disable for now for safety reasons (not yet needed): {ret}"
-    )
+    raise NotImplementedError(f"Disable for now for safety reasons (not yet needed): {ret}")
 
 
-def _visit_fill_obj_as_select(
-    create, compiler, _type, kw, *, cmd="CREATE ", sep=" AS", prefix="", suffix=""
-):
+def _visit_fill_obj_as_select(create, compiler, _type, kw, *, cmd="CREATE ", sep=" AS", prefix="", suffix=""):
     name = compiler.preparer.quote(create.name)
     schema = compiler.preparer.format_schema(create.schema.get())
     kw["literal_binds"] = True
@@ -740,16 +715,12 @@ def _visit_fill_obj_as_select(
 
 @compiles(InsertIntoSelect)
 def visit_insert_into_select(insert: InsertIntoSelect, compiler, **kw):
-    return _visit_fill_obj_as_select(
-        insert, compiler, "", kw, cmd="INSERT INTO", sep=""
-    )
+    return _visit_fill_obj_as_select(insert, compiler, "", kw, cmd="INSERT INTO", sep="")
 
 
 @compiles(InsertIntoSelect, "mssql")
 def visit_insert_into_select_mssql(insert: InsertIntoSelect, compiler, **kw):
-    return _visit_fill_obj_as_select(
-        insert, compiler, "", kw, cmd="INSERT INTO", sep=" WITH(TABLOCKX)"
-    )
+    return _visit_fill_obj_as_select(insert, compiler, "", kw, cmd="INSERT INTO", sep=" WITH(TABLOCKX)")
 
 
 @compiles(CreateTableAsSelect)
@@ -758,9 +729,7 @@ def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
 
 
 @compiles(CreateTableAsSelect, "postgresql")
-def visit_create_table_as_select_postgresql(
-    create: CreateTableAsSelect, compiler, **kw
-):
+def visit_create_table_as_select_postgresql(create: CreateTableAsSelect, compiler, **kw):
     if create.unlogged:
         return _visit_fill_obj_as_select(create, compiler, "UNLOGGED TABLE", kw)
     else:
@@ -783,9 +752,7 @@ def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler
     # Attention: for DB2, a CreateTableAsSelect must be followed by an InsertIntoSelect
     # to actually fill data
     suffix = ") DEFINITION ONLY " + create.suffix
-    return _visit_fill_obj_as_select(
-        create, compiler, "TABLE", kw, prefix="(", suffix=suffix
-    )
+    return _visit_fill_obj_as_select(create, compiler, "TABLE", kw, prefix="(", suffix=suffix)
 
 
 @compiles(CreateTableWithSuffix, "ibm_db_sa")
@@ -814,10 +781,7 @@ def visit_copy_to_as_select(copy: CopySelectTo, compiler, **kw):
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(copy.query, **kw)
     tick = "'"
-    return (
-        f"COPY (\n{select}\n) TO '{str(copy.target).replace(tick, '')}' "
-        f"WITH (FORMAT {copy.format})"
-    )
+    return f"COPY (\n{select}\n) TO '{str(copy.target).replace(tick, '')}' WITH (FORMAT {copy.format})"
 
 
 @compiles(CopySelectTo, "duckdb")
@@ -825,10 +789,7 @@ def visit_copy_to_as_select(copy: CopySelectTo, compiler, **kw):
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(copy.query, **kw)
     tick = "'"
-    return (
-        f"COPY (\n{select}\n) TO '{str(copy.target).replace(tick, '')}' "
-        f"(FORMAT {copy.format})"
-    )
+    return f"COPY (\n{select}\n) TO '{str(copy.target).replace(tick, '')}' (FORMAT {copy.format})"
 
 
 def insert_into_in_query(select_sql, schema, table):
@@ -854,11 +815,7 @@ def insert_into_in_query(select_sql, schema, table):
             prev = select_sql[0:match_start]
             # ignore marker in subqueries in select columns
             # as well as columns called from (escaped by [] or "")
-            if (
-                prev.count("(") == prev.count(")")
-                and prev.count("[") == prev.count("]")
-                and prev.count('"') % 2 == 0
-            ):
+            if prev.count("(") == prev.count(")") and prev.count("[") == prev.count("]") and prev.count('"') % 2 == 0:
                 into_point = match_start
                 break
         if into_point is not None:
@@ -875,9 +832,7 @@ def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
     from_name = compiler.preparer.quote(create_alias.from_name)
     from_schema = compiler.preparer.format_schema(create_alias.from_schema.get())
     query = sa.select("*").select_from(sa.text(f"{from_schema}.{from_name}"))
-    return compiler.process(
-        CreateViewAsSelect(create_alias.to_name, create_alias.to_schema, query), **kw
-    )
+    return compiler.process(CreateViewAsSelect(create_alias.to_name, create_alias.to_schema, query), **kw)
 
 
 @compiles(CreateAlias, "mssql")
@@ -1001,12 +956,8 @@ def visit_drop_alias_ibm_db_sa(drop: DropAlias, compiler, **kw):
     if drop.if_exists:
         from pydiverse.pipedag.backend.table.sql.reflection import PipedagDB2Reflection
 
-        schema_str = (
-            drop.schema.get() if isinstance(drop.schema, Schema) else drop.schema
-        )
-        if drop.name not in PipedagDB2Reflection.get_alias_names(
-            drop.engine, schema=schema_str
-        ):
+        schema_str = drop.schema.get() if isinstance(drop.schema, Schema) else drop.schema
+        if drop.name not in PipedagDB2Reflection.get_alias_names(drop.engine, schema=schema_str):
             return ""
         drop = DropAlias(drop.name, drop.schema, if_exists=False)
     return _visit_drop_anything(drop, "ALIAS", compiler, **kw)
@@ -1092,9 +1043,7 @@ def visit_add_clustered_columnstore_index(
 ) -> str:
     _ = kw
     table = compiler.preparer.quote(add_clustered_columnstore_index.table_name)
-    schema = compiler.preparer.format_schema(
-        add_clustered_columnstore_index.schema.get()
-    )
+    schema = compiler.preparer.format_schema(add_clustered_columnstore_index.schema.get())
     index_name = compiler.preparer.quote(add_clustered_columnstore_index.name)
     return f"CREATE CLUSTERED COLUMNSTORE INDEX {index_name} ON {schema}.{table}"
 
@@ -1106,16 +1055,11 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     schema = compiler.preparer.format_schema(change.schema.get())
     alter_columns = ",".join(
         [
-            f"ALTER COLUMN {compiler.preparer.quote(col)} SET DATA TYPE"
-            f" {compiler.type_compiler.process(_type)}"
-            for col, _type, nullable in zip(
-                change.column_names, change.column_types, change.nullable
-            )
+            f"ALTER COLUMN {compiler.preparer.quote(col)} SET DATA TYPE {compiler.type_compiler.process(_type)}"
+            for col, _type, nullable in zip(change.column_names, change.column_types, change.nullable)
         ]
         + [
-            "ALTER COLUMN"
-            f" {compiler.preparer.quote(col)}"
-            f" {'SET' if not nullable else 'DROP'} NOT NULL"
+            f"ALTER COLUMN {compiler.preparer.quote(col)} {'SET' if not nullable else 'DROP'} NOT NULL"
             for col, nullable in zip(change.column_names, change.nullable)
             if nullable is not None
         ]
@@ -1130,16 +1074,11 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     schema = compiler.preparer.format_schema(change.schema.get())
     alter_columns = ",".join(
         [
-            f"COLUMN {compiler.preparer.quote(col)} SET DATA TYPE"
-            f" {compiler.type_compiler.process(_type)}"
-            for col, _type, nullable in zip(
-                change.column_names, change.column_types, change.nullable
-            )
+            f"COLUMN {compiler.preparer.quote(col)} SET DATA TYPE {compiler.type_compiler.process(_type)}"
+            for col, _type, nullable in zip(change.column_names, change.column_types, change.nullable)
         ]
         + [
-            "COLUMN"
-            f" {compiler.preparer.quote(col)}"
-            f" {'SET' if not nullable else 'DROP'} NOT NULL"
+            f"COLUMN {compiler.preparer.quote(col)} {'SET' if not nullable else 'DROP'} NOT NULL"
             for col, nullable in zip(change.column_names, change.nullable)
             if nullable is not None
         ]
@@ -1152,21 +1091,14 @@ def visit_change_column_types_duckdb(change: ChangeColumnTypes, compiler, **kw):
     table = compiler.preparer.quote(change.table_name)
     schema = compiler.preparer.format_schema(change.schema.get())
     alter_columns = [
-        f"ALTER COLUMN {compiler.preparer.quote(col)} SET DATA TYPE"
-        f" {compiler.type_compiler.process(_type)}"
-        for col, _type, nullable in zip(
-            change.column_names, change.column_types, change.nullable
-        )
+        f"ALTER COLUMN {compiler.preparer.quote(col)} SET DATA TYPE {compiler.type_compiler.process(_type)}"
+        for col, _type, nullable in zip(change.column_names, change.column_types, change.nullable)
     ] + [
-        "ALTER COLUMN"
-        f" {compiler.preparer.quote(col)}"
-        f" {'SET' if not nullable else 'DROP'} NOT NULL"
+        f"ALTER COLUMN {compiler.preparer.quote(col)} {'SET' if not nullable else 'DROP'} NOT NULL"
         for col, nullable in zip(change.column_names, change.nullable)
         if nullable is not None
     ]
-    statements = [
-        f"ALTER TABLE {schema}.{table} {statement}" for statement in alter_columns
-    ]
+    statements = [f"ALTER TABLE {schema}.{table} {statement}" for statement in alter_columns]
     return join_ddl_statements(statements, compiler, **kw)
 
 
@@ -1180,9 +1112,7 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     def modify_type(_type):
         if change.cap_varchar_max is not None:
             _type = copy.copy(_type)
-            if isinstance(_type, sa.String) and (
-                _type.length is None or _type.length > change.cap_varchar_max
-            ):
+            if isinstance(_type, sa.String) and (_type.length is None or _type.length > change.cap_varchar_max):
                 # impose some limit to allow use in primary key / index
                 _type.length = change.cap_varchar_max
         return _type
@@ -1192,9 +1122,7 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
         f" {compiler.preparer.quote(col)} "
         f"{compiler.type_compiler.process(modify_type(_type))}"
         f"{'' if nullable is None else ' NULL' if nullable else ' NOT NULL'}"
-        for col, _type, nullable in zip(
-            change.column_names, change.column_types, change.nullable
-        )
+        for col, _type, nullable in zip(change.column_names, change.column_types, change.nullable)
     ]
     return join_ddl_statements(statements, compiler, **kw)
 
@@ -1206,9 +1134,7 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     def modify_type(_type):
         if change.cap_varchar_max is not None:
             _type = copy.copy(_type)
-            if isinstance(_type, sa.String) and (
-                _type.length is None or _type.length > change.cap_varchar_max
-            ):
+            if isinstance(_type, sa.String) and (_type.length is None or _type.length > change.cap_varchar_max):
                 # impose some limit to allow use in primary key / index
                 _type.length = change.cap_varchar_max
         return _type
@@ -1219,9 +1145,7 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
         f"ALTER TABLE {schema}.{table} ALTER COLUMN"
         f" {compiler.preparer.quote(col)} SET DATA TYPE"
         f" {compiler.type_compiler.process(modify_type(_type))}"
-        for col, _type, nullable in zip(
-            change.column_names, change.column_types, change.nullable
-        )
+        for col, _type, nullable in zip(change.column_names, change.column_types, change.nullable)
     ] + [
         f"ALTER TABLE {schema}.{table} ALTER COLUMN"
         f" {compiler.preparer.quote(col)}"
@@ -1240,9 +1164,7 @@ def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
     schema = compiler.preparer.format_schema(change.schema.get())
     alter_columns = ",".join(
         [
-            "ALTER COLUMN"
-            f" {compiler.preparer.quote(col)}"
-            f" {'SET' if not nullable else 'DROP'} NOT NULL"
+            f"ALTER COLUMN {compiler.preparer.quote(col)} {'SET' if not nullable else 'DROP'} NOT NULL"
             for col, nullable in zip(change.column_names, change.nullable)
         ]
     )
@@ -1256,9 +1178,7 @@ def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
     schema = compiler.preparer.format_schema(change.schema.get())
     alter_columns = ",".join(
         [
-            "COLUMN"
-            f" {compiler.preparer.quote(col)}"
-            f" {'SET' if not nullable else 'DROP'} NOT NULL"
+            f"COLUMN {compiler.preparer.quote(col)} {'SET' if not nullable else 'DROP'} NOT NULL"
             for col, nullable in zip(change.column_names, change.nullable)
         ]
     )
@@ -1312,9 +1232,7 @@ def visit_lock_table_ibm_db_sa(lock_table: LockTable, compiler, **kw):
 
 
 @compiles(LockSourceTable)
-def visit_lock_source_table_postgres(
-    lock_source_table: LockSourceTable, compiler, **kw
-):
+def visit_lock_source_table_postgres(lock_source_table: LockSourceTable, compiler, **kw):
     _ = kw
     preparer = compiler.preparer
     name = preparer.quote(lock_source_table.name)
@@ -1324,9 +1242,7 @@ def visit_lock_source_table_postgres(
 
 
 @compiles(LockSourceTable, "ibm_db_sa")
-def visit_lock_source_table_ibm_db_sa(
-    lock_source_table: LockSourceTable, compiler, **kw
-):
+def visit_lock_source_table_ibm_db_sa(lock_source_table: LockSourceTable, compiler, **kw):
     _ = kw
     preparer = compiler.preparer
     name = preparer.quote(lock_source_table.name)
@@ -1388,17 +1304,13 @@ def _mssql_update_definition(
 
     # Replace schema in definition with new destination schema
     string_literal = pp.QuotedString(quote_char="'", esc_quote="''")
-    quoted_identifier = pp.QuotedString(
-        quote_char="[", esc_quote="]]", end_quote_char="]"
-    )
+    quoted_identifier = pp.QuotedString(quote_char="[", esc_quote="]]", end_quote_char="]")
 
     schema_expr = pp.CaselessKeyword(old_schema).ignore(string_literal)
     if old_schema.startswith("["):
         schema_expr = schema_expr.ignore(quoted_identifier)
     else:
-        schema_expr = schema_expr.ignore(quoted_identifier) | (
-            pp.Literal("[") + schema_expr + pp.Literal("]")
-        )
+        schema_expr = schema_expr.ignore(quoted_identifier) | (pp.Literal("[") + schema_expr + pp.Literal("]"))
 
     schema_expr = schema_expr.set_parse_action(pp.replace_with(new_schema))
     expr = schema_expr + pp.FollowedBy(".")
@@ -1423,8 +1335,4 @@ def join_ddl_statements(statements, compiler, **kw):
 
 def split_ddl_statement(statement: str):
     """Split previously combined DDL statements apart"""
-    return [
-        statement
-        for statement in statement.split(STATEMENT_SEPARATOR)
-        if statement.strip() != ""
-    ]
+    return [statement for statement in statement.split(STATEMENT_SEPARATOR) if statement.strip() != ""]

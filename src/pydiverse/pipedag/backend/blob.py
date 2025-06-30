@@ -104,9 +104,7 @@ class FileBlobStore(BaseBlobStore):
         shutil.rmtree(transaction_path)
 
     def store_blob(self, blob: Blob):
-        with open(
-            self.get_blob_path(blob.stage.transaction_name, blob.name), "wb"
-        ) as f:
+        with open(self.get_blob_path(blob.stage.transaction_name, blob.name), "wb") as f:
             pickle.dump(blob.obj, f, pickle.HIGHEST_PROTOCOL)
 
     def copy_blob_to_transaction(self, blob: Blob):

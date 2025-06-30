@@ -124,10 +124,7 @@ class GroupNode:
 
     def __enter__(self):
         if self._did_enter:
-            raise GroupNodeError(
-                f"GroupNode '{self.label}' has already been entered."
-                " Can't reuse the same node twice."
-            )
+            raise GroupNodeError(f"GroupNode '{self.label}' has already been entered. Can't reuse the same node twice.")
         self._did_enter = True
 
         # Capture information from surrounding Flow or Stage block
@@ -155,9 +152,7 @@ class GroupNode:
 
         if self.ordering_barrier and self._ctx.stage is not None:
             if self._ctx.stage.tasks:
-                self.entry_barrier_task = BarrierTask(
-                    self, self._ctx.stage, self._ctx.flow, prefix="Entry "
-                )
+                self.entry_barrier_task = BarrierTask(self, self._ctx.stage, self._ctx.flow, prefix="Entry ")
                 self.outer_stage.barrier_tasks.append(self.entry_barrier_task)
 
         self._ctx.__enter__()
@@ -165,9 +160,7 @@ class GroupNode:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.ordering_barrier and self._ctx.stage is not None:
-            self.exit_barrier_task = BarrierTask(
-                self, self._ctx.stage, self._ctx.flow, prefix="Exit "
-            )
+            self.exit_barrier_task = BarrierTask(self, self._ctx.stage, self._ctx.flow, prefix="Exit ")
             self.outer_stage.barrier_tasks.append(self.exit_barrier_task)
         self._ctx.__exit__()
         del self._ctx
@@ -199,9 +192,7 @@ class BarrierTask(Task):
         self.name = f"{prefix}Barrier '{stage.name}.{group_node.label}'"
         self.nout = None
 
-        self.logger = structlog.get_logger(
-            logger_name="Barrier", group_node=group_node, stage=stage
-        )
+        self.logger = structlog.get_logger(logger_name="Barrier", group_node=group_node, stage=stage)
 
         self._bound_args = inspect.signature(self.fn).bind()
         self.flow = flow

@@ -53,10 +53,7 @@ setup_logging(log_level=log_level)
 @pytest.fixture(autouse=True, scope="function")
 def structlog_test_info(request):
     """Add testcase information to structlog context"""
-    if (
-        os.environ.get("DEBUG", "0") == "0"
-        and os.environ.get("LOG_TEST_NAME", "0") == "0"
-    ):
+    if os.environ.get("DEBUG", "0") == "0" and os.environ.get("LOG_TEST_NAME", "0") == "0":
         yield
         return
 
@@ -132,10 +129,7 @@ def pytest_addoption(parser):
 
 def pytest_collection_modifyitems(config: pytest.Config, items):
     for opt in supported_options:
-        if not (
-            config.getoption("--" + opt)
-            or (opt in default_options and not config.getoption("--no-" + opt))
-        ):
+        if not (config.getoption("--" + opt) or (opt in default_options and not config.getoption("--no-" + opt))):
             skip = pytest.mark.skip(reason=f"{opt} not selected")
             for item in items:
                 if opt in item.keywords:

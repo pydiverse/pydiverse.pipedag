@@ -474,11 +474,7 @@ def input_stage_versions(
     @materialize(**materialize_args)
     def task(*args, **kwargs):
         # the locks are already acquired by cache_fn if it is called
-        lock_stages = (
-            False
-            if other_stage_lock_manager.lock_manager is not None
-            else lock_source_stages
-        )
+        lock_stages = False if other_stage_lock_manager.lock_manager is not None else lock_source_stages
         ret, _, _, _ = _call_fn(
             fn,
             args,
@@ -554,9 +550,7 @@ def input_stage_versions(
                         tbls1 = cfg.store.table_store.get_objects_in_stage(stage)
                     else:
                         # won't detect aliases
-                        tbls1 = cfg.store.table_store.get_table_objects_in_stage(
-                            stage, include_views=include_views
-                        )
+                        tbls1 = cfg.store.table_store.get_table_objects_in_stage(stage, include_views=include_views)
                     for name in tbls1:
                         tbl = Table(name=name)
                         tbl.stage = stage
@@ -564,16 +558,10 @@ def input_stage_versions(
                             (
                                 tbl.name,
                                 tbl.external_schema,
-                            ) = cfg.store.table_store.resolve_alias(
-                                tbl, stage.current_name
-                            )
-                            if not cfg.store.table_store.has_table_or_view(
-                                tbl.name, tbl.external_schema
-                            ):
+                            ) = cfg.store.table_store.resolve_alias(tbl, stage.current_name)
+                            if not cfg.store.table_store.has_table_or_view(tbl.name, tbl.external_schema):
                                 continue  # skip because it is neither view nor alias
-                        table_dict[tbl.name] = cfg.store.dematerialize_item(
-                            tbl, input_type
-                        )
+                        table_dict[tbl.name] = cfg.store.dematerialize_item(tbl, input_type)
                     return table_dict
 
                 transaction_table_dict = _dematerialize_all(cfg1, stage)
@@ -588,11 +576,7 @@ def input_stage_versions(
                     cfg2: ConfigContext,
                     stage: Stage,
                 ):
-                    key = (
-                        ref.name
-                        if ref.stage == stage
-                        else f"{ref.stage.name}.{ref.name}"
-                    )
+                    key = ref.name if ref.stage == stage else f"{ref.stage.name}.{ref.name}"
                     transaction_dict[key] = obj
                     # load committed version of stage (either same pipeline instance or
                     # other)
@@ -611,13 +595,10 @@ def input_stage_versions(
                         if not isinstance(tbl2, Table) or tbl2.name.lower() in {
                             s.lower() for s in store2.get_objects_in_stage(tbl2.stage)
                         }:
-                            other_dict[key] = cfg2.store.dematerialize_item(
-                                tbl2, input_type
-                            )
+                            other_dict[key] = cfg2.store.dematerialize_item(tbl2, input_type)
                         else:
                             other_dict[key] = (
-                                "Table not found in other stage version: "
-                                f"{PipedagJSONEncoder().encode(tbl2)}"
+                                f"Table not found in other stage version: {PipedagJSONEncoder().encode(tbl2)}"
                             )
                     except Exception as e:
                         _task.logger.error(
@@ -631,13 +612,9 @@ def input_stage_versions(
                         other_dict[key] = e
 
                 for tbl, obj in table_dict.items():
-                    _dematerialize_versions(
-                        tbl, obj, transaction_table_dict, other_table_dict, cfg2, stage
-                    )
+                    _dematerialize_versions(tbl, obj, transaction_table_dict, other_table_dict, cfg2, stage)
                 for blob, obj in blob_dict.items():
-                    _dematerialize_versions(
-                        blob, obj, transaction_blob_dict, other_blob_dict, cfg2, stage
-                    )
+                    _dematerialize_versions(blob, obj, transaction_blob_dict, other_blob_dict, cfg2, stage)
                 for raw_sql in raw_sqls:
                     for tbl, obj in raw_sql.loaded_tables:
                         _dematerialize_versions(

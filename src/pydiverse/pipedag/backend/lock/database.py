@@ -55,18 +55,12 @@ class DatabaseLockManager(BaseLockManager):
         # If calling DatabaseLockManager(engine), then we want to dynamically
         # instantiate the correct dialect specific subclass based on the engine dialect.
         dialect = engine.dialect.name
-        dialect_specific_cls = DatabaseLockManager.__registered_dialects.get(
-            dialect, cls
-        )
-        return super(DatabaseLockManager, dialect_specific_cls).__new__(
-            dialect_specific_cls
-        )
+        dialect_specific_cls = DatabaseLockManager.__registered_dialects.get(dialect, cls)
+        return super(DatabaseLockManager, dialect_specific_cls).__new__(dialect_specific_cls)
 
     @classmethod
     def _init_conf_(cls, config: dict[str, Any]):
-        assert len(config) == 0, (
-            "DatabaseLockManager doesn't take any additional arguments"
-        )
+        assert len(config) == 0, "DatabaseLockManager doesn't take any additional arguments"
 
         cfg_context = ConfigContext.get()
         return cls.init_from_config_context(cfg_context)
@@ -93,11 +87,7 @@ class DatabaseLockManager(BaseLockManager):
         lock_schema: Schema | None = None,
         create_lock_schema: bool = True,
     ):
-        super().__init__(
-            logger_kwargs=dict(
-                engine_url=engine.url, instance_id=instance_id, schema=lock_schema
-            )
-        )
+        super().__init__(logger_kwargs=dict(engine_url=engine.url, instance_id=instance_id, schema=lock_schema))
 
         self.engine = engine
         self.instance_id = instance_id
@@ -130,10 +120,7 @@ class DatabaseLockManager(BaseLockManager):
 
         if dialect_name != DISABLE_DIALECT_REGISTRATION:
             if dialect_name in DatabaseLockManager.__registered_dialects:
-                warnings.warn(
-                    f"Already registered a DatabaseLockManager for dialect "
-                    f"{dialect_name}"
-                )
+                warnings.warn(f"Already registered a DatabaseLockManager for dialect {dialect_name}")
             DatabaseLockManager.__registered_dialects[dialect_name] = cls
 
     def prepare(self):
@@ -224,9 +211,7 @@ class DatabaseLockManager(BaseLockManager):
         elif isinstance(lock, str):
             return self.instance_id + "#" + lock
         else:
-            raise NotImplementedError(
-                f"Can't lock object of type '{type(lock).__name__}'"
-            )
+            raise NotImplementedError(f"Can't lock object of type '{type(lock).__name__}'")
 
 
 class Lock(ABC):
@@ -260,17 +245,13 @@ class PostgresLock(Lock):
         self._locked = False
 
     def acquire(self) -> bool:
-        result = self._connection.exec_driver_sql(
-            f"SELECT pg_catalog.pg_advisory_lock({self._id})"
-        ).scalar()
+        result = self._connection.exec_driver_sql(f"SELECT pg_catalog.pg_advisory_lock({self._id})").scalar()
         result = False if result is False else True
         self._locked = result
         return result
 
     def release(self) -> bool:
-        result = self._connection.exec_driver_sql(
-            f"SELECT pg_catalog.pg_advisory_unlock({self._id})"
-        ).scalar()
+        result = self._connection.exec_driver_sql(f"SELECT pg_catalog.pg_advisory_unlock({self._id})").scalar()
         self._locked = False
         return False if result is False else True
 
@@ -399,9 +380,7 @@ class DB2Lock(Lock):
             self._connection = self._engine.connect()
             self._connection.begin()
 
-        self._connection.exec_driver_sql(
-            f"LOCK TABLE {schema}.{table} IN EXCLUSIVE MODE"
-        )
+        self._connection.exec_driver_sql(f"LOCK TABLE {schema}.{table} IN EXCLUSIVE MODE")
 
         self._locked = True
         return True

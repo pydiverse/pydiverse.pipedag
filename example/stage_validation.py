@@ -38,8 +38,7 @@ def validate_stage1(tbls: dict[str, pd.DataFrame], other_tbls: dict[str, pd.Data
         return set(other_tbl.columns) - set(tbl.columns)
 
     missing_columns = {
-        tbl: get_missing_columns(tbls[tbl], other_tbls[tbl])
-        for tbl in set(tbls.keys()) & set(other_tbls.keys())
+        tbl: get_missing_columns(tbls[tbl], other_tbls[tbl]) for tbl in set(tbls.keys()) & set(other_tbls.keys())
     }
     col_diff_dfs = [pd.DataFrame(dict(table=[], column=[], value=[]))]
     for tbl, columns in missing_columns.items():

@@ -77,9 +77,7 @@ def test_local_table_cache(mocker):
     assert store_input_spy.call_count == expected_store_input
     assert retrieve_table_obj_spy.call_count == expected_retrieve_table_obj
 
-    assert _store_table_spy.call_count == (expected_store_input * si) + (
-        expected_store_table * so
-    )
+    assert _store_table_spy.call_count == (expected_store_input * si) + (expected_store_table * so)
     assert _retrieve_table_obj_spy.call_count == expected_successful_retrieve_table_obj
 
     # Second Run

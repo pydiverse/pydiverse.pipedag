@@ -98,9 +98,9 @@ class MyCollection(dy.Collection):
 
     @dy.filter()
     def first_b_greater_second_b(self) -> pl.LazyFrame:
-        return self.first.join(
-            self.second, on=self.common_primary_keys(), how="full", coalesce=True
-        ).filter((pl.col("b") > pl.col("b_right")).fill_null(True))
+        return self.first.join(self.second, on=self.common_primary_keys(), how="full", coalesce=True).filter(
+            (pl.col("b") > pl.col("b_right")).fill_null(True)
+        )
 
     @classmethod
     def _init(cls, data: Mapping[str, FrameType], /):
@@ -126,42 +126,26 @@ enum = pl.Enum(["x", "y"])
 
 
 def data_without_filter_without_rule_violation() -> tuple[pl.LazyFrame, pl.LazyFrame]:
-    first = pl.LazyFrame({"a": [1, 2, 3], "b": [1, 2, 3], "c": ["x", "y", None]}).cast(
-        dict(c=enum)
-    )
-    second = pl.LazyFrame({"a": [1, 2, 3], "b": [1, 2, 3], "c": ["x", "y", "x"]}).cast(
-        dict(c=enum)
-    )
+    first = pl.LazyFrame({"a": [1, 2, 3], "b": [1, 2, 3], "c": ["x", "y", None]}).cast(dict(c=enum))
+    second = pl.LazyFrame({"a": [1, 2, 3], "b": [1, 2, 3], "c": ["x", "y", "x"]}).cast(dict(c=enum))
     return first, second
 
 
 def data_without_filter_with_rule_violation() -> tuple[pl.LazyFrame, pl.LazyFrame]:
-    first = pl.LazyFrame({"a": [1, 2, 1], "b": [1, 2, 3], "c": ["x", "y", None]}).cast(
-        dict(c=enum)
-    )
-    second = pl.LazyFrame({"a": [1, 2, 3], "b": [0, 1, 2], "c": [None, "y", "x"]}).cast(
-        dict(c=enum)
-    )
+    first = pl.LazyFrame({"a": [1, 2, 1], "b": [1, 2, 3], "c": ["x", "y", None]}).cast(dict(c=enum))
+    second = pl.LazyFrame({"a": [1, 2, 3], "b": [0, 1, 2], "c": [None, "y", "x"]}).cast(dict(c=enum))
     return first, second
 
 
 def data_with_filter_without_rule_violation() -> tuple[pl.LazyFrame, pl.LazyFrame]:
-    first = pl.LazyFrame({"a": [1, 2, 3], "b": [1, 1, 3], "c": ["x", "y", None]}).cast(
-        dict(c=enum)
-    )
-    second = pl.LazyFrame(
-        {"a": [2, 3, 4, 5], "b": [1, 2, 3, 4], "c": ["x", "y", "x", "x"]}
-    ).cast(dict(c=enum))
+    first = pl.LazyFrame({"a": [1, 2, 3], "b": [1, 1, 3], "c": ["x", "y", None]}).cast(dict(c=enum))
+    second = pl.LazyFrame({"a": [2, 3, 4, 5], "b": [1, 2, 3, 4], "c": ["x", "y", "x", "x"]}).cast(dict(c=enum))
     return first, second
 
 
 def data_with_filter_with_rule_violation() -> tuple[pl.LazyFrame, pl.LazyFrame]:
-    first = pl.LazyFrame({"a": [1, 2, 3], "b": [1, 2, 3], "c": ["x", "y", None]}).cast(
-        dict(c=enum)
-    )
-    second = pl.LazyFrame(
-        {"a": [2, 3, 4, 5, 6], "b": [0, 1, 2, 3, -1], "c": [None, "y", "y", "x", "z"]}
-    )
+    first = pl.LazyFrame({"a": [1, 2, 3], "b": [1, 2, 3], "c": ["x", "y", None]}).cast(dict(c=enum))
+    second = pl.LazyFrame({"a": [2, 3, 4, 5, 6], "b": [0, 1, 2, 3, -1], "c": [None, "y", "y", "x", "z"]})
     return first, second
 
 
@@ -174,14 +158,11 @@ def test_dataclass():
 
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
 def test_enum_violation():
-    second = pl.LazyFrame(
-        {"a": [2, 3, 4, 5], "b": [0, 1, 2, 3], "c": ["z", "y", "y", "x"]}
-    )
+    second = pl.LazyFrame({"a": [2, 3, 4, 5], "b": [0, 1, 2, 3], "c": ["z", "y", "y", "x"]})
     # it is expected that cast fails on invalid enum value
     with pytest.raises(
         pl.exceptions.InvalidOperationError,
-        match="conversion from `str` to `enum` failed in column 'c' "
-        "for 1 out of 4 values",
+        match="conversion from `str` to `enum` failed in column 'c' for 1 out of 4 values",
     ):
         MySecondColSpec.cast(second).collect()
     x, y = MySecondColSpec.filter(second, cast=True)
@@ -272,9 +253,7 @@ def test_filter_with_filter_without_rule_violation():
         assert isinstance(out, MyCollection)
         assert_frame_equal(
             out.first,
-            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(
-                dict(b=pl.Int16, c=enum)
-            ),
+            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(dict(b=pl.Int16, c=enum)),
         )
         assert_frame_equal(
             out.second,
@@ -309,9 +288,7 @@ def test_filter_with_filter_with_rule_violation():
         assert isinstance(out, MyCollection)
         assert_frame_equal(
             out.first,
-            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(
-                dict(b=pl.Int16, c=enum)
-            ),
+            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(dict(b=pl.Int16, c=enum)),
         )
         assert_frame_equal(
             out.second,
@@ -355,9 +332,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
             return globals()[f"data_{name}"]()
 
     @materialize(input_type=pl.LazyFrame)
-    def consumer(
-        first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]
-    ):
+    def consumer(first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]):
         assert first.collect_schema() == pl.Schema(
             [("a", pl.Int64), ("b", pl.Int16), ("c", pl.Enum(categories=["x", "y"]))]
         )
@@ -368,22 +343,16 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
         assert len(second.collect()) in [3, 4, 5]
 
         if not validate_get_data and with_violation:
-            with pytest.raises(
-                dy.exc.RuleValidationError, match="1 rules failed validation"
-            ):
+            with pytest.raises(dy.exc.RuleValidationError, match="1 rules failed validation"):
                 MyFirstColSpec.validate(first)
-            with pytest.raises(
-                dy.exc.RuleValidationError, match="2 rules failed validation"
-            ):
+            with pytest.raises(dy.exc.RuleValidationError, match="2 rules failed validation"):
                 MySecondColSpec.validate(second)
         else:
             assert MyFirstColSpec.is_valid(first)
             assert MySecondColSpec.is_valid(second)
 
     @materialize(input_type=dy.LazyFrame)
-    def consumer2(
-        first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]
-    ):
+    def consumer2(first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]):
         assert first.collect_schema() == pl.Schema(
             [("a", pl.Int64), ("b", pl.Int16), ("c", pl.Enum(categories=["x", "y"]))]
         )
@@ -394,10 +363,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
         assert len(second.collect()) in [3, 4, 5]
 
     with Flow() as flow:
-        name = (
-            f"with{'out' if not with_filter else ''}_filter"
-            f"_with{'out' if not with_violation else ''}_rule_violation"
-        )
+        name = f"with{'out' if not with_filter else ''}_filter_with{'out' if not with_violation else ''}_rule_violation"
         with Stage("s01"):
             first, second = get_anno_data(name)
             consumer(first, second)
@@ -432,9 +398,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
 )
-def test_annotations_not_fail_fast(
-    with_filter: bool, with_violation: bool, validate_get_data: bool
-):
+def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, validate_get_data: bool):
     if validate_get_data:
 
         @materialize(nout=2)
@@ -449,9 +413,7 @@ def test_annotations_not_fail_fast(
             return globals()[f"data_{name}"]()
 
     @materialize(input_type=pl.LazyFrame)
-    def consumer(
-        first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]
-    ):
+    def consumer(first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]):
         assert first.collect_schema() == pl.Schema(
             [("a", pl.Int64), ("b", pl.Int16), ("c", pl.Enum(categories=["x", "y"]))]
         )
@@ -465,9 +427,7 @@ def test_annotations_not_fail_fast(
         assert MySecondColSpec.is_valid(second)
 
     @materialize(input_type=dy.LazyFrame)
-    def consumer2(
-        first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]
-    ):
+    def consumer2(first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]):
         assert first.collect_schema() == pl.Schema(
             [("a", pl.Int64), ("b", pl.Int16), ("c", pl.Enum(categories=["x", "y"]))]
         )
@@ -478,10 +438,7 @@ def test_annotations_not_fail_fast(
         assert len(second.collect()) in [3, 4, 5]
 
     with Flow() as flow:
-        name = (
-            f"with{'out' if not with_filter else ''}_filter"
-            f"_with{'out' if not with_violation else ''}_rule_violation"
-        )
+        name = f"with{'out' if not with_filter else ''}_filter_with{'out' if not with_violation else ''}_rule_violation"
         with Stage("s01"):
             first, second = get_anno_data(name)
             consumer(first, second)
@@ -501,9 +458,7 @@ def test_annotations_not_fail_fast(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
 )
-def test_annotations_fault_tolerant(
-    with_filter: bool, with_violation: bool, validate_get_data: bool
-):
+def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, validate_get_data: bool):
     if validate_get_data:
 
         @materialize(nout=2)
@@ -518,9 +473,7 @@ def test_annotations_fault_tolerant(
             return globals()[f"data_{name}"]()
 
     @materialize(input_type=pl.LazyFrame)
-    def consumer(
-        first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]
-    ):
+    def consumer(first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]):
         assert first.collect_schema() == pl.Schema(
             [("a", pl.Int64), ("b", pl.Int16), ("c", pl.Enum(categories=["x", "y"]))]
         )
@@ -530,9 +483,7 @@ def test_annotations_fault_tolerant(
                 ("b", pl.Int64),
                 (
                     "c",
-                    pl.Enum(categories=["x", "y"])
-                    if not with_filter or not with_violation
-                    else pl.String,
+                    pl.Enum(categories=["x", "y"]) if not with_filter or not with_violation else pl.String,
                 ),
             ]
         )
@@ -542,35 +493,24 @@ def test_annotations_fault_tolerant(
         if with_violation:
             if with_filter:
                 MyFirstColSpec.validate(first)
-                with pytest.raises(
-                    dy.exc.RuleValidationError, match="3 rules failed validation"
-                ):
+                with pytest.raises(dy.exc.RuleValidationError, match="3 rules failed validation"):
                     MySecondColSpec.validate(second, cast=True)
             else:
-                with pytest.raises(
-                    dy.exc.RuleValidationError, match="1 rules failed validation"
-                ):
+                with pytest.raises(dy.exc.RuleValidationError, match="1 rules failed validation"):
                     MyFirstColSpec.validate(first)
-                with pytest.raises(
-                    dy.exc.RuleValidationError, match="2 rules failed validation"
-                ):
+                with pytest.raises(dy.exc.RuleValidationError, match="2 rules failed validation"):
                     MySecondColSpec.validate(second)
         else:
             assert MyFirstColSpec.is_valid(first)
             assert MySecondColSpec.is_valid(second)
 
     @materialize(input_type=dy.LazyFrame)
-    def consumer2(
-        first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]
-    ):
+    def consumer2(first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]):
         assert len(first.collect()) == 3
         assert len(second.collect()) in [3, 4, 5]
 
     with Flow() as flow:
-        name = (
-            f"with{'out' if not with_filter else ''}_filter"
-            f"_with{'out' if not with_violation else ''}_rule_violation"
-        )
+        name = f"with{'out' if not with_filter else ''}_filter_with{'out' if not with_violation else ''}_rule_violation"
         with Stage("s01"):
             first, second = get_anno_data(name)
             consumer(first, second)
@@ -578,23 +518,13 @@ def test_annotations_fault_tolerant(
             consumer2(first, second)
 
     with structlog.testing.capture_logs() as logs:
-        with ConfigContext.get().evolve(
-            table_hook_args=dict(polars=dict(fault_tolerant_annotation_action=True))
-        ):
-            result = flow.run(
-                cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID
-            )
+        with ConfigContext.get().evolve(table_hook_args=dict(polars=dict(fault_tolerant_annotation_action=True))):
+            result = flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
     assert result.successful
-    failures = [
-        c
-        for c in logs
-        if c["event"] == "Failed to apply materialize annotation for table"
-    ]
+    failures = [c for c in logs if c["event"] == "Failed to apply materialize annotation for table"]
     if with_violation and validate_get_data:
         assert len(failures) == 1 if with_filter else 2
-        assert all(
-            "failed validation with My" in failure["exception"] for failure in failures
-        )
+        assert all("failed validation with My" in failure["exception"] for failure in failures)
 
 
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
@@ -630,9 +560,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
         assert len(coll.second.collect()) in [3, 4, 5]
 
         if with_violation:
-            with pytest.raises(
-                dy.exc.MemberValidationError, match="2 members failed validation"
-            ):
+            with pytest.raises(dy.exc.MemberValidationError, match="2 members failed validation"):
                 coll.validate(coll.__dict__, cast=True)
         else:
             if with_filter:
@@ -640,9 +568,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
                 out, _ = coll.filter(coll.__dict__, cast=True)
                 assert_frame_equal(
                     out.first,
-                    pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(
-                        dict(b=pl.Int16, c=enum)
-                    ),
+                    pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(dict(b=pl.Int16, c=enum)),
                 )
                 assert_frame_equal(
                     out.second,
@@ -663,10 +589,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
         assert len(coll.second.collect()) in [3, 4, 5]
 
     with Flow() as flow:
-        name = (
-            f"with{'out' if not with_filter else ''}_filter"
-            f"_with{'out' if not with_violation else ''}_rule_violation"
-        )
+        name = f"with{'out' if not with_filter else ''}_filter_with{'out' if not with_violation else ''}_rule_violation"
         with Stage("s01"):
             collection = get_anno_collection(name)
             consumer_collection(collection)
@@ -687,15 +610,11 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
 def test_type_mapping():
     @materialize(nout=2)
-    def get_anno_data() -> tuple[
-        dy.LazyFrame[MyFirstColSpec], dy.LazyFrame[MySecondColSpec]
-    ]:
+    def get_anno_data() -> tuple[dy.LazyFrame[MyFirstColSpec], dy.LazyFrame[MySecondColSpec]]:
         return data_with_filter_without_rule_violation()
 
     @materialize(input_type=sa.Table)
-    def consumer(
-        first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]
-    ):
+    def consumer(first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]):
         assert isinstance(first.c.b.type, sa.SmallInteger)
         assert isinstance(second.c.b.type, sa.BigInteger)
         assert not isinstance(second.c.b.type, sa.SmallInteger)

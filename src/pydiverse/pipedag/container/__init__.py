@@ -139,9 +139,7 @@ class Table(Generic[T]):
             (self.nullable, "nullable"),
             (self.non_nullable, "non_nullable"),
         ]:
-            type_error = TypeError(
-                f"Table argument '{name}' must be of type list[str]."
-            )
+            type_error = TypeError(f"Table argument '{name}' must be of type list[str].")
             if arg is not None:
                 if not isinstance(arg, Iterable) or isinstance(arg, str):
                     raise type_error
@@ -218,18 +216,14 @@ class Table(Generic[T]):
             dematerialized created table.
         """
         try:
-            task_context = (
-                TaskContext.get()
-            )  # raises Lookup Error if no TaskContext is open
+            task_context = TaskContext.get()  # raises Lookup Error if no TaskContext is open
             if config_context is not None and config_context is not ConfigContext.get():
                 raise ValueError(
                     "config_context must be identical to ConfigContext.get() "
                     "when task is regularly executed by pipedag orchestration."
                 )
             config_context = ConfigContext.get()
-            task_schema = config_context.store.table_store.get_schema(
-                task_context.task.stage.transaction_name
-            )
+            task_schema = config_context.store.table_store.get_schema(task_context.task.stage.transaction_name)
             if schema is not None and schema != task_schema:
                 raise ValueError(
                     "schema must be identical to Task Stage transaction schema "
@@ -247,29 +241,23 @@ class Table(Generic[T]):
                 # fall back to debug materialization when Table.materialize() is
                 # called twice for the same table
                 task_context.task.logger.info(
-                    "Falling back to debug materialization due to duplicate "
-                    "materializtion of this table"
+                    "Falling back to debug materialization due to duplicate materializtion of this table"
                 )
 
                 def return_type_mutator(return_as_type):
                     if return_as_type is None:
                         task: MaterializingTask = task_context.task  # type: ignore
                         return_as_type = task.input_type
-                        if (
-                            return_as_type is None
-                            or not config_context.store.table_store.get_r_table_hook(
-                                return_as_type
-                            ).retrieve_as_reference(return_as_type)
-                        ):
+                        if return_as_type is None or not config_context.store.table_store.get_r_table_hook(
+                            return_as_type
+                        ).retrieve_as_reference(return_as_type):
                             # dematerialize as sa.Table if it would transfer all rows
                             # to python when dematerializing with input_type
                             return_as_type = sa.Table
                     return return_as_type
 
                 if isinstance(return_as_type, Iterable):
-                    return_as_type = tuple(
-                        return_type_mutator(t) for t in return_as_type
-                    )
+                    return_as_type = tuple(return_type_mutator(t) for t in return_as_type)
                 else:
                     return_as_type = return_type_mutator(return_as_type)
         except LookupError:
@@ -278,8 +266,7 @@ class Table(Generic[T]):
         if config_context is not None:
             if schema is None:
                 raise ValueError(
-                    "schema must be provided when task is not regularly "
-                    "executed by pipedag orchestration."
+                    "schema must be provided when task is not regularly executed by pipedag orchestration."
                 )
             # fall back to debug behavior when an explicit table_store is given
             # via config_context
@@ -300,11 +287,7 @@ class Table(Generic[T]):
                     hook = store.get_r_table_hook(return_as_type)
                     save_name = self.name
                     self.name = table_name
-                    schema_name = (
-                        schema.name
-                        if store.get_schema(schema.name).get() == schema.get()
-                        else schema.get()
-                    )
+                    schema_name = schema.name if store.get_schema(schema.name).get() == schema.get() else schema.get()
                     if store.get_schema(schema_name).get() != schema.get():
                         raise ValueError(
                             "Schema prefix and postfix must match prefix and postfix of"
@@ -336,8 +319,7 @@ class Table(Generic[T]):
             if return_as_type is not None:
                 logger = structlog.get_logger(self.__class__.__name__, table=self)
                 logger.info(
-                    "Ignoring return_as_type in Table.materialize() outside of flow "
-                    "without given config_context.",
+                    "Ignoring return_as_type in Table.materialize() outside of flow without given config_context.",
                     return_as_type=return_as_type,
                 )
             return self.obj
@@ -360,9 +342,7 @@ class Table(Generic[T]):
     def __eq__(self, other: "Table"):
         if not isinstance(other, Table):
             return False
-        return self.name == other.name and (
-            self.stage == other.stage or (self.stage is None and other.stage is None)
-        )
+        return self.name == other.name and (self.stage == other.stage or (self.stage is None and other.stage is None))
 
     def __hash__(self):
         return hash(self.name) if self.stage is None else hash((self.name, self.stage))
@@ -701,9 +681,7 @@ try:
     def materialize_table(name: str | None = None, table_prefix: str | None = None): ...
 
     @pdt.verb
-    def materialize_table(
-        tbl: pdt.Table, name: str | None = None, table_prefix: str | None = None
-    ):
+    def materialize_table(tbl: pdt.Table, name: str | None = None, table_prefix: str | None = None):
         # use imperative materialization of pipedag within pydiverse transform task
         if name is None:
             name = table_prefix or ""
@@ -716,6 +694,5 @@ except ImportError:
     # If pydiverse.transform is not available, we cannot use the materialize_table verb
     def materialize_table(tbl: Any, table_prefix: str | None = None):
         raise ImportError(
-            "pydiverse.transform is not available. "
-            "Please install pydiverse-transform to use materialize_table."
+            "pydiverse.transform is not available. Please install pydiverse-transform to use materialize_table."
         )

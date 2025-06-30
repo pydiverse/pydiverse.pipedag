@@ -18,19 +18,13 @@ def table_1(script_path: str):
 
 @materialize(input_type=sa.Table, lazy=True)
 def table_2(script_path: str, dependent_table: Table):
-    sql = (
-        Path(script_path)
-        .read_text(encoding="utf-8")
-        .replace("{{dependent}}", str(dependent_table.original))
-    )
+    sql = Path(script_path).read_text(encoding="utf-8").replace("{{dependent}}", str(dependent_table.original))
     return Table(sa.text(sql), name="test_table2")
 
 
 @materialize(input_type=pd.DataFrame, lazy=True)
 def assert_result(df: pd.DataFrame):
-    pd.testing.assert_frame_equal(
-        df, pd.DataFrame({"coltab2": [24]}), check_dtype=False
-    )
+    pd.testing.assert_frame_equal(df, pd.DataFrame({"coltab2": [24]}), check_dtype=False)
 
 
 @with_instances("postgres", "mssql", "ibm_db2", per_user=True)

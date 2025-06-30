@@ -40,9 +40,7 @@ def main():
                     with GroupNode(
                         "group1",
                         ordering_barrier=True,
-                        style=VisualizationStyle(
-                            hide_content=True, box_color_always="#ccccff"
-                        ),
+                        style=VisualizationStyle(hide_content=True, box_color_always="#ccccff"),
                     ):
                         task1 = task_within_group()
                         _ = task_within_group2(task1)

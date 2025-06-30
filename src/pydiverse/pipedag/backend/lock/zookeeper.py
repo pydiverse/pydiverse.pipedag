@@ -101,9 +101,7 @@ class ZooKeeperLockManager(BaseLockManager):
         elif isinstance(lock, str):
             return self.base_path + lock
         else:
-            raise NotImplementedError(
-                f"Can't lock object of type '{type(lock).__name__}'"
-            )
+            raise NotImplementedError(f"Can't lock object of type '{type(lock).__name__}'")
 
     def _lock_listener(self, state):
         if state == KazooState.SUSPENDED:

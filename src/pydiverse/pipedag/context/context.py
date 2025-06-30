@@ -284,18 +284,11 @@ class ConfigContext(BaseAttrsContext):
                 return True
             except (ImportError, AttributeError):
                 self.logger.exception(
-                    "Configuration option auto_table in PipedagConfig included "
-                    f"class which does not exist: {t}"
+                    f"Configuration option auto_table in PipedagConfig included class which does not exist: {t}"
                 )
                 return False
 
-        return tuple(
-            [
-                import_object(t)
-                for t in self._config_dict.get("auto_table", ())
-                if exists(t)
-            ]
-        )
+        return tuple([import_object(t) for t in self._config_dict.get("auto_table", ()) if exists(t)])
 
     @cached_property
     def auto_blob(self) -> tuple[type, ...]:
@@ -414,24 +407,16 @@ class ConfigContext(BaseAttrsContext):
         """
         for key, value in default_config_dict.items():
             if key not in config:
-                raise ValueError(
-                    f"Missing config key '{key}', suggested default "
-                    f"config: {default_config_dict}"
-                )
+                raise ValueError(f"Missing config key '{key}', suggested default config: {default_config_dict}")
             elif isinstance(value, dict) and isinstance(config[key], dict):
                 for key2, _ in value.items():
                     if key2 not in config[key]:
                         raise ValueError(
-                            f"Missing config key '{key}'.'{key2}', "
-                            f"suggested default config: "
-                            f"{default_config_dict}"
+                            f"Missing config key '{key}'.'{key2}', suggested default config: {default_config_dict}"
                         )
         for key, _ in test_store_config_dict.items():
             if key not in config:
-                raise ValueError(
-                    f"Missing config key '{key}', suggested test "
-                    f"config: {test_store_config_dict}"
-                )
+                raise ValueError(f"Missing config key '{key}', suggested test config: {test_store_config_dict}")
 
         # check enums
         # Alternative: could be a feature of __get_merged_config_dict
@@ -452,11 +437,7 @@ class ConfigContext(BaseAttrsContext):
             if "stage_commit_technique" in config
             else StageCommitTechnique.SCHEMA_SWAP
         )
-        cache_validation = (
-            copy.deepcopy(config["cache_validation"])
-            if "cache_validation" in config
-            else {}
-        )
+        cache_validation = copy.deepcopy(config["cache_validation"]) if "cache_validation" in config else {}
         cache_validation["mode"] = (
             getattr(CacheValidationMode, config["cache_validation"]["mode"].upper())
             if "cache_validation" in config and "mode" in config["cache_validation"]
@@ -470,14 +451,11 @@ class ConfigContext(BaseAttrsContext):
 
         if not isinstance(config.get("visualization", {}), dict):
             raise ValueError(
-                "Config section 'visualization' must be a dictionary, "
-                f"found {type(config['visualization'])}"
+                f"Config section 'visualization' must be a dictionary, found {type(config['visualization'])}"
             )
         visualization = {}
         for key, value in config.get("visualization", {}).items():
-            ConfigContext.parse_in_object(
-                key, value, VisualizationConfig, "visualization", inout=visualization
-            )
+            ConfigContext.parse_in_object(key, value, VisualizationConfig, "visualization", inout=visualization)
             for _field, structure, class_type in [
                 ("styles", visualization[key].styles, VisualizationStyle),
                 ("group_nodes", visualization[key].group_nodes, GroupNodeConfig),
@@ -491,10 +469,7 @@ class ConfigContext(BaseAttrsContext):
                             f"visualization.{key}.{_field}",
                             inout=structure,
                         )
-        if (
-            cache_validation["mode"] == CacheValidationMode.NORMAL
-            and cache_validation["disable_cache_function"]
-        ):
+        if cache_validation["mode"] == CacheValidationMode.NORMAL and cache_validation["disable_cache_function"]:
             raise ValueError(
                 "cache_validation.disable_cache_function=True is not allowed in "
                 "combination with cache_validation.mode=NORMAL"
@@ -515,9 +490,7 @@ class ConfigContext(BaseAttrsContext):
             disable_kroki=config.get("disable_kroki"),
             kroki_url=config.get("kroki_url"),
             attrs=Box(config["attrs"], frozen_box=True),
-            table_hook_args=Box(
-                config.get("table_store", {}).get("hook_args", {}), frozen_box=True
-            ),
+            table_hook_args=Box(config.get("table_store", {}).get("hook_args", {}), frozen_box=True),
         )
         return config_context
 
@@ -548,44 +521,24 @@ class ConfigContext(BaseAttrsContext):
         """
         structure = inout
         if not isinstance(value, dict):
-            raise ValueError(
-                f"Config section '{key}' within '{within}' must be a dictionary, "
-                f"found {type(value)}"
-            )
+            raise ValueError(f"Config section '{key}' within '{within}' must be a dictionary, found {type(value)}")
         members = set(class_type.__dataclass_fields__.keys())
         if unexpected := set(value.keys()) - members:
             raise ValueError(
-                f"Unexpected keys in section '{key}' within '{within}': "
-                f"{unexpected}; expected: '{', '.join(members)}'"
+                f"Unexpected keys in section '{key}' within '{within}': {unexpected}; expected: '{', '.join(members)}'"
             )
-        structure[key] = class_type(
-            **{m: copy.copy(value[m]) for m in members if m in value}
-        )
+        structure[key] = class_type(**{m: copy.copy(value[m]) for m in members if m in value})
         for m in value:
             annotation = class_type.__annotations__[m]
             annotation = strip_none(annotation)
-            if isinstance(strip_args(annotation), dict) and not isinstance(
-                value[m], dict
-            ):
-                raise ValueError(
-                    f"Expected dictionary for '{m}' within '{within}.{key}', "
-                    f"found {type(value[m])}"
-                )
+            if isinstance(strip_args(annotation), dict) and not isinstance(value[m], dict):
+                raise ValueError(f"Expected dictionary for '{m}' within '{within}.{key}', found {type(value[m])}")
             if isinstance(annotation, bool) and not isinstance(value[m], bool):
-                raise ValueError(
-                    f"Expected boolean for '{m}' within '{within}.{key}', "
-                    f"found {type(value[m])}"
-                )
+                raise ValueError(f"Expected boolean for '{m}' within '{within}.{key}', found {type(value[m])}")
             if isinstance(annotation, str) and not isinstance(value[m], str):
-                raise ValueError(
-                    f"Expected string for '{m}' within '{within}.{key}', "
-                    f"found {type(value[m])}"
-                )
+                raise ValueError(f"Expected string for '{m}' within '{within}.{key}', found {type(value[m])}")
             if isinstance(annotation, int) and not isinstance(value[m], int):
-                raise ValueError(
-                    f"Expected integer for '{m}' within '{within}.{key}', "
-                    f"found {type(value[m])}"
-                )
+                raise ValueError(f"Expected integer for '{m}' within '{within}.{key}', found {type(value[m])}")
 
     _context_var = ContextVar("config_context")
 

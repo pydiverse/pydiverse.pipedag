@@ -81,15 +81,11 @@ class PandasTableHook(PandasTableHook):
         engine = store.engine
         dtypes = cls._get_dialect_dtypes(dtypes, table)
 
-        store.check_materialization_details_supported(
-            resolve_materialization_details_label(table)
-        )
+        store.check_materialization_details_supported(resolve_materialization_details_label(table))
 
         # Create empty table with correct schema
         cls._dialect_create_empty_table(store, table, schema, dtypes)
-        store.add_indexes_and_set_nullable(
-            table, schema, on_empty_table=True, table_cols=df.columns
-        )
+        store.add_indexes_and_set_nullable(table, schema, on_empty_table=True, table_cols=df.columns)
 
         # Copy dataframe directly to duckdb
         # This is SIGNIFICANTLY faster than using pandas.to_sql

@@ -41,9 +41,7 @@ class IPCClient:
 
             response = socket.recv()
             response = self._fernet.decrypt(response)
-            response = msgpack.unpackb(
-                response, use_list=False, ext_hook=self.msg_ext_hook
-            )
+            response = msgpack.unpackb(response, use_list=False, ext_hook=self.msg_ext_hook)
             self.logger.debug("Client got response", response=response)
             return response
 
@@ -86,9 +84,7 @@ class IPCServer(threading.Thread):
         self._fernet = Fernet(Fernet.generate_key())
 
         self.__stop_flag = False
-        self.logger = structlog.get_logger(
-            logger_name=type(self).__name__, address=self.address
-        )
+        self.logger = structlog.get_logger(logger_name=type(self).__name__, address=self.address)
 
         self.msg_default = msg_default
         self.msg_ext_hook = msg_ext_hook
@@ -124,17 +120,12 @@ class IPCServer(threading.Thread):
                 try:
                     data = context.recv()
                     data = self._fernet.decrypt(data)
-                    unpacker = msgpack.Unpacker(
-                        use_list=False, ext_hook=self.msg_ext_hook
-                    )
+                    unpacker = msgpack.Unpacker(use_list=False, ext_hook=self.msg_ext_hook)
                     unpacker.feed(data)
 
                     # Expected: (NONCE, PAYLOAD)
                     if unpacker.read_array_header() != 2:
-                        raise IPCError(
-                            "Expected request to contain exactly two fields:"
-                            " nonce and payload."
-                        )
+                        raise IPCError("Expected request to contain exactly two fields: nonce and payload.")
 
                     nonce = unpacker.unpack()
                     nonce_hex = nonce.hex()
@@ -150,9 +141,7 @@ class IPCServer(threading.Thread):
                         context_id += 1
                         continue
 
-                    thread_logger = structlog.get_logger(
-                        logger_name="IPC Worker", nonce=nonce_hex, id=context_id
-                    )
+                    thread_logger = structlog.get_logger(logger_name="IPC Worker", nonce=nonce_hex, id=context_id)
                     thread = threading.Thread(
                         name="IPC Worker",
                         target=self._serve,

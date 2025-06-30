@@ -139,9 +139,7 @@ class UnboundMaterializingTask(UnboundTask):
                     f"{unexpected_keys} are unexpected."
                 )
         else:
-            raise ValueError(
-                "The ordering_barrier parameter must be a boolean or a dictionary."
-            )
+            raise ValueError("The ordering_barrier parameter must be a boolean or a dictionary.")
         self.group_node_args = group_node_args
 
         if version is AUTO_VERSION:
@@ -150,9 +148,7 @@ class UnboundMaterializingTask(UnboundTask):
                 # to use (either not supported, lazy or tracing)
                 raise ValueError("Auto-versioning task must specify an input type")
             if lazy:
-                raise ValueError(
-                    "Task can't be lazy and auto-versioning at the same time"
-                )
+                raise ValueError("Task can't be lazy and auto-versioning at the same time")
 
     def __call__(self, *args, **kwargs) -> "MaterializingTask":
         if self.group_node_args["ordering_barrier"]:
@@ -215,18 +211,14 @@ class MaterializingTaskGetItem(TaskGetItem):
         """
         return super().__getitem__(item)
 
-    def get_output_from_store(
-        self, as_type: type = None, ignore_position_hashes: bool = False
-    ) -> Any:
+    def get_output_from_store(self, as_type: type = None, ignore_position_hashes: bool = False) -> Any:
         """
         Same as :py:meth:`MaterializingTask.get_output_from_store()`,
         except that it only loads the required subset of the output.
         """
         from pydiverse.pipedag.materialize.core import _get_output_from_store
 
-        return _get_output_from_store(
-            self, as_type, ignore_position_hashes=ignore_position_hashes
-        )
+        return _get_output_from_store(self, as_type, ignore_position_hashes=ignore_position_hashes)
 
 
 class MaterializingTask(Task):
@@ -273,9 +265,7 @@ class MaterializingTask(Task):
         try:
             TaskContext.get().override_version = version
         except LookupError:
-            raise AttributeError(
-                "Can't set task version outside of a TaskContext"
-            ) from None
+            raise AttributeError("Can't set task version outside of a TaskContext") from None
 
     def __getitem__(self, item) -> MaterializingTaskGetItem:
         """Construct a :py:class:`~.MaterializingTaskGetItem`.
@@ -309,9 +299,7 @@ class MaterializingTask(Task):
         """
         return MaterializingTaskGetItem(self, self, item)
 
-    def run(
-        self, inputs: dict[int, Any], ignore_position_hashes: bool = False, **kwargs
-    ):
+    def run(self, inputs: dict[int, Any], ignore_position_hashes: bool = False, **kwargs):
         # When running only a subset of an entire flow, not all inputs
         # get calculated during flow execution. As a consequence, we must load
         # those inputs from the cache.
@@ -328,18 +316,14 @@ class MaterializingTask(Task):
                 continue
 
             store = ConfigContext.get().store
-            cached_output, metadata = store.retrieve_most_recent_task_output_from_cache(
-                in_task, ignore_position_hashes
-            )
+            cached_output, metadata = store.retrieve_most_recent_task_output_from_cache(in_task, ignore_position_hashes)
 
             cached_output = deep_map(cached_output, replace_stage_with_pseudo_stage)
             inputs[in_id] = cached_output
 
         return super().run(inputs, **kwargs)
 
-    def get_output_from_store(
-        self, as_type: type = None, ignore_position_hashes: bool = False
-    ) -> Any:
+    def get_output_from_store(self, as_type: type = None, ignore_position_hashes: bool = False) -> Any:
         """Retrieves the output of the task from the cache.
 
         No guarantees are made regarding whether the returned values are still
@@ -378,9 +362,7 @@ class MaterializingTask(Task):
         """
         from pydiverse.pipedag.materialize.core import _get_output_from_store
 
-        return _get_output_from_store(
-            self, as_type, ignore_position_hashes=ignore_position_hashes
-        )
+        return _get_output_from_store(self, as_type, ignore_position_hashes=ignore_position_hashes)
 
 
 class AutoVersionType:
@@ -514,37 +496,21 @@ class MaterializationWrapper:
         # If yes, return memoized result. This prevents DuplicateNameExceptions
         with run_context.task_memo(task, memo_cache_key) as (success, memo):
             if success:
-                task.logger.info(
-                    "Task has already been run with the same inputs."
-                    " Using memoized results."
-                )
+                task.logger.info("Task has already been run with the same inputs. Using memoized results.")
 
                 return memo
 
             # Cache Lookup (only required if task isn't lazy)
-            force_task_execution = (
-                config_context.cache_validation.mode
-                == CacheValidationMode.FORCE_CACHE_INVALID
-                or (
-                    config_context.cache_validation.mode
-                    == CacheValidationMode.FORCE_FRESH_INPUT
-                    and task.cache is not None
-                )
+            force_task_execution = config_context.cache_validation.mode == CacheValidationMode.FORCE_CACHE_INVALID or (
+                config_context.cache_validation.mode == CacheValidationMode.FORCE_FRESH_INPUT and task.cache is not None
             )
             skip_cache_lookup = (
-                config_context.cache_validation.ignore_task_version
-                and task.version != AUTO_VERSION
+                config_context.cache_validation.ignore_task_version and task.version != AUTO_VERSION
             ) or task.version is None
-            assert_no_fresh_input = (
-                config_context.cache_validation.mode
-                == CacheValidationMode.ASSERT_NO_FRESH_INPUT
-            )
+            assert_no_fresh_input = config_context.cache_validation.mode == CacheValidationMode.ASSERT_NO_FRESH_INPUT
 
             if task.version is AUTO_VERSION:
-                if (
-                    force_task_execution
-                    and config_context.cache_validation.disable_cache_function
-                ):
+                if force_task_execution and config_context.cache_validation.disable_cache_function:
                     task.version = None
                     skip_cache_lookup = True
                     task.logger.info(
@@ -556,16 +522,12 @@ class MaterializationWrapper:
 
                     auto_version = self.compute_auto_version(task, store, bound)
                     task.version = auto_version
-                    task.logger.info(
-                        "Assigned auto version to task", version=auto_version
-                    )
+                    task.logger.info("Assigned auto version to task", version=auto_version)
 
             if not task.lazy and not skip_cache_lookup and not force_task_execution:
                 cache_metadata = None
                 try:
-                    cached_output, cache_metadata = store.retrieve_cached_output(
-                        task, input_hash, cache_fn_hash
-                    )
+                    cached_output, cache_metadata = store.retrieve_cached_output(task, input_hash, cache_fn_hash)
                 except CacheError as e:
                     task.logger.info(
                         "Failed to retrieve task from cache",
@@ -575,14 +537,10 @@ class MaterializationWrapper:
                         cause=str(e),
                     )
                     TaskContext.get().is_cache_valid = False
-                    run_context.trace_hook.task_cache_status(
-                        task, input_hash, cache_fn_hash, cache_valid=False
-                    )
+                    run_context.trace_hook.task_cache_status(task, input_hash, cache_fn_hash, cache_valid=False)
 
                 if cache_metadata is not None:
-                    store.copy_cached_output_to_transaction_stage(
-                        cached_output, cache_metadata, task
-                    )
+                    store.copy_cached_output_to_transaction_stage(cached_output, cache_metadata, task)
                     run_context.store_task_memo(task, memo_cache_key, cached_output)
                     task.logger.info(
                         "Found task in cache. Using cached result.",
@@ -609,19 +567,14 @@ class MaterializationWrapper:
                 # store.materialize_task procedure
                 TaskContext.get().is_cache_valid = True
 
-                if (
-                    config_context.cache_validation.mode
-                    == CacheValidationMode.IGNORE_FRESH_INPUT
-                ):
+                if config_context.cache_validation.mode == CacheValidationMode.IGNORE_FRESH_INPUT:
                     # `cache_fn_hash` is not used for cache retrieval if
                     # ignore_cache_function is set to True.
                     # In that case, cache_metadata.cache_fn_hash may be different
                     # from the cache_fn_hash of the current task run.
 
                     try:
-                        _, cache_metadata = store.retrieve_cached_output(
-                            task, input_hash, ""
-                        )
+                        _, cache_metadata = store.retrieve_cached_output(task, input_hash, "")
                         cache_fn_hash = cache_metadata.cache_fn_hash
                         run_context.trace_hook.task_cache_status(
                             task, input_hash, cache_fn_hash, cache_metadata, lazy=True
@@ -662,9 +615,7 @@ class MaterializationWrapper:
             task_context.input_tables = input_tables
 
             # Not found in cache / lazy -> Evaluate Function
-            args, kwargs = store.dematerialize_task_inputs(
-                task, bound.args, bound.kwargs
-            )
+            args, kwargs = store.dematerialize_task_inputs(task, bound.args, bound.kwargs)
 
             def imperative_materialize(
                 table: Table,
@@ -675,34 +626,23 @@ class MaterializationWrapper:
                 my_store = config_context.store if config_context is not None else store
                 state = task_cache_info.imperative_materialization_state
                 if id(table) in state.table_ids:
-                    raise RuntimeError(
-                        "The table has already been imperatively materialized."
-                    )
+                    raise RuntimeError("The table has already been imperatively materialized.")
                 table.assumed_dependencies = (
-                    list(sorted(state.assumed_dependencies))
-                    if len(state.assumed_dependencies) > 0
-                    else []
+                    list(sorted(state.assumed_dependencies)) if len(state.assumed_dependencies) > 0 else []
                 )
-                _ = my_store.materialize_task(
-                    task, task_cache_info, table, disable_task_finalization=True
-                )
+                _ = my_store.materialize_task(task, task_cache_info, table, disable_task_finalization=True)
                 if not return_nothing:
 
                     def get_return_obj(return_as_type):
                         if return_as_type is None:
                             return_as_type = task.input_type
-                            if (
-                                return_as_type is None
-                                or not my_store.table_store.get_r_table_hook(
-                                    return_as_type
-                                ).retrieve_as_reference(return_as_type)
-                            ):
+                            if return_as_type is None or not my_store.table_store.get_r_table_hook(
+                                return_as_type
+                            ).retrieve_as_reference(return_as_type):
                                 # dematerialize as sa.Table if it would transfer all
                                 # rows to python when dematerializing with input_type
                                 return_as_type = sa.Table
-                        obj = my_store.dematerialize_item(
-                            table, return_as_type, run_context
-                        )
+                        obj = my_store.dematerialize_item(table, return_as_type, run_context)
                         state.add_table_lookup(obj, table)
                         return obj
 
@@ -717,10 +657,7 @@ class MaterializationWrapper:
             run_context.trace_hook.task_post_call(task)
             task_context.imperative_materialize_callback = None
             if task.debug_tainted:
-                raise RuntimeError(
-                    f"The task {task.name} has been tainted by interactive debugging."
-                    f" Aborting."
-                )
+                raise RuntimeError(f"The task {task.name} has been tainted by interactive debugging. Aborting.")
 
             def result_finalization_mutator(x):
                 state = task_cache_info.imperative_materialization_state
@@ -734,9 +671,7 @@ class MaterializationWrapper:
                     # materialized
                     if len(state.assumed_dependencies) > 0:
                         if x.assumed_dependencies is None:
-                            x.assumed_dependencies = list(
-                                sorted(state.assumed_dependencies)
-                            )
+                            x.assumed_dependencies = list(sorted(state.assumed_dependencies))
                 return x
 
             result = deep_map(result, result_finalization_mutator)
@@ -749,9 +684,7 @@ class MaterializationWrapper:
                 if isinstance(x, RawSql):
                     x.loaded_tables = None
                 if isinstance(x, (Table, RawSql)):
-                    x.assumed_dependencies = deep_map(
-                        x.assumed_dependencies, obj_del_mutator
-                    )
+                    x.assumed_dependencies = deep_map(x.assumed_dependencies, obj_del_mutator)
                 return x
 
             result = deep_map(result, obj_del_mutator)
@@ -775,9 +708,7 @@ class MaterializationWrapper:
         auto_version_support = hook.auto_version_support
 
         if auto_version_support == AutoVersionSupport.NONE:
-            raise TypeError(
-                f"Auto versioning not supported for input type {task.input_type}."
-            )
+            raise TypeError(f"Auto versioning not supported for input type {task.input_type}.")
 
         # Perform auto versioning
         info = None
@@ -798,23 +729,17 @@ class MaterializationWrapper:
         store: "PipeDAGStore",
         bound: inspect.BoundArguments,
     ) -> str:
-        args, kwargs = store.dematerialize_task_inputs(
-            task, bound.args, bound.kwargs, for_auto_versioning=True
-        )
+        args, kwargs = store.dematerialize_task_inputs(task, bound.args, bound.kwargs, for_auto_versioning=True)
 
         try:
             result = self.fn(*args, **kwargs)
         except Exception as e:
             raise RuntimeError("Auto versioning failed") from e
 
-        result, tables = self._auto_version_prepare_and_check_task_output(
-            task, store, result
-        )
+        result, tables = self._auto_version_prepare_and_check_task_output(task, store, result)
 
         if len(tables) == 0:
-            raise ValueError(
-                f"Task with version={AUTO_VERSION} must return at least one Table."
-            )
+            raise ValueError(f"Task with version={AUTO_VERSION} must return at least one Table.")
 
         # Compute auto version
         auto_version_info = []
@@ -842,9 +767,7 @@ class MaterializationWrapper:
             if isinstance(x, Table):
                 return computation_tracer.create_proxy(("TABLE", x.stage.name, x.name))
             if isinstance(x, RawSql):
-                return computation_tracer.create_proxy(
-                    ("RAW_SQL", x.stage.name, x.name, x.cache_key)
-                )
+                return computation_tracer.create_proxy(("RAW_SQL", x.stage.name, x.name, x.cache_key))
             if isinstance(x, Blob):
                 return computation_tracer.create_proxy(("BLOB", x.stage.name, x.name))
 
@@ -859,9 +782,7 @@ class MaterializationWrapper:
             except Exception as e:
                 raise RuntimeError("Auto versioning failed") from e
 
-        result, tables = self._auto_version_prepare_and_check_task_output(
-            task, store, result
-        )
+        result, tables = self._auto_version_prepare_and_check_task_output(task, store, result)
 
         # Compute auto version
         trace_hash = computation_tracer.trace_hash()
@@ -882,9 +803,7 @@ class MaterializationWrapper:
             }
         )
 
-    def _auto_version_prepare_and_check_task_output(
-        self, task: MaterializingTask, store: "PipeDAGStore", output
-    ):
+    def _auto_version_prepare_and_check_task_output(self, task: MaterializingTask, store: "PipeDAGStore", output):
         task_cache_info = TaskCacheInfo(
             task=task,
             input_hash="AUTO_VERSION",
@@ -904,9 +823,7 @@ class MaterializationWrapper:
             return x
 
         output = deep_map(output, replace_proxy)
-        output, tables, raw_sqls, blobs = store.prepare_task_output_for_materialization(
-            task, task_cache_info, output
-        )
+        output, tables, raw_sqls, blobs = store.prepare_task_output_for_materialization(task, task_cache_info, output)
 
         if len(raw_sqls) != 0:
             raise ValueError(f"Task with version={AUTO_VERSION} can't return RawSql.")

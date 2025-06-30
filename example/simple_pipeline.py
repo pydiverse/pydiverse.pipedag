@@ -29,9 +29,7 @@ def input_tables():
 
 @materialize(lazy=True, input_type=sa.Table)
 def join_tables(names, ages):
-    return sa.select(names.c.id, names.c.name, ages.c.age).join_from(
-        names, ages, names.c.id == ages.c.id
-    )
+    return sa.select(names.c.id, names.c.name, ages.c.age).join_from(names, ages, names.c.id == ages.c.id)
 
 
 @materialize(input_type=pd.DataFrame)

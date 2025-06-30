@@ -74,16 +74,8 @@ class PrefectOneEngine(OrchestrationEngine):
             # if desired input is passed in inputs use it,
             # otherwise try to get it from results
             task_inputs = {
-                **{
-                    in_id: tasks[in_t]
-                    for in_id, in_t in t.input_tasks.items()
-                    if in_t in tasks and in_t not in inputs
-                },
-                **{
-                    in_id: Table(inputs[in_t])
-                    for in_id, in_t in t.input_tasks.items()
-                    if in_t in inputs
-                },
+                **{in_id: tasks[in_t] for in_id, in_t in t.input_tasks.items() if in_t in tasks and in_t not in inputs},
+                **{in_id: Table(inputs[in_t]) for in_id, in_t in t.input_tasks.items() if in_t in inputs},
             }
 
             flow.add_task(task)
@@ -133,9 +125,7 @@ class PrefectOneEngine(OrchestrationEngine):
                     break
             else:
                 # Generic Fallback
-                exception = Exception(
-                    f"Prefect run failed with message: {result.message}"
-                )
+                exception = Exception(f"Prefect run failed with message: {result.message}")
 
         return Result.init_from(
             subflow=flow,
@@ -203,11 +193,7 @@ class PrefectTwoEngine(OrchestrationEngine):
                         for in_id, in_t in t.input_tasks.items()
                         if in_t in futures and in_t not in inputs
                     },
-                    **{
-                        in_id: Table(inputs[in_t])
-                        for in_id, in_t in t.input_tasks.items()
-                        if in_t in inputs
-                    },
+                    **{in_id: Table(inputs[in_t]) for in_id, in_t in t.input_tasks.items() if in_t in inputs},
                 }
 
                 futures[t] = task.submit(

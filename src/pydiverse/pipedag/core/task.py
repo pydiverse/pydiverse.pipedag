@@ -99,9 +99,7 @@ class TaskGetItem:
         self.parent = parent
         self.item = item
 
-        self.position_hash = stable_hash(
-            "POS_GET_ITEM", parent.position_hash, repr(self.item)
-        )
+        self.position_hash = stable_hash("POS_GET_ITEM", parent.position_hash, repr(self.item))
 
     def __getitem__(self, item):
         return type(self)(self.task, self, item)

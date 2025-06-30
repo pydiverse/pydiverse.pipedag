@@ -23,10 +23,7 @@ except ImportError:
 
 
 @pytest.mark.skipif(tp is None, reason="Test requires tidypolars to be installed")
-@pytest.mark.skip(
-    "Tidypolars is not maintained anymore "
-    "and does not work with current polars versions"
-)
+@pytest.mark.skip("Tidypolars is not maintained anymore and does not work with current polars versions")
 def test_table_store():
     @materialize()
     def in_table():

@@ -29,14 +29,10 @@ def sql_table_expr(cols: dict):
     return sa.union_all(*queries)
 
 
-def get_config_with_table_store(
-    base_cfg: ConfigContext, table_store_class: type[BaseTableStore]
-):
+def get_config_with_table_store(base_cfg: ConfigContext, table_store_class: type[BaseTableStore]):
     instance = base_cfg.instance_name
     flow = base_cfg.flow_name
-    cfg = ConfigContext.new(
-        copy.deepcopy(base_cfg._config_dict), base_cfg.pipedag_name, flow, instance
-    )
+    cfg = ConfigContext.new(copy.deepcopy(base_cfg._config_dict), base_cfg.pipedag_name, flow, instance)
     cfg._config_dict["table_store"]["class"] = table_store_class
     # this actually instantiates the table store
     table_store = cfg.store.table_store

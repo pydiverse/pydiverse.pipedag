@@ -366,9 +366,7 @@ class SQLTableStore(BaseTableStore):
 
         if dialect_name != DISABLE_DIALECT_REGISTRATION:
             if dialect_name in SQLTableStore.__registered_dialects:
-                warnings.warn(
-                    f"Already registered a SQLTableStore for dialect {dialect_name}"
-                )
+                warnings.warn(f"Already registered a SQLTableStore for dialect {dialect_name}")
             SQLTableStore.__registered_dialects[dialect_name] = cls
 
     def _metadata_pk(self, name: str, table_name: str):
@@ -378,9 +376,7 @@ class SQLTableStore(BaseTableStore):
         if not self.create_database_if_not_exists:
             return
 
-        raise NotImplementedError(
-            "create_database_if_not_exists is not implemented for this engine"
-        )
+        raise NotImplementedError("create_database_if_not_exists is not implemented for this engine")
 
     def _init_database_with_database(
         self,
@@ -450,19 +446,13 @@ class SQLTableStore(BaseTableStore):
     def get_schema(self, name: str) -> Schema:
         return Schema(name, self.schema_prefix, self.schema_suffix)
 
-    def _execute(
-        self, query, conn: sa.engine.Connection, truncate_printed_select=False
-    ):
+    def _execute(self, query, conn: sa.engine.Connection, truncate_printed_select=False):
         if self.print_sql:
             if isinstance(query, str):
                 query_str = query
             else:
-                query_str = str(
-                    query.compile(self.engine, compile_kwargs={"literal_binds": True})
-                )
-            pretty_query_str = self.format_sql_string(
-                query_str, truncate_printed_select
-            )
+                query_str = str(query.compile(self.engine, compile_kwargs={"literal_binds": True}))
+            pretty_query_str = self.format_sql_string(query_str, truncate_printed_select)
             self.logger.info("Executing sql", query=pretty_query_str)
 
         if isinstance(query, str):
@@ -513,11 +503,7 @@ class SQLTableStore(BaseTableStore):
                     if isinstance(cur_query, sa.schema.DDLElement):
                         # Some custom DDL statements contain multiple statements.
                         # They are all separated using a special separator.
-                        query_str = str(
-                            cur_query.compile(
-                                self.engine, compile_kwargs={"literal_binds": True}
-                            )
-                        )
+                        query_str = str(cur_query.compile(self.engine, compile_kwargs={"literal_binds": True}))
 
                         for part in split_ddl_statement(query_str):
                             self._execute(part, conn, truncate_printed_select)
@@ -553,9 +539,7 @@ class SQLTableStore(BaseTableStore):
 
     def write_subquery(
         self,
-        query: sa.Text
-        | sqlalchemy.sql.expression.Selectable
-        | sqlalchemy.sql.expression.TextClause,
+        query: sa.Text | sqlalchemy.sql.expression.Selectable | sqlalchemy.sql.expression.TextClause,
         to_name: str,
         neighbor_table: Table,
         *,
@@ -596,33 +580,17 @@ class SQLTableStore(BaseTableStore):
     def check_materialization_details_supported(self, label: str | None) -> None:
         if label is None:
             return
-        error_msg = (
-            f"Materialization details are not supported"
-            f" for store {type(self).__name__}."
-        )
+        error_msg = f"Materialization details are not supported for store {type(self).__name__}."
         if self.strict_materialization_details:
-            raise ValueError(
-                f"{error_msg} To silence this exception set"
-                f" strict_materialization_details=False"
-            )
+            raise ValueError(f"{error_msg} To silence this exception set strict_materialization_details=False")
         else:
             self.logger.error(f"{error_msg}")
 
-    def _set_materialization_details(
-        self, materialization_details: dict[str, dict[str | list[str]]] | None
-    ) -> None:
-        if (
-            materialization_details is not None
-            or self.default_materialization_details is not None
-        ):
-            error_msg = (
-                f"{type(self).__name__} does not support materialization details."
-            )
+    def _set_materialization_details(self, materialization_details: dict[str, dict[str | list[str]]] | None) -> None:
+        if materialization_details is not None or self.default_materialization_details is not None:
+            error_msg = f"{type(self).__name__} does not support materialization details."
             if self.strict_materialization_details:
-                raise TypeError(
-                    f"{error_msg} To suppress this exception, "
-                    f"use strict_materialization_details=False"
-                )
+                raise TypeError(f"{error_msg} To suppress this exception, use strict_materialization_details=False")
             self.logger.error(error_msg)
 
     def get_unlogged(self, materialization_details_label: str | None) -> bool:
@@ -648,17 +616,11 @@ class SQLTableStore(BaseTableStore):
         rows: int,
     ) -> sa.sql.expression.Select:
         if isinstance(query, sa.sql.expression.TextClause):
-            return (
-                sa.select(sa.text("*"))
-                .limit(rows)
-                .select_from(sa.text("(" + str(query) + ") AS A"))
-            )
+            return sa.select(sa.text("*")).limit(rows).select_from(sa.text("(" + str(query) + ") AS A"))
         else:
             return sa.select(sa.text("*")).limit(rows).select_from(query.alias("A"))
 
-    def lock_table(
-        self, table: Table | str, schema: Schema | str, conn: Any = None
-    ) -> list:
+    def lock_table(self, table: Table | str, schema: Schema | str, conn: Any = None) -> list:
         """
         For some dialects, it might be beneficial to lock a table before writing to it.
 
@@ -668,9 +630,7 @@ class SQLTableStore(BaseTableStore):
         _ = table, schema, conn
         return []
 
-    def lock_source_table(
-        self, table: Table | str, schema: Schema | str, conn: Any = None
-    ) -> list:
+    def lock_source_table(self, table: Table | str, schema: Schema | str, conn: Any = None) -> list:
         """
         For some dialects, it might be beneficial to lock source tables before reading.
 
@@ -680,9 +640,7 @@ class SQLTableStore(BaseTableStore):
         _ = table, schema, conn
         return []
 
-    def lock_source_tables(
-        self, tables: list[dict[str, str]], conn: Any = None
-    ) -> list:
+    def lock_source_tables(self, tables: list[dict[str, str]], conn: Any = None) -> list:
         """
         For some dialects, it might be beneficial to lock source tables before reading.
 
@@ -695,9 +653,7 @@ class SQLTableStore(BaseTableStore):
                 stmts += self.lock_source_table(table["name"], table["schema"], conn)
         return stmts
 
-    def get_forced_nullability_columns(
-        self, table: Table, table_cols: Iterable[str]
-    ) -> tuple[list[str], list[str]]:
+    def get_forced_nullability_columns(self, table: Table, table_cols: Iterable[str]) -> tuple[list[str], list[str]]:
         """
         Get the columns that should be forced to be nullable or non-nullable.
 
@@ -722,9 +678,7 @@ class SQLTableStore(BaseTableStore):
             should be forced to be non-nullable. Most dialects will not need to
             force nullable columns because very column is nullable by default.
         """
-        _, non_nullable_cols = self._process_table_nullable_parameters(
-            table, table_cols
-        )
+        _, non_nullable_cols = self._process_table_nullable_parameters(table, table_cols)
 
         # in most dialects columns are nullable by default
         return [], non_nullable_cols
@@ -799,22 +753,12 @@ class SQLTableStore(BaseTableStore):
                 inspector = sa.inspect(self.engine)
                 columns = inspector.get_columns(table.name, schema=schema.get())
                 table_cols = [col["name"] for col in columns]
-            nullable_cols, non_nullable_cols = self.get_forced_nullability_columns(
-                table, table_cols
-            )
+            nullable_cols, non_nullable_cols = self.get_forced_nullability_columns(table, table_cols)
             if len(nullable_cols) > 0:
                 # some dialects represent literals as non-nullable types
-                self.execute(
-                    ChangeColumnNullable(
-                        table.name, schema, nullable_cols, nullable=True
-                    )
-                )
+                self.execute(ChangeColumnNullable(table.name, schema, nullable_cols, nullable=True))
             if len(non_nullable_cols) > 0:
-                self.execute(
-                    ChangeColumnNullable(
-                        table.name, schema, non_nullable_cols, nullable=False
-                    )
-                )
+                self.execute(ChangeColumnNullable(table.name, schema, non_nullable_cols, nullable=False))
         if on_empty_table is None or not on_empty_table:
             # By default, we set indexes after loading full table. This can be
             # overridden by dialect
@@ -852,9 +796,7 @@ class SQLTableStore(BaseTableStore):
     ):
         self.execute(AddIndex(table_name, schema, index_columns, name))
 
-    def copy_indexes(
-        self, src_table: str, src_schema: Schema, dest_table: str, dest_schema: Schema
-    ):
+    def copy_indexes(self, src_table: str, src_schema: Schema, dest_table: str, dest_schema: Schema):
         inspector = sa.inspect(self.engine)
         pk_constraint = inspector.get_pk_constraint(src_table, schema=src_schema.get())
         if len(pk_constraint["constrained_columns"]) > 0:
@@ -873,23 +815,16 @@ class SQLTableStore(BaseTableStore):
                     schema=dest_schema.get(),
                     include_columns=index["include_columns"],
                 )
-            if any(
-                not isinstance(val, list) or len(val) > 0
-                for val in index["dialect_options"].values()
-            ):
+            if any(not isinstance(val, list) or len(val) > 0 for val in index["dialect_options"].values()):
                 self.logger.warning(
                     "Perfect index recreation in caching is not net implemented",
                     table=dest_table,
                     schema=dest_schema.get(),
                     dialect_options=index["dialect_options"],
                 )
-            self.add_index(
-                dest_table, dest_schema, index["column_names"], index["name"]
-            )
+            self.add_index(dest_table, dest_schema, index["column_names"], index["name"])
 
-    def reflect_sql_types(
-        self, col_names: Iterable[str], table_name: str, schema: Schema
-    ):
+    def reflect_sql_types(self, col_names: Iterable[str], table_name: str, schema: Schema):
         inspector = sa.inspect(self.engine)
         columns = inspector.get_columns(table_name, schema=schema.get())
         types = {d["name"]: d["type"] for d in columns}
@@ -917,18 +852,14 @@ class SQLTableStore(BaseTableStore):
             self.execute(CreateSchema(self.metadata_schema, if_not_exists=True))
         with self.engine_connect() as conn:
             try:
-                version = conn.execute(
-                    sa.select(self.version_table.c.version)
-                ).scalar_one_or_none()
+                version = conn.execute(sa.select(self.version_table.c.version)).scalar_one_or_none()
             except sa.exc.ProgrammingError:
                 # table metadata_version does not yet exist
                 version = None
         if version is None:
             with self.engine_connect() as conn, conn.begin():
                 self.sql_metadata.create_all(conn)
-                version = conn.execute(
-                    sa.select(self.version_table.c.version)
-                ).scalar_one_or_none()
+                version = conn.execute(sa.select(self.version_table.c.version)).scalar_one_or_none()
                 assert version is None  # detect race condition
                 conn.execute(
                     self.version_table.insert().values(
@@ -979,16 +910,12 @@ class SQLTableStore(BaseTableStore):
         transaction_schema = self.get_schema(stage.transaction_name)
 
         cs_base = CreateSchema(schema, if_not_exists=True)
-        ds_trans = DropSchema(
-            transaction_schema, if_exists=True, cascade=True, engine=self.engine
-        )
+        ds_trans = DropSchema(transaction_schema, if_exists=True, cascade=True, engine=self.engine)
         cs_trans = CreateSchema(transaction_schema, if_not_exists=False)
 
         with self.engine_connect() as conn:
             if self.avoid_drop_create_schema:
-                self.execute(
-                    DropSchemaContent(transaction_schema, self.engine), conn=conn
-                )
+                self.execute(DropSchemaContent(transaction_schema, self.engine), conn=conn)
                 self.optional_pause_for_db_transactionality("table_drop")
             else:
                 self.execute(cs_base, conn=conn)
@@ -1003,11 +930,7 @@ class SQLTableStore(BaseTableStore):
                     self.lazy_cache_table,
                     self.raw_sql_cache_table,
                 ]:
-                    conn.execute(
-                        table.delete()
-                        .where(table.c.stage == stage.name)
-                        .where(table.c.in_transaction_schema)
-                    )
+                    conn.execute(table.delete().where(table.c.stage == stage.name).where(table.c.in_transaction_schema))
 
     def _init_stage_read_views(self, stage: Stage):
         cur_transaction_name = self._get_read_view_transaction_name(stage.name)
@@ -1027,11 +950,7 @@ class SQLTableStore(BaseTableStore):
         try:
             with self.engine_connect() as conn:
                 metadata_rows = (
-                    conn.execute(
-                        self.stage_table.select().where(
-                            self.stage_table.c.stage == schema_name
-                        )
-                    )
+                    conn.execute(self.stage_table.select().where(self.stage_table.c.stage == schema_name))
                     .mappings()
                     .one()
                 )
@@ -1062,14 +981,8 @@ class SQLTableStore(BaseTableStore):
         # an opportunity for derived classes to take actions
         pass
 
-    def _get_read_view_original_transaction_name(
-        self, stage, override_transaction_name: str | None = None
-    ):
-        transaction_name = (
-            stage.transaction_name
-            if override_transaction_name is None
-            else override_transaction_name
-        )
+    def _get_read_view_original_transaction_name(self, stage, override_transaction_name: str | None = None):
+        transaction_name = stage.transaction_name if override_transaction_name is None else override_transaction_name
         # undo transaction name assignment
         suffix = "__even" if transaction_name.endswith("__odd") else "__odd"
         original_transaction_name = stage.name + suffix
@@ -1092,21 +1005,15 @@ class SQLTableStore(BaseTableStore):
         with self.engine_connect() as conn:
             # TODO: self.avoid_drop_create_schema is currently being ignored...
             self.execute(
-                DropSchema(
-                    tmp_schema, if_exists=True, cascade=True, engine=self.engine
-                ),
+                DropSchema(tmp_schema, if_exists=True, cascade=True, engine=self.engine),
                 conn=conn,
             )
             self.optional_pause_for_db_transactionality("schema_drop")
             self.execute(RenameSchema(schema, tmp_schema, self.engine), conn=conn)
             self.optional_pause_for_db_transactionality("schema_rename")
-            self.execute(
-                RenameSchema(transaction_schema, schema, self.engine), conn=conn
-            )
+            self.execute(RenameSchema(transaction_schema, schema, self.engine), conn=conn)
             self.optional_pause_for_db_transactionality("schema_rename")
-            self.execute(
-                RenameSchema(tmp_schema, transaction_schema, self.engine), conn=conn
-            )
+            self.execute(RenameSchema(tmp_schema, transaction_schema, self.engine), conn=conn)
             self.optional_pause_for_db_transactionality("schema_rename")
 
             self._commit_stage_update_metadata(stage, conn=conn)
@@ -1122,17 +1029,14 @@ class SQLTableStore(BaseTableStore):
 
             # Create aliases for all tables in transaction schema
             inspector = sa.inspect(self.engine)
-            for table in inspector.get_table_names(
+            for table in inspector.get_table_names(schema=src_schema.get()) + inspector.get_view_names(
                 schema=src_schema.get()
-            ) + inspector.get_view_names(schema=src_schema.get()):
+            ):
                 self.execute(CreateAlias(table, src_schema, table, dest_schema))
 
             # Update metadata
             stage_metadata_exists = (
-                conn.execute(
-                    sa.select(1).where(self.stage_table.c.stage == stage.name)
-                ).scalar()
-                == 1
+                conn.execute(sa.select(1).where(self.stage_table.c.stage == stage.name)).scalar() == 1
             )
 
             if stage_metadata_exists:
@@ -1158,16 +1062,8 @@ class SQLTableStore(BaseTableStore):
                 self.lazy_cache_table,
                 self.raw_sql_cache_table,
             ]:
-                conn.execute(
-                    table.delete()
-                    .where(table.c.stage == stage.name)
-                    .where(~table.c.in_transaction_schema)
-                )
-                conn.execute(
-                    table.update()
-                    .where(table.c.stage == stage.name)
-                    .values(in_transaction_schema=False)
-                )
+                conn.execute(table.delete().where(table.c.stage == stage.name).where(~table.c.in_transaction_schema))
+                conn.execute(table.update().where(table.c.stage == stage.name).values(in_transaction_schema=False))
 
     def copy_table_to_transaction(self, table: Table):
         from_schema = self.get_schema(table.stage.name)
@@ -1192,9 +1088,9 @@ class SQLTableStore(BaseTableStore):
         has_table = self.has_table_or_view(from_name, schema=from_schema)
         if not has_table:
             inspector = sa.inspect(self.engine)
-            available_tables = inspector.get_table_names(
+            available_tables = inspector.get_table_names(from_schema.get()) + inspector.get_view_names(
                 from_schema.get()
-            ) + inspector.get_view_names(from_schema.get())
+            )
             msg = (
                 f"Can't copy table '{from_name}' (schema: '{from_schema}') to "
                 f"transaction because no such table exists.\n"
@@ -1211,9 +1107,7 @@ class SQLTableStore(BaseTableStore):
         # Copy table via executing a select statement with respective hook
         RunContext.get().trace_hook.cache_pre_transfer(dest_tbl)
         hook = self.get_m_table_hook(dest_tbl)
-        hook.materialize(
-            self, dest_tbl, dest_tbl.stage.transaction_name, without_config_context=True
-        )
+        hook.materialize(self, dest_tbl, dest_tbl.stage.transaction_name, without_config_context=True)
         RunContext.get().trace_hook.cache_post_transfer(dest_tbl)
 
     def _deferred_copy_table(
@@ -1240,9 +1134,9 @@ class SQLTableStore(BaseTableStore):
         has_table = self.has_table_or_view(from_name, from_schema)
         if not has_table:
             inspector = sa.inspect(self.engine)
-            available_tables = inspector.get_table_names(
+            available_tables = inspector.get_table_names(from_schema.get()) + inspector.get_view_names(
                 from_schema.get()
-            ) + inspector.get_view_names(from_schema.get())
+            )
             msg = (
                 f"Can't deferred copy table '{from_name}' (schema: '{from_schema}') to "
                 f"transaction because no such table exists.\n"
@@ -1298,10 +1192,7 @@ class SQLTableStore(BaseTableStore):
             )
 
         except Exception as _e:
-            msg = (
-                f"Failed to copy table {from_name} (schema: '{from_schema}') "
-                f"to transaction."
-            )
+            msg = f"Failed to copy table {from_name} (schema: '{from_schema}') to transaction."
             self.logger.exception(msg)
             raise CacheError(msg) from _e
 
@@ -1335,10 +1226,7 @@ class SQLTableStore(BaseTableStore):
                 )
             )
         except Exception as _e:
-            msg = (
-                f"Failed putting copied table {table_copy.name} (schema: '{schema}') "
-                f"in place of alias."
-            )
+            msg = f"Failed putting copied table {table_copy.name} (schema: '{schema}') in place of alias."
             raise RuntimeError(msg) from _e
 
     def _rename_table(self, from_name: str, to_name: str, schema: Schema):
@@ -1347,9 +1235,7 @@ class SQLTableStore(BaseTableStore):
         self.logger.info("RENAME", fr=from_name, to=to_name)
         self.execute(RenameTable(from_name, to_name, schema))
 
-    def copy_raw_sql_tables_to_transaction(
-        self, metadata: RawSqlMetadata, target_stage: Stage
-    ):
+    def copy_raw_sql_tables_to_transaction(self, metadata: RawSqlMetadata, target_stage: Stage):
         inspector = sa.inspect(self.engine)
         src_schema = self.get_schema(metadata.stage)
         dest_schema = self.get_schema(target_stage.transaction_name)
@@ -1359,16 +1245,10 @@ class SQLTableStore(BaseTableStore):
         tables_in_schema = set(inspector.get_table_names(src_schema.get()))
         objects_in_schema = self._get_all_objects_in_schema(src_schema)
 
-        self.check_materialization_details_supported(
-            target_stage.materialization_details
-        )
+        self.check_materialization_details_supported(target_stage.materialization_details)
 
         tables_to_copy = new_objects & tables_in_schema
-        objects_to_copy = {
-            k: v
-            for k, v in objects_in_schema.items()
-            if k in new_objects and k not in tables_to_copy
-        }
+        objects_to_copy = {k: v for k, v in objects_in_schema.items() if k in new_objects and k not in tables_to_copy}
 
         try:
             with self.engine_connect() as conn:
@@ -1379,12 +1259,8 @@ class SQLTableStore(BaseTableStore):
                             src_schema,
                             name,
                             dest_schema,
-                            unlogged=self.get_unlogged(
-                                target_stage.materialization_details
-                            ),
-                            suffix=self.get_create_table_suffix(
-                                target_stage.materialization_details
-                            ),
+                            unlogged=self.get_unlogged(target_stage.materialization_details),
+                            suffix=self.get_create_table_suffix(target_stage.materialization_details),
                         ),
                         conn=conn,
                     )
@@ -1396,18 +1272,11 @@ class SQLTableStore(BaseTableStore):
                     )
 
                 for name, obj_metadata in objects_to_copy.items():
-                    self._copy_object_to_transaction(
-                        name, obj_metadata, src_schema, dest_schema, conn
-                    )
+                    self._copy_object_to_transaction(name, obj_metadata, src_schema, dest_schema, conn)
 
         except Exception as _e:
-            msg = (
-                f"Failed to copy raw sql generated object {name} (schema:"
-                f" '{src_schema}') to transaction."
-            )
-            self.logger.exception(
-                msg + " This error is treated as cache-lookup-failure."
-            )
+            msg = f"Failed to copy raw sql generated object {name} (schema: '{src_schema}') to transaction."
+            self.logger.exception(msg + " This error is treated as cache-lookup-failure.")
             raise CacheError(msg) from _e
 
     def _get_all_objects_in_schema(self, schema: Schema) -> dict[str, Any]:
@@ -1446,9 +1315,7 @@ class SQLTableStore(BaseTableStore):
         dialect = self.engine.dialect.name
         raise NotImplementedError(f"Not implemented for dialect '{dialect}'.")
 
-    def delete_table_from_transaction(
-        self, table: Table, *, schema: Schema | None = None
-    ):
+    def delete_table_from_transaction(self, table: Table, *, schema: Schema | None = None):
         if schema is None:
             schema = self.get_schema(table.stage.transaction_name)
         self.execute(
@@ -1477,19 +1344,11 @@ class SQLTableStore(BaseTableStore):
                     )
                 )
 
-    def retrieve_task_metadata(
-        self, task: MaterializingTask, input_hash: str, cache_fn_hash: str
-    ) -> TaskMetadata:
+    def retrieve_task_metadata(self, task: MaterializingTask, input_hash: str, cache_fn_hash: str) -> TaskMetadata:
         if self.disable_caching:
-            raise CacheError(
-                "Caching is disabled, so we also don't even try to retrieve task"
-                f" cache: {task}"
-            )
+            raise CacheError(f"Caching is disabled, so we also don't even try to retrieve task cache: {task}")
 
-        ignore_cache_function = (
-            ConfigContext.get().cache_validation.mode
-            == CacheValidationMode.IGNORE_FRESH_INPUT
-        )
+        ignore_cache_function = ConfigContext.get().cache_validation.mode == CacheValidationMode.IGNORE_FRESH_INPUT
         try:
             with self.engine_connect() as conn:
                 result = (
@@ -1536,15 +1395,9 @@ class SQLTableStore(BaseTableStore):
         )
 
         if not ignore_position_hashes:
-            match_condition = match_condition & (
-                self.tasks_table.c.position_hash == task.position_hash
-            )
+            match_condition = match_condition & (self.tasks_table.c.position_hash == task.position_hash)
         with self.engine_connect() as conn:
-            results = (
-                conn.execute(self.tasks_table.select().where(match_condition))
-                .mappings()
-                .all()
-            )
+            results = conn.execute(self.tasks_table.select().where(match_condition)).mappings().all()
         return [
             TaskMetadata(
                 name=result.name,
@@ -1574,14 +1427,9 @@ class SQLTableStore(BaseTableStore):
                 )
 
     # noinspection DuplicatedCode
-    def retrieve_lazy_table_metadata(
-        self, query_hash: str, task_hash: str, stage: Stage
-    ) -> LazyTableMetadata:
+    def retrieve_lazy_table_metadata(self, query_hash: str, task_hash: str, stage: Stage) -> LazyTableMetadata:
         if self.disable_caching:
-            raise CacheError(
-                "Caching is disabled, so we also don't even try to retrieve lazy table"
-                " cache"
-            )
+            raise CacheError("Caching is disabled, so we also don't even try to retrieve lazy table cache")
 
         try:
             with self.engine_connect() as conn:
@@ -1591,17 +1439,13 @@ class SQLTableStore(BaseTableStore):
                         .where(self.lazy_cache_table.c.stage == stage.name)
                         .where(self.lazy_cache_table.c.query_hash == query_hash)
                         .where(self.lazy_cache_table.c.task_hash == task_hash)
-                        .where(
-                            self.lazy_cache_table.c.in_transaction_schema.in_([False])
-                        )
+                        .where(self.lazy_cache_table.c.in_transaction_schema.in_([False]))
                     )
                     .mappings()
                     .one_or_none()
                 )
         except sa.exc.MultipleResultsFound:
-            raise CacheError(
-                "Multiple results found for lazy table cache key"
-            ) from None
+            raise CacheError("Multiple results found for lazy table cache key") from None
 
         if result is None:
             raise CacheError("No result found for lazy table cache key")
@@ -1628,14 +1472,9 @@ class SQLTableStore(BaseTableStore):
                 )
 
     # noinspection DuplicatedCode
-    def retrieve_raw_sql_metadata(
-        self, query_hash: str, task_hash: str, stage: Stage
-    ) -> RawSqlMetadata:
+    def retrieve_raw_sql_metadata(self, query_hash: str, task_hash: str, stage: Stage) -> RawSqlMetadata:
         if self.disable_caching:
-            raise CacheError(
-                "Caching is disabled, so we also don't even try to retrieve raw sql"
-                " cache"
-            )
+            raise CacheError("Caching is disabled, so we also don't even try to retrieve raw sql cache")
 
         try:
             with self.engine_connect() as conn:
@@ -1645,11 +1484,7 @@ class SQLTableStore(BaseTableStore):
                         .where(self.raw_sql_cache_table.c.stage == stage.name)
                         .where(self.raw_sql_cache_table.c.query_hash == query_hash)
                         .where(self.raw_sql_cache_table.c.task_hash == task_hash)
-                        .where(
-                            self.raw_sql_cache_table.c.in_transaction_schema.in_(
-                                [False]
-                            )
-                        )
+                        .where(self.raw_sql_cache_table.c.in_transaction_schema.in_([False]))
                     )
                     .mappings()
                     .one_or_none()
@@ -1683,11 +1518,7 @@ class SQLTableStore(BaseTableStore):
             naming pattern for currently processed transaction stage)
         :return: string table name and schema
         """
-        schema = (
-            self.get_schema(stage_name).get()
-            if table.external_schema is None
-            else table.external_schema
-        )
+        schema = self.get_schema(stage_name).get() if table.external_schema is None else table.external_schema
         return table.name, schema
 
     def get_objects_in_stage(self, stage: Stage):
@@ -1710,9 +1541,7 @@ class SQLTableStore(BaseTableStore):
         # after evaluating lazy output objects for cache validity. This is the same
         # information we use for producing input_hash of downstream tasks.
         if self.disable_caching:
-            raise NotImplementedError(
-                "computing stage hash with disabled caching is currently not supported"
-            )
+            raise NotImplementedError("computing stage hash with disabled caching is currently not supported")
         with self.engine_connect() as conn:
             result = conn.execute(
                 sa.select(self.tasks_table.c.output_json)

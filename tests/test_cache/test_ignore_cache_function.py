@@ -61,9 +61,7 @@ def test_literal(mocker):
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(
-                cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT
-            )
+            result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
             assert result.get(out) == 0
             assert result.get(child) == 0
             out_spy.assert_not_called()
@@ -116,9 +114,7 @@ def test_table(mocker):
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(
-                cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT
-            )
+            result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
             assert result.get(child) == 0
             out_spy.assert_not_called()
             child_spy.assert_not_called()
@@ -250,9 +246,7 @@ def test_blob(mocker):
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(
-                cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT
-            )
+            result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
             assert result.get(out) == 0
             assert result.get(child) == 0
             out_spy.assert_not_called()
@@ -329,9 +323,7 @@ def test_raw_sql(mocker):
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(
-                cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT
-            )
+            result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
             assert result.get(child, as_type=pd.DataFrame)["x"][0] == 0
             out_spy.assert_called_once()
             child_spy.assert_not_called()
@@ -442,9 +434,7 @@ def test_cache_temporarily_different(mocker):
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(
-                cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT
-            )
+            result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
             assert result.get(out) == 0
             assert result.get(child) == 0
             out_spy.assert_not_called()

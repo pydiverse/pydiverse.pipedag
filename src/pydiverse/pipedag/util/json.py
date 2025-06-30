@@ -56,9 +56,7 @@ def json_default(o):
     if isinstance(o, Table):
         kwargs = {}
         if o.assumed_dependencies is not None:
-            kwargs["assumed_dependencies"] = (
-                o.assumed_dependencies
-            )  # [json_default(t) for t in o.assumed_dependencies]
+            kwargs["assumed_dependencies"] = o.assumed_dependencies  # [json_default(t) for t in o.assumed_dependencies]
         return {
             TYPE_KEY: Type.TABLE,
             "stage": o.stage.name if o.stage is not None else None,
@@ -234,9 +232,7 @@ def json_object_hook(d: dict):
     if type_ == Type.PIPEDAG_CONFIG:
         return PipedagConfig(d["config_dict"])
     if type_ == Type.CONFIG_CONTEXT:
-        return ConfigContext.new(
-            d["config_dict"], d["pipedag_name"], d["flow_name"], d["instance_name"]
-        )
+        return ConfigContext.new(d["config_dict"], d["pipedag_name"], d["flow_name"], d["instance_name"])
     if type_ == Type.PATHLIB_PATH:
         return Path(d["path"])
     if type_ == Type.DT_DATE:

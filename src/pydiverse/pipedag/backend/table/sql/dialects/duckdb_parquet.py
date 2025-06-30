@@ -244,9 +244,7 @@ class ParquetTableStore(DuckDBTableStore):
     def init_stage(self, stage: Stage):
         # fetch existing tables from database before schema is deleted there
         old_transaction_name = self._get_read_view_transaction_name(stage.name)
-        new_transaction_name = self._get_read_view_original_transaction_name(
-            stage, old_transaction_name
-        )
+        new_transaction_name = self._get_read_view_original_transaction_name(stage, old_transaction_name)
         with self.engine_connect() as conn:
             existing_tables = self.execute(
                 f"FROM duckdb_views() SELECT view_name WHERE "
@@ -261,12 +259,8 @@ class ParquetTableStore(DuckDBTableStore):
         new_schema = self.get_schema(stage.current_name)
         self.parquet_schema_paths[new_schema.name] = self.get_parquet_path(new_schema)
         # The stage.name should still point to opposite transaction schema
-        old_schema = self.get_schema(
-            self._get_read_view_original_transaction_name(stage)
-        )
-        self.parquet_schema_paths[self.get_schema(stage.name).name] = (
-            self.get_parquet_path(old_schema)
-        )
+        old_schema = self.get_schema(self._get_read_view_original_transaction_name(stage))
+        self.parquet_schema_paths[self.get_schema(stage.name).name] = self.get_parquet_path(old_schema)
         # TODO: for nested stages this might be per stage
         self.parquet_deferred_copy.clear()
         path = self.get_stage_path(stage)
@@ -283,8 +277,7 @@ class ParquetTableStore(DuckDBTableStore):
                 os.remove(file_path)
             except FileNotFoundError:
                 self.logger.error(
-                    "Could not remove parquet file while deleting corresponding view "
-                    "in transaction schema",
+                    "Could not remove parquet file while deleting corresponding view in transaction schema",
                     file=file_path,
                     view_name=table,
                     stage=stage,
@@ -296,13 +289,9 @@ class ParquetTableStore(DuckDBTableStore):
             return
         _ = from_schema  # not used because this only points to READ VIEW
         dest_schema = self.get_schema(table.stage.current_name)
-        original_transaction_name = self._get_read_view_original_transaction_name(
-            table.stage
-        )
+        original_transaction_name = self._get_read_view_original_transaction_name(table.stage)
         original_schema = self.get_schema(original_transaction_name)
-        src_file_path = self.get_parquet_path(original_schema) / (
-            from_name + ".parquet"
-        )
+        src_file_path = self.get_parquet_path(original_schema) / (from_name + ".parquet")
         dest_file_path = self.get_parquet_path(dest_schema) / src_file_path.name
         self.logger.info(
             "Copying table between transactions",
@@ -312,11 +301,7 @@ class ParquetTableStore(DuckDBTableStore):
         # TODO: think about how to do this with S3
         shutil.copy(src_file_path, dest_file_path)
         # create view in duckdb database file
-        self.execute(
-            CreateViewAsSelect(
-                table.name, dest_schema, self._read_parquet_query(dest_file_path)
-            )
-        )
+        self.execute(CreateViewAsSelect(table.name, dest_schema, self._read_parquet_query(dest_file_path)))
 
     @staticmethod
     def _read_parquet_query(file_path):
@@ -337,14 +322,12 @@ class ParquetTableStore(DuckDBTableStore):
         # this will just create an alias in the duckdb database
         super()._deferred_copy_table(table, from_schema, from_name)
         # keep symlink to original parquet file until stage commits
-        original_transaction_name = self._get_read_view_original_transaction_name(
-            table.stage
-        )
+        original_transaction_name = self._get_read_view_original_transaction_name(table.stage)
         original_schema = self.get_schema(original_transaction_name)
         schema = self.get_schema(table.stage.current_name)
-        self.parquet_table_paths[(schema.name, table.name)] = self.get_parquet_path(
-            original_schema
-        ) / (table.name + ".parquet")
+        self.parquet_table_paths[(schema.name, table.name)] = self.get_parquet_path(original_schema) / (
+            table.name + ".parquet"
+        )
         self.parquet_deferred_copy.append(table)
 
     def commit_stage(self, stage: Stage):
@@ -366,15 +349,9 @@ class ParquetTableStore(DuckDBTableStore):
                 shutil.copy(src_file_path, dest_file_path)
                 # replace view in duckdb database file (which was previously just
                 # alias to main schema)
-                self.execute(
-                    CreateViewAsSelect(
-                        table.name, schema, self._read_parquet_query(dest_file_path)
-                    )
-                )
+                self.execute(CreateViewAsSelect(table.name, schema, self._read_parquet_query(dest_file_path)))
             # switch committed transaction path to the new transaction path
-            self.parquet_schema_paths[self.get_schema(stage.name).name] = (
-                stage_transaction_path
-            )
+            self.parquet_schema_paths[self.get_schema(stage.name).name] = stage_transaction_path
         super().commit_stage(stage)
         # clear table individual parquet paths since this is not needed after commit
         self.parquet_table_paths = {}
@@ -413,22 +390,16 @@ class ParquetTableStore(DuckDBTableStore):
     ) -> Path:
         store = ConfigContext.get().store.table_store
         schema_name = table.stage.current_name
-        return self.get_table_schema_path(
-            table.name, store.get_schema(schema_name), file_extension
-        )
+        return self.get_table_schema_path(table.name, store.get_schema(schema_name), file_extension)
 
-    def get_table_schema_path(
-        self, table_name: str, schema: Schema, file_extension: str = ".parquet"
-    ) -> Path:
+    def get_table_schema_path(self, table_name: str, schema: Schema, file_extension: str = ".parquet") -> Path:
         # Parquet files might be stored in other transaction schema in case of cache
         # validity. We resolve a level of indirection in memory.
         if (schema.name, table_name) in self.parquet_table_paths:
             return self.parquet_table_paths[(schema.name, table_name)]
         return self.get_parquet_schema_path(schema) / (table_name + file_extension)
 
-    def delete_table_from_transaction(
-        self, table: Table, *, schema: Schema | None = None
-    ):
+    def delete_table_from_transaction(self, table: Table, *, schema: Schema | None = None):
         if schema is None:
             schema = self.get_schema(table.stage.transaction_name)
         file_path = self.get_table_schema_path(table.name, schema)
@@ -464,9 +435,7 @@ class ParquetTableStore(DuckDBTableStore):
         # ParquetTableStore does not support indexes. They are ignored.
         pass
 
-    def copy_indexes(
-        self, src_table: str, src_schema: Schema, dest_table: str, dest_schema: Schema
-    ):
+    def copy_indexes(self, src_table: str, src_schema: Schema, dest_table: str, dest_schema: Schema):
         # ParquetTableStore does not support indexes. They are ignored.
         pass
 
@@ -485,9 +454,7 @@ class ParquetTableStore(DuckDBTableStore):
             )
         )
         # create view again
-        self.execute(
-            CreateViewAsSelect(to_name, schema, self._read_parquet_query(to_path))
-        )
+        self.execute(CreateViewAsSelect(to_name, schema, self._read_parquet_query(to_path)))
 
     def write_subquery(
         self,
@@ -512,9 +479,7 @@ class ParquetTableStore(DuckDBTableStore):
                     "PARQUET",
                     query,
                 ),
-                CreateViewAsSelect(
-                    to_name, schema, self._read_parquet_query(file_path)
-                ),
+                CreateViewAsSelect(to_name, schema, self._read_parquet_query(file_path)),
             ]
         )
         return schema
@@ -583,9 +548,7 @@ class PandasTableHook(TableHook[ParquetTableStore]):
 
         df = table.obj
         df.to_parquet(file_path)
-        store.execute(
-            CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path))
-        )
+        store.execute(CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path)))
 
     @classmethod
     def retrieve(
@@ -615,8 +578,7 @@ class PandasTableHook(TableHook[ParquetTableStore]):
         )
         if isinstance(as_type, tuple) and len(as_type) == 2 and len(schema.names) > 0:
             if as_type[1] == "arrow" and not all(
-                hasattr(dtype, "storage") and dtype.storage == "pyarrow"
-                for dtype in df.dtypes
+                hasattr(dtype, "storage") and dtype.storage == "pyarrow" for dtype in df.dtypes
             ):
                 store.logger.warning(
                     f"Ignoring storage specialization '{as_type[1]}' for {table.name} "
@@ -626,8 +588,7 @@ class PandasTableHook(TableHook[ParquetTableStore]):
                     dtypes=df.dtypes,
                 )
             if as_type[1] == "numpy" and any(
-                hasattr(dtype, "storage") and dtype.storage == "pyarrow"
-                for dtype in df.dtypes
+                hasattr(dtype, "storage") and dtype.storage == "pyarrow" for dtype in df.dtypes
             ):
                 store.logger.warning(
                     f"Ignoring storage specialization '{as_type[1]}' for {table.name} "
@@ -667,9 +628,7 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
                 file_path=file_path,
             )
         df.write_parquet(file_path)
-        store.execute(
-            CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path))
-        )
+        store.execute(CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path)))
 
     @classmethod
     def _execute_query(
@@ -711,7 +670,5 @@ class SQLAlchemyTableHook(sql_hooks.SQLAlchemyTableHook):
                 "PARQUET",
                 query,
             ),
-            CreateViewAsSelect(
-                table_name, schema, store._read_parquet_query(file_path)
-            ),
+            CreateViewAsSelect(table_name, schema, store._read_parquet_query(file_path)),
         ]

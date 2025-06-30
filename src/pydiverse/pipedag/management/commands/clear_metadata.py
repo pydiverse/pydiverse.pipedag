@@ -33,11 +33,7 @@ from pydiverse.pipedag.management.cli import cli
     is_flag=True,
     default=False,
 )
-@click.confirmation_option(
-    prompt=(
-        "Are you sure that you want to clear all metadata? This action can't be undone."
-    )
-)
+@click.confirmation_option(prompt=("Are you sure that you want to clear all metadata? This action can't be undone."))
 def clear_metadata(
     config_path: str | None,
     instance: str,
@@ -60,9 +56,7 @@ def clear_metadata(
     with config:
         table_store: SQLTableStore = config.store.table_store
 
-        assert isinstance(table_store, SQLTableStore), (
-            "clear-metadata only supported for SQLTableStore"
-        )
+        assert isinstance(table_store, SQLTableStore), "clear-metadata only supported for SQLTableStore"
 
         drop_schema = DropSchema(
             table_store.metadata_schema,

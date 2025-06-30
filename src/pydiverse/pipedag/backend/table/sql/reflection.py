@@ -99,9 +99,7 @@ class PipedagMSSqlReflection:
         return result
 
     @staticmethod
-    def resolve_alias(
-        engine: Engine, name: str, schema: str
-    ) -> tuple[str, str] | tuple[None, None]:
+    def resolve_alias(engine: Engine, name: str, schema: str) -> tuple[str, str] | tuple[None, None]:
         from sqlalchemy.dialects.mssql.base import _schema_elements
 
         query = f"""

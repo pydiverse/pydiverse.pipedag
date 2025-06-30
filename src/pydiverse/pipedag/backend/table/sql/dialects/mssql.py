@@ -183,12 +183,8 @@ class MSSqlTableStore(SQLTableStore):
             columns = inspector.get_columns(table.name, schema=schema.get())
             table_cols = [d["name"] for d in columns]
             types = {d["name"]: d["type"] for d in columns}
-            nullable_cols, non_nullable_cols = self.get_forced_nullability_columns(
-                table, table_cols
-            )
-            non_nullable_cols = [
-                col for col in non_nullable_cols if col not in key_columns
-            ]
+            nullable_cols, non_nullable_cols = self.get_forced_nullability_columns(table, table_cols)
+            non_nullable_cols = [col for col in non_nullable_cols if col not in key_columns]
             sql_types = [types[col] for col in nullable_cols]
             if len(nullable_cols) > 0:
                 self.execute(
@@ -230,9 +226,7 @@ class MSSqlTableStore(SQLTableStore):
                     for index in table.indexes:
                         index_columns |= set(index)
                 index_columns_list = list(index_columns)
-                sql_types = self.reflect_sql_types(
-                    index_columns_list, table.name, schema
-                )
+                sql_types = self.reflect_sql_types(index_columns_list, table.name, schema)
                 index_str_max_columns = [
                     col
                     for _type, col in zip(sql_types, index_columns_list)
@@ -294,9 +288,7 @@ class MSSqlTableStore(SQLTableStore):
         if self.print_sql:
             print_query_string = self.format_sql_string(sql_string)
             if len(print_query_string) >= self.max_query_print_length:
-                print_query_string = (
-                    print_query_string[: self.max_query_print_length] + " [...]"
-                )
+                print_query_string = print_query_string[: self.max_query_print_length] + " [...]"
             self.logger.info("Executing sql", query=print_query_string)
         # ensure database connection is reset to original database
         sql_string += f"\nUSE {self.engine_url.database}"
@@ -357,16 +349,12 @@ class MSSqlTableStore(SQLTableStore):
         table_name, schema = super().resolve_alias(table, stage_name)
         return PipedagMSSqlReflection.resolve_alias(self.engine, table_name, schema)
 
-    def _set_materialization_details(
-        self, materialization_details: dict[str, dict[str | list[str]]] | None
-    ) -> None:
-        self.materialization_details = (
-            MSSqlMaterializationDetails.create_materialization_details_dict(
-                materialization_details,
-                self.strict_materialization_details,
-                self.default_materialization_details,
-                self.logger,
-            )
+    def _set_materialization_details(self, materialization_details: dict[str, dict[str | list[str]]] | None) -> None:
+        self.materialization_details = MSSqlMaterializationDetails.create_materialization_details_dict(
+            materialization_details,
+            self.strict_materialization_details,
+            self.default_materialization_details,
+            self.logger,
         )
 
     def get_create_columnstore_index(self, table: Table) -> bool:
@@ -400,11 +388,7 @@ class DataframeMsSQLTableHook:
         cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame]
     ) -> dict[str, sa.types.TypeEngine]:
         sql_dtypes = ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
-            {
-                name: sa.dialects.mssql.DATETIME2()
-                for name, dtype in dtypes.items()
-                if dtype == Datetime()
-            }
+            {name: sa.dialects.mssql.DATETIME2() for name, dtype in dtypes.items() if dtype == Datetime()}
         )
         if table.type_map:
             sql_dtypes.update(table.type_map)
@@ -429,8 +413,7 @@ class DataframeMsSQLTableHook:
             mssqlkit = True
         except ImportError:
             store.logger.debug(
-                "mssqlkit not installed, falling back to bcpandas. "
-                "This is expected since mssqlkit is not open source."
+                "mssqlkit not installed, falling back to bcpandas. This is expected since mssqlkit is not open source."
             )
 
         if mssqlkit:
@@ -447,9 +430,7 @@ class DataframeMsSQLTableHook:
             url = store.engine_url.render_as_string()
             if "&" in url:
                 creds.odbc_kwargs = {
-                    x.split("=")[0]: x.split("=")[1]
-                    for x in url.split("&")[1:]
-                    if len(x.split("=")) == 2
+                    x.split("=")[0]: x.split("=")[1] for x in url.split("&")[1:] if len(x.split("=")) == 2
                 }
             if isinstance(df, pl.DataFrame):
                 # convert polars DataFrame to pandas DataFrame
@@ -459,14 +440,10 @@ class DataframeMsSQLTableHook:
             # different columns
             df_out = df.assign(
                 **{
-                    col: (
-                        lambda col: lambda df: df[col]
-                        .map({True: 1, False: 0})
-                        .astype(pd.Int8Dtype())
-                    )(copy.copy(col))
-                    for col, dtype in df.dtypes[
-                        (df.dtypes == "bool[pyarrow]") | (df.dtypes == "bool")
-                    ].items()
+                    col: (lambda col: lambda df: df[col].map({True: 1, False: 0}).astype(pd.Int8Dtype()))(
+                        copy.copy(col)
+                    )
+                    for col, dtype in df.dtypes[(df.dtypes == "bool[pyarrow]") | (df.dtypes == "bool")].items()
                 }
             ).assign(
                 **{
@@ -477,9 +454,7 @@ class DataframeMsSQLTableHook:
                         .str.replace("\r", "\\r", regex=False)
                     )(copy.copy(col))
                     for col, dtype in df.dtypes[
-                        (df.dtypes == "object")
-                        | (df.dtypes == "string")
-                        | (df.dtypes == "string[pyarrow]")
+                        (df.dtypes == "object") | (df.dtypes == "string") | (df.dtypes == "string[pyarrow]")
                     ].items()
                 }
             )
@@ -571,10 +546,7 @@ class PandasTableHook(DataframeMsSQLTableHook, PandasTableHook):
                 df = pl_df.to_pandas()
                 df = cls._fix_dtypes(df, dtypes)
             except Exception as e:  # noqa
-                store.logger.warning(
-                    "Failed to download table using arrow-odbc, falling back to "
-                    "sqlalchemy/pandas."
-                )
+                store.logger.warning("Failed to download table using arrow-odbc, falling back to sqlalchemy/pandas.")
 
         return super().download_table(query, store, dtypes)
 
@@ -591,9 +563,7 @@ class PandasTableHook(DataframeMsSQLTableHook, PandasTableHook):
             try:
                 return cls.upload_table_bulk_insert(table, schema, dtypes, store, early)
             except Exception as e:  # noqa
-                store.logger.exception(
-                    "Failed to upload table using bulk insert, falling back to pandas."
-                )
+                store.logger.exception("Failed to upload table using bulk insert, falling back to pandas.")
         # TODO: consider using arrow-odbc for uploading
         super().upload_table(table, schema, dtypes, store, early)
 
@@ -662,10 +632,7 @@ class PolarsTableHook(DataframeMsSQLTableHook, PolarsTableHook):
             try:
                 return cls.upload_table_bulk_insert(table, schema, dtypes, store, early)
             except:  # noqa
-                store.logger.warning(
-                    "Failed to upload table using bulk insert, falling back to arrow "
-                    "odbc."
-                )
+                store.logger.warning("Failed to upload table using bulk insert, falling back to arrow odbc.")
         super().upload_table(table, schema, dtypes, store, early)
 
 
@@ -705,12 +672,7 @@ def map_pyarrow_schema_for_polars(schema: pa.Schema) -> pa.Schema:
     """
     assert pa.schema is not None, "please install pyarrow"
     mapped_fields = [
-        (
-            field.with_type(pa.timestamp("us"))
-            if field.type == pa.timestamp("ns")
-            else field
-        )
-        for field in list(schema)
+        (field.with_type(pa.timestamp("us")) if field.type == pa.timestamp("ns") else field) for field in list(schema)
     ]
     return pa.schema(mapped_fields, schema.metadata)
 
@@ -839,9 +801,7 @@ class ConnectionString:
         for entry in odbc_string.split(";"):
             key_val = entry.split("=")
             assert len(key_val) == 2
-            adjusted_key = ODBC_CONNECTION_FIELD_KEYMAP.get(
-                key_val[0].lower(), key_val[0].lower()
-            )
+            adjusted_key = ODBC_CONNECTION_FIELD_KEYMAP.get(key_val[0].lower(), key_val[0].lower())
             if adjusted_key == "trusted_connection":
                 continue  # we can determine this key from username presence
             kwargs[adjusted_key] = key_val[1]
@@ -896,14 +856,9 @@ class ConnectionString:
                 params["PWD"] = self.password
         return ";".join(f"{k}={v}" for k, v in params.items())
 
-    def fine_grained_odbc_string(
-        self, multiple_active_result_sets: bool = False
-    ) -> str:
+    def fine_grained_odbc_string(self, multiple_active_result_sets: bool = False) -> str:
         """Construct an ODBC connection string with more more fine-grained control."""
-        return (
-            self.odbc_string
-            + f";MARS_Connection={'yes' if multiple_active_result_sets else 'no'}"
-        )
+        return self.odbc_string + f";MARS_Connection={'yes' if multiple_active_result_sets else 'no'}"
 
     @property
     def sqlalchemy_url(self) -> URL:

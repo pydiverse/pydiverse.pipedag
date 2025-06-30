@@ -65,13 +65,10 @@ def materialize_table(
         # LookupError happens if no TaskContext is open
         if schema is None:
             raise ValueError(
-                "Parameter schema must be provided if task is not called by "
-                "normal pipedag orchestration."
+                "Parameter schema must be provided if task is not called by normal pipedag orchestration."
             ) from None
 
-    suffix = (
-        stable_hash(str(random.randbytes(8))) + "_0000" if debug_suffix is None else ""
-    )
+    suffix = stable_hash(str(random.randbytes(8))) + "_0000" if debug_suffix is None else ""
     old_table_name = table.name
     table.name = mangle_table_name(table.name, task_name, suffix)
     if debug_suffix is not None:
@@ -85,16 +82,10 @@ def materialize_table(
             table_store.delete_table_from_transaction(table, schema=schema)
         else:
             logger = structlog.get_logger(logger_name="Debug materialize_table")
-            logger.warning(
-                "drop_if_exists not supported for non SQLTableStore table stores."
-            )
+            logger.warning("drop_if_exists not supported for non SQLTableStore table stores.")
     if task is None:
         hook = table_store.get_m_table_hook(table)
-        schema_name = (
-            schema.name
-            if table_store.get_schema(schema.name).get() == schema.get()
-            else schema.get()
-        )
+        schema_name = schema.name if table_store.get_schema(schema.name).get() == schema.get() else schema.get()
         if table_store.get_schema(schema_name).get() != schema.get():
             raise ValueError(
                 "Schema prefix and postfix must match prefix and postfix of provided "

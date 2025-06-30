@@ -50,24 +50,20 @@ class DictTableStore(BaseTableStore):
         stage = table.stage
         if stage.did_commit:
             raise StageError(
-                f"Can't copy table '{table.name}' to transaction."
-                f" Stage '{stage.name}' has already been committed."
+                f"Can't copy table '{table.name}' to transaction. Stage '{stage.name}' has already been committed."
             )
 
         try:
             t = self.store[stage.name][table.name]
             self.store[stage.transaction_name][table.name] = t
         except KeyError:
-            raise CacheError(
-                f"No table with name '{table.name}' found in '{stage.name}' stage"
-            ) from None
+            raise CacheError(f"No table with name '{table.name}' found in '{stage.name}' stage") from None
 
     def copy_lazy_table_to_transaction(self, metadata: LazyTableMetadata, table: Table):
         stage = table.stage
         if stage.did_commit:
             raise StageError(
-                f"Can't copy table '{metadata.name}' to transaction."
-                f" Stage '{stage.name}' has already been committed."
+                f"Can't copy table '{metadata.name}' to transaction. Stage '{stage.name}' has already been committed."
             )
 
         try:
@@ -76,13 +72,9 @@ class DictTableStore(BaseTableStore):
             self.store[stage.transaction_name][metadata.name] = t
             RunContext.get().trace_hook.cache_post_transfer(table)
         except KeyError:
-            raise CacheError(
-                f"No table with name '{metadata.name}' found in '{stage.name}' stage"
-            ) from None
+            raise CacheError(f"No table with name '{metadata.name}' found in '{stage.name}' stage") from None
 
-    def delete_table_from_transaction(
-        self, table: Table, *, schema: Schema | None = None
-    ):
+    def delete_table_from_transaction(self, table: Table, *, schema: Schema | None = None):
         if schema is None:
             schema = self.get_schema(table.stage.transaction_name)
         try:
@@ -94,16 +86,13 @@ class DictTableStore(BaseTableStore):
         cache_key = metadata.input_hash + str(metadata.cache_fn_hash)
         self.t_metadata[stage][cache_key] = metadata
 
-    def retrieve_task_metadata(
-        self, task: MaterializingTask, input_hash: str, cache_fn_hash: str
-    ) -> TaskMetadata:
+    def retrieve_task_metadata(self, task: MaterializingTask, input_hash: str, cache_fn_hash: str) -> TaskMetadata:
         cache_key = input_hash + str(cache_fn_hash)
         try:
             return self.metadata[task.stage][cache_key]
         except KeyError:
             raise CacheError(
-                "There is no metadata for task "
-                f"'{task.name}' with cache key '{task.input_hash}', yet"
+                f"There is no metadata for task '{task.name}' with cache key '{task.input_hash}', yet"
             ) from None
 
     def retrieve_all_task_metadata(
@@ -114,9 +103,7 @@ class DictTableStore(BaseTableStore):
             *self.metadata[task.stage].values(),
             *self.t_metadata[task.stage].values(),
         ):
-            if m.name == task.name and (
-                (m.position_hash == task.position_hash) or ignore_position_hashes
-            ):
+            if m.name == task.name and ((m.position_hash == task.position_hash) or ignore_position_hashes):
                 task_metadata.append(m)
         return task_metadata
 
@@ -124,9 +111,7 @@ class DictTableStore(BaseTableStore):
         cache_key = metadata.query_hash + metadata.task_hash
         self.t_lazy_table_metadata[metadata.stage][cache_key] = metadata
 
-    def retrieve_lazy_table_metadata(
-        self, query_hash: str, task_hash: str, stage: Stage
-    ) -> LazyTableMetadata:
+    def retrieve_lazy_table_metadata(self, query_hash: str, task_hash: str, stage: Stage) -> LazyTableMetadata:
         try:
             cache_key = query_hash + task_hash
             return self.lazy_table_metadata[stage.name][cache_key]
@@ -204,11 +189,7 @@ class PydiverseTransformTableHook(TableHook[DictTableStore]):
         else:
             # this error is expected for eager backend
             type_ = type(tbl.obj)
-            return (
-                CanResult.YES_BUT_DONT_CACHE
-                if issubclass(type_, pdt.Table)
-                else CanResult.NO
-            )
+            return CanResult.YES_BUT_DONT_CACHE if issubclass(type_, pdt.Table) else CanResult.NO
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:

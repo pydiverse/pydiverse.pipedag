@@ -79,6 +79,4 @@ class FileLockManager(BaseLockManager):
         elif isinstance(lock, str):
             return self.base_path / (lock + ".lock")
         else:
-            raise NotImplementedError(
-                f"Can't lock object of type '{type(lock).__name__}'"
-            )
+            raise NotImplementedError(f"Can't lock object of type '{type(lock).__name__}'")

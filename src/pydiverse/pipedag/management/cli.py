@@ -16,9 +16,7 @@ def cli():
 def find_commands():
     commands_dir = Path(__file__).parent / "commands"
     return [
-        name
-        for _, name, ispkg in pkgutil.iter_modules([str(commands_dir)])
-        if not ispkg and not name.startswith("_")
+        name for _, name, ispkg in pkgutil.iter_modules([str(commands_dir)]) if not ispkg and not name.startswith("_")
     ]
 
 

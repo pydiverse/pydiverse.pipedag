@@ -28,9 +28,7 @@ def sql_script(
     return RawSql(sql)
 
 
-def raw_sql_bind_schema(
-    sql, prefix: str, stage: Stage | RawSql | None, *, transaction=False
-):
+def raw_sql_bind_schema(sql, prefix: str, stage: Stage | RawSql | None, *, transaction=False):
     config = ConfigContext.get()
     store = config.store.table_store
     if stage is not None:

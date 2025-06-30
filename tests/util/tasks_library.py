@@ -163,9 +163,7 @@ def simple_dataframe_compressed_one_method():
     return Table(
         pd.DataFrame(dict(COMPRESSION=["R"], ROWCOMPMODE=["S"])),
         "df_compressed_1_properties",
-    ), _simple_dataframe_materialization_details(
-        "df_compressed_1", "static_compression"
-    )
+    ), _simple_dataframe_materialization_details("df_compressed_1", "static_compression")
 
 
 @materialize(nout=2)
@@ -173,9 +171,7 @@ def simple_dataframe_compressed_two_methods():
     return Table(
         pd.DataFrame(dict(COMPRESSION=["B"], ROWCOMPMODE=["A"])),
         "df_compressed_2_properties",
-    ), _simple_dataframe_materialization_details(
-        "df_compressed_2", "adaptive_value_compression"
-    )
+    ), _simple_dataframe_materialization_details("df_compressed_2", "adaptive_value_compression")
 
 
 def _simple_dataframe_materialization_details(name=None, materialization_details=None):
@@ -299,9 +295,9 @@ def simple_dataframes_with_indexes_task():
             "col2": ["0", "1", "2", "3"],
         }
     )
-    return Table(
-        df, "dfA", primary_key=["col1"], indexes=[["col2"], ["col2", "col1"]]
-    ), Table(df, "dfB", primary_key=["col1"], indexes=[["col2"], ["col2", "col1"]])
+    return Table(df, "dfA", primary_key=["col1"], indexes=[["col2"], ["col2", "col1"]]), Table(
+        df, "dfB", primary_key=["col1"], indexes=[["col2"], ["col2", "col1"]]
+    )
 
 
 def simple_dataframes_with_indexes():
@@ -311,16 +307,10 @@ def simple_dataframes_with_indexes():
 
 def _get_df_query():
     try:
-        unions = [
-            sa.select([sa.literal(i).label("col1"), sa.literal(str(i)).label("col2")])
-            for i in range(4)
-        ]
+        unions = [sa.select([sa.literal(i).label("col1"), sa.literal(str(i)).label("col2")]) for i in range(4)]
     except sa.exc.ArgumentError:
         # this works from sqlalchemy 2.0.0 on
-        unions = [
-            sa.select(sa.literal(i).label("col1"), sa.literal(str(i)).label("col2"))
-            for i in range(4)
-        ]
+        unions = [sa.select(sa.literal(i).label("col1"), sa.literal(str(i)).label("col2")) for i in range(4)]
     return unions[0].union_all(*unions[1:])
 
 
@@ -385,9 +375,7 @@ def simple_table_default_compressed():
     # materialization_details="adaptive_value_compression".
     # This justifies the use of compression_properties_adaptive_value_compression_db2().
     query = _get_df_query()
-    return compression_properties_adaptive_value_compression_db2(), Table(
-        query, name="compress_two"
-    )
+    return compression_properties_adaptive_value_compression_db2(), Table(query, name="compress_two")
 
 
 @materialize(version="1.0")

@@ -32,9 +32,7 @@ try:
 
             test_list = [SqlAlchemy, Polars, Pandas]
         except ImportError:
-            raise NotImplementedError(
-                "pydiverse.transform 0.2.0 - 0.2.2 isn't supported"
-            ) from None
+            raise NotImplementedError("pydiverse.transform 0.2.0 - 0.2.2 isn't supported") from None
 except ImportError:
     test_list = []
 
