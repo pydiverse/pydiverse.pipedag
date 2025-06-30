@@ -68,6 +68,8 @@ extend-exclude = ["docs/*"]
 ignore-init-module-imports = true
 fix = true
 target-version = "py38"
+# 88 leads to worse comments
+line-length = 120
 
 [tool.ruff.per-file-ignores]
 "src/pydiverse/pipedag/backend/table/sql/ddl.py" = ["F811"]

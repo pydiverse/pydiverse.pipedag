@@ -294,3 +294,16 @@ instances:
       class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
       args:
         hosts: "localhost:2181"
+
+  parquet_s3_backend:
+    instance_id: parquet_s3_backend
+    table_store:
+      class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
+      table_store_connection: parquet_duckdb
+      args:
+        parquet_base_path: "s3://pipedag-test-bucket/table_store/"
+    stage_commit_technique: READ_VIEWS
+    lock_manager:
+      class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
+      args:
+        hosts: "localhost:2181"

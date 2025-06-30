@@ -7,6 +7,7 @@ from enum import Enum
 from typing import Any
 
 import pandas as pd
+import polars as pl
 import sqlalchemy as sa
 
 from pydiverse.common import Dtype, String
@@ -15,7 +16,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     LockSourceTable,
     LockTable,
 )
-from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook
+from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook, PolarsTableHook
 from pydiverse.pipedag.backend.table.sql.reflection import PipedagDB2Reflection
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.container import Schema, Table
@@ -110,9 +111,7 @@ class IBMDB2TableStore(SQLTableStore):
     def _default_isolation_level(self):
         return "UNCOMMITTED READ"
 
-    def lock_table(
-        self, table: Table | str, schema: Schema | str, conn: Any = None
-    ) -> list:
+    def lock_table(self, table: Table | str, schema: Schema | str, conn: Any = None) -> list:
         """
         For some dialects, it might be beneficial to lock a table before writing to it.
         """
@@ -121,15 +120,11 @@ class IBMDB2TableStore(SQLTableStore):
             self.execute(stmt, conn=conn)
         return [stmt]
 
-    def lock_source_table(
-        self, table: Table | str, schema: Schema | str, conn: Any = None
-    ) -> list:
+    def lock_source_table(self, table: Table | str, schema: Schema | str, conn: Any = None) -> list:
         """
         For some dialects, it might be beneficial to lock source tables before reading.
         """
-        stmt = LockSourceTable(
-            table.name if isinstance(table, Table) else table, schema
-        )
+        stmt = LockSourceTable(table.name if isinstance(table, Table) else table, schema)
         if conn is not None:
             self.execute(stmt, conn=conn)
         return [stmt]
@@ -152,20 +147,12 @@ class IBMDB2TableStore(SQLTableStore):
     ) -> tuple[list[str], list[str]]:
         # ibm_db2 dialect has literals as non-nullable types by default, so we also need
         # the list of nullable columns to fix
-        nullable_cols, non_nullable_cols = self._process_table_nullable_parameters(
-            table, table_cols
-        )
+        nullable_cols, non_nullable_cols = self._process_table_nullable_parameters(table, table_cols)
         # add primery key columns to non_nullable_cols
         if table.primary_key:
-            primary_key = (
-                table.primary_key
-                if isinstance(table.primary_key, list)
-                else [table.primary_key]
-            )
+            primary_key = table.primary_key if isinstance(table.primary_key, list) else [table.primary_key]
             non_nullable_cols += primary_key
-            nullable_cols = [
-                col for col in nullable_cols if col not in table.primary_key
-            ]
+            nullable_cols = [col for col in nullable_cols if col not in table.primary_key]
         return nullable_cols, non_nullable_cols
 
     def add_indexes_and_set_nullable(
@@ -176,9 +163,7 @@ class IBMDB2TableStore(SQLTableStore):
         on_empty_table: bool | None = None,
         table_cols: Iterable[str] | None = None,
     ):
-        super().add_indexes_and_set_nullable(
-            table, schema, on_empty_table=on_empty_table, table_cols=table_cols
-        )
+        super().add_indexes_and_set_nullable(table, schema, on_empty_table=on_empty_table, table_cols=table_cols)
         table_name = self.engine.dialect.identifier_preparer.quote(table.name)
         schema_name = self.engine.dialect.identifier_preparer.quote_schema(schema.get())
         query = (
@@ -199,21 +184,15 @@ class IBMDB2TableStore(SQLTableStore):
         _ = label
         return
 
-    def _set_materialization_details(
-        self, materialization_details: dict[str, dict[str | list[str]]] | None
-    ) -> None:
-        self.materialization_details = (
-            IBMDB2MaterializationDetails.create_materialization_details_dict(
-                materialization_details,
-                self.strict_materialization_details,
-                self.default_materialization_details,
-                self.logger,
-            )
+    def _set_materialization_details(self, materialization_details: dict[str, dict[str | list[str]]] | None) -> None:
+        self.materialization_details = IBMDB2MaterializationDetails.create_materialization_details_dict(
+            materialization_details,
+            self.strict_materialization_details,
+            self.default_materialization_details,
+            self.logger,
         )
 
-    def _get_compression(
-        self, materialization_details_label: str | None
-    ) -> str | list[str] | None:
+    def _get_compression(self, materialization_details_label: str | None) -> str | list[str] | None:
         compression: IBMDB2CompressionTypes | list[IBMDB2CompressionTypes] | None = (
             IBMDB2MaterializationDetails.get_attribute_from_dict(
                 self.materialization_details,
@@ -229,9 +208,7 @@ class IBMDB2TableStore(SQLTableStore):
         if compression is not None:
             return compression.value
 
-    def _get_table_spaces(
-        self, materialization_details_label: str | None
-    ) -> dict[str, str]:
+    def _get_table_spaces(self, materialization_details_label: str | None) -> dict[str, str]:
         return {
             f"table_space_{st}": IBMDB2MaterializationDetails.get_attribute_from_dict(
                 self.materialization_details,
@@ -247,8 +224,7 @@ class IBMDB2TableStore(SQLTableStore):
     def get_create_table_suffix(self, materialization_details_label: str | None) -> str:
         table_spaces = self._get_table_spaces(materialization_details_label)
         table_space_suffix = " ".join(
-            f"{_TABLE_SPACE_KEYWORD_MAP[stype]} "
-            f"{self.engine.dialect.identifier_preparer.quote(sname)}"
+            f"{_TABLE_SPACE_KEYWORD_MAP[stype]} {self.engine.dialect.identifier_preparer.quote(sname)}"
             for stype, sname in table_spaces.items()
             if sname
         )
@@ -264,11 +240,10 @@ class IBMDB2TableStore(SQLTableStore):
         return PipedagDB2Reflection.get_all_objects(self.engine, schema.get())
 
 
-@IBMDB2TableStore.register_table(pd)
-class PandasTableHook(PandasTableHook):
+class DataframeIbmDb2TableHook:
     @classmethod
     def _get_dialect_dtypes(
-        cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame]
+        cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame | pl.DataFrame]
     ) -> dict[str, sa.types.TypeEngine]:
         # Default string target is CLOB which can't be used for indexing.
         # -> Convert indexed string columns to VARCHAR(256)
@@ -280,11 +255,7 @@ class PandasTableHook(PandasTableHook):
 
         sql_dtypes = ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
             {
-                name: (
-                    sa.String(length=256)
-                    if name in index_columns
-                    else sa.String(length=32_672)
-                )
+                name: (sa.String(length=256) if name in index_columns else sa.String(length=32_672))
                 for name, dtype in dtypes.items()
                 if dtype == String()
             }
@@ -297,13 +268,11 @@ class PandasTableHook(PandasTableHook):
     def _dialect_create_empty_table(
         cls,
         store: SQLTableStore,
-        table: Table[pd.DataFrame],
+        table: Table[pd.DataFrame | pl.DataFrame],
         schema: Schema,
         dtypes: dict[str, sa.types.TypeEngine],
     ):
-        suffix = store.get_create_table_suffix(
-            resolve_materialization_details_label(table)
-        )
+        suffix = store.get_create_table_suffix(resolve_materialization_details_label(table))
         store.execute(
             CreateTableWithSuffix(
                 table.name,
@@ -314,3 +283,13 @@ class PandasTableHook(PandasTableHook):
                 suffix,
             )
         )
+
+
+@IBMDB2TableStore.register_table(pd)
+class PandasTableHook(DataframeIbmDb2TableHook, PandasTableHook):
+    pass
+
+
+@IBMDB2TableStore.register_table(pd)
+class PolarsTableHook(DataframeIbmDb2TableHook, PolarsTableHook):
+    pass

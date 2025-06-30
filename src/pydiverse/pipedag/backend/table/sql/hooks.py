@@ -70,13 +70,9 @@ except ImportError:
     SqlText = TextClause  # this is what sa.text() returns
 
 
-def _polars_apply_retrieve_annotation(
-    df, table, store, intentionally_empty: bool = False
-):
+def _polars_apply_retrieve_annotation(df, table, store, intentionally_empty: bool = False):
     if cs is not None:
-        if inspect.isclass(table.annotation) and issubclass(
-            table.annotation, cs.ColSpec
-        ):
+        if inspect.isclass(table.annotation) and issubclass(table.annotation, cs.ColSpec):
             column_spec = table.annotation  # type: cs.ColSpec
             if dy is not None:
                 # Try colspec polars specific operation which uses dataframely
@@ -151,9 +147,7 @@ def _polars_apply_materialize_annotation(df, table, store):
                             f"\nInvalid:\n{fail_df}"
                         )
     if cs is not None:
-        if inspect.isclass(table.annotation) and issubclass(
-            table.annotation, cs.ColSpec
-        ):
+        if inspect.isclass(table.annotation) and issubclass(table.annotation, cs.ColSpec):
             column_spec = table.annotation
             if dy is not None:
                 # Try colspec polars specific operation which uses dataframely
@@ -179,11 +173,13 @@ def _polars_apply_materialize_annotation(df, table, store):
                     with pl.Config() as cfg:
                         cfg.set_tbl_cols(15)
                         cfg.set_tbl_width_chars(120)
-                        fail_df = str(
-                            failures.debug_invalid_rows
-                            >> pdt.slice_head(5)
-                            >> pdt.export(Polars(lazy=False))
-                        )
+                        debug_invalid_rows = failures.debug_invalid_rows
+                        if debug_invalid_rows >> pdt.build_query() and store.engine.dialect.name == "mssql":
+                            # this is just a workaround as long as pydiverse.transform
+                            # puts an OFFSET in slice_head
+                            debug_invalid_rows = failures.debug_invalid_rows >> pdt.arrange(pdt.lit(True))
+
+                        fail_df = str(debug_invalid_rows >> pdt.slice_head(5) >> pdt.export(Polars(lazy=False)))
                     raise HookCheckException(
                         f"Polars task output {table.name} failed "
                         f"validation with {column_spec.__name__}; "
@@ -195,14 +191,10 @@ def _polars_apply_materialize_annotation(df, table, store):
     return df
 
 
-def _sql_apply_materialize_annotation_pdt_early(
-    table: Table, schema: Schema, store: SQLTableStore
-):
+def _sql_apply_materialize_annotation_pdt_early(table: Table, schema: Schema, store: SQLTableStore):
     tbl = table.obj  # type: pdt.Table
     if cs is not None:
-        if inspect.isclass(table.annotation) and issubclass(
-            table.annotation, cs.ColSpec
-        ):
+        if inspect.isclass(table.annotation) and issubclass(table.annotation, cs.ColSpec):
             column_spec = table.annotation
             if pdt_new is not None:
                 # cast columns according to column specification
@@ -212,9 +204,7 @@ def _sql_apply_materialize_annotation_pdt_early(
                     **{
                         name: tbl[name].cast(col.dtype())
                         for name, col in column_spec.columns().items()
-                        if name in cols
-                        and not isinstance(col, cs.Enum)
-                        and not isinstance(col, cs.Struct)
+                        if name in cols and not isinstance(col, cs.Enum) and not isinstance(col, cs.Struct)
                     }
                 )
     return tbl
@@ -233,9 +223,7 @@ def _sql_apply_materialize_annotation(
 
     def write_pdt_table(tbl: pdt.Table, table_name: str, suffix: str | None = None):
         query = sa.text(str(tbl >> pdt.build_query()))
-        schema = store.write_subquery(
-            query, table_name, neighbor_table=table, unlogged=unlogged, suffix=suffix
-        )
+        schema = store.write_subquery(query, table_name, neighbor_table=table, unlogged=unlogged, suffix=suffix)
         return pdt.Table(table_name, pdt.SqlAlchemy(store.engine, schema=schema.get()))
 
     def materialize_hook(tbl: pdt.Table, table_prefix):
@@ -246,38 +234,45 @@ def _sql_apply_materialize_annotation(
         return write_pdt_table(tbl, name)
 
     if cs is not None:
-        if inspect.isclass(table.annotation) and issubclass(
-            table.annotation, cs.ColSpec
-        ):
+        if inspect.isclass(table.annotation) and issubclass(table.annotation, cs.ColSpec):
             column_spec = table.annotation
             if pdt_new is not None:
-                intermediate_tbls = []
-                cfg = cs.config.Config.default
-                cfg.materialize_hook = materialize_hook
-                tmp_name = "_raw_" + table.name
-                store.rename_table(table, tmp_name, schema)
-                raw = pdt.Table(
-                    tmp_name, pdt.SqlAlchemy(store.engine, schema=schema.get())
-                )
-                tbl, failures = column_spec.filter(raw, cast=True, cfg=cfg)
-                write_pdt_table(tbl, table.name, suffix)
-                failure_counts = failures.counts()
-                if len(failure_counts) > 0:
-                    with pl.Config() as cfg:
-                        cfg.set_tbl_cols(15)
-                        cfg.set_tbl_width_chars(120)
-                        fail_df = str(
-                            failures.debug_invalid_rows
-                            >> pdt.slice_head(5)
-                            >> pdt.export(Polars(lazy=False))
+                supported_dialects = ["duckdb", "sqlite", "postgresql", "mssql"]
+                if store.engine.dialect.name in supported_dialects:
+                    intermediate_tbls = []
+                    cfg = cs.config.Config.default
+                    cfg.dialect_name = store.engine.dialect.name
+                    cfg.materialize_hook = materialize_hook
+                    tmp_name = "_raw_" + table.name
+                    store.rename_table(table, tmp_name, schema)
+                    raw = pdt.Table(tmp_name, pdt.SqlAlchemy(store.engine, schema=schema.get()))
+                    tbl, failures = column_spec.filter(raw, cast=True, cfg=cfg)
+                    write_pdt_table(tbl, table.name, suffix)
+                    failure_counts = failures.counts()
+                    if len(failure_counts) > 0:
+                        with pl.Config() as cfg:
+                            cfg.set_tbl_cols(15)
+                            cfg.set_tbl_width_chars(120)
+                            if store.engine.dialect.name == "mssql":
+                                # this is just a workaround as long as pydiverse.transform
+                                # puts an OFFSET in slice_head
+                                debug_invalid_rows = failures.debug_invalid_rows >> pdt.arrange(pdt.lit(True))
+                            else:
+                                debug_invalid_rows = failures.debug_invalid_rows
+                            fail_df = str(debug_invalid_rows >> pdt.slice_head(5) >> pdt.export(Polars(lazy=False)))
+                        raise HookCheckException(
+                            f"Sql task output {table.name} failed "
+                            f"validation with {column_spec.__name__}; "
+                            f"Failure counts: {failure_counts}; "
+                            f"\nInvalid:\n{fail_df}\nQuery:\n{compile_sql(query)}"
                         )
-                    raise HookCheckException(
-                        f"Sql task output {table.name} failed "
-                        f"validation with {column_spec.__name__}; "
-                        f"Failure counts: {failure_counts}; "
-                        f"\nInvalid:\n{fail_df}\nQuery:\n{compile_sql(query)}"
+                    invalid_rows = tbl >> pdt.alias(table.name)
+                else:
+                    store.logger.info(
+                        "Colspec annotation ignored because pydiverse.transform currently does not support SQL dialect",
+                        dialect=store.engine.dialect.name,
+                        supported=supported_dialects,
                     )
-                query = tbl >> pdt.alias(table.name)
 
     return invalid_rows, intermediate_tbls
 
@@ -305,19 +300,13 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                         )
                     setattr(ret, key, value)
                 else:
-                    raise ValueError(
-                        f"Unknown polars hook argument '{key}' in table_hook_args."
-                    )
+                    raise ValueError(f"Unknown polars hook argument '{key}' in table_hook_args.")
         return ret
 
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanResult:
         type_ = type(tbl.obj)
-        return CanResult.new(
-            issubclass(
-                type_, (sa.sql.expression.TextClause, sa.sql.expression.Selectable)
-            )
-        )
+        return CanResult.new(issubclass(type_, (sa.sql.expression.TextClause, sa.sql.expression.Selectable)))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -364,22 +353,14 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 
         schema = store.get_schema(stage_name)
 
-        store.check_materialization_details_supported(
-            resolve_materialization_details_label(table)
-        )
+        store.check_materialization_details_supported(resolve_materialization_details_label(table))
 
-        suffix = store.get_create_table_suffix(
-            resolve_materialization_details_label(table)
-        )
+        suffix = store.get_create_table_suffix(resolve_materialization_details_label(table))
         unlogged = store.get_unlogged(resolve_materialization_details_label(table))
         if store.dialect_requests_empty_creation(table, is_sql=True):
-            cls._create_table_as_select_empty_insert(
-                table, schema, query, source_tables, store, suffix, unlogged
-            )
+            cls._create_table_as_select_empty_insert(table, schema, query, source_tables, store, suffix, unlogged)
         else:
-            cls._create_table_as_select(
-                table, schema, query, source_tables, store, suffix, unlogged
-            )
+            cls._create_table_as_select(table, schema, query, source_tables, store, suffix, unlogged)
         if not without_config_context:
             cfg = cls.cfg()
             invalid_rows, intermediate_tbls = None, None
@@ -405,18 +386,13 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                     store.execute(DropTable(invalid_rows, schema, if_exists=True)),
                     truncate_printed_select=True,
                 )
-            if (
-                cfg.cleanup_annotation_action_intermediate_state
-                and intermediate_tbls is not None
-            ):
+            if cfg.cleanup_annotation_action_intermediate_state and intermediate_tbls is not None:
                 store.logger.debug(
                     "Cleaning up intermediate state after materialization",
                     table=table.name,
                 )
                 for tbl in intermediate_tbls:
-                    store.drop_subquery_table(
-                        tbl, schema, neighbor_table=table, if_exists=True
-                    )
+                    store.drop_subquery_table(tbl, schema, neighbor_table=table, if_exists=True)
 
         store.optional_pause_for_db_transactionality("table_create")
 
@@ -432,9 +408,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         unlogged: bool,
     ):
         statements = store.lock_source_tables(source_tables)
-        statements += cls._create_as_select_statements(
-            table.name, schema, query, store, suffix, unlogged
-        )
+        statements += cls._create_as_select_statements(table.name, schema, query, store, suffix, unlogged)
         store.execute(statements)
         store.add_indexes_and_set_nullable(table, schema)
 
@@ -450,11 +424,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         unlogged: bool,
     ):
         limit_query = store.get_limit_query(query, rows=0)
-        store.execute(
-            cls._create_as_select_statements(
-                table.name, schema, limit_query, store, suffix, unlogged
-            )
-        )
+        store.execute(cls._create_as_select_statements(table.name, schema, limit_query, store, suffix, unlogged))
         store.add_indexes_and_set_nullable(table, schema, on_empty_table=True)
         statements = store.lock_table(table, schema)
         statements += store.lock_source_tables(source_tables)
@@ -529,15 +499,11 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
             query = sa.select("*").select_from(obj)
         else:
             query = obj
-        query_str = str(
-            query.compile(store.engine, compile_kwargs={"literal_binds": True})
-        )
+        query_str = str(query.compile(store.engine, compile_kwargs={"literal_binds": True}))
         # hacky way to canonicalize query (despite __tmp/__even/__odd suffixes
         # and alias resolution)
         query_str = re.sub(r'["\[\]]', "", query_str)
-        query_str = re.sub(
-            r'(__tmp|__even|__odd)(?=[ \t\n.;"]|$)', "", query_str.lower()
-        )
+        query_str = re.sub(r'(__tmp|__even|__odd)(?=[ \t\n.;"]|$)', "", query_str.lower())
         return query_str
 
 
@@ -676,15 +642,11 @@ class DataframeSqlTableHook:
         df = table.obj
         dtypes = cls._get_dialect_dtypes(dtypes, table)
 
-        store.check_materialization_details_supported(
-            resolve_materialization_details_label(table)
-        )
+        store.check_materialization_details_supported(resolve_materialization_details_label(table))
 
         if early := store.dialect_requests_empty_creation(table, is_sql=False):
             cls._dialect_create_empty_table(store, table, schema, dtypes)
-            store.add_indexes_and_set_nullable(
-                table, schema, on_empty_table=True, table_cols=cls.get_columns(df)
-            )
+            store.add_indexes_and_set_nullable(table, schema, on_empty_table=True, table_cols=cls.get_columns(df))
             if store.get_unlogged(resolve_materialization_details_label(table)):
                 store.execute(ChangeTableLogged(table.name, schema, False))
 
@@ -800,9 +762,7 @@ class PandasTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         schema = store.get_schema(stage_name)
 
         if store.print_materialize:
-            store.logger.info(
-                f"Writing table '{schema.get()}.{table.name}'", table_obj=table.obj
-            )
+            store.logger.info(f"Writing table '{schema.get()}.{table.name}'", table_obj=table.obj)
 
         return cls.materialize_(df, None, store, table, schema)
 
@@ -817,9 +777,7 @@ class PandasTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
     ):
         """Helper function that can be invoked by other hooks"""
         if dtypes is None:
-            dtypes = {
-                name: Dtype.from_pandas(dtype) for name, dtype in df.dtypes.items()
-            }
+            dtypes = {name: Dtype.from_pandas(dtype) for name, dtype in df.dtypes.items()}
 
         for col, dtype in dtypes.items():
             # Currently, pandas' .to_sql fails for arrow date columns.
@@ -888,9 +846,7 @@ class PandasTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         backend = PandasBackend(backend_str)
 
         # Retrieve
-        query, dtypes = cls._build_retrieve_query(
-            store, table, stage_name, backend, limit
-        )
+        query, dtypes = cls._build_retrieve_query(store, table, stage_name, backend, limit)
         dataframe = cls._execute_query_retrieve(store, query, dtypes, backend)
         return dataframe
 
@@ -993,9 +949,7 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
                         )
                     setattr(ret, key, value)
                 else:
-                    raise ValueError(
-                        f"Unknown polars hook argument '{key}' in table_hook_args."
-                    )
+                    raise ValueError(f"Unknown polars hook argument '{key}' in table_hook_args.")
         return ret
 
     @classmethod
@@ -1106,10 +1060,7 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
     ):
         df = table.obj
         schema = store.get_schema(stage_name)
-        dtypes = {
-            name: Dtype.from_polars(dtype)
-            for name, dtype in df.collect_schema().items()
-        }
+        dtypes = {name: Dtype.from_polars(dtype) for name, dtype in df.collect_schema().items()}
 
         if isinstance(df, pl.LazyFrame):
             df = df.collect()
@@ -1119,13 +1070,9 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         cls._execute_materialize(table, store, schema, dtypes)
 
     @classmethod
-    def _fix_dtypes(
-        cls, df: pl.DataFrame, dtypes: dict[str, pl.DataType] | None = None
-    ) -> pl.DataFrame:
+    def _fix_dtypes(cls, df: pl.DataFrame, dtypes: dict[str, pl.DataType] | None = None) -> pl.DataFrame:
         if dtypes is not None:
-            return df.with_columns(
-                **{col: df[col].cast(dtype) for col, dtype in dtypes.items()}
-            )
+            return df.with_columns(**{col: df[col].cast(dtype) for col, dtype in dtypes.items()})
         return df
 
     @classmethod
@@ -1155,9 +1102,7 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
 
         if store.print_materialize:
             schema = store.get_schema(stage_name)
-            store.logger.info(
-                f"Writing table '{schema.get()}.{table.name}'", table_obj=table.obj
-            )
+            store.logger.info(f"Writing table '{schema.get()}.{table.name}'", table_obj=table.obj)
 
         cfg = cls.cfg()
         try:
@@ -1188,9 +1133,7 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         limit: int | None = None,
     ) -> pl.DataFrame:
         cfg = cls.cfg()
-        df = cls._execute_query(
-            store, table, stage_name, as_type, dtypes=None, limit=limit
-        )
+        df = cls._execute_query(store, table, stage_name, as_type, dtypes=None, limit=limit)
         if not cfg.disable_retrieve_annotation_action:
             try:
                 df = _polars_apply_retrieve_annotation(df, table, store)
@@ -1249,16 +1192,13 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
             df = cls.download_table(query, store, dtypes)
         except (RuntimeError, ModuleNotFoundError) as e:
             store.logger.error(
-                "Fallback via Pandas since Polars failed to execute query on "
-                "database %s: %s",
+                "Fallback via Pandas since Polars failed to execute query on database %s: %s",
                 store.engine_url.render_as_string(hide_password=True),
                 e,
             )
             pandas_hook = store.get_r_table_hook(pd.DataFrame)  # type: PandasTableHook
             backend = PandasBackend.ARROW
-            query, dtypes = pandas_hook._build_retrieve_query(
-                store, table, stage_name, backend
-            )
+            query, dtypes = pandas_hook._build_retrieve_query(store, table, stage_name, backend)
             dtypes = {name: dtype.to_pandas(backend) for name, dtype in dtypes.items()}
             pd_df = pandas_hook.download_table(query, store, dtypes)
             df = pl.from_pandas(pd_df)
@@ -1379,8 +1319,7 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         without_config_context: bool = False,
     ):
         warnings.warn(
-            "tidypolars support is deprecated since tidypolars does not work "
-            "with current version of polars",
+            "tidypolars support is deprecated since tidypolars does not work with current version of polars",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -1401,8 +1340,7 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
         limit: int | None = None,
     ) -> Tibble:
         warnings.warn(
-            "tidypolars support is deprecated since tidypolars does not work "
-            "with current version of polars",
+            "tidypolars support is deprecated since tidypolars does not work with current version of polars",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -1446,9 +1384,7 @@ try:
             pdt_old = None
             pdt_new = pdt
         except ImportError:
-            raise NotImplementedError(
-                "pydiverse.transform 0.2.0 - 0.2.2 isn't supported"
-            ) from None
+            raise NotImplementedError("pydiverse.transform 0.2.0 - 0.2.2 isn't supported") from None
 except ImportError as e:
     warnings.warn(str(e), ImportWarning)
     pdt = types.ModuleType("pydiverse.transform")
@@ -1583,9 +1519,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             # continue with SQL case handling
             table_cpy.obj = sa.text(str(query))
             hook = store.get_m_table_hook(table_cpy)
-            assert hook, (
-                "fatal error: no hook for materialization of SqlAlchemy query found"
-            )
+            assert hook, "fatal error: no hook for materialization of SqlAlchemy query found"
             cfg = hook.cfg()
             if not cfg.disable_materialize_annotation_action:
                 schema = store.get_schema(stage_name)

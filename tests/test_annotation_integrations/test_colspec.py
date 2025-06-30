@@ -39,7 +39,7 @@ except ImportError:
 
 pytestmark = [
     pytest.mark.pdtransform,
-    with_instances(DATABASE_INSTANCES),
+    with_instances(tuple(set(DATABASE_INSTANCES) - {"ibm_db2"})),
 ]
 
 # ------------------------------------------------------------------------------------ #
@@ -73,11 +73,7 @@ class MyCollection(cs.Collection):
 
     @cs.filter()
     def first_b_greater_second_b(self):
-        return (
-            (self.first.b > self.second.b)
-            | self.pk_is_null(self.first)
-            | self.pk_is_null(self.second)
-        )
+        return (self.first.b > self.second.b) | self.pk_is_null(self.first) | self.pk_is_null(self.second)
 
 
 @dataclass
@@ -92,39 +88,25 @@ class SimpleCollection(cs.Collection):
 
 
 def data_without_filter_without_rule_violation() -> tuple[pdt.Table, pdt.Table]:
-    first = pdt.Table(
-        {"a": [1, 2, 3], "b": [1, 2, 3], "c": ["x", "y", None]}, name="first"
-    )
-    second = pdt.Table(
-        {"a": [1, 2, 3], "b": [1, 2, 3], "c": ["x", "y", "x"]}, name="second"
-    )
+    first = pdt.Table({"a": [1, 2, 3], "b": [1, 2, 3], "c": ["x", "y", None]}, name="first")
+    second = pdt.Table({"a": [1, 2, 3], "b": [1, 2, 3], "c": ["x", "y", "x"]}, name="second")
     return first, second
 
 
 def data_without_filter_with_rule_violation() -> tuple[pdt.Table, pdt.Table]:
-    first = pdt.Table(
-        {"a": [1, 2, 1], "b": [1, 2, 3], "c": ["x", "y", None]}, name="first"
-    )
-    second = pdt.Table(
-        {"a": [1, 2, 3], "b": [0, 1, 2], "c": [None, "y", "x"]}, name="second"
-    )
+    first = pdt.Table({"a": [1, 2, 1], "b": [1, 2, 3], "c": ["x", "y", None]}, name="first")
+    second = pdt.Table({"a": [1, 2, 3], "b": [0, 1, 2], "c": [None, "y", "x"]}, name="second")
     return first, second
 
 
 def data_with_filter_without_rule_violation() -> tuple[pdt.Table, pdt.Table]:
-    first = pdt.Table(
-        {"a": [1, 2, 3], "b": [1, 1, 3], "c": ["x", "y", None]}, name="first"
-    )
-    second = pdt.Table(
-        {"a": [2, 3, 4, 5], "b": [1, 2, 3, 4], "c": ["x", "y", "x", "x"]}, name="second"
-    )
+    first = pdt.Table({"a": [1, 2, 3], "b": [1, 1, 3], "c": ["x", "y", None]}, name="first")
+    second = pdt.Table({"a": [2, 3, 4, 5], "b": [1, 2, 3, 4], "c": ["x", "y", "x", "x"]}, name="second")
     return first, second
 
 
 def data_with_filter_with_rule_violation() -> tuple[pdt.Table, pdt.Table]:
-    first = pdt.Table(
-        {"a": [1, 2, 3], "b": [1, 2, 3], "c": ["x", "y", None]}, name="first"
-    )
+    first = pdt.Table({"a": [1, 2, 3], "b": [1, 2, 3], "c": ["x", "y", None]}, name="first")
     second = pdt.Table(
         {"a": [2, 3, 4, 5, 6], "b": [0, 1, 2, 3, -1], "c": [None, "y", "y", "x", "z"]},
         name="second",
@@ -133,18 +115,12 @@ def data_with_filter_with_rule_violation() -> tuple[pdt.Table, pdt.Table]:
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(
-    pdt.Table is None, reason="pydiverse.transform needs to be installed"
-)
+@pytest.mark.skipif(pdt.Table is None, reason="pydiverse.transform needs to be installed")
 def test_dataclass():
     first, second = data_without_filter_without_rule_violation()
     c = SimpleCollection(first, second)
-    assert_frame_equal(
-        c.first >> pdt.export(pdt.Polars), first >> pdt.export(pdt.Polars)
-    )
-    assert_frame_equal(
-        c.second >> pdt.export(pdt.Polars), second >> pdt.export(pdt.Polars)
-    )
+    assert_frame_equal(c.first >> pdt.export(pdt.Polars), first >> pdt.export(pdt.Polars))
+    assert_frame_equal(c.second >> pdt.export(pdt.Polars), second >> pdt.export(pdt.Polars))
 
 
 @materialize(nout=2)
@@ -159,15 +135,14 @@ def exec_filter(c: cs.Collection):
     def materialize_hook(tbl, table_prefix):
         return tbl >> materialize_table(table_prefix)
 
+    store = ConfigContext.get().store.table_store
+    cfg.dialect_name = store.engine.dialect.name
     cfg.materialize_hook = materialize_hook
     out, failure = c.filter(cfg=cfg, cast=True)
     return (
         out,
         SimpleCollection(
-            **{
-                name: f.invalid_rows >> pdt.alias(name + "_invalid_rows")
-                for name, f in failure.__dict__.items()
-            }
+            **{name: f.invalid_rows >> pdt.alias(name + "_invalid_rows") for name, f in failure.__dict__.items()}
         ),
         SimpleCollection(**{name: f.counts() for name, f in failure.__dict__.items()}),
     )
@@ -177,9 +152,7 @@ def exec_filter(c: cs.Collection):
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(
-    pdt.Table is None, reason="pydiverse.transform needs to be installed"
-)
+@pytest.mark.skipif(pdt.Table is None, reason="pydiverse.transform needs to be installed")
 def test_filter_without_filter_without_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
@@ -190,9 +163,7 @@ def test_filter_without_filter_without_rule_violation():
             out.first.sort(by="a"),
             (first >> pdt.export(pdt.Polars(lazy=True))).cast(dict(b=pl.Int16)),
         )
-        assert_frame_equal(
-            out.second.sort(by="a"), second >> pdt.export(pdt.Polars(lazy=True))
-        )
+        assert_frame_equal(out.second.sort(by="a"), second >> pdt.export(pdt.Polars(lazy=True)))
         assert failure.first.select(pl.len()).collect().item() == 0
         assert failure.second.select(pl.len()).collect().item() == 0
 
@@ -207,9 +178,7 @@ def test_filter_without_filter_without_rule_violation():
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(
-    pdt.Table is None, reason="pydiverse.transform needs to be installed"
-)
+@pytest.mark.skipif(pdt.Table is None, reason="pydiverse.transform needs to be installed")
 def test_filter_without_filter_with_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
@@ -232,9 +201,7 @@ def test_filter_without_filter_with_rule_violation():
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(
-    pdt.Table is None, reason="pydiverse.transform needs to be installed"
-)
+@pytest.mark.skipif(pdt.Table is None, reason="pydiverse.transform needs to be installed")
 def test_filter_with_filter_without_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
@@ -243,9 +210,7 @@ def test_filter_with_filter_without_rule_violation():
         assert isinstance(out, MyCollection)
         assert_frame_equal(
             out.first,
-            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(
-                dict(b=pl.Int16, c=pl.String)
-            ),
+            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(dict(b=pl.Int16, c=pl.String)),
         )
         assert_frame_equal(
             out.second,
@@ -271,9 +236,7 @@ def test_filter_with_filter_without_rule_violation():
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(
-    pdt.Table is None, reason="pydiverse.transform needs to be installed"
-)
+@pytest.mark.skipif(pdt.Table is None, reason="pydiverse.transform needs to be installed")
 def test_filter_with_filter_with_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
@@ -282,9 +245,7 @@ def test_filter_with_filter_with_rule_violation():
         assert isinstance(out, MyCollection)
         assert_frame_equal(
             out.first,
-            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(
-                dict(b=pl.Int16, c=pl.String)
-            ),
+            pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(dict(b=pl.Int16, c=pl.String)),
         )
         assert_frame_equal(
             out.second,
@@ -311,8 +272,7 @@ def test_filter_with_filter_with_rule_violation():
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(
     dy is not None,
-    reason="This test only works if dataframely is not installed since we "
-    "test a fallback mechanism in polars hook",
+    reason="This test only works if dataframely is not installed since we test a fallback mechanism in polars hook",
 )
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
@@ -357,13 +317,9 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
                 # this case does not occur for polars versions since they abort in cast
                 MyFirstColSpec.validate(first)
             else:
-                with pytest.raises(
-                    cs.exc.RuleValidationError, match="1 rules failed validation"
-                ):
+                with pytest.raises(cs.exc.RuleValidationError, match="1 rules failed validation"):
                     MyFirstColSpec.validate(first)
-            with pytest.raises(
-                cs.exc.RuleValidationError, match="2 rules failed validation"
-            ):
+            with pytest.raises(cs.exc.RuleValidationError, match="2 rules failed validation"):
                 MySecondColSpec.validate(second)
         else:
             if not validate_get_data and dy is None:
@@ -390,10 +346,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
         assert len(second >> pdt.export(pdt.Polars())) in [3, 4, 5]
 
     with Flow() as flow:
-        name = (
-            f"with{'out' if not with_filter else ''}_filter"
-            f"_with{'out' if not with_violation else ''}_rule_violation"
-        )
+        name = f"with{'out' if not with_filter else ''}_filter_with{'out' if not with_violation else ''}_rule_violation"
         with Stage("s01"):
             first, second = get_anno_data(name)
             consumer(first, second)
@@ -404,8 +357,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
         # Validation at end of get_anno_data task fails
         with pytest.raises(
             HookCheckException,
-            match="failed validation with MyFirstColSpec; Failure counts: "
-            "{'b|min': 1, 'c|nullability': 1};"
+            match="failed validation with MyFirstColSpec; Failure counts: {'b|min': 1, 'c|nullability': 1};"
             if with_filter
             else "{'_primary_key_': 2};",
         ):
@@ -427,16 +379,13 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(
     dy is not None,
-    reason="This test only works if dataframely is not installed since we "
-    "test a fallback mechanism in polars hook",
+    reason="This test only works if dataframely is not installed since we test a fallback mechanism in polars hook",
 )
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
 )
-def test_annotations_not_fail_fast(
-    with_filter: bool, with_violation: bool, validate_get_data: bool
-):
+def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, validate_get_data: bool):
     if validate_get_data:
 
         @materialize(nout=2)
@@ -489,10 +438,7 @@ def test_annotations_not_fail_fast(
         assert len(second >> pdt.export(pdt.Polars())) in [3, 4, 5]
 
     with Flow() as flow:
-        name = (
-            f"with{'out' if not with_filter else ''}_filter"
-            f"_with{'out' if not with_violation else ''}_rule_violation"
-        )
+        name = f"with{'out' if not with_filter else ''}_filter_with{'out' if not with_violation else ''}_rule_violation"
         with Stage("s01"):
             first, second = get_anno_data(name)
             consumer(first, second)
@@ -510,16 +456,13 @@ def test_annotations_not_fail_fast(
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(
     dy is not None,
-    reason="This test only works if dataframely is not installed since we "
-    "test a fallback mechanism in polars hook",
+    reason="This test only works if dataframely is not installed since we test a fallback mechanism in polars hook",
 )
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
 )
-def test_annotations_fault_tolerant(
-    with_filter: bool, with_violation: bool, validate_get_data: bool
-):
+def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, validate_get_data: bool):
     if validate_get_data:
 
         @materialize(nout=2)
@@ -539,9 +482,7 @@ def test_annotations_fault_tolerant(
             ("a", pdc.Int64()),
             (
                 "b",
-                pdc.Int16()
-                if (validate_get_data and (not with_violation or with_filter)) or dy
-                else pdc.Int64(),
+                pdc.Int16() if (validate_get_data and (not with_violation or with_filter)) or dy else pdc.Int64(),
             ),
             ("c", pdc.String()),
         ]
@@ -553,9 +494,7 @@ def test_annotations_fault_tolerant(
         assert len(first >> pdt.export(pdt.Polars())) == 3
         assert len(second >> pdt.export(pdt.Polars())) in [3, 4, 5]
 
-        if (
-            not validate_get_data or (with_violation and not with_filter)
-        ) and dy is None:
+        if (not validate_get_data or (with_violation and not with_filter)) and dy is None:
             # colspec will not do casting without dataframely
             # In case of validate_get_data, the type should already be
             # smallint in the database.
@@ -563,18 +502,12 @@ def test_annotations_fault_tolerant(
         if with_violation:
             if with_filter:
                 MyFirstColSpec.validate(first)
-                with pytest.raises(
-                    cs.exc.RuleValidationError, match="2 rules failed validation"
-                ):
+                with pytest.raises(cs.exc.RuleValidationError, match="2 rules failed validation"):
                     MySecondColSpec.validate(second, cast=True)
             else:
-                with pytest.raises(
-                    cs.exc.RuleValidationError, match="1 rules failed validation"
-                ):
+                with pytest.raises(cs.exc.RuleValidationError, match="1 rules failed validation"):
                     MyFirstColSpec.validate(first)
-                with pytest.raises(
-                    cs.exc.RuleValidationError, match="2 rules failed validation"
-                ):
+                with pytest.raises(cs.exc.RuleValidationError, match="2 rules failed validation"):
                     MySecondColSpec.validate(second)
         else:
             assert MyFirstColSpec.is_valid(first)
@@ -586,9 +519,7 @@ def test_annotations_fault_tolerant(
             ("a", pdc.Int64()),
             (
                 "b",
-                pdc.Int16()
-                if (validate_get_data and (not with_violation or with_filter)) or dy
-                else pdc.Int64(),
+                pdc.Int16() if (validate_get_data and (not with_violation or with_filter)) or dy else pdc.Int64(),
             ),
             ("c", pdc.String()),
         ]
@@ -601,10 +532,7 @@ def test_annotations_fault_tolerant(
         assert len(second >> pdt.export(pdt.Polars())) in [3, 4, 5]
 
     with Flow() as flow:
-        name = (
-            f"with{'out' if not with_filter else ''}_filter"
-            f"_with{'out' if not with_violation else ''}_rule_violation"
-        )
+        name = f"with{'out' if not with_filter else ''}_filter_with{'out' if not with_violation else ''}_rule_violation"
         with Stage("s01"):
             first, second = get_anno_data(name)
             consumer(first, second)
@@ -612,30 +540,19 @@ def test_annotations_fault_tolerant(
             consumer2(first, second)
 
     with structlog.testing.capture_logs() as logs:
-        with ConfigContext.get().evolve(
-            table_hook_args=dict(polars=dict(fault_tolerant_annotation_action=True))
-        ):
-            result = flow.run(
-                cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID
-            )
+        with ConfigContext.get().evolve(table_hook_args=dict(polars=dict(fault_tolerant_annotation_action=True))):
+            result = flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
     assert result.successful
-    failures = [
-        c
-        for c in logs
-        if c["event"] == "Failed to apply materialize annotation for table"
-    ]
+    failures = [c for c in logs if c["event"] == "Failed to apply materialize annotation for table"]
     if with_violation and validate_get_data:
         assert len(failures) == 1 if with_filter else 2
-        assert all(
-            "failed validation with My" in failure["exception"] for failure in failures
-        )
+        assert all("failed validation with My" in failure["exception"] for failure in failures)
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(
     dy is not None,
-    reason="This test only works if dataframely is not installed since we "
-    "test a fallback mechanism in polars hook",
+    reason="This test only works if dataframely is not installed since we test a fallback mechanism in polars hook",
 )
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
@@ -675,9 +592,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
         assert len(coll.second >> pdt.export(pdt.Polars())) in [3, 4, 5]
 
         if with_violation:
-            with pytest.raises(
-                cs.exc.MemberValidationError, match="2 members failed validation"
-            ):
+            with pytest.raises(cs.exc.MemberValidationError, match="2 members failed validation"):
                 coll.validate(cast=True)
         else:
             if with_filter:
@@ -685,9 +600,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
                 out, _ = coll.filter(cast=True)
                 assert_frame_equal(
                     out.first >> pdt.export(pdt.Polars(lazy=True)),
-                    pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(
-                        dict(b=pl.Int16, c=pl.String)
-                    ),
+                    pl.LazyFrame({"a": [3], "b": [3], "c": [None]}).cast(dict(b=pl.Int16, c=pl.String)),
                 )
                 assert_frame_equal(
                     out.second >> pdt.export(pdt.Polars(lazy=True)),
@@ -714,10 +627,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
         assert len(coll.second >> pdt.export(pdt.Polars())) in [3, 4, 5]
 
     with Flow() as flow:
-        name = (
-            f"with{'out' if not with_filter else ''}_filter"
-            f"_with{'out' if not with_violation else ''}_rule_violation"
-        )
+        name = f"with{'out' if not with_filter else ''}_filter_with{'out' if not with_violation else ''}_rule_violation"
         with Stage("s01"):
             collection = get_anno_collection(name)
             consumer_collection(collection)
@@ -738,8 +648,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(
     dy is not None,
-    reason="This test only works if dataframely is not installed since we "
-    "test a fallback mechanism in polars hook",
+    reason="This test only works if dataframely is not installed since we test a fallback mechanism in polars hook",
 )
 def test_type_mapping():
     @materialize(nout=2)
@@ -765,9 +674,7 @@ def test_type_mapping():
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
 )
-def test_annotations_sql(
-    with_filter: bool, with_violation: bool, validate_get_data: bool
-):
+def test_annotations_sql(with_filter: bool, with_violation: bool, validate_get_data: bool):
     @materialize(nout=2)
     def load_raw_data(name: str):
         return globals()[f"data_{name}"]()
@@ -775,16 +682,12 @@ def test_annotations_sql(
     if validate_get_data:
 
         @materialize(nout=2, input_type=pdt.SqlAlchemy)
-        def get_anno_data_sql(
-            first: MyFirstColSpec, second: MySecondColSpec
-        ) -> tuple[MyFirstColSpec, MySecondColSpec]:
+        def get_anno_data_sql(first: MyFirstColSpec, second: MySecondColSpec) -> tuple[MyFirstColSpec, MySecondColSpec]:
             return first >> pdt.alias("first2"), second >> pdt.alias("second2")
     else:
 
         @materialize(nout=2, input_type=pdt.SqlAlchemy)
-        def get_anno_data_sql(
-            first: pdt.Table, second: pdt.Table
-        ) -> tuple[pdt.Table, pdt.Table]:
+        def get_anno_data_sql(first: pdt.Table, second: pdt.Table) -> tuple[pdt.Table, pdt.Table]:
             return first >> pdt.alias("first2"), second >> pdt.alias("second2")
 
     def get_anno_data(name: str):
@@ -797,9 +700,7 @@ def test_annotations_sql(
             ("a", pdc.Int64()),
             (
                 "b",
-                pdc.Int16()
-                if validate_get_data and (not with_violation or with_filter)
-                else pdc.Int64(),
+                pdc.Int16() if validate_get_data and (not with_violation or with_filter) else pdc.Int64(),
             ),
             ("c", pdc.String()),
         ]
@@ -813,37 +714,27 @@ def test_annotations_sql(
 
         # Conversion from sqlalchemy backend to polars backend always uses 64bit integer
         # intentionally
-        first = (
-            first
-            >> pdt.collect(pdt.Polars())
-            >> pdt.mutate(b=first.b.cast(pdt.Int16()))
-        )
+        first = first >> pdt.collect(pdt.Polars()) >> pdt.mutate(b=first.b.cast(pdt.Int16()))
         if not validate_get_data and with_violation:
             if with_filter:
                 # this case does not occur for polars versions since they abort in cast
                 MyFirstColSpec.validate(first)
             else:
-                with pytest.raises(
-                    cs.exc.RuleValidationError, match="1 rules failed validation"
-                ):
+                with pytest.raises(cs.exc.RuleValidationError, match="1 rules failed validation"):
                     MyFirstColSpec.validate(first)
-            with pytest.raises(
-                cs.exc.RuleValidationError, match="2 rules failed validation"
-            ):
+            with pytest.raises(cs.exc.RuleValidationError, match="2 rules failed validation"):
                 MySecondColSpec.validate(second)
         else:
             assert MyFirstColSpec.is_valid(first >> pdt.collect(pdt.Polars()))
             assert MySecondColSpec.is_valid(second >> pdt.collect(pdt.Polars()))
 
-    @materialize(input_type=pdt.Polars)
+    @materialize(input_type=pdt.SqlAlchemy)
     def consumer2(first: MyFirstColSpec, second: MySecondColSpec):
         assert [(c.name, c.dtype()) for c in first] == [
             ("a", pdc.Int64()),
             (
                 "b",
-                pdc.Int16()
-                if validate_get_data and (not with_violation or with_filter)
-                else pdc.Int64(),
+                pdc.Int16() if validate_get_data and (not with_violation or with_filter) else pdc.Int64(),
             ),
             ("c", pdc.String()),
         ]
@@ -856,10 +747,7 @@ def test_annotations_sql(
         assert len(second >> pdt.export(pdt.Polars())) in [3, 4, 5]
 
     with Flow() as flow:
-        name = (
-            f"with{'out' if not with_filter else ''}_filter"
-            f"_with{'out' if not with_violation else ''}_rule_violation"
-        )
+        name = f"with{'out' if not with_filter else ''}_filter_with{'out' if not with_violation else ''}_rule_violation"
         with Stage("s01"):
             first, second = get_anno_data(name)
             consumer(first, second)
@@ -870,8 +758,7 @@ def test_annotations_sql(
         # Validation at end of get_anno_data task fails
         with pytest.raises(
             HookCheckException,
-            match="failed validation with MyFirstColSpec; Failure counts: "
-            "{'b|min': 1, 'c|nullability': 1};"
+            match="failed validation with MyFirstColSpec; Failure counts: {'b|min': 1, 'c|nullability': 1};"
             if with_filter
             else "{'_primary_key_': 2};",
         ):
