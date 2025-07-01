@@ -160,10 +160,15 @@ def pytest_collection_modifyitems(config: pytest.Config, items):
             all_opts = [opt]
             if opt in sub_backends:
                 all_opts.extend(sub_backends[opt])
-            for opt in all_opts:
-                skip = pytest.mark.skip(reason=f"{opt} not selected")
+            for opt2 in all_opts:
+                skip = pytest.mark.skip(reason=f"{opt2} not selected")
                 for item in items:
-                    if opt in item.keywords:
+                    if (
+                        opt2 in item.keywords
+                        or any(itm.startswith(opt2 + "-") for itm in item.keywords)
+                        or any(itm.endswith("-" + opt2) for itm in item.keywords)
+                        or any("-" + opt2 + "-" in itm for itm in item.keywords)
+                    ):
                         item.add_marker(skip)
 
 

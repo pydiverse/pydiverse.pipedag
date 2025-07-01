@@ -32,12 +32,13 @@ def create_bucket_if_not_exists(bucket_name: str, s3_client, region: str | None 
 
 
 def initialize_test_s3_bucket():
-    minio_client = boto3.client(
-        "s3",
-        endpoint_url="http://localhost:9000",
-        aws_access_key_id="minioadmin",  # default MinIO credentials
-        aws_secret_access_key="minioadmin",
-        region_name="us-east-1",
-        config=boto3.session.Config(s3={"addressing_style": "path"}),
-    )
-    create_bucket_if_not_exists("pipedag-test-bucket", minio_client)
+    if boto3 is not None:
+        minio_client = boto3.client(
+            "s3",
+            endpoint_url="http://localhost:9000",
+            aws_access_key_id="minioadmin",  # default MinIO credentials
+            aws_secret_access_key="minioadmin",
+            region_name="us-east-1",
+            config=boto3.session.Config(s3={"addressing_style": "path"}),
+        )
+        create_bucket_if_not_exists("pipedag-test-bucket", minio_client)
