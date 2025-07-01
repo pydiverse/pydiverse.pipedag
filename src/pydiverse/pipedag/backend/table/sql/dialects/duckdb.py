@@ -49,18 +49,19 @@ class DuckDBTableStore(SQLTableStore):
     def _default_isolation_level(self) -> str | None:
         return None  # "READ UNCOMMITTED" does not exist in DuckDB
 
-    def _init_database(self):
-        if not self.create_database_if_not_exists:
-            return
-
+    def _init_database_before_engine(self):
         # Duckdb already creates the database file automatically
         # However, the parent directory doesn't get created automatically
         database = self.engine_url.database
-        if database == ":memory:":
+        if database is None or database == ":memory:":
             return
 
         database_path = Path(database)
         database_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _init_database(self):
+        if not self.create_database_if_not_exists:
+            return
 
     def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
         _ = table, is_sql

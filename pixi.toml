@@ -28,6 +28,7 @@ duckdb = ">=0.10.3,<2"
 duckdb-engine = ">=0.15.0,<0.16"
 polars = ">=1.2.1,<2"
 fsspec = ">=2025.5.1,<2026"
+universal_pathlib = ">=0.2.6,<0.3"
 
 
 [target.osx-arm64.dependencies]
@@ -101,7 +102,7 @@ ibm_db_sa = ">=0.3.8"
 
 # S3
 [feature.s3.dependencies]
-fs-s3fs = ">=1.1.1,<2"
+s3fs = ">=2025.5.1,<2026"
 
 [feature.docs.dependencies]
 Sphinx = ">=7.3.7"

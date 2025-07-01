@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from pydiverse.common.util.structlog import setup_logging
+from pydiverse.pipedag.util.testing_s3 import initialize_test_s3_bucket
 
 # Load the `run_with_instances` fixture, so it gets applied to all tests
 from tests.fixtures.instances import INSTANCE_MARKS, fixture_run_with_instance
@@ -33,6 +34,29 @@ def setup_environ():
     os.environ["MSSQL_PASSWORD"] = "PydiQuant27"
 
     os.environ["PYDIVERSE_PIPEDAG_PYTEST"] = "1"
+    os.environ["AWS_ACCESS_KEY_ID"] = "minioadmin"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "minioadmin"
+    os.environ["AWS_ENDPOINT_URL"] = "http://localhost:9000"
+
+    from fsspec.config import conf  # fsspec’s global config
+
+    conf.setdefault("s3", {})
+    conf["s3"].update(
+        {
+            "key": "minioadmin",
+            "secret": "minioadmin",
+            "client_kwargs": {
+                "endpoint_url": "http://localhost:9000",
+            },
+            # ─── botocore.config.Config parameters go here ────
+            "config_kwargs": {
+                "connect_timeout": 3,
+                "read_timeout": 5,
+                "retries": {"max_attempts": 2, "mode": "standard"},
+                "s3": {"addressing_style": "path"},  # MinIO needs path-style
+            },
+        }
+    )
 
 
 setup_environ()
@@ -104,9 +128,12 @@ supported_options = [
     "polars",
     "dask",
     "prefect",
+    "s3",
 ]
 
-default_options = ["postgres"]
+default_options = ["postgres", "duckdb", "polars"]
+
+sub_backends = dict(duckdb=["parquet_backend"], s3=["parquet_s3_backend"])
 
 
 def pytest_addoption(parser):
@@ -130,10 +157,14 @@ def pytest_addoption(parser):
 def pytest_collection_modifyitems(config: pytest.Config, items):
     for opt in supported_options:
         if not (config.getoption("--" + opt) or (opt in default_options and not config.getoption("--no-" + opt))):
-            skip = pytest.mark.skip(reason=f"{opt} not selected")
-            for item in items:
-                if opt in item.keywords:
-                    item.add_marker(skip)
+            all_opts = [opt]
+            if opt in sub_backends:
+                all_opts.extend(sub_backends[opt])
+            for opt in all_opts:
+                skip = pytest.mark.skip(reason=f"{opt} not selected")
+                for item in items:
+                    if opt in item.keywords:
+                        item.add_marker(skip)
 
 
 @pytest.hookimpl
@@ -157,3 +188,9 @@ def pytest_parallelize_group_items(config, items):
 
         groups[group].append(item)
     return groups
+
+
+# S3 preparation
+@pytest.fixture(autouse=True, scope="session")
+def s3_init():
+    initialize_test_s3_bucket()

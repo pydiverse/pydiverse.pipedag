@@ -270,6 +270,8 @@ class SQLTableStore(BaseTableStore):
 
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
         self.engine_url = sa.engine.make_url(engine_url)
+
+        self._init_database_before_engine()
         self.engine = self._create_engine()
 
         # Dict where hooks are allowed to store values that should get cached
@@ -372,6 +374,10 @@ class SQLTableStore(BaseTableStore):
     def _metadata_pk(self, name: str, table_name: str):
         return sa.Column(name, sa.BigInteger(), primary_key=True)
 
+    def _init_database_before_engine(self):
+        "File databases might have to create a directory here."
+        pass
+
     def _init_database(self):
         if not self.create_database_if_not_exists:
             return
@@ -421,9 +427,8 @@ class SQLTableStore(BaseTableStore):
         # we never want database transactional behavior (concurrent read+write)
         return "READ UNCOMMITTED"
 
-    def _create_engine(self):
-        kwargs = {}
-        if self._default_isolation_level() is not None:
+    def _create_engine(self, **kwargs):
+        if self._default_isolation_level() is not None and "isolation_level" not in kwargs:
             kwargs["isolation_level"] = self._default_isolation_level()
 
         # future=True enables SQLAlchemy 2.0 behaviour with version 1.4

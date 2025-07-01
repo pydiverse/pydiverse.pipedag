@@ -48,6 +48,7 @@ DATABASE_INSTANCES = (
     "ibm_db2",
     "duckdb",
     "parquet_backend",
+    "parquet_s3_backend",
 )
 
 ORCHESTRATION_INSTANCES = (
@@ -71,6 +72,7 @@ ALL_INSTANCES = (
     "snowflake",
     "local_table_cache",
     "parquet_backend",
+    "parquet_s3_backend",
 )
 
 

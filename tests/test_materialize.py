@@ -589,7 +589,7 @@ def _test_nullable_get_flow():
     return f, lazy_tables
 
 
-@skip_instances("snowflake", "parquet_backend")
+@skip_instances("snowflake", "parquet_backend", "parquet_s3_backend")
 @pytest.mark.parametrize("_get_flow", [_test_nullable_get_flow, _test_nullable_lazy_get_flow])
 def test_nullable(_get_flow):
     f, tables = _get_flow()
@@ -613,7 +613,7 @@ def test_nullable(_get_flow):
 
 
 # duckdb does not persist nullable flags over connections; snowflake is slow
-@skip_instances("duckdb", "snowflake", "parquet_backend")
+@skip_instances("duckdb", "snowflake", "parquet_backend", "parquet_s3_backend")
 @pytest.mark.parametrize("_get_flow", [_test_nullable_get_flow, _test_nullable_lazy_get_flow])
 def test_nullable_output(_get_flow):
     f, tables = _get_flow()

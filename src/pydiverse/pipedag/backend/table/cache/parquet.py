@@ -5,11 +5,11 @@ import json
 import os
 import shutil
 import types
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
 from packaging.version import Version
+from upath import UPath
 
 import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
 from pydiverse.pipedag import ConfigContext, Stage, Table
@@ -17,6 +17,7 @@ from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.store import BaseTableCache
 from pydiverse.pipedag.materialize.table_hook_base import CanResult, TableHook
 from pydiverse.pipedag.util import normalize_name
+from pydiverse.pipedag.util.path import is_file_uri
 
 
 class ParquetTableCache(BaseTableCache):
@@ -42,21 +43,27 @@ class ParquetTableCache(BaseTableCache):
         instance_id = normalize_name(ConfigContext.get().instance_id)
 
         config = config.copy()
-        base_path = Path(config.pop("base_path")) / instance_id
+        base_path = UPath(config.pop("base_path")) / instance_id
         return cls(base_path=base_path, **config)
 
-    def __init__(self, *args, base_path: str | Path, **kwargs):
+    def __init__(self, *args, base_path: str | UPath, **kwargs):
         super().__init__(*args, **kwargs)
-        self.base_path = Path(base_path).absolute()
+        self.base_path = UPath(base_path).absolute()
 
     def setup(self):
-        os.makedirs(self.base_path, exist_ok=True)
+        if is_file_uri(self.base_path):
+            os.makedirs(self.base_path, exist_ok=True)
 
     def init_stage(self, stage: Stage):
-        os.makedirs(self.base_path / stage.name, exist_ok=True)
+        if is_file_uri(self.base_path):
+            os.makedirs(self.base_path / stage.name, exist_ok=True)
 
     def clear_cache(self, stage: Stage):
-        shutil.rmtree(self.get_stage_path(stage))
+        _dir = self.get_stage_path(stage)
+        if is_file_uri(_dir):
+            shutil.rmtree(_dir)
+        else:
+            _dir.rmdir(recursive=True)
 
     def _store_table(self, table: Table, task: MaterializingTask):
         if not super()._store_table(table, task):
@@ -79,10 +86,10 @@ class ParquetTableCache(BaseTableCache):
         except (OSError, json.decoder.JSONDecodeError):
             return False
 
-    def get_stage_path(self, stage: Stage):
+    def get_stage_path(self, stage: Stage) -> UPath:
         return self.base_path / stage.name
 
-    def get_table_path(self, table: Table, file_extension: str) -> Path:
+    def get_table_path(self, table: Table, file_extension: str) -> UPath:
         return self.get_stage_path(table.stage) / (table.name + file_extension)
 
 

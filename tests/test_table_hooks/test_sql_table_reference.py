@@ -28,7 +28,7 @@ from tests.util.sql import sql_table_expr
 pytestmark = [with_instances(DATABASE_INSTANCES)]
 
 
-@skip_instances("parquet_backend")
+@skip_instances("parquet_backend", "parquet_s3_backend")
 def test_smoke_table_reference():
     @materialize(version="1.1")
     def in_table():
@@ -84,7 +84,7 @@ except ImportError:
     pl = None
 
 
-@skip_instances("parquet_backend")
+@skip_instances("parquet_backend", "parquet_s3_backend")
 @pytest.mark.skipif(pl is None, reason="polars is needed for this test")
 def test_table_store():
     @materialize(version="1.1")

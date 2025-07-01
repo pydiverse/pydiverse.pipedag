@@ -68,6 +68,7 @@ jobs:
       docker-services: |
         postgres
         zoo
+        minio
 
   postgres_test:
     name: Postgres Tests
@@ -92,8 +93,52 @@ jobs:
       docker-services: |
         postgres
         zoo
-      pytest-arguments: --polars --ibis --pdtransform
+      pytest-arguments: --ibis --pdtransform --no-duckdb
 
+  duckdb_test:
+    name: DuckDB Tests
+    needs: [smoke_test]
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        environment:
+          - py310all
+          - py312all
+          - py310pdt
+          - py313pdt
+          - py311cspdt
+          - py313cspdt
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      docker-services: |
+        zoo
+        minio
+      pytest-arguments: --ibis --pdtransform --no-postgres
+
+  s3_test:
+    name: S3 Tests
+    needs: [smoke_test]
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        environment:
+          - py310all
+          - py311all
+          - py312all
+          - py313all
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      docker-services: |
+        postgres
+        zoo
+        minio
+      pytest-arguments: --s3 --ibis --pdtransform --no-duckdb --no-postgres
 
   colspec_test:
     name: ColSpec Tests
@@ -116,30 +161,8 @@ jobs:
       docker-services: |
         postgres
         zoo
+        minio
       pytest-arguments: --pdtransform
-
-
-  duckdb_test:
-    name: DuckDB Tests
-    needs: [smoke_test]
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-        environment:
-          - py310all
-          - py312all
-          - py310pdt
-          - py313pdt
-          - py311cspdt
-          - py313cspdt
-    uses: ./.github/workflows/test.yml
-    with:
-      os: ${{ matrix.os }}
-      environment: ${{ matrix.environment }}
-      docker-services: |
-        zoo
-      pytest-arguments: --duckdb -m duckdb --polars --ibis --pdtransform --no-postgres
 
   db2_test:
     name: DB2 Tests
@@ -158,8 +181,8 @@ jobs:
       docker-services: |
         zoo
         ibm_db2
-      # --polars and --ibis not supported
-      pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform --no-postgres
+      # and --ibis not supported
+      pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform --no-postgres --no-duckdb
 
   mssql_test:
     name: MSSql Tests
@@ -182,7 +205,7 @@ jobs:
       docker-services: |
         mssql
         zoo
-      pytest-arguments: --mssql -m mssql --polars --ibis --pdtransform --no-postgres
+      pytest-arguments: --mssql -m mssql --ibis --pdtransform --no-postgres --no-duckdb
 
   orchestration_test:
     name: Orchestration Tests
@@ -204,6 +227,7 @@ jobs:
         prefect
         postgres
         zoo
+        minio
       pytest-arguments: --dask --prefect -m "dask or prefect"
 
   pandas1_sqlalchemy1_test:
@@ -223,7 +247,8 @@ jobs:
       docker-services: |
         postgres
         zoo
-      pytest-arguments: --polars --ibis --pdtransform
+        minio
+      pytest-arguments: --ibis --pdtransform
 
   snowflake_test:
     name: Snowflake Tests
@@ -250,4 +275,4 @@ jobs:
       docker-services: |
         postgres
         zoo
-      pytest-arguments: --polars --ibis --pdtransform --snowflake --no-postgres
+      pytest-arguments: --ibis --pdtransform --snowflake --no-postgres --no-duckdb

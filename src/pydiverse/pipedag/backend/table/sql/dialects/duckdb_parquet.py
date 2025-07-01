@@ -3,9 +3,10 @@
 
 import os
 import shutil
-from pathlib import Path
+from typing import Any
 
 import sqlalchemy as sa
+from upath import UPath
 
 import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
 from pydiverse.pipedag import ConfigContext, Schema, Stage, Table
@@ -22,6 +23,8 @@ from pydiverse.pipedag.materialize.table_hook_base import (
     CanResult,
     TableHook,
 )
+from pydiverse.pipedag.util import normalize_name
+from pydiverse.pipedag.util.path import is_file_uri
 
 try:
     import pandas as pd
@@ -178,16 +181,24 @@ class ParquetTableStore(DuckDBTableStore):
         with concurrent operations each working with one or more database connections.
     :param parquet_base_bath:
         This is an fsspec compatible path to either a directory or an S3 bucket key
-        prefix. Examples are '/tmp/pipedag/parquet/' or 'S3
+        prefix. Examples are '/tmp/pipedag/parquet/' or 's3://pipedag-test-bucket/table_store/'.
+        `instance_id` will automatically be appended to parquet_base_bath.
 
     """
 
     _dialect_name = DISABLE_DIALECT_REGISTRATION
 
+    @classmethod
+    def _init_conf_(cls, config: dict[str, Any]):
+        config = config.copy()
+        instance_id = normalize_name(ConfigContext.get().instance_id)
+        config["parquet_base_path"] = UPath(config["parquet_base_path"]) / instance_id
+        return super()._init_conf_(config)
+
     def __init__(
         self,
         engine_url: str,
-        parquet_base_path: str,
+        parquet_base_path: UPath,
         *,
         create_database_if_not_exists: bool = False,
         schema_prefix: str = "",
@@ -219,17 +230,17 @@ class ParquetTableStore(DuckDBTableStore):
             sqlalchemy_pool_size=sqlalchemy_pool_size,
             sqlalchemy_pool_timeout=sqlalchemy_pool_timeout,
         )
-        self.parquet_base_path = Path(parquet_base_path)
+        self.parquet_base_path = parquet_base_path
 
         # ## state
 
         # whether parquet files of stage are stored in __odd or __even
         # can typically be found in metadata, but firstly we cache this
         # and secondly we modify it for the current stage before commit
-        self.parquet_schema_paths: dict[str, Path] = {}
+        self.parquet_schema_paths: dict[str, UPath] = {}
         # tables may get alias to other transaction slot in case of cache
         # valid tasks
-        self.parquet_table_paths: dict[tuple[str, str], Path] = {}
+        self.parquet_table_paths: dict[tuple[str, str], UPath] = {}
         # remember tables that need to be copied if stage is not unchanged
         self.parquet_deferred_copy: list[Table] = []
 
@@ -240,6 +251,49 @@ class ParquetTableStore(DuckDBTableStore):
             schema_prefix=self.schema_prefix,
             schema_suffix=self.schema_suffix,
         )
+
+    def _create_engine(self):
+        engine = super()._create_engine(
+            connect_args={
+                # configure s3 for minio (see docker-compose.yaml)
+                "config": {
+                    "s3_endpoint": "localhost:9000",
+                    "s3_url_style": "path",
+                    "s3_use_ssl": "false",
+                    # "s3_region": "us-east-1",
+                    "s3_access_key_id": "minioadmin",
+                    "s3_secret_access_key": "minioadmin",
+                },
+            }
+        )
+
+        def execute(con, statement):
+            """
+            Execute a SQL statement and return the result.
+            """
+            if sa.__version__ >= "2.0.0":
+                return con.execute(sa.text(statement))
+            else:
+                return con.execute(statement)
+
+        with engine.connect() as con:
+            # Enable HTTPFS extension
+            execute(con, "INSTALL httpfs;")
+            execute(con, "LOAD httpfs;")
+
+            # MinIO credentials (default unless you've changed them)
+            execute(con, "SET s3_access_key_id='minioadmin';")
+            execute(con, "SET s3_secret_access_key='minioadmin';")
+
+            # MinIO-specific settings
+            execute(con, "SET s3_use_ssl=false;")
+            execute(con, "SET s3_endpoint='localhost:9000';")  # MinIO server URL
+            execute(con, "SET s3_url_style='path';")  # Important: MinIO uses path-style URLs
+
+            if sa.__version__ >= "2.0.0":
+                con.commit()
+
+        return engine
 
     def init_stage(self, stage: Stage):
         # fetch existing tables from database before schema is deleted there
@@ -264,8 +318,8 @@ class ParquetTableStore(DuckDBTableStore):
         # TODO: for nested stages this might be per stage
         self.parquet_deferred_copy.clear()
         path = self.get_stage_path(stage)
-        # TODO: figure out how to do this for S3
-        os.makedirs(path, exist_ok=True)
+        if is_file_uri(path):
+            os.makedirs(path, exist_ok=True)
         for row in existing_tables:
             table = row[0]
             file_path = path / (table + ".parquet")
@@ -274,7 +328,7 @@ class ParquetTableStore(DuckDBTableStore):
                     "Cleaning up parquet file in transaction schema",
                     file_path=file_path,
                 )
-                os.remove(file_path)
+                file_path.unlink()
             except FileNotFoundError:
                 self.logger.error(
                     "Could not remove parquet file while deleting corresponding view in transaction schema",
@@ -298,8 +352,10 @@ class ParquetTableStore(DuckDBTableStore):
             src_file_path=src_file_path,
             dest_file_path=dest_file_path,
         )
-        # TODO: think about how to do this with S3
-        shutil.copy(src_file_path, dest_file_path)
+        if is_file_uri(src_file_path):
+            shutil.copy(src_file_path, dest_file_path)
+        else:
+            src_file_path.fs.copy(src_file_path.as_uri(), dest_file_path.as_uri(), on_error="raise")
         # create view in duckdb database file
         self.execute(CreateViewAsSelect(table.name, dest_schema, self._read_parquet_query(dest_file_path)))
 
@@ -345,8 +401,10 @@ class ParquetTableStore(DuckDBTableStore):
                     src_file_path=src_file_path,
                     dest_file_path=dest_file_path,
                 )
-                # TODO: think about how to do this with S3
-                shutil.copy(src_file_path, dest_file_path)
+                if is_file_uri(src_file_path):
+                    shutil.copy(src_file_path, dest_file_path)
+                else:
+                    src_file_path.fs.copy(src_file_path.as_uri(), dest_file_path.as_uri(), on_error="raise")
                 # replace view in duckdb database file (which was previously just
                 # alias to main schema)
                 self.execute(CreateViewAsSelect(table.name, schema, self._read_parquet_query(dest_file_path)))
@@ -364,7 +422,7 @@ class ParquetTableStore(DuckDBTableStore):
     def get_parquet_path(self, schema: Schema):
         return self.parquet_base_path / schema.get()
 
-    def get_parquet_schema_path(self, schema: Schema) -> Path:
+    def get_parquet_schema_path(self, schema: Schema) -> UPath:
         # Parquet files are stored in transaction schema while stage.current_name
         # changes to final schema. We resolve a level of indirection in memory.
         if schema.name in self.parquet_schema_paths:
@@ -378,7 +436,7 @@ class ParquetTableStore(DuckDBTableStore):
         self.parquet_schema_paths[schema.name] = path
         return path
 
-    def get_stage_path(self, stage: Stage):
+    def get_stage_path(self, stage: Stage) -> UPath:
         store = ConfigContext.get().store.table_store
         return self.get_parquet_schema_path(store.get_schema(stage.current_name))
 
@@ -387,12 +445,12 @@ class ParquetTableStore(DuckDBTableStore):
         table: Table,
         file_extension: str = ".parquet",
         lookup_schema: bool = False,
-    ) -> Path:
+    ) -> UPath:
         store = ConfigContext.get().store.table_store
         schema_name = table.stage.current_name
         return self.get_table_schema_path(table.name, store.get_schema(schema_name), file_extension)
 
-    def get_table_schema_path(self, table_name: str, schema: Schema, file_extension: str = ".parquet") -> Path:
+    def get_table_schema_path(self, table_name: str, schema: Schema, file_extension: str = ".parquet") -> UPath:
         # Parquet files might be stored in other transaction schema in case of cache
         # validity. We resolve a level of indirection in memory.
         if (schema.name, table_name) in self.parquet_table_paths:
@@ -403,9 +461,7 @@ class ParquetTableStore(DuckDBTableStore):
         if schema is None:
             schema = self.get_schema(table.stage.transaction_name)
         file_path = self.get_table_schema_path(table.name, schema)
-        # TODO: think about how to do this with S3
-        if file_path.exists():
-            os.remove(file_path)
+        file_path.unlink(missing_ok=True)
         self.execute(
             DropView(
                 table.name,
@@ -444,8 +500,12 @@ class ParquetTableStore(DuckDBTableStore):
         schema = self.get_schema(table.stage.transaction_name)
         from_path = self.get_table_schema_path(table.name, schema)
         to_path = self.get_table_schema_path(to_name, schema)
-        # TODO: think about how to do this with S3
-        os.rename(from_path, to_path)
+        if is_file_uri(from_path):
+            os.rename(from_path, to_path)
+        else:
+            from_path.fs.copy(from_path.as_uri(), to_path.as_uri(), on_error="raise")
+            from_path.unlink()
+
         # drop view
         self.execute(
             DropView(
@@ -500,10 +560,9 @@ class ParquetTableStore(DuckDBTableStore):
         _ = cascade
         schema = self.get_schema(neighbor_table.stage.transaction_name)
         drop_path = self.get_table_schema_path(drop_name, schema)
-        # TODO: think about how to do this with S3
         try:
-            os.remove(drop_path)
-        except OSError as e:
+            drop_path.unlink()
+        except FileNotFoundError as e:
             if not if_exists:
                 raise e
         # drop view
