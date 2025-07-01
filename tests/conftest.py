@@ -195,7 +195,7 @@ def pytest_parallelize_group_items(config, items):
     return groups
 
 
-# S3 preparation
-@pytest.fixture(autouse=True, scope="session")
-def s3_init():
-    initialize_test_s3_bucket()
+def pytest_sessionstart(session):
+    # initialize the S3 test bucket in case --s3 option was given
+    if session.config.getoption("--s3"):
+        initialize_test_s3_bucket()
