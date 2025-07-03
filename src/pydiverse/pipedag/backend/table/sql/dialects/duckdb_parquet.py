@@ -696,7 +696,6 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
         table: Table,
         stage_name: str,
         as_type: type,
-        dtypes: dict[str, pl.DataType] | None = None,
         limit: int | None = None,
     ) -> pl.DataFrame:
         _ = as_type

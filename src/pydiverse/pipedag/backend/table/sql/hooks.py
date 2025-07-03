@@ -659,6 +659,38 @@ class DataframeSqlTableHook:
         )
         store.optional_pause_for_db_transactionality("table_create")
 
+    @classmethod
+    def _build_retrieve_query(
+        cls,
+        store: SQLTableStore,
+        table: Table,
+        stage_name: str | None,
+        limit: int | None = None,
+    ) -> tuple[Any, dict[str, Dtype]]:
+        table_name, schema = store.resolve_alias(table, stage_name)
+
+        sql_table = store.reflect_table(table_name, schema).alias("tbl")
+
+        cols = {col.name: col for col in sql_table.columns}
+        dtypes = {name: Dtype.from_sql(col.type) for name, col in cols.items()}
+
+        cols, dtypes = cls._adjust_cols_retrieve(store, cols, dtypes)
+
+        if cols is None:
+            query = sa.select("*").select_from(sql_table)
+        else:
+            query = sa.select(*cols.values()).select_from(sql_table)
+        if limit is not None:
+            query = store.get_limit_query(query, rows=limit)
+        return query, dtypes
+
+    @classmethod
+    def _adjust_cols_retrieve(cls, store: SQLTableStore, cols: dict, dtypes: dict) -> tuple[dict | None, dict]:
+        # in earlier times pandas only supported datetime64[ns] and thus we implemented
+        # clipping in this function to avoid the creation of dtype=object columns
+        return None, dtypes
+        # return cols, dtypes
+
 
 @SQLTableStore.register_table(pd)
 class PandasTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
@@ -846,44 +878,9 @@ class PandasTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         backend = PandasBackend(backend_str)
 
         # Retrieve
-        query, dtypes = cls._build_retrieve_query(store, table, stage_name, backend, limit)
+        query, dtypes = cls._build_retrieve_query(store, table, stage_name, limit)
         dataframe = cls._execute_query_retrieve(store, query, dtypes, backend)
         return dataframe
-
-    @classmethod
-    def _build_retrieve_query(
-        cls,
-        store: SQLTableStore,
-        table: Table,
-        stage_name: str | None,
-        backend: PandasBackend,
-        limit: int | None = None,
-    ) -> tuple[Any, dict[str, Dtype]]:
-        table_name, schema = store.resolve_alias(table, stage_name)
-
-        sql_table = store.reflect_table(table_name, schema).alias("tbl")
-
-        cols = {col.name: col for col in sql_table.columns}
-        dtypes = {name: Dtype.from_sql(col.type) for name, col in cols.items()}
-
-        cols, dtypes = cls._adjust_cols_retrieve(store, cols, dtypes, backend)
-
-        if cols is None:
-            query = sa.select("*").select_from(sql_table)
-        else:
-            query = sa.select(*cols.values()).select_from(sql_table)
-        if limit is not None:
-            query = store.get_limit_query(query, rows=limit)
-        return query, dtypes
-
-    @classmethod
-    def _adjust_cols_retrieve(
-        cls, store: SQLTableStore, cols: dict, dtypes: dict, backend: PandasBackend
-    ) -> tuple[dict | None, dict]:
-        # in earlier times pandas only supported datetime64[ns] and thus we implemented
-        # clipping in this function to avoid the creation of dtype=object columns
-        return None, dtypes
-        # return cols, dtypes
 
     @classmethod
     def _execute_query_retrieve(
@@ -1133,7 +1130,7 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         limit: int | None = None,
     ) -> pl.DataFrame:
         cfg = cls.cfg()
-        df = cls._execute_query(store, table, stage_name, as_type, dtypes=None, limit=limit)
+        df = cls._execute_query(store, table, stage_name, as_type, limit=limit)
         if not cfg.disable_retrieve_annotation_action:
             try:
                 df = _polars_apply_retrieve_annotation(df, table, store)
@@ -1155,23 +1152,6 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         return super().auto_table(obj)
 
     @classmethod
-    def _read_db_query(
-        cls,
-        store: SQLTableStore,
-        table: Table,
-        stage_name: str | None,
-        limit: int | None = None,
-    ):
-        table_name, schema = store.resolve_alias(table, stage_name)
-
-        t = sa.table(table_name, schema=schema)
-        q = sa.select("*").select_from(t)
-        if limit is not None:
-            q = q.limit(limit)
-
-        return q
-
-    @classmethod
     def _compile_query(cls, store: SQLTableStore, query: Select) -> str:
         return str(query.compile(store.engine, compile_kwargs={"literal_binds": True}))
 
@@ -1182,11 +1162,13 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         table: Table,
         stage_name: str,
         as_type: type,
-        dtypes: dict[str, pl.DataType] | None = None,
         limit: int | None = None,
     ) -> pl.DataFrame:
         _ = as_type
-        query = cls._read_db_query(store, table, stage_name, limit)
+        query, dtypes = cls._build_retrieve_query(store, table, stage_name, limit)
+        # Polars database read methods tend to do a good job in automatic type mapping.
+        # Thus dtypes must be corrected after loading if needed.
+        dtypes = None
         query = cls._compile_query(store, query)
         try:
             df = cls.download_table(query, store, dtypes)
@@ -1198,7 +1180,7 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
             )
             pandas_hook = store.get_r_table_hook(pd.DataFrame)  # type: PandasTableHook
             backend = PandasBackend.ARROW
-            query, dtypes = pandas_hook._build_retrieve_query(store, table, stage_name, backend)
+            query, dtypes = pandas_hook._build_retrieve_query(store, table, stage_name)
             dtypes = {name: dtype.to_pandas(backend) for name, dtype in dtypes.items()}
             pd_df = pandas_hook.download_table(query, store, dtypes)
             df = pl.from_pandas(pd_df)

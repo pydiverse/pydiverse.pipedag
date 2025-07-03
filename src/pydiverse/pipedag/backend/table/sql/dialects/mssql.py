@@ -15,7 +15,7 @@ import sqlalchemy as sa
 import sqlalchemy.dialects.mssql
 from pandas.core.dtypes.base import ExtensionDtype
 
-from pydiverse.common import Datetime, Dtype, PandasBackend
+from pydiverse.common import Datetime, Dtype
 from pydiverse.pipedag.backend.table.sql.ddl import (
     AddClusteredColumnstoreIndex,
     ChangeColumnTypes,
@@ -426,50 +426,55 @@ class DataframeMsSQLTableHook:
             # use bcpandas
             from bcpandas import SqlCreds, to_sql
 
-            creds = SqlCreds.from_engine(store.engine)
-            url = store.engine_url.render_as_string()
-            if "&" in url:
-                creds.odbc_kwargs = {
-                    x.split("=")[0]: x.split("=")[1] for x in url.split("&")[1:] if len(x.split("=")) == 2
-                }
-            if isinstance(df, pl.DataFrame):
-                # convert polars DataFrame to pandas DataFrame
-                df = df.to_pandas()
-            # attention: the `(lambda col: lambda...)(copy.copy(col))` part looks odd
-            # but is needed to ensure loop iterations create lambdas working on
-            # different columns
-            df_out = df.assign(
-                **{
-                    col: (lambda col: lambda df: df[col].map({True: 1, False: 0}).astype(pd.Int8Dtype()))(
-                        copy.copy(col)
-                    )
-                    for col, dtype in df.dtypes[(df.dtypes == "bool[pyarrow]") | (df.dtypes == "bool")].items()
-                }
-            ).assign(
-                **{
-                    col: (
-                        lambda col: lambda df: df[col]
-                        .str.replace("\n", "\\n", regex=False)
-                        .str.replace("\t", "\\t", regex=False)
-                        .str.replace("\r", "\\r", regex=False)
-                    )(copy.copy(col))
-                    for col, dtype in df.dtypes[
-                        (df.dtypes == "object") | (df.dtypes == "string") | (df.dtypes == "string[pyarrow]")
-                    ].items()
-                }
-            )
-            to_sql(
-                df_out,
-                table.name,
-                creds,
-                schema=schema_name,
-                index=False,
-                if_exists="append" if early else "fail",
-                batch_size=min(len(df), 100_000),
-                dtype=dtypes,
-                delimiter="\t",
-                quotechar="\1",
-            )
+            if len(df) == 0:
+                # bcpands won't write an empty table
+                # (this method is inherited from PandasTableHook/PolarsTableHook)
+                cls._dialect_create_empty_table(store, table, schema, dtypes)
+            else:
+                creds = SqlCreds.from_engine(store.engine)
+                url = store.engine_url.render_as_string()
+                if "&" in url:
+                    creds.odbc_kwargs = {
+                        x.split("=")[0]: x.split("=")[1] for x in url.split("&")[1:] if len(x.split("=")) == 2
+                    }
+                if isinstance(df, pl.DataFrame):
+                    # convert polars DataFrame to pandas DataFrame
+                    df = df.to_pandas()
+                # attention: the `(lambda col: lambda...)(copy.copy(col))` part looks odd
+                # but is needed to ensure loop iterations create lambdas working on
+                # different columns
+                df_out = df.assign(
+                    **{
+                        col: (lambda col: lambda df: df[col].map({True: 1, False: 0}).astype(pd.Int8Dtype()))(
+                            copy.copy(col)
+                        )
+                        for col, dtype in df.dtypes[(df.dtypes == "bool[pyarrow]") | (df.dtypes == "bool")].items()
+                    }
+                ).assign(
+                    **{
+                        col: (
+                            lambda col: lambda df: df[col]
+                            .str.replace("\n", "\\n", regex=False)
+                            .str.replace("\t", "\\t", regex=False)
+                            .str.replace("\r", "\\r", regex=False)
+                        )(copy.copy(col))
+                        for col, dtype in df.dtypes[
+                            (df.dtypes == "object") | (df.dtypes == "string") | (df.dtypes == "string[pyarrow]")
+                        ].items()
+                    }
+                )
+                to_sql(
+                    df_out,
+                    table.name,
+                    creds,
+                    schema=schema_name,
+                    index=False,
+                    if_exists="append" if early else "fail",
+                    batch_size=min(len(df), 100_000),
+                    dtype=dtypes,
+                    delimiter="\t",
+                    quotechar="\1",
+                )
 
     @classmethod
     def download_table_arrow_odbc(
@@ -505,13 +510,8 @@ class DataframeMsSQLTableHook:
 
         return df
 
-
-@MSSqlTableStore.register_table(pd)
-class PandasTableHook(DataframeMsSQLTableHook, PandasTableHook):
     @classmethod
-    def _adjust_cols_retrieve(
-        cls, store: MSSqlTableStore, cols: dict, dtypes: dict, backend: PandasBackend
-    ) -> tuple[dict | None, dict]:
+    def _adjust_cols_retrieve(cls, store: MSSqlTableStore, cols: dict, dtypes: dict) -> tuple[dict | None, dict]:
         assert isinstance(store, MSSqlTableStore)
         arrow_odbc = not store.disable_arrow_odbc
         max_string_length = 256
@@ -530,6 +530,9 @@ class PandasTableHook(DataframeMsSQLTableHook, PandasTableHook):
                 }, dtypes
         return None, dtypes
 
+
+@MSSqlTableStore.register_table(pd)
+class PandasTableHook(DataframeMsSQLTableHook, PandasTableHook):
     @classmethod
     def download_table(
         cls,
