@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 from itertools import chain
 
@@ -22,6 +23,8 @@ INSTANCE_MARKS = {
     "postgres_unlogged": pytest.mark.postgres,
     "mssql": pytest.mark.mssql,
     "mssql_pytsql": pytest.mark.mssql,
+    "mssql_nobulk": pytest.mark.mssql,
+    "mssql_noaodbc": pytest.mark.mssql,
     "mssql_columnstore": pytest.mark.mssql,
     "ibm_db2": pytest.mark.ibm_db2,
     "ibm_db2_avoid_schema": pytest.mark.ibm_db2,
@@ -44,6 +47,8 @@ DATABASE_INSTANCES = (
     "mssql",
     "ibm_db2",
     "duckdb",
+    "parquet_backend",
+    "parquet_s3_backend",
 )
 
 ORCHESTRATION_INSTANCES = (
@@ -57,6 +62,8 @@ ALL_INSTANCES = (
     "postgres_unlogged",
     "mssql",
     "mssql_pytsql",
+    "mssql_nobulk",
+    "mssql_noaodbc",
     "mssql_columnstore",
     "ibm_db2",
     "ibm_db2_avoid_schema",
@@ -64,6 +71,8 @@ ALL_INSTANCES = (
     "duckdb",
     "snowflake",
     "local_table_cache",
+    "parquet_backend",
+    "parquet_s3_backend",
 )
 
 

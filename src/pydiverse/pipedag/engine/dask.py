@@ -1,21 +1,18 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import sys
 import warnings
-from typing import TYPE_CHECKING
 
 import structlog
 
+from pydiverse.common.util import requires
 from pydiverse.pipedag import ExternalTableReference, Table
 from pydiverse.pipedag.context import ConfigContext, RunContext
-from pydiverse.pipedag.core import Result
+from pydiverse.pipedag.core import Result, Subflow, Task
 from pydiverse.pipedag.engine.base import (
     OrchestrationEngine,
 )
-from pydiverse.pipedag.util import requires
-
-if TYPE_CHECKING:
-    from pydiverse.pipedag.core import Subflow, Task
 
 try:
     import dask
@@ -71,9 +68,7 @@ class DaskEngine(OrchestrationEngine):
                 _ = parent_futures
 
                 # TODO: Don't just assume a logger factory...
-                structlog_config["logger_factory"] = structlog.PrintLoggerFactory(
-                    sys.stderr
-                )
+                structlog_config["logger_factory"] = structlog.PrintLoggerFactory(sys.stderr)
                 structlog.configure(**structlog_config)
 
                 with structlog.contextvars.bound_contextvars(**structlog_context):
@@ -89,17 +84,11 @@ class DaskEngine(OrchestrationEngine):
                     for in_id, in_t in task.input_tasks.items()
                     if in_t in results and in_t not in inputs
                 },
-                **{
-                    in_id: Table(inputs[in_t])
-                    for in_id, in_t in task.input_tasks.items()
-                    if in_t in inputs
-                },
+                **{in_id: Table(inputs[in_t]) for in_id, in_t in task.input_tasks.items() if in_t in inputs},
             }
 
             results[task] = bind_run(task)(
-                parent_futures=[
-                    results[parent] for parent in flow.get_parent_tasks(task)
-                ],
+                parent_futures=[results[parent] for parent in flow.get_parent_tasks(task)],
                 inputs=task_inputs,
                 run_context=run_context,
                 config_context=config_context,

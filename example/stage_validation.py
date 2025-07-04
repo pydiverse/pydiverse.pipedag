@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import logging
 import tempfile
@@ -6,10 +7,10 @@ import tempfile
 import pandas as pd
 import sqlalchemy as sa
 
+from pydiverse.common.util.structlog import setup_logging
 from pydiverse.pipedag import Flow, Stage, Table, input_stage_versions, materialize
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.core.config import create_basic_pipedag_config
-from pydiverse.pipedag.util.structlog import setup_logging
 
 
 # The @input_stage_versions decorator offers all the options that @materialize has as
@@ -37,8 +38,7 @@ def validate_stage1(tbls: dict[str, pd.DataFrame], other_tbls: dict[str, pd.Data
         return set(other_tbl.columns) - set(tbl.columns)
 
     missing_columns = {
-        tbl: get_missing_columns(tbls[tbl], other_tbls[tbl])
-        for tbl in set(tbls.keys()) & set(other_tbls.keys())
+        tbl: get_missing_columns(tbls[tbl], other_tbls[tbl]) for tbl in set(tbls.keys()) & set(other_tbls.keys())
     }
     col_diff_dfs = [pd.DataFrame(dict(table=[], column=[], value=[]))]
     for tbl, columns in missing_columns.items():

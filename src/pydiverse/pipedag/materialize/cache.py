@@ -1,15 +1,16 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import itertools
 from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from pydiverse.pipedag.util.hashing import stable_hash
+from pydiverse.common.util.hashing import stable_hash
+from pydiverse.pipedag import Table
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag import Table
-    from pydiverse.pipedag.materialize.core import MaterializingTask
+    from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 
 
 class ImperativeMaterializationState:
@@ -32,7 +33,7 @@ class ImperativeMaterializationState:
 
 @dataclass(frozen=True)
 class TaskCacheInfo:
-    task: MaterializingTask
+    task: "MaterializingTask"
     input_hash: str
     cache_fn_hash: str
     cache_key: str
@@ -45,7 +46,7 @@ class TaskCacheInfo:
         return ImperativeMaterializationState()
 
 
-def task_cache_key(task: MaterializingTask, input_hash: str, cache_fn_hash: str):
+def task_cache_key(task: "MaterializingTask", input_hash: str, cache_fn_hash: str):
     """Cache key used to judge cache validity of the current task output.
 
     Also referred to as `task_hash`.

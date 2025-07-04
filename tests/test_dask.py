@@ -1,12 +1,18 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import io
 import pickle
 from io import BytesIO
 
-import dask
+import pytest
 import structlog
 from _pytest.capture import EncodedFile
+
+try:
+    import dask
+except ImportError:
+    dask = None
 
 
 class A(io.TextIOWrapper):
@@ -29,6 +35,7 @@ def test_that_encoded_file_is_picklable():
     pickle.dumps(EncodedFile(BytesIO(b"hello"), "utf-8"))
 
 
+@pytest.mark.skipif(dask is None, reason="requires dask")
 def test_dask_structlog_configuration_does_not_prevent_pickling():
     def bind_run():
         structlog_config = structlog.get_config()

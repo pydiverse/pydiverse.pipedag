@@ -9,23 +9,23 @@ A pipeline orchestration library executing tasks within one python session. It t
 (de)materialization, caching and cache invalidation. Blob storage is supported as well for example
 for storing model files.
 
-This is an early stage version 0.x, however, it is already used in real projects. We are happy to receive your 
-feedback as [issues](https://github.com/pydiverse/pydiverse.pipedag/issues) on the GitHub repo. Feel free to also 
+This is an early stage version 0.x, however, it is already used in real projects. We are happy to receive your
+feedback as [issues](https://github.com/pydiverse/pydiverse.pipedag/issues) on the GitHub repo. Feel free to also
 comment on existing issues to extend them to your needs or to add solution ideas.
 
 ## Preparing installation
 
 To install the package locally in development mode, you will need to install
 [pixi](https://pixi.sh/latest/). For those who haven't used pixi before, it is a
-poetry style dependency management tool based on conda/micromamba/conda-forge package 
-ecosystem. The conda-forge repository has well maintained packages for Linux, macOS, 
-and Windows supporting both ARM and X86 architectures. Especially, installing 
-psycopg2 in a portable way got much easier with pixi. In addition, pixi is really 
-strong in creating lock files for reproducible environments (including system libraries) 
+poetry style dependency management tool based on conda/micromamba/conda-forge package
+ecosystem. The conda-forge repository has well maintained packages for Linux, macOS,
+and Windows supporting both ARM and X86 architectures. Especially, installing
+psycopg2 in a portable way got much easier with pixi. In addition, pixi is really
+strong in creating lock files for reproducible environments (including system libraries)
 with many essential features missing in alternative tools like poetry (see [pixi.toml](pixi.toml)).
 
-Docker is used to test against Postgres, MS SQL Server, and DB2 database targets. The bulk of 
-unit tests requires a Postgres test database to be up and running which can be started with 
+Docker is used to test against Postgres, MS SQL Server, and DB2 database targets. The bulk of
+unit tests requires a Postgres test database to be up and running which can be started with
 docker-compose. Pixi can also help you install docker-compose if it is not already part of your
 docker (or alternative container runtime) installation:
 
@@ -36,8 +36,8 @@ pixi global install docker-compose
 ## Installation
 
 > Currently, development on pipedag is not tested with Windows. Installing packages with pixi
-> should work. If you are interested in contributing with Windows, please submit an 
-> [issue](https://github.com/pydiverse/pydiverse.pipedag/issues) 
+> should work. If you are interested in contributing with Windows, please submit an
+> [issue](https://github.com/pydiverse/pydiverse.pipedag/issues)
 > and we will try to help you with initial setup problems.
 
 To install pydiverse pipedag try this:
@@ -81,14 +81,14 @@ After installation and launching docker container in the background, you should 
 pixi run pytest --workers 4
 ```
 
-You can peak in [pytest.ini](pytest.ini) and [github actions](.github/workflows/tests.yml) 
+You can peak in [pytest.ini](pytest.ini) and [github actions](.github/workflows/tests.yml)
 to see different parameters to launch more tests.
 
 ```bash
 pixi run pytest --workers=auto --mssql --duckdb --snowflake --pdtransform --ibis --polars --dask --prefect
 ```
 
-for `--ibm_db2`, see the [IBM DB2 development](#ibm-db2-development) section. 
+for `--ibm_db2`, see the [IBM DB2 development](#ibm-db2-development) section.
 
 ## Example
 
@@ -103,7 +103,7 @@ import sqlalchemy as sa
 from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.core.config import create_basic_pipedag_config
-from pydiverse.pipedag.util.structlog import setup_logging
+from pydiverse.common.util.structlog import setup_logging
 
 
 @materialize(lazy=True)
@@ -171,20 +171,20 @@ def main():
                 with Stage("stage_1"):
                     lazy_1 = lazy_task_1()
                     a, b = eager_inputs()
-    
+
                 with Stage("stage_2"):
                     lazy_2 = lazy_task_2(lazy_1, b)
                     lazy_3 = lazy_task_3(lazy_2)
                     eager = eager_task(lazy_1, b)
-    
+
                 with Stage("stage_3"):
                     lazy_4 = lazy_task_4(lazy_2)
                 _ = lazy_3, lazy_4, eager  # unused terminal output tables
-    
+
             # Run flow
             result = f.run()
             assert result.successful
-    
+
             # Run in a different way for testing
             with StageLockContext():
                 result = f.run()
@@ -215,7 +215,7 @@ def main():
 
 A more realistic example can be found in [`example_postgres/run_pipeline.py`](example_postgres/run_pipeline.py).
 Please note that there are `pipedag.yaml` and `docker-compose.yaml` files in the example directory.
-This is also described on 
+This is also described on
 [pydiversepipedag.readthedocs.io](https://pydiversepipedag.readthedocs.io/en/latest/database_testing.html).
 
 You can run this example with `bash` as follows:
@@ -257,7 +257,7 @@ select * from stage_2.task_2_out;
 The `ibm_db` package is only available on the following platforms: linux-64, osx-arm64, win-64.
 
 > [!NOTE]
-> Because of this, the IBM DB2 drivers are only available in the `py312ibm` and `py39ibm`
+> Because of this, the IBM DB2 drivers are only available in the `py312ibm` and `py310ibm`
 > environments.
 > You can run tests using `pixi run -e py312ibm pytest --ibm_db2`.
 
@@ -269,12 +269,12 @@ Install via Microsoft's
 instructions for [Linux](https://docs.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server)
 or [macOS](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos).
 
-In one Linux installation case, `odbcinst -j` revealed that it installed the configuration in `/etc/unixODBC/*`. 
-But conda installed pyodbc brings its own `odbcinst` executable and that shows odbc config files are expected in 
-`/etc/*`. Symlinks were enough to fix the problem. Try `pixi run python -c 'import pyodbc;print(pyodbc.drivers())'` 
+In one Linux installation case, `odbcinst -j` revealed that it installed the configuration in `/etc/unixODBC/*`.
+But conda installed pyodbc brings its own `odbcinst` executable and that shows odbc config files are expected in
+`/etc/*`. Symlinks were enough to fix the problem. Try `pixi run python -c 'import pyodbc;print(pyodbc.drivers())'`
 and see whether you get more than an empty list.
 
-Same happened for MacOS. The driver was installed in `/opt/homebrew/etc/odbcinst.ini` but pyodbc expected it in 
+Same happened for MacOS. The driver was installed in `/opt/homebrew/etc/odbcinst.ini` but pyodbc expected it in
 `/etc/odbcinst.ini`. This can also be solved by `sudo ln -s /opt/homebrew/etc/odbcinst.ini /etc/odbcinst.ini`.
 
 Furthermore, make sure you use 127.0.0.1 instead of localhost. It seems that /etc/hosts is ignored.

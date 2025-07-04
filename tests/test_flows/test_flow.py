@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
 import sqlalchemy as sa
@@ -6,6 +7,7 @@ from pandas.testing import assert_frame_equal
 
 from pydiverse.pipedag import Blob, Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import StageLockContext
+from tests.fixtures.instances import with_instances
 
 dfA = pd.DataFrame(
     {
@@ -51,6 +53,7 @@ def blob_task(x, y):
     return Blob(x), Blob(y)
 
 
+@with_instances("postgres")
 def test_simple_flow(with_blob=True):
     with Flow() as flow:
         with Stage("simple_flow_stage1"):

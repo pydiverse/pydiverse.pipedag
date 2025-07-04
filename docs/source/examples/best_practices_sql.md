@@ -1,10 +1,10 @@
 # Best practices: moving from Raw SQL over handwritten SELECT statements to programmatic SQL
 
-Pydiverse.pipedag should enable adoption for whatever data pipeline code already exists and then allow for gradual 
-improvements. Many data pipelines start with considerable code bases of raw SQL scripts. The example 
+Pydiverse.pipedag should enable adoption for whatever data pipeline code already exists and then allow for gradual
+improvements. Many data pipelines start with considerable code bases of raw SQL scripts. The example
 [raw_sql](/examples/raw_sql) shows how to wrap raw SQL files with pipedag tasks. Such a raw SQL script may look as follows:
 
-```sql  
+```sql
 DROP TABLE IF EXISTS {{out_schema}}.table01
 GO
 CREATE TABLE {{out_schema}}.table01 (
@@ -50,7 +50,7 @@ def table01(raw01: sa.Alias):
         ON raw01.entity = raw01x.entity
         WHERE raw01.end_date = '9999-01-01'
           AND raw01x.entity IS NULL
-    """    
+    """
     return dag.Table(sa.text(sql), name="table01", primary_key=["entity", "reason"])
 ```
 Attention: sa.Alias only exists for SQLAlchemy >= 2.0. Use sa.Table or sa.sql.expression.Alias for older versions.
@@ -75,7 +75,7 @@ In the [raw sql example](/examples/raw_sql), this task can be embedded even in t
             _ = prep
 ```
 
-In the end, the goal is to see the complete dependency tree on table level in codes. Pipedag can handle lists and 
+In the end, the goal is to see the complete dependency tree on table level in codes. Pipedag can handle lists and
 dictionaries. So it is no problem for a task to return more than one output table.
 
 Once all `SELECT` statements are extracted, the next step is to convert them to programmatic SQL. This has the advantage

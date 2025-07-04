@@ -131,8 +131,6 @@ instances:
 This can be used with the following code:
 
 ```python
-from __future__ import annotations
-
 import os
 from pathlib import Path
 from typing import Any
@@ -150,7 +148,7 @@ from pydiverse.pipedag import (
 )
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.core.config import PipedagConfig
-from pydiverse.pipedag.util.structlog import setup_logging
+from pydiverse.common.util.structlog import setup_logging
 
 
 # these global variables are just a mock for information that can be sourced from somewhere for the full pipeline
@@ -203,7 +201,7 @@ def copy_filtered_inputs(
     attrs: dict[str, Any],
     stage: Stage,
 ):
-    # we assue that tables can be copied within database engine just from different schema
+    # we assume that tables can be copied within database engine just from different schema
     _ = source_cfg, stage
     # we expect this schema to be still empty, one could check for collisions
     _ = tbls
@@ -265,7 +263,7 @@ if __name__ == "__main__":
         check_result(result, out1, out2)
 ```
 
-The file [multi_instance_pipeline.zip](multi_instance_pipeline.zip) includes a slighly more sophisticated project setup
+The file [multi_instance_pipeline.zip](multi_instance_pipeline.zip) includes a slightly more sophisticated project setup
 even though it is still missing separate src and tests folders. Furthermore, it lacks proper configuration of pytest
 markers. However, it already configures mini/midi pipelines to source data from the full pipeline.
 See [best practices for configuring instances](/examples/best_practices_instances) for an even more realistic setup of pipeline

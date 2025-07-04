@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import copy
 import getpass
@@ -13,7 +14,7 @@ import sqlalchemy as sa
 import structlog
 import yaml
 
-from pydiverse.pipedag.util.deep_merge import deep_merge
+from pydiverse.common.util import deep_merge
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.context import ConfigContext
@@ -51,7 +52,7 @@ class PipedagConfig:
         * The user folder
     """
 
-    default: PipedagConfig
+    default: "PipedagConfig"
 
     def __init__(self, path: str | Path | dict[str, Any]):
         self.path = None
@@ -102,9 +103,7 @@ class PipedagConfig:
                 continue
 
             base_dict = _get(config, expand_path)
-            merged_dict = deep_merge(
-                base_dict, copy.deepcopy(_get(self.raw_config, ref_src_path, ref_name))
-            )
+            merged_dict = deep_merge(base_dict, copy.deepcopy(_get(self.raw_config, ref_src_path, ref_name)))
             base_dict.update(merged_dict)
             _pop(base_dict, ref_name_path)
 
@@ -115,7 +114,7 @@ class PipedagConfig:
         instance: str | None = None,
         flow: str | None = None,
         per_user: bool = False,
-    ) -> ConfigContext:
+    ) -> "ConfigContext":
         """
         Constructs a :py:class:`ConfigContext`.
         For more details how the specific ConfigContext instance is constructed,
@@ -133,28 +132,12 @@ class PipedagConfig:
 
         # TODO: Check that this function only gets called in the main interpreter.
         #       Otherwise certain environment variables might get expanded incorrectly.
-        from pydiverse.pipedag.context import ConfigContext
+        from pydiverse.pipedag.context import ConfigContext, default_config_dict
 
         config = self.__get_merged_config_dict(
             instance=instance,
             flow=flow,
-            default={
-                "fail_fast": False,
-                "network_interface": "127.0.0.1",
-                "disable_kroki": True,
-                "kroki_url": "https://kroki.io",
-                "per_user_template": "{id}_{username}",
-                "strict_result_get_locking": True,
-                "cache_validation": dict(
-                    mode="normal",
-                    disable_cache_function=False,
-                    ignore_task_version=False,
-                ),
-                "stage_commit_technique": "SCHEMA_SWAP",
-                "auto_table": [],
-                "auto_blob": [],
-                "attrs": {},
-            },
+            default=default_config_dict,
         ).copy()
 
         # TODO: Delegate selecting where variables can be expanded to the
@@ -177,9 +160,7 @@ class PipedagConfig:
             )
 
         # Handle url_attrs_file
-        url_attrs_file = _pop(
-            config, "table_store", "args", "url_attrs_file", default=None
-        )
+        url_attrs_file = _pop(config, "table_store", "args", "url_attrs_file", default=None)
         if url_attrs_file is not None:
             with open(url_attrs_file, encoding="utf-8") as fh:
                 url_attrs = yaml.safe_load(fh)
@@ -232,14 +213,11 @@ class PipedagConfig:
         if strict_instance_lookup and instance is not None:
             found_instance = False
             for path, d in zip(search_paths, dicts):
-                found_instance |= (
-                    "instances" in path and instance in path and d is not None
-                )
+                found_instance |= "instances" in path and instance in path and d is not None
 
             if not found_instance:
                 raise AttributeError(
-                    "Strict instance lookup failed: Couldn't find instance"
-                    f" '{instance}' in pipedag config."
+                    f"Strict instance lookup failed: Couldn't find instance '{instance}' in pipedag config."
                 )
 
         # Merge
@@ -394,9 +372,7 @@ def create_basic_pipedag_config(
     engine.dispose()
 
     if dialect not in ["mssql", "postgresql", "ibm_db_sa", "duckdb"]:
-        logger = structlog.get_logger(
-            logger_name=__name__, function="create_basic_pipedag_config"
-        )
+        logger = structlog.get_logger(logger_name=__name__, function="create_basic_pipedag_config")
         logger.info("")
 
     if (
@@ -520,18 +496,13 @@ def expand_environment_variables(string: str) -> str:
     def env_var_sub(match: re.Match):
         name = match.group()[2:-1]
         if name not in os.environ:
-            raise AttributeError(
-                f"Could not find environment variable '{name}' "
-                f"referenced in '{string}'."
-            )
+            raise AttributeError(f"Could not find environment variable '{name}' referenced in '{string}'.")
         return os.environ[name]
 
     return re.sub(r"\{\$[a-zA-Z_]+[a-zA-Z0-9_]*\}", env_var_sub, string)
 
 
-def expand_variables(
-    string: str, variables: dict[str:str], skip_missing: bool = False
-) -> str:
+def expand_variables(string: str, variables: dict[str:str], skip_missing: bool = False) -> str:
     """
     Expands all occurrences of the form {var_name} with the variable
     named ``var_name``.
@@ -542,9 +513,7 @@ def expand_variables(
         if name not in variables:
             if skip_missing:
                 return match.group()
-            raise AttributeError(
-                f"Could not find variable '{name}' referenced in '{string}'."
-            )
+            raise AttributeError(f"Could not find variable '{name}' referenced in '{string}'.")
         return str(variables[name])
 
     return re.sub(r"\{[a-zA-Z_]+[a-zA-Z0-9_]*\}", var_sub, string)

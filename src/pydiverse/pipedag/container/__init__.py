@@ -1,9 +1,12 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import copy
+import inspect
+import typing
 from collections.abc import Iterable
 from functools import total_ordering
-from typing import TYPE_CHECKING, Any, Generic
+from typing import TYPE_CHECKING, Any, Generic, overload
 
 import sqlalchemy as sa
 import structlog
@@ -16,7 +19,36 @@ from pydiverse.pipedag.util import normalize_name
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core.stage import Stage
-    from pydiverse.pipedag.materialize.core import MaterializingTask
+    from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
+
+
+@frozen
+class Schema:
+    """
+    Class for holding a schema name with separable prefix and suffix.
+
+    Attributes
+    ----------
+    name : str
+        The schema name.
+    prefix : str
+        The prefix to be added to the schema name.
+    suffix : str
+        The suffix to be added to the schema name.
+    """
+
+    name: str
+    prefix: str = ""
+    suffix: str = ""
+
+    def get(self) -> str:
+        """
+        Get the schema name with prefix and suffix.
+        """
+        return self.prefix + self.name + self.suffix
+
+    def __str__(self):
+        return self.get()
 
 
 @total_ordering
@@ -68,12 +100,15 @@ class Table(Generic[T]):
         nullable: list[str] | None = None,
         non_nullable: list[str] | None = None,
         materialization_details: str | None = None,
+        annotation: type | None = None,
     ):
+        # state
         self._name = None
         self.stage: Stage | None = None
         self.external_schema: str | None = None
         self.shared_lock_allowed: bool = True
 
+        # arguments
         self.obj = obj
         self.name = name
         self.primary_key = primary_key
@@ -82,6 +117,9 @@ class Table(Generic[T]):
         self.nullable = nullable
         self.non_nullable = non_nullable
         self.materialization_details = materialization_details
+        self.annotation = annotation  # if None, will be set by
+        #                               core.py:attach_annotation() and used by
+        #                               dematerialization hook
 
         # Check that indexes is of type list[list[str]]
         indexes_type_error = TypeError(
@@ -101,9 +139,7 @@ class Table(Generic[T]):
             (self.nullable, "nullable"),
             (self.non_nullable, "non_nullable"),
         ]:
-            type_error = TypeError(
-                f"Table argument '{name}' must be of type list[str]."
-            )
+            type_error = TypeError(f"Table argument '{name}' must be of type list[str].")
             if arg is not None:
                 if not isinstance(arg, Iterable) or isinstance(arg, str):
                     raise type_error
@@ -143,7 +179,7 @@ class Table(Generic[T]):
             raise TypeError(f"Table name must be of instance 'str' not {type(value)}.")
         self._name = normalize_name(value)
 
-    def copy_without_obj(self) -> Table:
+    def copy_without_obj(self) -> "Table":
         obj = self.obj
         self.obj = None
         self_copy = copy.deepcopy(self)
@@ -180,18 +216,14 @@ class Table(Generic[T]):
             dematerialized created table.
         """
         try:
-            task_context = (
-                TaskContext.get()
-            )  # raises Lookup Error if no TaskContext is open
+            task_context = TaskContext.get()  # raises Lookup Error if no TaskContext is open
             if config_context is not None and config_context is not ConfigContext.get():
                 raise ValueError(
                     "config_context must be identical to ConfigContext.get() "
                     "when task is regularly executed by pipedag orchestration."
                 )
             config_context = ConfigContext.get()
-            task_schema = config_context.store.table_store.get_schema(
-                task_context.task.stage.transaction_name
-            )
+            task_schema = config_context.store.table_store.get_schema(task_context.task.stage.transaction_name)
             if schema is not None and schema != task_schema:
                 raise ValueError(
                     "schema must be identical to Task Stage transaction schema "
@@ -209,28 +241,23 @@ class Table(Generic[T]):
                 # fall back to debug materialization when Table.materialize() is
                 # called twice for the same table
                 task_context.task.logger.info(
-                    "Falling back to debug materialization due to duplicate "
-                    "materializtion of this table"
+                    "Falling back to debug materialization due to duplicate materializtion of this table"
                 )
 
                 def return_type_mutator(return_as_type):
                     if return_as_type is None:
                         task: MaterializingTask = task_context.task  # type: ignore
                         return_as_type = task.input_type
-                        if (
-                            return_as_type is None
-                            or not config_context.store.table_store.get_r_table_hook(
-                                return_as_type
-                            ).retrieve_as_reference(return_as_type)
-                        ):
+                        if return_as_type is None or not config_context.store.table_store.get_r_table_hook(
+                            return_as_type
+                        ).retrieve_as_reference(return_as_type):
                             # dematerialize as sa.Table if it would transfer all rows
                             # to python when dematerializing with input_type
                             return_as_type = sa.Table
+                    return return_as_type
 
                 if isinstance(return_as_type, Iterable):
-                    return_as_type = tuple(
-                        return_type_mutator(t) for t in return_as_type
-                    )
+                    return_as_type = tuple(return_type_mutator(t) for t in return_as_type)
                 else:
                     return_as_type = return_type_mutator(return_as_type)
         except LookupError:
@@ -239,8 +266,7 @@ class Table(Generic[T]):
         if config_context is not None:
             if schema is None:
                 raise ValueError(
-                    "schema must be provided when task is not regularly "
-                    "executed by pipedag orchestration."
+                    "schema must be provided when task is not regularly executed by pipedag orchestration."
                 )
             # fall back to debug behavior when an explicit table_store is given
             # via config_context
@@ -261,11 +287,7 @@ class Table(Generic[T]):
                     hook = store.get_r_table_hook(return_as_type)
                     save_name = self.name
                     self.name = table_name
-                    schema_name = (
-                        schema.name
-                        if store.get_schema(schema.name).get() == schema.get()
-                        else schema.get()
-                    )
+                    schema_name = schema.name if store.get_schema(schema.name).get() == schema.get() else schema.get()
                     if store.get_schema(schema_name).get() != schema.get():
                         raise ValueError(
                             "Schema prefix and postfix must match prefix and postfix of"
@@ -297,8 +319,7 @@ class Table(Generic[T]):
             if return_as_type is not None:
                 logger = structlog.get_logger(self.__class__.__name__, table=self)
                 logger.info(
-                    "Ignoring return_as_type in Table.materialize() outside of flow "
-                    "without given config_context.",
+                    "Ignoring return_as_type in Table.materialize() outside of flow without given config_context.",
                     return_as_type=return_as_type,
                 )
             return self.obj
@@ -318,12 +339,10 @@ class Table(Generic[T]):
                 return False
         return self.name < other.name
 
-    def __eq__(self, other: Table):
+    def __eq__(self, other: "Table"):
         if not isinstance(other, Table):
             return False
-        return self.name == other.name and (
-            self.stage == other.stage or (self.stage is None and other.stage is None)
-        )
+        return self.name == other.name and (self.stage == other.stage or (self.stage is None and other.stage is None))
 
     def __hash__(self):
         return hash(self.name) if self.stage is None else hash((self.name, self.stage))
@@ -370,7 +389,7 @@ class RawSql:
             schema = stage.current_name
             return RawSql(f\"\"\"
                 CREATE TABLE {schema}.tbl_1 AS SELECT 1 as x;
-                CREATE TABEL {schema}.tbl_2 AS SELECT 2 as x;
+                CREATE TABLE {schema}.tbl_2 AS SELECT 2 as x;
             \"\"\")
 
         @materialize(input_type=sa.Table)
@@ -418,8 +437,8 @@ class RawSql:
 
         # If a task receives a RawSQL object as input, it loads all tables
         # produced by it and makes them available through a dict like interface.
-        self.table_names: list[str] = None  # type: ignore
-        self.loaded_tables: dict[str, Any] = None  # type: ignore
+        self.table_names: list[str] | None = None  # type: ignore
+        self.loaded_tables: dict[str, Any] | None = None  # type: ignore
 
     def __repr__(self):
         stage_name = self.stage.name if self.stage else None
@@ -442,15 +461,15 @@ class RawSql:
 
     def __iter__(self) -> Iterable[str]:
         """Yields all names of tables produced by this RawSql object."""
-        yield from self.table_names
+        yield from (self.table_names or [])
 
     def __contains__(self, table_name: str) -> bool:
         """Check if this RawSql object produced a table with name `table_name`."""
-        return table_name in self.table_names
+        return table_name in (self.table_names or [])
 
     def __getitem__(self, table_name: str):
         """Gets the table produced by this RawSql object with name `table_name`."""
-        if table_name not in self.table_names:
+        if table_name not in (self.table_names or []):
             raise KeyError(f"No table with name '{table_name}' found in RawSql.")
 
         # Did load tables -> __getitem__ should return Table.obj
@@ -466,7 +485,7 @@ class RawSql:
 
     def items(self) -> Iterable[tuple[str, Any]]:
         """Returns pairs of ``(table_name, table)``."""
-        for table_name in self.table_names:
+        for table_name in self.table_names or []:
             yield table_name, self[table_name]
 
     def get(self, table_name: str, default=None):
@@ -478,7 +497,7 @@ class RawSql:
             return table_name
         return default
 
-    def copy_without_obj(self) -> RawSql:
+    def copy_without_obj(self) -> "RawSql":
         obj = self.loaded_tables
         self.loaded_tables = None
         self_copy = copy.deepcopy(self)
@@ -545,7 +564,7 @@ class Blob(Generic[T]):
     def name(self, value):
         self._name = normalize_name(value)
 
-    def copy_without_obj(self) -> Blob:
+    def copy_without_obj(self) -> "Blob":
         obj = self.obj
         self.obj = None
         self_copy = copy.deepcopy(self)
@@ -618,33 +637,62 @@ class ExternalTableReference:
         self.shared_lock_allowed = shared_lock_allowed
 
     def __repr__(self):
-        return f"<ExternalTableReference: {hex(id(self))}" f" (schema: {self.schema})>"
+        return f"<ExternalTableReference: {hex(id(self))} (schema: {self.schema})>"
 
 
-@frozen
-class Schema:
-    """
-    Class for holding a schema name with separable prefix and suffix.
+def attach_annotation(annotation: type, arg):
+    """Recursive traversal for attaching type annotations to correct container."""
+    if typing.get_origin(annotation) is not None:
+        anno_origin = typing.get_origin(annotation)
+        anno_args = typing.get_args(annotation)
+        if (
+            inspect.isclass(anno_origin)
+            and issubclass(anno_origin, dict)
+            and len(anno_args) == 2
+            and isinstance(arg, dict)
+        ):
+            for key, value in arg.items():
+                attach_annotation(anno_args[0], key)
+                attach_annotation(anno_args[1], value)
+        elif (
+            inspect.isclass(anno_origin)
+            and issubclass(anno_origin, list)
+            and len(anno_args) == 1
+            and isinstance(arg, Iterable)
+        ):
+            for value in arg:
+                attach_annotation(anno_args[0], value)
+        elif (
+            inspect.isclass(anno_origin)
+            and issubclass(anno_origin, tuple)
+            and isinstance(arg, typing.Sized)
+            and len(anno_args) == len(arg)
+        ):
+            for value, anno in zip(arg, anno_args):
+                attach_annotation(anno, value)
+    if isinstance(arg, (Table, Blob, RawSql)):
+        arg.annotation = annotation
 
-    Attributes
-    ----------
-    name : str
-        The schema name.
-    prefix : str
-        The prefix to be added to the schema name.
-    suffix : str
-        The suffix to be added to the schema name.
-    """
 
-    name: str
-    prefix: str = ""
-    suffix: str = ""
+try:
+    import pydiverse.transform as pdt
 
-    def get(self) -> str:
-        """
-        Get the schema name with prefix and suffix.
-        """
-        return self.prefix + self.name + self.suffix
+    @overload
+    def materialize_table(name: str | None = None, table_prefix: str | None = None): ...
 
-    def __str__(self):
-        return self.get()
+    @pdt.verb
+    def materialize_table(tbl: pdt.Table, name: str | None = None, table_prefix: str | None = None):
+        # use imperative materialization of pipedag within pydiverse transform task
+        if name is None:
+            name = table_prefix or ""
+            name += tbl._ast.name or ""
+            name += "%%"
+        if tbl >> pdt.build_query():
+            return Table(tbl, name=name).materialize(return_as_type=pdt.SqlAlchemy)
+        return tbl >> pdt.alias()
+except ImportError:
+    # If pydiverse.transform is not available, we cannot use the materialize_table verb
+    def materialize_table(tbl: Any, table_prefix: str | None = None):
+        raise ImportError(
+            "pydiverse.transform is not available. Please install pydiverse-transform to use materialize_table."
+        )

@@ -2,7 +2,7 @@
 # This script checks if all the services defined in our docker compose file
 # are up and running.
 
-set -e 
+set -e
 set -o pipefail
 
 running_services=$(docker compose ps --services --status running)

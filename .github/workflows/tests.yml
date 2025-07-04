@@ -20,22 +20,41 @@ concurrency:
 jobs:
   lint:
     name: Pre-commit Checks
+    timeout-minutes: 5
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
       - name: Checkout branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@eef61447b9ff4aafe5dcd4e0bbf5d482be7e7871 # v4.2.1
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@19eac09b398e3d0c747adc7921926a6d802df4da # v0.8.1
+      - name: Install repository
+        # needed for generate-col-ops hook
+        run: pixi run postinstall
+      - name: pre-commit
+        run: pixi run pre-commit run -a --color=always --show-diff-on-failure
+      - name: Check pyproject.toml dependencies
+        run: pixi run check-deps
 
-      - name: Install Python 3.9
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.9
-
-      - name: Linting - Run pre-commit checks
-        uses: pre-commit/action@v3.0.1
+#  one_test:
+#    name: One Test
+#    strategy:
+#      matrix:
+#        os:
+#          - ubuntu-latest
+#        environment:
+#          - py310mssqlpdt
+#    uses: ./.github/workflows/test.yml
+#    with:
+#      os: ${{ matrix.os }}
+#      environment: ${{ matrix.environment }}
+#      docker-services: |
+#        mssql
+#        zoo
+#      pytest-arguments: -m mssql --mssql tests/test_cache/test_basic_cache_invalidation.py::test_change_task_version_table
 
   smoke_test:
     name: Smoke Test
+#    needs: [one_test]
     strategy:
       matrix:
         os:
@@ -49,6 +68,7 @@ jobs:
       docker-services: |
         postgres
         zoo
+        minio
 
   postgres_test:
     name: Postgres Tests
@@ -61,6 +81,11 @@ jobs:
           - py310all
           - py311all
           - py312all
+          - py313all
+          - py310pdt
+          - py313pdt
+          - py311cspdt
+          - py313cspdt
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
@@ -68,8 +93,7 @@ jobs:
       docker-services: |
         postgres
         zoo
-      pytest-arguments: --polars --ibis --pdtransform
-
+      pytest-arguments: --ibis --pdtransform --no-duckdb
 
   duckdb_test:
     name: DuckDB Tests
@@ -81,13 +105,64 @@ jobs:
         environment:
           - py310all
           - py312all
+          - py310pdt
+          - py313pdt
+          - py311cspdt
+          - py313cspdt
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
       environment: ${{ matrix.environment }}
       docker-services: |
         zoo
-      pytest-arguments: --duckdb -m duckdb --polars --ibis --pdtransform --no-postgres
+        minio
+      pytest-arguments: --ibis --pdtransform --no-postgres
+
+  s3_test:
+    name: S3 Tests
+    needs: [smoke_test]
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        environment:
+          - py310all
+          - py311all
+          - py312all
+          - py313all
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      docker-services: |
+        postgres
+        zoo
+        minio
+      pytest-arguments: --s3 --ibis --pdtransform --no-duckdb --no-postgres
+
+  colspec_test:
+    name: ColSpec Tests
+    needs: [smoke_test]
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        environment:
+          - py311cs
+          - py313cs
+          - py311csdy
+          - py313csdy
+          - py311dy
+          - py313dy
+    uses: ./.github/workflows/test.yml
+    with:
+      os: ${{ matrix.os }}
+      environment: ${{ matrix.environment }}
+      docker-services: |
+        postgres
+        zoo
+        minio
+      pytest-arguments: --pdtransform
 
   db2_test:
     name: DB2 Tests
@@ -106,8 +181,8 @@ jobs:
       docker-services: |
         zoo
         ibm_db2
-      # --polars and --ibis not supported
-      pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform --no-postgres
+      # and --ibis not supported
+      pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform --no-postgres --no-duckdb
 
   mssql_test:
     name: MSSql Tests
@@ -119,6 +194,10 @@ jobs:
         environment:
           - py310all
           - py311all
+          - py310mssqlpdt
+          - py313mssqlpdt
+          - py311mssqldy
+          - py313mssqldy
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
@@ -126,7 +205,7 @@ jobs:
       docker-services: |
         mssql
         zoo
-      pytest-arguments: --mssql -m mssql --polars --ibis --pdtransform --no-postgres
+      pytest-arguments: --mssql -m mssql --ibis --pdtransform --no-postgres --no-duckdb
 
   orchestration_test:
     name: Orchestration Tests
@@ -136,14 +215,19 @@ jobs:
         os:
           - ubuntu-latest
         environment:
+          - py310dapre
+          - py313dapre
           - py311all
+          - py311pdsa1all
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
       environment: ${{ matrix.environment }}
       docker-services: |
+        prefect
         postgres
         zoo
+        minio
       pytest-arguments: --dask --prefect -m "dask or prefect"
 
   pandas1_sqlalchemy1_test:
@@ -154,7 +238,7 @@ jobs:
         os:
           - ubuntu-latest
         environment:
-          - py39pdsa1all
+          - py310pdsa1all
           - py311pdsa1all
     uses: ./.github/workflows/test.yml
     with:
@@ -163,7 +247,8 @@ jobs:
       docker-services: |
         postgres
         zoo
-      pytest-arguments: --polars --ibis --pdtransform
+        minio
+      pytest-arguments: --ibis --pdtransform
 
   snowflake_test:
     name: Snowflake Tests
@@ -190,4 +275,4 @@ jobs:
       docker-services: |
         postgres
         zoo
-      pytest-arguments: --polars --ibis --pdtransform --snowflake --no-postgres
+      pytest-arguments: --ibis --pdtransform --snowflake --no-postgres --no-duckdb

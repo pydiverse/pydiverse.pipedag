@@ -1,19 +1,23 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import json
 import os
 import shutil
-from pathlib import Path
+import types
 from typing import Any
 
 import pandas as pd
 from packaging.version import Version
+from upath import UPath
 
+import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
 from pydiverse.pipedag import ConfigContext, Stage, Table
-from pydiverse.pipedag.backend.table.base import TableHook
-from pydiverse.pipedag.backend.table.cache.base import BaseTableCache
-from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
+from pydiverse.pipedag.materialize.store import BaseTableCache
+from pydiverse.pipedag.materialize.table_hook_base import CanResult, TableHook
 from pydiverse.pipedag.util import normalize_name
+from pydiverse.pipedag.util.path import is_file_uri
 
 
 class ParquetTableCache(BaseTableCache):
@@ -39,21 +43,27 @@ class ParquetTableCache(BaseTableCache):
         instance_id = normalize_name(ConfigContext.get().instance_id)
 
         config = config.copy()
-        base_path = Path(config.pop("base_path")) / instance_id
+        base_path = UPath(config.pop("base_path")) / instance_id
         return cls(base_path=base_path, **config)
 
-    def __init__(self, *args, base_path: str | Path, **kwargs):
+    def __init__(self, *args, base_path: str | UPath, **kwargs):
         super().__init__(*args, **kwargs)
-        self.base_path = Path(base_path).absolute()
+        self.base_path = UPath(base_path).absolute()
 
     def setup(self):
-        os.makedirs(self.base_path, exist_ok=True)
+        if is_file_uri(self.base_path):
+            os.makedirs(self.base_path, exist_ok=True)
 
     def init_stage(self, stage: Stage):
-        os.makedirs(self.base_path / stage.name, exist_ok=True)
+        if is_file_uri(self.base_path):
+            os.makedirs(self.base_path / stage.name, exist_ok=True)
 
     def clear_cache(self, stage: Stage):
-        shutil.rmtree(self.get_stage_path(stage))
+        _dir = self.get_stage_path(stage)
+        if is_file_uri(_dir):
+            shutil.rmtree(_dir)
+        else:
+            _dir.rmdir(recursive=True)
 
     def _store_table(self, table: Table, task: MaterializingTask):
         if not super()._store_table(table, task):
@@ -76,10 +86,10 @@ class ParquetTableCache(BaseTableCache):
         except (OSError, json.decoder.JSONDecodeError):
             return False
 
-    def get_stage_path(self, stage: Stage):
+    def get_stage_path(self, stage: Stage) -> UPath:
         return self.base_path / stage.name
 
-    def get_table_path(self, table: Table, file_extension: str) -> Path:
+    def get_table_path(self, table: Table, file_extension: str) -> UPath:
         return self.get_stage_path(table.stage) / (table.name + file_extension)
 
 
@@ -88,15 +98,22 @@ class PandasTableHook(TableHook[ParquetTableCache]):
     pd_version = Version(pd.__version__)
 
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, pd.DataFrame)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        return CanResult.new(issubclass(type_, pd.DataFrame))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
         return type_ == pd.DataFrame
 
     @classmethod
-    def materialize(cls, store: ParquetTableCache, table: Table, stage_name: str):
+    def materialize(
+        cls,
+        store: ParquetTableCache,
+        table: Table,
+        stage_name: str,
+        without_config_context: bool = False,
+    ):
         path = store.get_table_path(table, ".parquet")
 
         df: pd.DataFrame = table.obj
@@ -109,6 +126,7 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         table: Table,
         stage_name: str | None,
         as_type: type[pd.DataFrame],
+        limit: int | None = None,
     ) -> pd.DataFrame:
         # Determine dtype backend for pandas >= 2.0
         # [this is similar to the PandasTableHook found in SQLTableStore]
@@ -126,66 +144,84 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         if PandasTableHook.pd_version < Version("2.0"):
             # for use_nullable_dtypes=False, returned types are mostly numpy backed
             # extension dtypes
-            ret = cls._retrieve(
-                store, table, use_nullable_dtypes=backend_str != "arrow"
-            )
+            ret = cls._retrieve(store, table, limit, use_nullable_dtypes=backend_str != "arrow")
             # use_nullable_dtypes=False may still return string[python] even though we
             # expect and sometimes get string[pyarrow]
             for col in ret.dtypes[ret.dtypes == "string[python]"].index:
                 ret[col] = ret[col].astype(pd.StringDtype("pyarrow"))
         else:
             dtype_backend_map = {"arrow": "pyarrow", "numpy": "numpy_nullable"}
-            ret = cls._retrieve(
-                store, table, dtype_backend=dtype_backend_map[backend_str]
-            )
+            ret = cls._retrieve(store, table, limit, dtype_backend=dtype_backend_map[backend_str])
 
         # Prefer StringDtype("pyarrow") over ArrowDtype(pa.string()) for now.
         # We need to check this choice with future versions of pandas/pyarrow.
-        for col in ret.dtypes[
-            (ret.dtypes == "large_string[pyarrow]") | (ret.dtypes == "string[pyarrow]")
-        ].index:
+        for col in ret.dtypes[(ret.dtypes == "large_string[pyarrow]") | (ret.dtypes == "string[pyarrow]")].index:
             ret[col] = ret[col].astype(pd.StringDtype("pyarrow"))
         return ret
 
     @classmethod
-    def _retrieve(cls, store, table, **pandas_kwargs):
+    def _retrieve(cls, store, table, limit: int | None = None, **pandas_kwargs):
         path = store.get_table_path(table, ".parquet")
-        return pd.read_parquet(path, **pandas_kwargs)
+        import pyarrow.dataset as ds
+
+        if limit is not None:
+            # TODO: pandas_kwargs are currently ignored
+            return ds.dataset(path).scanner().head(limit).to_pandas()
+        else:
+            return pd.read_parquet(path, **pandas_kwargs)
 
 
 try:
-    import polars
+    import polars as pl
 except ImportError:
-    polars = None
+    pl = None
 
 
-@ParquetTableCache.register_table(polars)
-class PolarsTableHook(TableHook[ParquetTableCache]):
+@ParquetTableCache.register_table(pl)
+class PolarsTableHook(sql_hooks.PolarsTableHook):
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return type_ == polars.dataframe.DataFrame
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        return CanResult.new(issubclass(type_, (pl.DataFrame, pl.LazyFrame)))
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        return type_ == polars.dataframe.DataFrame
+        return issubclass(type_, (pl.DataFrame, pl.LazyFrame))
 
     @classmethod
     def materialize(
-        cls, store: ParquetTableCache, table: Table[polars.DataFrame], stage_name: str
+        cls,
+        store: ParquetTableCache,
+        table: Table[pl.DataFrame],
+        stage_name: str,
+        without_config_context: bool = False,
     ):
         path = store.get_table_path(table, ".parquet")
-        table.obj.write_parquet(path)
+        df = table.obj
+        import polars as pl
+
+        if isinstance(df, pl.LazyFrame):
+            df = df.collect()
+        df.write_parquet(path)
+        # intentionally don't apply annotation checks because they might also be done
+        # within polars table hook of actual table store
 
     @classmethod
-    def retrieve(
+    def _execute_query(
         cls,
         store: ParquetTableCache,
         table: Table,
-        stage_name: str | None,
+        stage_name: str,
         as_type: type,
-    ):
+        dtypes: dict[str, pl.DataType] | None = None,
+        limit: int | None = None,
+    ) -> pl.DataFrame:
+        _ = as_type
         path = store.get_table_path(table, ".parquet")
-        return polars.read_parquet(path)
+        df = pl.read_parquet(path, n_rows=limit)
+        if issubclass(as_type, pl.LazyFrame):
+            return df.lazy()
+        return df
 
 
 try:
@@ -210,11 +246,10 @@ try:
             pdt_old = None
             pdt_new = pdt
         except ImportError:
-            raise NotImplementedError(
-                "pydiverse.transform 0.2.0 - 0.2.2 isn't supported"
-            ) from None
+            raise NotImplementedError("pydiverse.transform 0.2.0 - 0.2.2 isn't supported") from None
 except ImportError:
-    pdt = None
+    pdt = types.ModuleType("pydiverse.transform")
+    pdt.Table = None
     pdt_old = None
     pdt_new = None
 
@@ -222,8 +257,13 @@ except ImportError:
 @ParquetTableCache.register_table(pdt_old)
 class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, pdt.Table)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        if not issubclass(type_, pdt.Table):
+            return CanResult.NO
+        from pydiverse.transform.eager import PandasTableImpl
+
+        return CanResult.YES_BUT_DONT_CACHE if issubclass(type_, PandasTableImpl) else CanResult.NO
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
@@ -233,7 +273,11 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
 
     @classmethod
     def materialize(
-        cls, store: ParquetTableCache, table: Table[pdt.Table], stage_name: str
+        cls,
+        store: ParquetTableCache,
+        table: Table[pdt.Table],
+        stage_name: str,
+        without_config_context: bool = False,
     ):
         from pydiverse.transform.core.verbs import collect
         from pydiverse.transform.eager import PandasTableImpl
@@ -243,9 +287,7 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
 
         if isinstance(t._impl, PandasTableImpl):
             table.obj = t >> collect()
-            return store.get_hook_subclass(PandasTableHook).materialize(
-                store, table, stage_name
-            )
+            return store.get_r_table_hook(pd.DataFrame).materialize(store, table, stage_name)
 
         raise TypeError(f"Unsupported type {type(t._impl).__name__}")
 
@@ -256,12 +298,13 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
         table: Table,
         stage_name: str | None,
         as_type: type,
+        limit: int | None = None,
     ):
         from pydiverse.transform.eager import PandasTableImpl
 
         if isinstance(as_type, PandasTableImpl):
-            hook = store.get_hook_subclass(PandasTableHook)
-            df = hook.retrieve(store, table, stage_name, pd.DataFrame)
+            hook = store.get_r_table_hook(pd.DataFrame)
+            df = hook.retrieve(store, table, stage_name, pd.DataFrame, limit)
             return pdt.Table(PandasTableImpl(table.name, df))
 
         raise ValueError(f"Invalid type {as_type}")
@@ -270,18 +313,32 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
 @ParquetTableCache.register_table(pdt_new)
 class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
     @classmethod
-    def can_materialize(cls, type_) -> bool:
-        return issubclass(type_, pdt.Table)
+    def can_materialize(cls, tbl: Table) -> CanResult:
+        type_ = type(tbl.obj)
+        if not issubclass(type_, pdt.Table):
+            return CanResult.NO
+        from pydiverse.transform._internal.pipe.verbs import build_query
+
+        query = tbl.obj >> build_query()
+        if query is not None:
+            # don't cache if the table is SQL backed
+            return CanResult.NO
+        else:
+            return CanResult.YES_BUT_DONT_CACHE
 
     @classmethod
     def can_retrieve(cls, type_) -> bool:
-        from pydiverse.transform.extended import Pandas
+        from pydiverse.transform.extended import Polars
 
-        return issubclass(type_, Pandas)
+        return issubclass(type_, Polars)
 
     @classmethod
     def materialize(
-        cls, store: ParquetTableCache, table: Table[pdt.Table], stage_name: str
+        cls,
+        store: ParquetTableCache,
+        table: Table[pdt.Table],
+        stage_name: str,
+        without_config_context: bool = False,
     ):
         from pydiverse.transform.extended import (
             Polars,
@@ -292,8 +349,9 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
         table = table.copy_without_obj()
 
         try:
-            table.obj = t >> export(Polars())
-            hook = store.get_hook_subclass(PolarsTableHook)
+            table.obj = t >> export(Polars(lazy=True))
+
+            hook = store.get_m_table_hook(table)
             return hook.materialize(store, table, stage_name)
         except Exception as e:
             raise TypeError(f"Unsupported type {type(t._ast).__name__}") from e
@@ -305,12 +363,15 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
         table: Table,
         stage_name: str | None,
         as_type: type,
+        limit: int | None = None,
     ):
         from pydiverse.transform.extended import Polars
 
         if isinstance(as_type, Polars):
-            hook = store.get_hook_subclass(PandasTableHook)
-            df = hook.retrieve(store, table, stage_name, pd.DataFrame)
+            import polars as pl
+
+            hook = store.get_r_table_hook(pl.LazyFrame)
+            df = hook.retrieve(store, table, stage_name, pd.DataFrame, limit)
             return pdt.Table(df)
 
         raise ValueError(f"Invalid type {as_type}")

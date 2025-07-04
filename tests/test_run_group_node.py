@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import random
 import time
@@ -8,6 +9,7 @@ import attr
 import pytest
 import sqlalchemy as sa
 
+from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import (
     Flow,
     GroupNode,
@@ -23,7 +25,6 @@ from pydiverse.pipedag.context.context import (
     TaskContext,
 )
 from pydiverse.pipedag.core.config import PipedagConfig
-from pydiverse.pipedag.util.hashing import stable_hash
 from tests.fixtures.instances import (
     ORCHESTRATION_INSTANCES,
     skip_instances,
@@ -50,13 +51,9 @@ def test_run_specific_task(ordering_barrier):
         engine = ConfigContext.get().store.table_store.engine
         with engine.connect() as conn:
             with conn.begin():
-                conn.execute(
-                    sa.text(f'LOCK TABLE "{table_name}" IN ACCESS EXCLUSIVE MODE')
-                )
+                conn.execute(sa.text(f'LOCK TABLE "{table_name}" IN ACCESS EXCLUSIVE MODE'))
                 conn.execute(sa.text(f'INSERT INTO "{table_name}" VALUES (1)'))
-                n = conn.execute(
-                    sa.text(f'SELECT COUNT(*) FROM "{table_name}"')
-                ).fetchone()[0]
+                n = conn.execute(sa.text(f'SELECT COUNT(*) FROM "{table_name}"')).fetchone()[0]
         TaskContext.get().task.logger.info(f"Task result:{n}")
         return n
 
@@ -129,9 +126,7 @@ def fake_cache_status_deterministic_for_baseline_tests(result: Result):
 
     return attr.evolve(
         result,
-        task_states={
-            task: fix_state(task, state) for task, state in result.task_states.items()
-        },
+        task_states={task: fix_state(task, state) for task, state in result.task_states.items()},
     )
 
 
@@ -183,9 +178,7 @@ def test_run_specific_task_sequential(label, style, ordering_barrier, nesting):
                 with Stage("stage_3"):
                     with Stage("stage_4"):
                         with GroupNode(label, style, ordering_barrier=ordering_barrier):
-                            with GroupNode(
-                                label, style, ordering_barrier=ordering_barrier
-                            ):
+                            with GroupNode(label, style, ordering_barrier=ordering_barrier):
                                 _ = m.noop(1)
                             _ = m.noop(2)
                         _ = m.noop(3)
@@ -196,9 +189,7 @@ def test_run_specific_task_sequential(label, style, ordering_barrier, nesting):
                 with Stage("stage_6"):
                     with Stage("stage_7"):
                         with GroupNode(label, style, ordering_barrier=ordering_barrier):
-                            with GroupNode(
-                                label, style, ordering_barrier=ordering_barrier
-                            ):
+                            with GroupNode(label, style, ordering_barrier=ordering_barrier):
                                 _ = m.noop(6)
 
     if not nesting:
@@ -217,18 +208,14 @@ def test_run_specific_task_sequential(label, style, ordering_barrier, nesting):
         assert res.get(x4) == 4
         assert res.get(x5) == 5
         viz_res = fake_cache_status_deterministic_for_baseline_tests(res)
-        assert BaselineStore(
-            "flow", label, style, ordering_barrier, nesting
-        ) == f.visualize_url(viz_res)
+        assert BaselineStore("flow", label, style, ordering_barrier, nesting) == f.visualize_url(viz_res)
 
     with StageLockContext():
         res = f.run(x1, x3, config=cfg)
         assert res.get(x1) == 6
         assert res.get(x3) == 7
         viz_res = fake_cache_status_deterministic_for_baseline_tests(res)
-        assert BaselineStore(
-            "subflow", label, style, ordering_barrier, nesting
-        ) == res.subflow.visualize_url(viz_res)
+        assert BaselineStore("subflow", label, style, ordering_barrier, nesting) == res.subflow.visualize_url(viz_res)
 
 
 @with_instances("postgres")
@@ -246,9 +233,7 @@ def test_run_specific_task_sequential(label, style, ordering_barrier, nesting):
     ],
 )
 def test_run_specific_task_sequential_styles(label, style):
-    test_run_specific_task_sequential(
-        label, style, ordering_barrier=False, nesting=True
-    )
+    test_run_specific_task_sequential(label, style, ordering_barrier=False, nesting=True)
 
 
 @with_instances("postgres")
@@ -279,9 +264,7 @@ def test_run_specific_task_config(label, style):
     if style:
         visualization["default"]["styles"] = dict(
             test_style={
-                k: style.__dict__[k]
-                for k in style.__dataclass_fields__.keys()
-                if style.__dict__[k] is not None
+                k: style.__dict__[k] for k in style.__dataclass_fields__.keys() if style.__dict__[k] is not None
             }
         )
         for group_node in group_nodes.values():
@@ -348,18 +331,12 @@ def test_run_specific_task_config(label, style):
         assert res.get(x5) == 5
         viz_res = fake_cache_status_deterministic_for_baseline_tests(res)
         assert BaselineStore("config_flow", label, style) == f.visualize_url(viz_res)
-        assert BaselineStore("config2_flow", label, style) == f.visualize_url(
-            viz_res, "alternative"
-        )
+        assert BaselineStore("config2_flow", label, style) == f.visualize_url(viz_res, "alternative")
 
     with StageLockContext():
         res = f.run(x1, x3, config=cfg)
         assert res.get(x1) == 6
         assert res.get(x3) == 7
         viz_res = fake_cache_status_deterministic_for_baseline_tests(res)
-        assert BaselineStore(
-            "config_subflow", label, style
-        ) == res.subflow.visualize_url(viz_res)
-        assert BaselineStore(
-            "config2_subflow", label, style
-        ) == res.subflow.visualize_url(viz_res, "alternative")
+        assert BaselineStore("config_subflow", label, style) == res.subflow.visualize_url(viz_res)
+        assert BaselineStore("config2_subflow", label, style) == res.subflow.visualize_url(viz_res, "alternative")

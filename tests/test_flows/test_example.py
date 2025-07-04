@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import pytest
 
@@ -8,6 +9,9 @@ from example.visualization import main as visualization_main
 from example_imperative.run_pipeline import main as example_imperative_flow_main
 from example_interactive.run_tasks_interactively import main as example_interactive_main
 from example_postgres.run_pipeline import main as example_postgres_flow_main
+from tests.fixtures.instances import with_instances
+
+pytestmark = [with_instances("postgres")]
 
 
 @pytest.mark.parametrize(

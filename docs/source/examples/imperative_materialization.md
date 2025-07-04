@@ -2,8 +2,8 @@
 
 This [example](../examples.md) shows how to easily materialize subqueries and use the result within the same task.
 
-Subqueries are nice, but at some point they let the search space of query optimizers explode and suddenly increase 
-query runtime by more than 10x. Thus for tables in the million row range, it is recommended to materialize all 
+Subqueries are nice, but at some point they let the search space of query optimizers explode and suddenly increase
+query runtime by more than 10x. Thus for tables in the million row range, it is recommended to materialize all
 subqueries. This example shows that switching from subquery to materialized subquery can be quite easy with pipedag.
 
 This task is actually quite close to many realistic queries:
@@ -16,13 +16,13 @@ def lazy_task_4(input1: sa.sql.expression.Alias):
         GROUP BY a
     """
     query = f"""
-        SELECT * FROM {ref(input1)} as input1 
+        SELECT * FROM {ref(input1)} as input1
         LEFT JOIN ({subquery}) as sub ON input1.a = sub.a
     """
     return Table(sa.text(query), name="enriched_aggregation").materialize()
 ```
 
-Pipedag supports imperative materialization, which means you can call `Table(...).materialize()` within a task. 
+Pipedag supports imperative materialization, which means you can call `Table(...).materialize()` within a task.
 This allows writing the subquery into a table called `_sub` with only one additional line:
 ```python
 @materialize(lazy=True, input_type=sa.Table)
@@ -34,20 +34,18 @@ def lazy_task_4(input1: sa.sql.expression.Alias):
     """
     sub_ref = Table(sa.text(subquery), name="_sub").materialize()
     query = f"""
-        SELECT * FROM {ref(input1)} as input1 
+        SELECT * FROM {ref(input1)} as input1
         LEFT JOIN {ref(sub_ref)} as sub ON input1.a = sub.a
     """
     return Table(sa.text(query), name="enriched_aggregation").materialize()
 ```
 
-Here is a complete example using imperative materialization everywhere. For a task returning a single table, 
-`return Table(...)` or `return Table(...).materialize()` are identical. In case a task writes multiple tables, 
-imperative materialization needs to assume that every previously materialized table is a dependency to subsequent 
-materialized tables for automatic cache invalidation. 
+Here is a complete example using imperative materialization everywhere. For a task returning a single table,
+`return Table(...)` or `return Table(...).materialize()` are identical. In case a task writes multiple tables,
+imperative materialization needs to assume that every previously materialized table is a dependency to subsequent
+materialized tables for automatic cache invalidation.
 
 ```python
-from __future__ import annotations
-
 import tempfile
 
 import pandas as pd
@@ -56,7 +54,7 @@ import sqlalchemy as sa
 from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.core.config import create_basic_pipedag_config
-from pydiverse.pipedag.util.structlog import setup_logging
+from pydiverse.common.util.structlog import setup_logging
 
 
 @materialize(lazy=True)
@@ -97,7 +95,7 @@ def lazy_task_4(input1: sa.sql.expression.Alias):
     """
     sub_ref = Table(sa.text(subquery), name="_sub").materialize()
     query = f"""
-        SELECT * FROM {ref(input1)} as input1 
+        SELECT * FROM {ref(input1)} as input1
         LEFT JOIN {ref(sub_ref)} as sub ON input1.a = sub.a
     """
     return Table(sa.text(query), name="enriched_aggregation").materialize()
@@ -167,19 +165,17 @@ if __name__ == "__main__":
 ```
 For SQLAlchemy >= 2.0, you can use sa.Alias instead of sa.sql.expression.Alias.
 
-Imperative materialization also has the advantage that the task stays in the stack trace in case exceptions happen 
+Imperative materialization also has the advantage that the task stays in the stack trace in case exceptions happen
 during the materialization itself:
 
 ```python
-from __future__ import annotations
-
 import tempfile
 
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.core.config import create_basic_pipedag_config
-from pydiverse.pipedag.util.structlog import setup_logging
+from pydiverse.common.util.structlog import setup_logging
 
 
 @materialize(lazy=True)
@@ -209,7 +205,7 @@ if __name__ == "__main__":
     main()
 ```
 
-Stacktrace includes 
+Stacktrace includes
 `File "/home/user/code/pydiverse.pipedag/example_imperative/failing_example.py", line 14, in lazy_task_1`:
 
 ```
@@ -227,7 +223,7 @@ Traceback (most recent call last):
     return Table(sa.text("<invalid query>")).materialize()
   File "/home/user/code/pydiverse.pipedag/src/pydiverse/pipedag/materialize/container.py", line 200, in materialize
     return task_context.imperative_materialize_callback(
-...    
+...
   File "/home/user/.cache/env/virtualenvs/pydiverse-pipedag-Hmb_rarN-py3.10/lib/python3.10/site-packages/duckdb_engine/__init__.py", line 162, in execute
     self.__c.execute(statement, parameters)
 sqlalchemy.exc.ProgrammingError: (duckdb.duckdb.ParserException) Parser Error: syntax error at or near "<"

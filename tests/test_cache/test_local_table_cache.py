@@ -1,9 +1,10 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
 import sqlalchemy as sa
 
-from pydiverse.pipedag import *
+from pydiverse.pipedag import ConfigContext, Flow, Stage, Table, materialize
 from tests.fixtures.instances import with_instances
 
 
@@ -76,9 +77,7 @@ def test_local_table_cache(mocker):
     assert store_input_spy.call_count == expected_store_input
     assert retrieve_table_obj_spy.call_count == expected_retrieve_table_obj
 
-    assert _store_table_spy.call_count == (expected_store_input * si) + (
-        expected_store_table * so
-    )
+    assert _store_table_spy.call_count == (expected_store_input * si) + (expected_store_table * so)
     assert _retrieve_table_obj_spy.call_count == expected_successful_retrieve_table_obj
 
     # Second Run

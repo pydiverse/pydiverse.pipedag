@@ -1,6 +1,7 @@
-# this code is inspired by https://github.com/dmgass/baseline/ but uses separate JSON
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
+# this code is inspired by https://github.com/dmgass/baseline/ but uses separate JSON
 # files and supports parameterized tests
 import json
 import os.path
@@ -22,9 +23,7 @@ class BaselineStore:
         else:
             self.parameters = list(args)
         self.last_cmp = None
-        self.logger = structlog.get_logger(
-            self.__class__.__name__, parameters=self.parameters
-        )
+        self.logger = structlog.get_logger(self.__class__.__name__, parameters=self.parameters)
 
     def __eq__(self, other):
         self.last_cmp = None
@@ -37,18 +36,12 @@ class BaselineStore:
         else:
             updated_baseline = {}
         if self.parameters:
-            cmp = self.swap(
-                key_path=self.parameters, value=other, inout=updated_baseline
-            )
+            cmp = self.swap(key_path=self.parameters, value=other, inout=updated_baseline)
         else:
             cmp = updated_baseline if updated_baseline else None
             updated_baseline = other
         updated_file = self.compare_file.with_suffix(".updated.json")
-        if (
-            exists
-            and updated_file.is_file()
-            and os.path.getmtime(updated_file) > os.path.getmtime(self.compare_file)
-        ):
+        if exists and updated_file.is_file() and os.path.getmtime(updated_file) > os.path.getmtime(self.compare_file):
             # Update the update_file instead of self.compare_file since it is newer.
             # Like this, parameterized tests can accumulate their joint update.
             with open(updated_file) as f:
@@ -66,10 +59,7 @@ class BaselineStore:
                     json.dump(None, f, indent=4)
         self.last_cmp = cmp
         if not (cmp == other):
-            self.logger.info(
-                f"Comparison is false: BaselineStore({self.parameters}):\n"
-                f"   '{cmp}'\n!= '{other}'"
-            )
+            self.logger.info(f"Comparison is false: BaselineStore({self.parameters}):\n   '{cmp}'\n!= '{other}'")
         return cmp == other
 
     def __repr__(self):
@@ -90,21 +80,13 @@ class BaselineStore:
                 key_value = str(key_path.pop(try_key))
                 if key_value in mutable_dict[try_key]:
                     if key_path:
-                        return BaselineStore.swap(
-                            key_path, value, inout=mutable_dict[try_key][key_value]
-                        )
-                    return BaselineStore._swap_value(
-                        key_value, value, inout=mutable_dict[try_key]
-                    )
-                return BaselineStore._add_dict_key(
-                    try_key, key_value, key_path, value, inout=mutable_dict
-                )
+                        return BaselineStore.swap(key_path, value, inout=mutable_dict[try_key][key_value])
+                    return BaselineStore._swap_value(key_value, value, inout=mutable_dict[try_key])
+                return BaselineStore._add_dict_key(try_key, key_value, key_path, value, inout=mutable_dict)
             else:
                 key, key_value = key_path.popitem()
                 key, key_value = str(key), str(key_value)
-                return BaselineStore._add_dict_key(
-                    key, key_value, key_path, value, inout=mutable_dict
-                )
+                return BaselineStore._add_dict_key(key, key_value, key_path, value, inout=mutable_dict)
         elif isinstance(key_path, list):
             key = str(key_path.pop(0))
             if key in mutable_dict:
@@ -120,10 +102,7 @@ class BaselineStore:
                     mutable_dict[key] = value
                     return None
         else:
-            raise TypeError(
-                "Fatal error: BaselineStore messed up self.parameters to include type: "
-                f"{type(key_path)}"
-            )
+            raise TypeError(f"Fatal error: BaselineStore messed up self.parameters to include type: {type(key_path)}")
 
     @staticmethod
     def _swap_value(key, value, *, inout):

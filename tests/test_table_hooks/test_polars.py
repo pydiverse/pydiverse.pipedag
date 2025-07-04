@@ -1,15 +1,26 @@
-from __future__ import annotations
-
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 from typing import Any
 
 import pytest
+from pandas.core.dtypes.base import ExtensionDtype
 
-from pydiverse.pipedag import *
+from pydiverse.pipedag import (
+    AUTO_VERSION,
+    ConfigContext,
+    Flow,
+    Stage,
+    Table,
+    materialize,
+)
 from pydiverse.pipedag.backend.table.sql.hooks import PolarsTableHook
-from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
+from pydiverse.pipedag.backend.table.sql.sql import (
+    DISABLE_DIALECT_REGISTRATION,
+    SQLTableStore,
+)
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
 from tests.util.spy import spy_task
 from tests.util.sql import get_config_with_table_store
 from tests.util.tasks_library import assert_table_equal
@@ -32,16 +43,27 @@ def test_table_store():
             pl.DataFrame(
                 {
                     "col": [0, 1, 2, 3],
+                    "str_col": ["a", "abc", "".join("x" for _ in range(1024)), None],
                 }
             )
         )
 
     @materialize()
     def expected_out_table():
+        expected_length = 1024
+        store = ConfigContext.get().store.table_store
+        if store.engine.dialect.name == "mssql":
+            expected_length = 256
         return Table(
             pl.DataFrame(
                 {
                     "col": [0, 1, 2, 3],
+                    "str_col": [
+                        "a",
+                        "abc",
+                        "".join("x" for _ in range(expected_length)),
+                        None,
+                    ],
                     "x": [1, 1, 1, 1],
                     "y": [2, 2, 2, 2],
                 }
@@ -168,6 +190,7 @@ def test_auto_version_2(mocker):
     in_tables_spy.assert_called(2)
 
 
+@skip_instances("parquet_backend")
 def test_custom_download():
     class TestTableStore(ConfigContext.get().store.table_store.__class__):
         _dialect_name = DISABLE_DIALECT_REGISTRATION
@@ -176,18 +199,22 @@ def test_custom_download():
 
     cfg = get_config_with_table_store(ConfigContext.get(), TestTableStore)
 
+    import numpy as np
+
     @TestTableStore.register_table(pl, replace_hooks=[PolarsTableHook])
     class CustomPolarsDownloadTableHook(PolarsTableHook):
         @classmethod
         def download_table(
             cls,
             query: Any,
-            connection_uri: str,
-        ):
+            store: SQLTableStore,
+            dtypes: dict[str, ExtensionDtype | np.dtype] | None = None,
+        ) -> pl.DataFrame:
             # to simplify this test with various dependencies and platforms, it is
             # easier to use pandas:
             import pandas as pd
 
+            connection_uri = store.engine_url.render_as_string(hide_password=False)
             pandas_df = pd.read_sql(query, con=connection_uri)
             # # pl.read_database_uri fails for duckdb and osx-arm64
             # # (newer conda-forge builds for connectorx for osx-arm64 are broken)

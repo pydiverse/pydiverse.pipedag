@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
 import sqlalchemy as sa
@@ -28,9 +29,7 @@ def input_tables():
 
 @materialize(lazy=True, input_type=sa.Table)
 def join_tables(names, ages):
-    return sa.select(names.c.id, names.c.name, ages.c.age).join_from(
-        names, ages, names.c.id == ages.c.id
-    )
+    return sa.select(names.c.id, names.c.name, ages.c.age).join_from(names, ages, names.c.id == ages.c.id)
 
 
 @materialize(input_type=pd.DataFrame)
@@ -67,7 +66,7 @@ def main():
 
 
 if __name__ == "__main__":
-    from pydiverse.pipedag.util.structlog import setup_logging
+    from pydiverse.common.util.structlog import setup_logging
 
     setup_logging()  # you can setup the logging and/or structlog libraries as you wish
     main()

@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 from pathlib import Path
 
@@ -32,12 +33,8 @@ def test_db2_nicknames():
     def create_nicknames(table: sa.sql.expression.Alias):
         script_path = Path(__file__).parent / "scripts" / "simple_nicknames.sql"
         simple_nicknames = Path(script_path).read_text(encoding="utf-8")
-        simple_nicknames = simple_nicknames.replace(
-            "{{out_schema}}", str(table.original.schema)
-        )
-        simple_nicknames = simple_nicknames.replace(
-            "{{out_table}}", str(table.original.name)
-        )
+        simple_nicknames = simple_nicknames.replace("{{out_schema}}", str(table.original.schema))
+        simple_nicknames = simple_nicknames.replace("{{out_table}}", str(table.original.name))
 
         return RawSql(simple_nicknames, "create_nicknames", separator="|")
 
@@ -79,18 +76,10 @@ def test_db2_table_reference_nicknames():
         simple_nicknames = simple_nicknames.replace("{{out_schema}}", schema.get())
         simple_nicknames = simple_nicknames.replace("{{out_table}}", table_name)
 
-        table_store.execute_raw_sql(
-            RawSql(simple_nicknames, "create_external_nicknames", separator="|")
-        )
+        table_store.execute_raw_sql(RawSql(simple_nicknames, "create_external_nicknames", separator="|"))
 
-        return Table(
-            ExternalTableReference(
-                "nick1", schema=schema.get(), shared_lock_allowed=False
-            )
-        ), Table(
-            ExternalTableReference(
-                "nick2", schema=schema.get(), shared_lock_allowed=True
-            )
+        return Table(ExternalTableReference("nick1", schema=schema.get(), shared_lock_allowed=False)), Table(
+            ExternalTableReference("nick2", schema=schema.get(), shared_lock_allowed=True)
         )
 
     with Flow("f") as f:
@@ -130,9 +119,7 @@ def test_db2_table_spaces(task):
     @materialize(version="1.0")
     def get_expected_table_space_attributes():
         return Table(
-            pd.DataFrame(
-                {"TBSPACE": ["S1"], "INDEX_TBSPACE": ["S2"], "LONG_TBSPACE": ["S3"]}
-            ),
+            pd.DataFrame({"TBSPACE": ["S1"], "INDEX_TBSPACE": ["S2"], "LONG_TBSPACE": ["S3"]}),
             name="tbspace_attributes",
         )
 

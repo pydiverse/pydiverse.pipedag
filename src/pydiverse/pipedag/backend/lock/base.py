@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import threading
 from abc import ABC, abstractmethod
@@ -8,8 +9,8 @@ from typing import Callable, Union
 
 import structlog
 
+from pydiverse.common.util import Disposable
 from pydiverse.pipedag.errors import LockError
-from pydiverse.pipedag.util import Disposable
 
 
 class LockState(Enum):
@@ -59,9 +60,7 @@ class BaseLockManager(Disposable, ABC):
     def __init__(self, logger_kwargs=None):
         if logger_kwargs is None:
             logger_kwargs = {}
-        self.logger = structlog.get_logger(
-            logger_name=type(self).__name__, **logger_kwargs
-        )
+        self.logger = structlog.get_logger(logger_name=type(self).__name__, **logger_kwargs)
 
         self.state_listeners = set()
         self.lock_states = {}

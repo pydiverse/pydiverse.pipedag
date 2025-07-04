@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import inspect
 from collections.abc import Iterable
@@ -6,12 +7,12 @@ from typing import TYPE_CHECKING, Any, Callable
 
 import structlog
 
+from pydiverse.common.util import deep_map
+from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import Table
 from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext, TaskContext
 from pydiverse.pipedag.context.run_context import FinalTaskState
 from pydiverse.pipedag.errors import StageError
-from pydiverse.pipedag.util import deep_map
-from pydiverse.pipedag.util.hashing import stable_hash
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import Flow, Stage
@@ -60,7 +61,7 @@ class UnboundTask:
     def __repr__(self):
         return f"<UnboundTask 'name' {hex(id(self))}>"
 
-    def __call__(self, *args, **kwargs) -> Task:
+    def __call__(self, *args, **kwargs) -> "Task":
         """
         When called inside a flow definition context:
         Constructs a `Task` with bound inputs
@@ -88,13 +89,35 @@ class UnboundTask:
         return self.fn(*args, **kwargs)
 
 
+class TaskGetItem:
+    """
+    Wrapper __getitem__ on tasks
+    """
+
+    def __init__(self, task: "Task", parent: "Task | TaskGetItem", item: Any):
+        self.task = task
+        self.parent = parent
+        self.item = item
+
+        self.position_hash = stable_hash("POS_GET_ITEM", parent.position_hash, repr(self.item))
+
+    def __getitem__(self, item):
+        return type(self)(self.task, self, item)
+
+    def resolve_value(self, task_value: Any):
+        parent_value = self.parent.resolve_value(task_value)
+        if parent_value is None:
+            raise TypeError(f"Parent ({self.parent}) value is None.")
+        return parent_value[self.item]
+
+
 class Task:
     def __init__(
         self,
         unbound_task: UnboundTask,
         bound_args: inspect.BoundArguments,
-        flow: Flow,
-        stage: Stage,
+        flow: "Flow",
+        stage: "Stage",
     ):
         self.fn = unbound_task.fn
         self.name = unbound_task.name
@@ -248,27 +271,3 @@ class Task:
 
     def resolve_value(self, task_value: Any):
         return task_value
-
-
-class TaskGetItem:
-    """
-    Wrapper __getitem__ on tasks
-    """
-
-    def __init__(self, task: Task, parent: Task | TaskGetItem, item: Any):
-        self.task = task
-        self.parent = parent
-        self.item = item
-
-        self.position_hash = stable_hash(
-            "POS_GET_ITEM", parent.position_hash, repr(self.item)
-        )
-
-    def __getitem__(self, item):
-        return type(self)(self.task, self, item)
-
-    def resolve_value(self, task_value: Any):
-        parent_value = self.parent.resolve_value(task_value)
-        if parent_value is None:
-            raise TypeError(f"Parent ({self.parent}) value is None.")
-        return parent_value[self.item]

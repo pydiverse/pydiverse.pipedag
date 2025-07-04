@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import networkx as nx
 import pytest
@@ -62,9 +63,7 @@ def validate_dependencies(flow: Flow):
     for stage in stages:
         if stage.outer_stage is None:
             continue
-        assert nx.shortest_path(
-            expl_g, stage.commit_task, stage.outer_stage.commit_task
-        )
+        assert nx.shortest_path(expl_g, stage.commit_task, stage.outer_stage.commit_task)
 
 
 class TestDAGConstruction:
@@ -545,8 +544,6 @@ def test_flow_visualize_url():
         assert visualization_url.startswith("https://kroki.io/graphviz/")
 
     # Check that overriding works
-    with PipedagConfig.default.get().evolve(
-        disable_kroki=False, kroki_url="THIS_IS_A_TEST_URL"
-    ):
+    with PipedagConfig.default.get().evolve(disable_kroki=False, kroki_url="THIS_IS_A_TEST_URL"):
         visualization_url = f.visualize_url()
         assert visualization_url.startswith("THIS_IS_A_TEST_URL/graphviz/")

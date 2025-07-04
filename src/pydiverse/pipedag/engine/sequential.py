@@ -1,16 +1,13 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 from pydiverse.pipedag import ExternalTableReference, Table, Task
 from pydiverse.pipedag.context import ConfigContext, RunContext
+from pydiverse.pipedag.core import Subflow
 from pydiverse.pipedag.core.result import Result
 from pydiverse.pipedag.engine.base import (
     OrchestrationEngine,
 )
-
-if TYPE_CHECKING:
-    from pydiverse.pipedag.core import Subflow
 
 
 class SequentialEngine(OrchestrationEngine):
@@ -42,9 +39,7 @@ class SequentialEngine(OrchestrationEngine):
                                 if in_t in results and in_t not in inputs
                             },
                             **{
-                                in_id: Table(inputs[in_t])
-                                for in_id, in_t in task.input_tasks.items()
-                                if in_t in inputs
+                                in_id: Table(inputs[in_t]) for in_id, in_t in task.input_tasks.items() if in_t in inputs
                             },
                         }
 

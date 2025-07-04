@@ -1,17 +1,17 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import random
 
 import structlog
 
+from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import ConfigContext, Table
 from pydiverse.pipedag.backend import SQLTableStore
-from pydiverse.pipedag.backend.table.sql.ddl import DropTable
 from pydiverse.pipedag.container import Schema
 from pydiverse.pipedag.context import TaskContext
-from pydiverse.pipedag.materialize.core import MaterializingTask
+from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.store import mangle_table_name
-from pydiverse.pipedag.util.hashing import stable_hash
 
 
 def materialize_table(
@@ -65,13 +65,10 @@ def materialize_table(
         # LookupError happens if no TaskContext is open
         if schema is None:
             raise ValueError(
-                "Parameter schema must be provided if task is not called by "
-                "normal pipedag orchestration."
+                "Parameter schema must be provided if task is not called by normal pipedag orchestration."
             ) from None
 
-    suffix = (
-        stable_hash(str(random.randbytes(8))) + "_0000" if debug_suffix is None else ""
-    )
+    suffix = stable_hash(str(random.randbytes(8))) + "_0000" if debug_suffix is None else ""
     old_table_name = table.name
     table.name = mangle_table_name(table.name, task_name, suffix)
     if debug_suffix is not None:
@@ -82,26 +79,20 @@ def materialize_table(
 
     if drop_if_exists:
         if isinstance(table_store, SQLTableStore):
-            table_store.execute(DropTable(table.name, schema, if_exists=True))
+            table_store.delete_table_from_transaction(table, schema=schema)
         else:
             logger = structlog.get_logger(logger_name="Debug materialize_table")
-            logger.warning(
-                "drop_if_exists not supported for non SQLTableStore table stores."
-            )
+            logger.warning("drop_if_exists not supported for non SQLTableStore table stores.")
     if task is None:
-        hook = table_store.get_m_table_hook(type(table.obj))
-        schema_name = (
-            schema.name
-            if table_store.get_schema(schema.name).get() == schema.get()
-            else schema.get()
-        )
+        hook = table_store.get_m_table_hook(table)
+        schema_name = schema.name if table_store.get_schema(schema.name).get() == schema.get() else schema.get()
         if table_store.get_schema(schema_name).get() != schema.get():
             raise ValueError(
                 "Schema prefix and postfix must match prefix and postfix of provided "
                 "config_context: "
                 f"{table_store.get_schema(schema_name).get()} != {schema.get()}"
             )
-        hook.materialize(table_store, table, schema_name)
+        hook.materialize(table_store, table, schema_name, without_config_context=True)
     else:
         table_store.store_table(table, task)
 

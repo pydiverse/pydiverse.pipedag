@@ -1,9 +1,10 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
 import pytest
 
-from pydiverse.pipedag import *
+from pydiverse.pipedag import Flow, Stage, Table, materialize
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
@@ -20,6 +21,7 @@ except ImportError:
 
 # connectorx and thus ibis have trouble with db2+ibm_db:// URLs and mssql
 @skip_instances("ibm_db2", "mssql")
+@pytest.mark.skipif(ibis is None, reason="ibis not installed")
 def test_table_store():
     IbisTable = ibis.api.Table
 

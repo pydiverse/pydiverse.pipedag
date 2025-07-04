@@ -1,14 +1,15 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import tempfile
 
 import pandas as pd
 import sqlalchemy as sa
 
+from pydiverse.common.util.structlog import setup_logging
 from pydiverse.pipedag import Schema, Table, materialize
 from pydiverse.pipedag.core.config import create_basic_pipedag_config
 from pydiverse.pipedag.materialize.debug import materialize_table
-from pydiverse.pipedag.util.structlog import setup_logging
 
 
 def main():
@@ -26,10 +27,7 @@ def main():
         # Same also works for lazy tasks, however, SQLAlchemy expressions are a bit
         # harder to manage manually:
         lazy_1 = lazy_task_1()
-        assert (
-            str(lazy_1.compile(engine, compile_kwargs={"literal_binds": True}))
-            == "SELECT 1 AS x, 2 AS y"
-        )
+        assert str(lazy_1.compile(engine, compile_kwargs={"literal_binds": True})) == "SELECT 1 AS x, 2 AS y"
 
         # We might want to create a custom debugging schema:
         schema = Schema(
@@ -51,12 +49,7 @@ def main():
         assert tbl.original.schema == schema.get()
 
         # It is also possible to explicitly ask for materialize() to return dataframes
-        assert (
-            Table(lazy_task_1()).materialize(cfg, schema, return_as_type=pd.DataFrame)[
-                "x"
-            ][0]
-            == 1
-        )
+        assert Table(lazy_task_1()).materialize(cfg, schema, return_as_type=pd.DataFrame)["x"][0] == 1
 
         # ## now we can call the following flow interactively:
         # with cfg:
@@ -90,9 +83,7 @@ def main():
         stage_2 = Schema("stage_2")
         cfg.store.table_store.execute(f"CREATE SCHEMA IF NOT EXISTS {stage_2.get()}")
         lazy_2 = lazy_task_2(lazy_1, b)
-        lazy_2 = Table(lazy_2, name="task_2_out").materialize(
-            config_context=cfg, schema=stage_2
-        )
+        lazy_2 = Table(lazy_2, name="task_2_out").materialize(config_context=cfg, schema=stage_2)
         lazy_3 = lazy_task_3(lazy_2)
         eager = eager_task(lazy_1_df, b_df)
         # stage_3:
@@ -139,9 +130,7 @@ def main():
 
         # there is a more low level function to debug materialize tables with a few more
         # options exposed:
-        materialize_table(
-            Table(lazy_task_1(), name="task_1_out"), cfg, stage_1, debug_suffix="_debug"
-        )
+        materialize_table(Table(lazy_task_1(), name="task_1_out"), cfg, stage_1, debug_suffix="_debug")
 
 
 @materialize(lazy=True)

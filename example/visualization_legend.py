@@ -1,10 +1,11 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import tempfile
 
+from pydiverse.common.util.structlog import setup_logging
 from pydiverse.pipedag import Flow, GroupNode, Stage, VisualizationStyle, materialize
 from pydiverse.pipedag.core.config import create_basic_pipedag_config
-from pydiverse.pipedag.util.structlog import setup_logging
 
 
 @materialize
@@ -73,14 +74,10 @@ def main():
                     ):
                         # avoid memoization (not counted as cache valid)
                         _ = cache_valid2()
-                    with GroupNode(
-                        "group_any_failed", style=VisualizationStyle(hide_content=True)
-                    ):
+                    with GroupNode("group_any_failed", style=VisualizationStyle(hide_content=True)):
                         _ = completed_but_cache_invalid()
                         out = failed()
-                    with GroupNode(
-                        "group_all_skipped", style=VisualizationStyle(hide_content=True)
-                    ):
+                    with GroupNode("group_all_skipped", style=VisualizationStyle(hide_content=True)):
                         _ = skipped(out)
 
             # Run flow

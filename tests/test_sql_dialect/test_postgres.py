@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import uuid
 
@@ -41,11 +42,7 @@ def test_postgres_unlogged():
     @materialize(input_type=pd.DataFrame)
     def assert_relpersistence(df: pd.DataFrame):
         relpersistence = (
-            "u"
-            if ConfigContext.get()
-            .store.table_store.materialization_details["__any__"]
-            .unlogged
-            else "p"
+            "u" if ConfigContext.get().store.table_store.materialization_details["__any__"].unlogged else "p"
         )
         assert df["relpersistence"][0] == relpersistence
 

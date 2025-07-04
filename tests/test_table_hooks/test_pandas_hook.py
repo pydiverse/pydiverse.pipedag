@@ -1,20 +1,33 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import datetime as dt
 import string
+import sys
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
 import sqlalchemy as sa
 from packaging.version import Version
+from pandas.core.dtypes.base import ExtensionDtype
 
 import tests.util.tasks_library as m
-from pydiverse.pipedag import *
+from pydiverse.pipedag import (
+    AUTO_VERSION,
+    ConfigContext,
+    Flow,
+    Stage,
+    StageLockContext,
+    Table,
+    materialize,
+)
+from pydiverse.pipedag.backend import SQLTableStore
 from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
-from pydiverse.pipedag.backend.table.util import DType
+from pydiverse.pipedag.engine import dask
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
@@ -127,6 +140,7 @@ class TestPandasTableHookNumpy:
 
         assert f.run().successful
 
+    @pytest.mark.skipif(pd.__version__ < "2.", reason="datetime64[us] requires pandas 2")
     def test_datetime(self):
         df = pd.DataFrame(
             {
@@ -141,28 +155,18 @@ class TestPandasTableHookNumpy:
 
         df_expected = pd.DataFrame(
             {
-                "date": pd.array(Values.DATE_NS, dtype="datetime64[ns]"),
-                "date_ns": pd.array(Values.DATE_NS, dtype="datetime64[ns]"),
-                "date_none": pd.array(NoneValues.DATE, dtype="datetime64[ns]"),
-                "datetime": pd.array(Values.DATETIME_NS, dtype="datetime64[ns]"),
-                "datetime_ns": pd.array(Values.DATETIME_NS, dtype="datetime64[ns]"),
-                "datetime_none": pd.array(NoneValues.DATETIME, dtype="datetime64[ns]"),
-                "date_year": [d.year for d in Values.DATE],
-                "date_ns_year": [d.year for d in Values.DATE_NS],
-                "date_none_year": [1970, None],
-                "datetime_year": [d.year for d in Values.DATETIME],
-                "datetime_ns_year": [d.year for d in Values.DATETIME_NS],
-                "datetime_none_year": [1970, None],
+                "date": pd.array(Values.DATE, dtype="datetime64[s]"),
+                "date_ns": pd.array(Values.DATE_NS, dtype="datetime64[s]"),
+                "date_none": pd.array(NoneValues.DATE, dtype="datetime64[s]"),
+                "datetime": pd.array(Values.DATETIME, dtype="datetime64[us]"),
+                "datetime_ns": pd.array(Values.DATETIME_NS, dtype="datetime64[us]"),
+                "datetime_none": pd.array(NoneValues.DATETIME, dtype="datetime64[us]"),
             }
         )
 
         @materialize()
         def numpy_input():
-            datetime_dtype = (
-                sa.DateTime()
-                if (get_dialect_name() != "mssql")
-                else sa.dialects.mssql.DATETIME2()
-            )
+            datetime_dtype = sa.DateTime() if (get_dialect_name() != "mssql") else sa.dialects.mssql.DATETIME2()
 
             return Table(
                 df,
@@ -187,6 +191,61 @@ class TestPandasTableHookNumpy:
 
         assert f.run().successful
 
+    @pytest.mark.polars
+    def test_datetime_polars(self):
+        import polars as pl
+
+        df = pd.DataFrame(
+            {
+                "date": Values.DATE,
+                "date_ns": Values.DATE_NS,
+                "date_none": NoneValues.DATE,
+                "datetime": Values.DATETIME,
+                "datetime_ns": Values.DATETIME_NS,
+                "datetime_none": NoneValues.DATETIME,
+            }
+        ).astype(object)
+
+        df_expected = pl.DataFrame(
+            {
+                "date": Values.DATE,
+                "date_ns": Values.DATE_NS,
+                "date_none": NoneValues.DATE,
+                "datetime": Values.DATETIME,
+                "datetime_ns": Values.DATETIME_NS,
+                "datetime_none": NoneValues.DATETIME,
+            }
+        )
+
+        @materialize()
+        def numpy_input():
+            datetime_dtype = sa.DateTime() if (get_dialect_name() != "mssql") else sa.dialects.mssql.DATETIME2()
+
+            return Table(
+                df,
+                type_map={
+                    "date": sa.Date(),
+                    "date_ns": sa.Date(),
+                    "date_none": sa.Date(),
+                    "datetime": datetime_dtype,
+                    "datetime_ns": datetime_dtype,
+                    "datetime_none": datetime_dtype,
+                },
+            )
+
+        @materialize(input_type=pl.DataFrame)
+        def assert_expected(in_df):
+            import polars.testing as pl_testing
+
+            pl_testing.assert_frame_equal(in_df, df_expected, check_dtype=False)
+
+        with Flow() as f:
+            with Stage("stage"):
+                t = numpy_input()
+                assert_expected(t)
+
+        assert f.run().successful
+
 
 @pytest.mark.skipif(pd_version < Version("2.0"), reason="Requires pandas v2.0")
 class TestPandasTableHookArrow:
@@ -203,9 +262,7 @@ class TestPandasTableHookArrow:
                 "boolean": pd.array(Values.BOOLEAN, dtype="bool[pyarrow]"),
                 "date": pd.array(Values.DATE, dtype=pd.ArrowDtype(pa.date32())),
                 "time": pd.array(Values.TIME, dtype=pd.ArrowDtype(pa.time64("us"))),
-                "datetime": pd.array(
-                    Values.DATETIME, dtype=pd.ArrowDtype(pa.timestamp("us"))
-                ),
+                "datetime": pd.array(Values.DATETIME, dtype=pd.ArrowDtype(pa.timestamp("us"))),
             }
         )
 
@@ -215,6 +272,15 @@ class TestPandasTableHookArrow:
 
         @materialize(input_type=(pd.DataFrame, "arrow"))
         def assert_expected(in_df):
+            if ConfigContext.get().store.table_store.engine.dialect.name == "mssql":
+                # these are unavoidable differences when using bcp for writing tables
+                df["str"] = df["str"].replace("", pd.NA)
+                df["str"] = (
+                    df["str"]
+                    .str.replace("\t", "\\t", regex=False)
+                    .str.replace("\n", "\\n", regex=False)
+                    .str.replace("\r", "\\r", regex=False)
+                )
             pd.testing.assert_frame_equal(in_df, df, check_dtype=False)
             allowed_dtypes = set(df.dtypes)
             # Prefer StringDtype("pyarrow") over ArrowDtype(pa.string()) for now.
@@ -243,9 +309,7 @@ class TestPandasTableHookArrow:
                 "boolean": pd.array(NoneValues.BOOLEAN, dtype="bool[pyarrow]"),
                 "date": pd.array(NoneValues.DATE, dtype=pd.ArrowDtype(pa.date32())),
                 "time": pd.array(NoneValues.TIME, dtype=pd.ArrowDtype(pa.time64("us"))),
-                "datetime": pd.array(
-                    NoneValues.DATETIME, dtype=pd.ArrowDtype(pa.timestamp("us"))
-                ),
+                "datetime": pd.array(NoneValues.DATETIME, dtype=pd.ArrowDtype(pa.timestamp("us"))),
             }
         )
 
@@ -255,6 +319,9 @@ class TestPandasTableHookArrow:
 
         @materialize(input_type=(pd.DataFrame, "arrow"))
         def assert_expected(in_df):
+            if ConfigContext.get().store.table_store.engine.dialect.name == "mssql":
+                # these are unavoidable differences when using bcp for writing tables
+                df["str"] = df["str"].replace("", pd.NA)
             pd.testing.assert_frame_equal(in_df, df, check_dtype=False)
 
         with Flow() as f:
@@ -266,10 +333,7 @@ class TestPandasTableHookArrow:
 
 
 @pytest.mark.xfail(
-    reason=(
-        "The string '\\N' can't be materialized using the "
-        "COPY FROM STDIN WITH CSV technique."
-    ),
+    reason=("The string '\\N' can't be materialized using the COPY FROM STDIN WITH CSV technique."),
     strict=True,
 )
 @with_instances("postgres")
@@ -286,12 +350,15 @@ def test_pandas_table_hook_postgres_null_string():
 
     assert df["strNA"][0] == ""
     assert pd.isna(df["strNA"][1])
-    assert (
-        df["strNA"].fillna("X")[2] == "\\N"
-    ), "This is a known issue that the string '\\N' is considered NA"
+    assert df["strNA"].fillna("X")[2] == "\\N", "This is a known issue that the string '\\N' is considered NA"
 
 
 @with_instances("postgres", "local_table_store")
+@pytest.mark.skipif(dask.dask is None, reason="AUTO_VERSION for pandas requires dask")
+@pytest.mark.skipif(
+    sys.version_info >= (3, 13),
+    reason="Pandas AUTO_VERSION ComputationTracer might be deprecated since it is hard to maintain",
+)
 class TestPandasAutoVersion:
     def test_smoke(self, mocker):
         should_swap_inputs = False
@@ -352,15 +419,15 @@ class TestPandasCustomHook:
             @classmethod
             def upload_table(
                 cls,
-                df: pd.DataFrame,
-                name: str,
+                table: Table[pd.DataFrame],
                 schema: str,
-                dtypes: dict[str, DType],
-                conn: sa.Connection,
+                dtypes: dict[str, sa.types.TypeEngine],
+                store: SQLTableStore,
                 early: bool,
             ):
+                df = table.obj
                 df["custom_upload"] = True
-                super().upload_table(df, name, schema, dtypes, conn, early)
+                super().upload_table(table, schema, dtypes, store, early)
 
         df = pd.DataFrame(
             {
@@ -373,13 +440,13 @@ class TestPandasCustomHook:
             return df
 
         @materialize(input_type=pd.DataFrame)
-        def verify_cutom(t):
+        def verify_custom(t):
             assert "custom_upload" in t.columns
 
         with Flow() as f:
             with Stage("stage"):
                 t = numpy_input()
-                verify_cutom(t)
+                verify_custom(t)
 
         assert f.run(config=cfg).successful
 
@@ -397,10 +464,10 @@ class TestPandasCustomHook:
             def download_table(
                 cls,
                 query: Any,
-                conn: sa.Connection,
-                dtypes: dict[str, DType] | None = None,
-            ):
-                df = super().download_table(query, conn, dtypes)
+                store: SQLTableStore,
+                dtypes: dict[str, ExtensionDtype | np.dtype] | None = None,
+            ) -> pd.DataFrame:
+                df = super().download_table(query, store, dtypes)
                 df["custom_download"] = True
                 return df
 
@@ -415,12 +482,12 @@ class TestPandasCustomHook:
             return df
 
         @materialize(input_type=pd.DataFrame)
-        def verify_cutom(t):
+        def verify_custom(t):
             assert "custom_download" in t.columns
 
         with Flow() as f:
             with Stage("stage"):
                 t = numpy_input()
-                verify_cutom(t)
+                verify_custom(t)
 
         assert f.run(config=cfg).successful

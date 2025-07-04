@@ -1,11 +1,14 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import pytest
 import sqlalchemy as sa
 
 from pydiverse.pipedag import ConfigContext, Flow, Stage, Table, materialize
-from pydiverse.pipedag.backend.table.sql.dialects import (
+from pydiverse.pipedag.backend.table.sql.dialects.ibm_db2 import (
     IBMDB2TableStore,
+)
+from pydiverse.pipedag.backend.table.sql.dialects.mssql import (
     MSSqlTableStore,
 )
 
@@ -32,7 +35,7 @@ pytestmark = [with_instances(DATABASE_INSTANCES)]
     ],
 )
 @with_instances(DATABASE_INSTANCES, "ibm_db2_materialization_details")
-@skip_instances("ibm_db2")
+@skip_instances("ibm_db2", "parquet_backend", "parquet_s3_backend")
 def test_compression(task, stage_materialization_details):
     @materialize(input_type=sa.Table, lazy=False)
     def get_compression_attributes(table: sa.sql.expression.Alias):
@@ -55,14 +58,10 @@ def test_compression(task, stage_materialization_details):
             m.assert_table_equal(x, x)
 
     for _ in range(3):
-        if (
-            not isinstance(store, (MSSqlTableStore, IBMDB2TableStore))
-            and task != m.simple_dataframe_uncompressed
-        ):
+        if not isinstance(store, (MSSqlTableStore, IBMDB2TableStore)) and task != m.simple_dataframe_uncompressed:
             with pytest.raises(
                 ValueError,
-                match="To silence this exception set"
-                " strict_materialization_details=False",
+                match="To silence this exception set strict_materialization_details=False",
             ):
                 assert f.run().successful
         else:

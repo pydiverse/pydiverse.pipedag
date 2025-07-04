@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import threading
 import time
@@ -64,8 +65,7 @@ def _test_lock_manager(create_lock_manager: Callable[[], BaseLockManager]):
 
                 if not sleep_event.is_set() or not unlocked_event.wait(timeout=0.025):
                     raise RuntimeError(
-                        "Second lock manager was able to acquire lock before the "
-                        "first lock manager released it."
+                        "Second lock manager was able to acquire lock before the first lock manager released it."
                     )
 
             delta = end_time - start_time
@@ -124,7 +124,7 @@ def test_no_lock():
     def create_lock_manager():
         return NoLockManager()
 
-    with pytest.raises(BaseException):
+    with pytest.raises(RuntimeError):
         _test_lock_manager(create_lock_manager)
         pytest.fail("No lock manager MUST fail the lock manager tests")
 

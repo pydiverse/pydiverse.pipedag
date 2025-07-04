@@ -1,28 +1,37 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import csv
 from dataclasses import dataclass
-from io import StringIO
+from io import BytesIO, StringIO
 from typing import Any
 
 import pandas as pd
+import sqlalchemy as sa
 
+from pydiverse.common import Dtype
+from pydiverse.pipedag.backend.table.sql import hooks
 from pydiverse.pipedag.backend.table.sql.ddl import (
     ChangeTableLogged,
     LockSourceTable,
     LockTable,
 )
-from pydiverse.pipedag.backend.table.sql.hooks import (
-    PandasTableHook,
-    SQLAlchemyTableHook,
-)
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
-from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.container import Schema, Table
 from pydiverse.pipedag.materialize.details import (
     BaseMaterializationDetails,
     resolve_materialization_details_label,
 )
+
+try:
+    import polars as pl
+except ImportError:
+    pl = None
+
+try:
+    import pyarrow as pa
+except ImportError:
+    pa = None
 
 
 @dataclass(frozen=True)
@@ -74,6 +83,10 @@ class PostgresTableStore(SQLTableStore):
 
     _dialect_name = "postgresql"
 
+    def __init__(self, *args, use_adbc: bool = True, **kwargs):
+        self.use_adbc = use_adbc
+        super().__init__(*args, **kwargs)
+
     def _init_database(self):
         self._init_database_with_database("postgres", {"isolation_level": "AUTOCOMMIT"})
 
@@ -87,9 +100,7 @@ class PostgresTableStore(SQLTableStore):
             self.logger,
         )
 
-    def lock_table(
-        self, table: Table | str, schema: Schema | str, conn: Any = None
-    ) -> list:
+    def lock_table(self, table: Table | str, schema: Schema | str, conn: Any = None) -> list:
         """
         For some dialects, it might be beneficial to lock a table before writing to it.
         """
@@ -98,15 +109,11 @@ class PostgresTableStore(SQLTableStore):
             self.execute(stmt, conn=conn)
         return [stmt]
 
-    def lock_source_table(
-        self, table: Table | str, schema: Schema | str, conn: Any = None
-    ) -> list:
+    def lock_source_table(self, table: Table | str, schema: Schema | str, conn: Any = None) -> list:
         """
         For some dialects, it might be beneficial to lock source tables before reading.
         """
-        stmt = LockSourceTable(
-            table.name if isinstance(table, Table) else table, schema
-        )
+        stmt = LockSourceTable(table.name if isinstance(table, Table) else table, schema)
         if conn is not None:
             self.execute(stmt, conn=conn)
         return [stmt]
@@ -115,52 +122,44 @@ class PostgresTableStore(SQLTableStore):
         _ = label
         return
 
-    def _set_materialization_details(
-        self, materialization_details: dict[str, dict[str | list[str]]] | None
-    ) -> None:
-        self.materialization_details = (
-            PostgresMaterializationDetails.create_materialization_details_dict(
-                materialization_details,
-                self.strict_materialization_details,
-                self.default_materialization_details,
-                self.logger,
-            )
+    def _set_materialization_details(self, materialization_details: dict[str, dict[str | list[str]]] | None) -> None:
+        self.materialization_details = PostgresMaterializationDetails.create_materialization_details_dict(
+            materialization_details,
+            self.strict_materialization_details,
+            self.default_materialization_details,
+            self.logger,
         )
 
 
 @PostgresTableStore.register_table()
-class SQLAlchemyTableHook(SQLAlchemyTableHook):
+class SQLAlchemyTableHook(hooks.SQLAlchemyTableHook):
     pass  # postges is our reference dialect
 
 
 @PostgresTableStore.register_table(pd)
-class PandasTableHook(PandasTableHook):
+class PandasTableHook(hooks.PandasTableHook):
     @classmethod
     def _execute_materialize(
         cls,
-        df: pd.DataFrame,
-        store: PostgresTableStore,
         table: Table[pd.DataFrame],
+        store: PostgresTableStore,
         schema: Schema,
-        dtypes: dict[str, DType],
+        dtypes: dict[str, Dtype],
     ):
-        dtypes = {name: dtype.to_sql() for name, dtype in dtypes.items()}
-        if table.type_map:
-            dtypes.update(table.type_map)
+        df = table.obj
+        dtypes = cls._get_dialect_dtypes(dtypes, table)
 
         # Create empty table
-        cls._dialect_create_empty_table(store, df, table, schema, dtypes)
-        store.add_indexes_and_set_nullable(
-            table, schema, on_empty_table=True, table_cols=df.columns
-        )
+        cls._dialect_create_empty_table(store, table, schema, dtypes)
+        store.add_indexes_and_set_nullable(table, schema, on_empty_table=True, table_cols=df.columns)
 
         if store.get_unlogged(resolve_materialization_details_label(table)):
             store.execute(ChangeTableLogged(table.name, schema, False))
 
         # COPY data
         # TODO: For python 3.12, there is csv.QUOTE_STRINGS
-        #       This would make everything a bit safer, because then we could represent
-        #       the string "\\N" (backslash + capital n).
+        #       This would make everything a bit safer, because then we could
+        #       represent the string "\\N" (backslash + capital n).
         s_buf = StringIO()
         df.to_csv(
             s_buf,
@@ -178,10 +177,7 @@ class PandasTableHook(PandasTableHook):
         dbapi_conn = engine.raw_connection()
         try:
             with dbapi_conn.cursor() as cur:
-                sql = (
-                    f"COPY {schema_name}.{table_name} FROM STDIN"
-                    " WITH (FORMAT CSV, NULL '\\N')"
-                )
+                sql = f"COPY {schema_name}.{table_name} FROM STDIN WITH (FORMAT CSV, NULL '\\N')"
                 store.logger.info("Executing bulk load", query=sql)
                 cur.copy_expert(sql=sql, file=s_buf)
             dbapi_conn.commit()
@@ -192,3 +188,46 @@ class PandasTableHook(PandasTableHook):
             schema,
             on_empty_table=False,
         )
+
+
+@PostgresTableStore.register_table(pl)
+class PolarsTableHook(hooks.PolarsTableHook):
+    @classmethod
+    def upload_table(
+        cls,
+        table: Table[pl.DataFrame],
+        schema: Schema,
+        dtypes: dict[str, sa.types.TypeEngine],
+        store: SQLTableStore,
+        early: bool,
+    ):
+        if not early:
+            cls._dialect_create_empty_table(store, table, schema, dtypes)
+        df = table.obj  # type: pl.DataFrame
+
+        # COPY data
+        # TODO: For python 3.12, there is csv.QUOTE_STRINGS
+        #       This would make everything a bit safer, because then we could
+        #       represent the string "\\N" (backslash + capital n).
+        s_buf = BytesIO()
+        df.write_csv(
+            s_buf,
+            null_value="\\N",
+            include_header=False,
+            quote_style="necessary",
+        )
+        s_buf.seek(0)
+
+        engine = store.engine
+        table_name = engine.dialect.identifier_preparer.quote(table.name)
+        schema_name = engine.dialect.identifier_preparer.format_schema(schema.get())
+
+        dbapi_conn = engine.raw_connection()
+        try:
+            with dbapi_conn.cursor() as cur:
+                sql = f"COPY {schema_name}.{table_name} FROM STDIN WITH (FORMAT CSV, NULL '\\N')"
+                store.logger.info("Executing bulk load", query=sql)
+                cur.copy_expert(sql=sql, file=s_buf)
+            dbapi_conn.commit()
+        finally:
+            dbapi_conn.close()

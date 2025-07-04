@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import importlib
 import pkgutil
@@ -15,9 +16,7 @@ def cli():
 def find_commands():
     commands_dir = Path(__file__).parent / "commands"
     return [
-        name
-        for _, name, ispkg in pkgutil.iter_modules([str(commands_dir)])
-        if not ispkg and not name.startswith("_")
+        name for _, name, ispkg in pkgutil.iter_modules([str(commands_dir)]) if not ispkg and not name.startswith("_")
     ]
 
 

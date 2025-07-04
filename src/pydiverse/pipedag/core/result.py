@@ -1,19 +1,22 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 from typing import TYPE_CHECKING, Any
 
+import pydot
 import structlog
 from attrs import frozen
 
 from pydiverse.pipedag.context import ConfigContext, StageLockContext
-from pydiverse.pipedag.context.run_context import DematerializeRunContext, RunContext
+from pydiverse.pipedag.context.run_context import (
+    DematerializeRunContext,
+    FinalTaskState,
+    RunContext,
+)
 from pydiverse.pipedag.core.task import Task, TaskGetItem
 from pydiverse.pipedag.errors import LockError
 
 if TYPE_CHECKING:
-    import pydot
-
-    from pydiverse.pipedag.context.run_context import FinalTaskState
     from pydiverse.pipedag.core import Flow, Subflow
 
 
@@ -40,8 +43,8 @@ class Result:
         this attribute.
     """
 
-    flow: Flow
-    subflow: Subflow
+    flow: "Flow"
+    subflow: "Subflow"
 
     underlying: Any
     successful: bool
@@ -54,12 +57,12 @@ class Result:
     @staticmethod
     def init_from(
         *,
-        subflow: Subflow,
+        subflow: "Subflow",
         underlying: Any,
         successful: bool,
         task_values: dict[Task, Any],
         exception: Exception | None,
-    ) -> Result:
+    ) -> "Result":
         return Result(
             flow=subflow.flow,
             subflow=subflow,
@@ -94,9 +97,7 @@ class Result:
 
         if not self.successful:
             logger = structlog.get_logger(logger_name=type(self).__name__)
-            logger.warning(
-                "Attention: getting tables from unsuccessful run is unreliable!"
-            )
+            logger.warning("Attention: getting tables from unsuccessful run is unreliable!")
 
         if self.config_context.strict_result_get_locking:
             try:

@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import copy
 
@@ -53,9 +54,7 @@ def test_get_output_from_store(imperative):
         # ignoring the position hash when retrieving
         # should just return the output from the latest call
         pd.testing.assert_frame_equal(
-            df1.get_output_from_store(
-                as_type=pd.DataFrame, ignore_position_hashes=True
-            ),
+            df1.get_output_from_store(as_type=pd.DataFrame, ignore_position_hashes=True),
             result.get(df2, as_type=pd.DataFrame),
         )
 
@@ -66,12 +65,8 @@ def test_get_output_from_store(imperative):
         )
 
         pd.testing.assert_frame_equal(
-            dataframes[0].get_output_from_store(
-                as_type=pd.DataFrame, ignore_position_hashes=True
-            ),
-            dataframes.get_output_from_store(
-                as_type=pd.DataFrame, ignore_position_hashes=True
-            )[0],
+            dataframes[0].get_output_from_store(as_type=pd.DataFrame, ignore_position_hashes=True),
+            dataframes.get_output_from_store(as_type=pd.DataFrame, ignore_position_hashes=True)[0],
         )
 
 
@@ -151,9 +146,7 @@ def test_imperative_materialize_given_config():
         tbl.materialize(config_context)
     # test materialization with explicit config_context and direct schema
     ref = tbl.materialize(config_context, schema=Schema("dummy_schema"))
-    sa_tbl = sa.Table(
-        ref.original.name, sa.MetaData(), schema="dummy_schema", autoload_with=engine
-    )
+    sa_tbl = sa.Table(ref.original.name, sa.MetaData(), schema="dummy_schema", autoload_with=engine)
     assert [c.name for c in sa_tbl.columns] == ["x"]
     sa_tbl2 = _m.noop_lazy(sa_tbl.alias("alias"))
     assert sa_tbl2.name == "alias"
@@ -161,74 +154,51 @@ def test_imperative_materialize_given_config():
 
     # test return nothing materialization
     tbl.name = "a"
-    assert (
-        tbl.materialize(
-            config_context, schema=Schema("dummy_schema"), return_nothing=True
-        )
-        is None
-    )
-    sa_tbl = sa.Table(
-        tbl.name, sa.MetaData(), schema="dummy_schema", autoload_with=engine
-    )
+    assert tbl.materialize(config_context, schema=Schema("dummy_schema"), return_nothing=True) is None
+    sa_tbl = sa.Table(tbl.name, sa.MetaData(), schema="dummy_schema", autoload_with=engine)
     assert [c.name for c in sa_tbl.columns] == ["x"]
     assert sa_tbl.name == tbl.name
 
     # test materialization with explicit config_context and prefixed schema
     tbl.name = "b"
     tbl.materialize(config_context, schema=Schema("schema", prefix="dummy_"))
-    sa_tbl = sa.Table(
-        tbl.name, sa.MetaData(), schema="dummy_schema", autoload_with=engine
-    )
+    sa_tbl = sa.Table(tbl.name, sa.MetaData(), schema="dummy_schema", autoload_with=engine)
     assert [c.name for c in sa_tbl.columns] == ["x"]
     assert sa_tbl.name == tbl.name
 
     # test materialization with explicit config_context and postfixed schema
     tbl.name = "c"
     tbl.materialize(config_context, schema=Schema("dummy", suffix="_schema"))
-    sa_tbl = sa.Table(
-        tbl.name, sa.MetaData(), schema="dummy_schema", autoload_with=engine
-    )
+    sa_tbl = sa.Table(tbl.name, sa.MetaData(), schema="dummy_schema", autoload_with=engine)
     assert [c.name for c in sa_tbl.columns] == ["x"]
     assert sa_tbl.name == tbl.name
 
     # test materialization with explicit config_context incl. prefixed schema
     pipedag_config = create_basic_pipedag_config(
-        config_context.store.table_store.engine.url.render_as_string(
-            hide_password=False
-        )
+        config_context.store.table_store.engine.url.render_as_string(hide_password=False)
     )
     raw_config2 = copy.deepcopy(pipedag_config.raw_config)
-    raw_config2["instances"]["__any__"]["table_store"]["args"][
-        "schema_prefix"
-    ] = "dummy_"
+    raw_config2["instances"]["__any__"]["table_store"]["args"]["schema_prefix"] = "dummy_"
     cfg2 = PipedagConfig(raw_config2).get()
     tbl.name = "e"
     with pytest.raises(ValueError, match="Schema prefix and postfix must match"):
         tbl.materialize(cfg2, schema=Schema("schema", prefix="dummyX_"))
     tbl.materialize(cfg2, schema=Schema("schema", prefix="dummy_"))
-    sa_tbl = sa.Table(
-        tbl.name, sa.MetaData(), schema="dummy_schema", autoload_with=engine
-    )
+    sa_tbl = sa.Table(tbl.name, sa.MetaData(), schema="dummy_schema", autoload_with=engine)
     assert [c.name for c in sa_tbl.columns] == ["x"]
     assert sa_tbl.name == tbl.name
 
     # test materialization with explicit config_context and postfixed schema
     pipedag_config = create_basic_pipedag_config(
-        config_context.store.table_store.engine.url.render_as_string(
-            hide_password=False
-        )
+        config_context.store.table_store.engine.url.render_as_string(hide_password=False)
     )
     raw_config2 = copy.deepcopy(pipedag_config.raw_config)
-    raw_config2["instances"]["__any__"]["table_store"]["args"][
-        "schema_suffix"
-    ] = "_schema"
+    raw_config2["instances"]["__any__"]["table_store"]["args"]["schema_suffix"] = "_schema"
     cfg2 = PipedagConfig(raw_config2).get()
     tbl.name = "e"
     with pytest.raises(ValueError, match="Schema prefix and postfix must match"):
         tbl.materialize(cfg2, schema=Schema("dummy", suffix="_Xschema"))
     tbl.materialize(cfg2, schema=Schema("dummy", suffix="_schema"))
-    sa_tbl = sa.Table(
-        tbl.name, sa.MetaData(), schema="dummy_schema", autoload_with=engine
-    )
+    sa_tbl = sa.Table(tbl.name, sa.MetaData(), schema="dummy_schema", autoload_with=engine)
     assert [c.name for c in sa_tbl.columns] == ["x"]
     assert sa_tbl.name == tbl.name

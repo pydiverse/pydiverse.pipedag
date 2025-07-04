@@ -1,22 +1,21 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import warnings
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import structlog
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 
+from pydiverse.common.util import requires
 from pydiverse.pipedag import ExternalTableReference, Table
 from pydiverse.pipedag.context import ConfigContext, RunContext
+from pydiverse.pipedag.core import Subflow, Task
 from pydiverse.pipedag.core.result import Result
 from pydiverse.pipedag.engine.base import (
     OrchestrationEngine,
 )
-from pydiverse.pipedag.util import requires
-
-if TYPE_CHECKING:
-    from pydiverse.pipedag.core import Subflow, Task
 
 try:
     import prefect
@@ -75,16 +74,8 @@ class PrefectOneEngine(OrchestrationEngine):
             # if desired input is passed in inputs use it,
             # otherwise try to get it from results
             task_inputs = {
-                **{
-                    in_id: tasks[in_t]
-                    for in_id, in_t in t.input_tasks.items()
-                    if in_t in tasks and in_t not in inputs
-                },
-                **{
-                    in_id: Table(inputs[in_t])
-                    for in_id, in_t in t.input_tasks.items()
-                    if in_t in inputs
-                },
+                **{in_id: tasks[in_t] for in_id, in_t in t.input_tasks.items() if in_t in tasks and in_t not in inputs},
+                **{in_id: Table(inputs[in_t]) for in_id, in_t in t.input_tasks.items() if in_t in inputs},
             }
 
             flow.add_task(task)
@@ -134,9 +125,7 @@ class PrefectOneEngine(OrchestrationEngine):
                     break
             else:
                 # Generic Fallback
-                exception = Exception(
-                    f"Prefect run failed with message: {result.message}"
-                )
+                exception = Exception(f"Prefect run failed with message: {result.message}")
 
         return Result.init_from(
             subflow=flow,
@@ -149,8 +138,8 @@ class PrefectOneEngine(OrchestrationEngine):
 
 @requires(prefect, ImportError("Module 'prefect' not installed"))
 @requires(
-    prefect_version in SpecifierSet("~=2.0"),
-    ImportWarning(f"Requires prefect version 2.x (found {prefect_version})"),
+    prefect_version in SpecifierSet(">=2.0,<4.0"),
+    ImportWarning(f"Requires prefect version 2.x or 3.x (found {prefect_version})"),
 )
 class PrefectTwoEngine(OrchestrationEngine):
     """
@@ -158,7 +147,7 @@ class PrefectTwoEngine(OrchestrationEngine):
 
     :param flow_kwargs:
         Optional dictionary of keyword arguments that get passed to the
-        initializer of |@prefect2.flow|_ deecorator.
+        initializer of |@prefect2.flow|_ decorator.
 
     .. |@prefect2.flow| replace:: ``@prefect.flow``
     .. _@prefect2.flow:
@@ -173,7 +162,7 @@ class PrefectTwoEngine(OrchestrationEngine):
         f: Subflow,
         inputs: dict[Task, ExternalTableReference] | None = None,
     ) -> prefect.Flow:
-        from pydiverse.pipedag.materialize.core import MaterializingTask
+        from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 
         inputs = inputs if inputs is not None else {}
 
@@ -204,11 +193,7 @@ class PrefectTwoEngine(OrchestrationEngine):
                         for in_id, in_t in t.input_tasks.items()
                         if in_t in futures and in_t not in inputs
                     },
-                    **{
-                        in_id: Table(inputs[in_t])
-                        for in_id, in_t in t.input_tasks.items()
-                        if in_t in inputs
-                    },
+                    **{in_id: Table(inputs[in_t]) for in_id, in_t in t.input_tasks.items() if in_t in inputs},
                 }
 
                 futures[t] = task.submit(
@@ -267,7 +252,8 @@ class PrefectTwoEngine(OrchestrationEngine):
 
 if prefect_version in SpecifierSet("~=1.0"):
     PrefectEngine = PrefectOneEngine
-elif prefect_version in SpecifierSet("~=2.0"):
+elif prefect_version in SpecifierSet(">=2.0,<4.0"):
+    # prefect 2 and 3 are not that different
     PrefectEngine = PrefectTwoEngine
 else:
     from abc import ABC

@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 from pathlib import Path
 
@@ -36,9 +37,7 @@ def tsql(
     return RawSql(sql, Path(script_path).name)
 
 
-def raw_sql_bind_schema(
-    sql, prefix: str, stage: Stage | RawSql | None, *, transaction=False
-):
+def raw_sql_bind_schema(sql, prefix: str, stage: Stage | RawSql | None, *, transaction=False):
     if isinstance(stage, RawSql):
         stage = stage.stage
     config = ConfigContext.get()
@@ -46,7 +45,7 @@ def raw_sql_bind_schema(
     if stage is not None:
         stage_name = stage.transaction_name if transaction else stage.name
         schema = store.get_schema(stage_name).get()
-        sql = sql.replace("{{%sschema}}" % prefix, schema)
+        sql = sql.replace("{{%sschema}}" % prefix, schema)  # noqa: UP031
     return sql
 
 
@@ -63,12 +62,8 @@ def test_raw_sql():
             raw = tsql("raw_views.sql", _dir, out_stage=out_stage, helper_sql=helper)
         with Stage("prep") as prep_stage:
             _dir = parent_dir / "prep"
-            prep = tsql(
-                "entity_checks.sql", _dir, in_sql=raw, out_stage=prep_stage, depend=raw
-            )
-            prep = tsql(
-                "more_tables.sql", _dir, in_sql=raw, out_stage=prep_stage, depend=prep
-            )
+            prep = tsql("entity_checks.sql", _dir, in_sql=raw, out_stage=prep_stage, depend=raw)
+            prep = tsql("more_tables.sql", _dir, in_sql=raw, out_stage=prep_stage, depend=prep)
             _ = prep
 
     # on a fresh database, this will create indexes with Raw-SQL

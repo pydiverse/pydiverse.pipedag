@@ -1,26 +1,29 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import copy
 import threading
+import typing
 from collections.abc import Mapping
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
 from threading import Lock
+from types import GenericAlias
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import structlog
 from attrs import define, evolve, field, frozen
 from box import Box
 
-from pydiverse.pipedag.util import deep_merge
-from pydiverse.pipedag.util.import_ import import_object, load_object
+from pydiverse.common.util import deep_merge
+from pydiverse.common.util.import_ import import_object, load_object
+from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.util.naming import NameDisambiguator
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Flow, GroupNode, Stage, Task, VisualizationStyle
-    from pydiverse.pipedag._typing import T
     from pydiverse.pipedag.backend import BaseLockManager
     from pydiverse.pipedag.context.run_context import StageLockStateHandler
     from pydiverse.pipedag.engine.base import OrchestrationEngine
@@ -85,9 +88,9 @@ class BaseAttrsContext(BaseContext):
 class DAGContext(BaseAttrsContext):
     """Context during DAG definition"""
 
-    flow: Flow
-    stage: Stage
-    group_node: GroupNode
+    flow: "Flow"
+    stage: "Stage"
+    group_node: "GroupNode"
 
     _context_var = ContextVar("dag_context")
 
@@ -100,8 +103,8 @@ class TaskContext(BaseContext):
     It also serves as a place to store temporary state while processing a task.
     """
 
-    task: Task
-    input_tables: list[Table] = None
+    task: "Task"
+    input_tables: list["Table"] = None
     is_cache_valid: bool | None = None
     name_disambiguator: NameDisambiguator = field(factory=NameDisambiguator)
     override_version: str | None = None
@@ -155,8 +158,51 @@ class GroupNodeConfig:
 
 @dataclass(frozen=True)
 class VisualizationConfig:
-    styles: dict[str, VisualizationStyle] | None = None
-    group_nodes: dict[str, GroupNodeConfig] | None = None
+    styles: dict[str, "VisualizationStyle"] | None = None
+    group_nodes: dict[str, "GroupNodeConfig"] | None = None
+
+
+default_config_dict = {
+    "fail_fast": False,
+    "network_interface": "127.0.0.1",
+    "disable_kroki": True,
+    "kroki_url": "https://kroki.io",
+    "per_user_template": "{id}_{username}",
+    "strict_result_get_locking": True,
+    "cache_validation": dict(
+        mode="normal",
+        disable_cache_function=False,
+        ignore_task_version=False,
+    ),
+    "stage_commit_technique": "SCHEMA_SWAP",
+    "auto_table": [],
+    "auto_blob": [],
+    "attrs": {},
+}
+
+test_store_config_dict = dict(
+    table_store={
+        "class": "pydiverse.pipedag.backend.table.SQLTableStore",
+        "args": {"url": "duckdb://"},
+    },
+    blob_store={"class": "pydiverse.pipedag.backend.blob.NoBlobStore"},
+    lock_manager={"class": "pydiverse.pipedag.backend.lock.NoLockManager"},
+)
+
+
+def strip_none(annotation):
+    if isinstance(annotation, GenericAlias):
+        args = typing.get_args(annotation)
+        if len(args) == 2 and args[1] is type(None):
+            # Remove None from the annotation
+            return args[0]
+    return annotation
+
+
+def strip_args(annotation):
+    if isinstance(annotation, GenericAlias):
+        return typing.get_origin(annotation)
+    return annotation
 
 
 @frozen(slots=False)
@@ -226,8 +272,23 @@ class ConfigContext(BaseAttrsContext):
     _is_evolved: bool = False  # if True, _config_dict might be out of date
 
     @cached_property
+    def logger(self):
+        return structlog.get_logger(logger_name=type(self).__name__, id=id(self))
+
+    @cached_property
     def auto_table(self) -> tuple[type, ...]:
-        return tuple(map(import_object, self._config_dict.get("auto_table", ())))
+        def exists(t: str) -> bool:
+            """Check if the table class exists."""
+            try:
+                import_object(t)
+                return True
+            except (ImportError, AttributeError):
+                self.logger.exception(
+                    f"Configuration option auto_table in PipedagConfig included class which does not exist: {t}"
+                )
+                return False
+
+        return tuple([import_object(t) for t in self._config_dict.get("auto_table", ()) if exists(t)])
 
     @cached_property
     def auto_blob(self) -> tuple[type, ...]:
@@ -276,7 +337,7 @@ class ConfigContext(BaseAttrsContext):
             local_table_cache=local_table_cache,
         )
 
-    def evolve(self, **changes) -> ConfigContext:
+    def evolve(self, **changes) -> "ConfigContext":
         """Create a new config context instance with the changes applied.
 
         Because ConfigContext is immutable, this is the only valid way to derive a
@@ -304,11 +365,11 @@ class ConfigContext(BaseAttrsContext):
 
         return evolved
 
-    def create_lock_manager(self) -> BaseLockManager:
+    def create_lock_manager(self) -> "BaseLockManager":
         with self:  # ensure that DatabaseLockManager uses correct engine
             return load_object(self._config_dict["lock_manager"])
 
-    def create_orchestration_engine(self) -> OrchestrationEngine:
+    def create_orchestration_engine(self) -> "OrchestrationEngine":
         return load_object(self._config_dict["orchestration"])
 
     def _close(self):
@@ -344,41 +405,57 @@ class ConfigContext(BaseAttrsContext):
         :return:
             ConfigContext instance
         """
+        for key, value in default_config_dict.items():
+            if key not in config:
+                raise ValueError(f"Missing config key '{key}', suggested default config: {default_config_dict}")
+            elif isinstance(value, dict) and isinstance(config[key], dict):
+                for key2, _ in value.items():
+                    if key2 not in config[key]:
+                        raise ValueError(
+                            f"Missing config key '{key}'.'{key2}', suggested default config: {default_config_dict}"
+                        )
+        for key, _ in test_store_config_dict.items():
+            if key not in config:
+                raise ValueError(f"Missing config key '{key}', suggested test config: {test_store_config_dict}")
 
         # check enums
         # Alternative: could be a feature of __get_merged_config_dict
         # in case default value is set to Enum
         for parent_cfg, enum_name, enum_type in [
             (config, "stage_commit_technique", StageCommitTechnique),
-            (config["cache_validation"], "mode", CacheValidationMode),
+            (config.get("cache_validation"), "mode", CacheValidationMode),
         ]:
-            parent_cfg[enum_name] = parent_cfg[enum_name].strip().upper()
-            if not hasattr(enum_type, parent_cfg[enum_name]):
-                raise ValueError(
-                    f"Found unknown setting {enum_name}: '{parent_cfg[enum_name]}';"
-                    f" Expected one of: {', '.join([v.name for v in enum_type])}"
-                )
-        stage_commit_technique = getattr(
-            StageCommitTechnique, config["stage_commit_technique"]
+            if parent_cfg is not None and hasattr(parent_cfg, enum_name):
+                parent_cfg[enum_name] = parent_cfg[enum_name].strip().upper()
+                if not hasattr(enum_type, parent_cfg[enum_name]):
+                    raise ValueError(
+                        f"Found unknown setting {enum_name}: '{parent_cfg[enum_name]}';"
+                        f" Expected one of: {', '.join([v.name for v in enum_type])}"
+                    )
+        stage_commit_technique = (
+            getattr(StageCommitTechnique, config["stage_commit_technique"].upper())
+            if "stage_commit_technique" in config
+            else StageCommitTechnique.SCHEMA_SWAP
         )
-        cache_validation = copy.deepcopy(config["cache_validation"])
-        cache_validation["mode"] = getattr(
-            CacheValidationMode, config["cache_validation"]["mode"]
+        cache_validation = copy.deepcopy(config["cache_validation"]) if "cache_validation" in config else {}
+        cache_validation["mode"] = (
+            getattr(CacheValidationMode, config["cache_validation"]["mode"].upper())
+            if "cache_validation" in config and "mode" in config["cache_validation"]
+            else CacheValidationMode.NORMAL
         )
+        if "disable_cache_function" not in cache_validation:
+            cache_validation["disable_cache_function"] = False
         # parsing visualization dictionaries into objects (this could be generalized
         # and possible an open source solution exists)
         from pydiverse.pipedag import VisualizationStyle
 
         if not isinstance(config.get("visualization", {}), dict):
             raise ValueError(
-                "Config section 'visualization' must be a dictionary, "
-                f"found {type(config['visualization'])}"
+                f"Config section 'visualization' must be a dictionary, found {type(config['visualization'])}"
             )
         visualization = {}
         for key, value in config.get("visualization", {}).items():
-            ConfigContext.parse_in_object(
-                key, value, VisualizationConfig, "visualization", inout=visualization
-            )
+            ConfigContext.parse_in_object(key, value, VisualizationConfig, "visualization", inout=visualization)
             for _field, structure, class_type in [
                 ("styles", visualization[key].styles, VisualizationStyle),
                 ("group_nodes", visualization[key].group_nodes, GroupNodeConfig),
@@ -392,10 +469,7 @@ class ConfigContext(BaseAttrsContext):
                             f"visualization.{key}.{_field}",
                             inout=structure,
                         )
-        if (
-            cache_validation["mode"] == CacheValidationMode.NORMAL
-            and cache_validation["disable_cache_function"]
-        ):
+        if cache_validation["mode"] == CacheValidationMode.NORMAL and cache_validation["disable_cache_function"]:
             raise ValueError(
                 "cache_validation.disable_cache_function=True is not allowed in "
                 "combination with cache_validation.mode=NORMAL"
@@ -408,7 +482,7 @@ class ConfigContext(BaseAttrsContext):
             instance_name=instance,
             fail_fast=config["fail_fast"],
             strict_result_get_locking=config["strict_result_get_locking"],
-            instance_id=config["instance_id"],
+            instance_id=config.get("instance_id", "pipeline"),
             stage_commit_technique=stage_commit_technique,
             cache_validation=Box(cache_validation, frozen_box=True),
             visualization=visualization,
@@ -416,9 +490,7 @@ class ConfigContext(BaseAttrsContext):
             disable_kroki=config.get("disable_kroki"),
             kroki_url=config.get("kroki_url"),
             attrs=Box(config["attrs"], frozen_box=True),
-            table_hook_args=Box(
-                config["table_store"].get("hook_args", {}), frozen_box=True
-            ),
+            table_hook_args=Box(config.get("table_store", {}).get("hook_args", {}), frozen_box=True),
         )
         return config_context
 
@@ -449,41 +521,24 @@ class ConfigContext(BaseAttrsContext):
         """
         structure = inout
         if not isinstance(value, dict):
-            raise ValueError(
-                f"Config section '{key}' within '{within}' must be a dictionary, "
-                f"found {type(value)}"
-            )
+            raise ValueError(f"Config section '{key}' within '{within}' must be a dictionary, found {type(value)}")
         members = set(class_type.__dataclass_fields__.keys())
         if unexpected := set(value.keys()) - members:
             raise ValueError(
-                f"Unexpected keys in section '{key}' within '{within}': "
-                f"{unexpected}; expected: '{', '.join(members)}'"
+                f"Unexpected keys in section '{key}' within '{within}': {unexpected}; expected: '{', '.join(members)}'"
             )
-        structure[key] = class_type(
-            **{m: copy.copy(value[m]) for m in members if m in value}
-        )
+        structure[key] = class_type(**{m: copy.copy(value[m]) for m in members if m in value})
         for m in value:
             annotation = class_type.__annotations__[m]
-            if annotation.startswith("dict[") and not isinstance(value[m], dict):
-                raise ValueError(
-                    f"Expected dictionary for '{m}' within '{within}.{key}', "
-                    f"found {type(value[m])}"
-                )
-            if annotation.startswith("bool") and not isinstance(value[m], bool):
-                raise ValueError(
-                    f"Expected boolean for '{m}' within '{within}.{key}', "
-                    f"found {type(value[m])}"
-                )
-            if annotation.startswith("str") and not isinstance(value[m], str):
-                raise ValueError(
-                    f"Expected string for '{m}' within '{within}.{key}', "
-                    f"found {type(value[m])}"
-                )
-            if annotation.startswith("int") and not isinstance(value[m], int):
-                raise ValueError(
-                    f"Expected integer for '{m}' within '{within}.{key}', "
-                    f"found {type(value[m])}"
-                )
+            annotation = strip_none(annotation)
+            if isinstance(strip_args(annotation), dict) and not isinstance(value[m], dict):
+                raise ValueError(f"Expected dictionary for '{m}' within '{within}.{key}', found {type(value[m])}")
+            if isinstance(annotation, bool) and not isinstance(value[m], bool):
+                raise ValueError(f"Expected boolean for '{m}' within '{within}.{key}', found {type(value[m])}")
+            if isinstance(annotation, str) and not isinstance(value[m], str):
+                raise ValueError(f"Expected string for '{m}' within '{within}.{key}', found {type(value[m])}")
+            if isinstance(annotation, int) and not isinstance(value[m], int):
+                raise ValueError(f"Expected integer for '{m}' within '{within}.{key}', found {type(value[m])}")
 
     _context_var = ContextVar("config_context")
 
@@ -511,7 +566,7 @@ class StageLockContext(BaseContext):
             df = result.get(task_x)
     """
 
-    lock_state_handlers: [StageLockStateHandler]
+    lock_state_handlers: ["StageLockStateHandler"]
 
     _context_var = ContextVar("stage_lock_context")
 

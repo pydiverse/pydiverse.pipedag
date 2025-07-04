@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 # Configuration file for the Sphinx documentation builder.
 #
 # For the full list of built-in configuration values, see the documentation:
@@ -61,7 +64,7 @@ intersphinx_mapping = {
     "pd": ("https://pandas.pydata.org/pandas-docs/stable", None),
     "pl": ("https://pola-rs.github.io/polars/py-polars/html", None),
     "tp": ("https://tidypolars.readthedocs.io/en/stable", None),
-    "ibis": ("https://ibis-project.org/", None),
+    # "ibis": ("https://ibis-project.org/", None),
     "kazoo": ("https://kazoo.readthedocs.io/en/latest", None),
     "dask": ("https://docs.dask.org/en/stable", None),
 }

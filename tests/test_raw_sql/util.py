@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 from pathlib import Path
 
@@ -27,9 +28,7 @@ def sql_script(
     return RawSql(sql)
 
 
-def raw_sql_bind_schema(
-    sql, prefix: str, stage: Stage | RawSql | None, *, transaction=False
-):
+def raw_sql_bind_schema(sql, prefix: str, stage: Stage | RawSql | None, *, transaction=False):
     config = ConfigContext.get()
     store = config.store.table_store
     if stage is not None:

@@ -1,8 +1,9 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import pytest
 
-from pydiverse.pipedag import *
+from pydiverse.pipedag import Flow, Stage, Table, materialize
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
@@ -22,6 +23,7 @@ except ImportError:
 
 
 @pytest.mark.skipif(tp is None, reason="Test requires tidypolars to be installed")
+@pytest.mark.skip("Tidypolars is not maintained anymore and does not work with current polars versions")
 def test_table_store():
     @materialize()
     def in_table():

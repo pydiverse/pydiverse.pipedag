@@ -1,22 +1,24 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
 import sqlalchemy as sa
 
-from pydiverse.pipedag import *
+from pydiverse.pipedag import ConfigContext, Flow, Stage, StageLockContext, materialize
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateSchema,
     CreateTableAsSelect,
     DropTable,
     InsertIntoSelect,
 )
-from pydiverse.pipedag.container import ExternalTableReference, Schema
+from pydiverse.pipedag.container import ExternalTableReference, RawSql, Schema, Table
 from tests.fixtures.instances import with_instances
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.util.sql import sql_table_expr
 
 
+@with_instances("postgres")
 def test_external_table_inputs():
     @materialize(version="1.1")
     def make_external_table():
@@ -139,6 +141,7 @@ def test_external_table_inputs_rawsql():
         assert result.get(output, as_type=pd.DataFrame).shape[0] == 4
 
 
+@with_instances("postgres")
 def test_external_table_inputs_nout():
     @materialize(version="1.1")
     def make_external_table():
@@ -198,6 +201,7 @@ def test_external_table_inputs_nout():
         assert result.get(output, as_type=pd.DataFrame).shape[0] == 4
 
 
+@with_instances("postgres")
 def test_external_table_inputs_no_run():
     @materialize(version="1.1")
     def make_external_table():

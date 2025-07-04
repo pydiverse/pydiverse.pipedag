@@ -1,12 +1,12 @@
 # Raw SQL example pipeline
 
-Even though it is not the recommended way to run larger Raw SQL scripts within pipedag, the aim of 
+Even though it is not the recommended way to run larger Raw SQL scripts within pipedag, the aim of
 pydiverse.pipedag is to enable adoption with the least amount possible given existing code. And lots of data pipelines
 have extensive code bases of raw SQL scripts.
 
-Pipedag supports automatic cache invalidation for raw SQL scripts and schema swapping. So these are benefits you get 
+Pipedag supports automatic cache invalidation for raw SQL scripts and schema swapping. So these are benefits you get
 from pipedag adoption out of the box. It will detect tables created by a raw SQL script, and it will offer to reference
-such tables with `raw_sql["table_name"]` get-item syntax both at flow declaration time (will be lazily evaluated by 
+such tables with `raw_sql["table_name"]` get-item syntax both at flow declaration time (will be lazily evaluated by
 consumer task) and at runtime.
 
 The following code can be found in this [zip file](raw_sql.zip). It keeps the raw SQL scripts in files and creates
@@ -17,8 +17,6 @@ See [best practices around SQL](best_practices_sql) for how to move from raw SQL
 and thus more fine-grained cache invalidation.
 
 ```python
-from __future__ import annotations
-
 from pathlib import Path
 
 import sqlalchemy as sa

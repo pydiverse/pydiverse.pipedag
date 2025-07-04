@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import click
 import sqlalchemy as sa
@@ -66,20 +67,14 @@ def delete_schemas(
     with config:
         table_store: SQLTableStore = config.store.table_store
 
-        assert isinstance(
-            table_store, SQLTableStore
-        ), "delete-schemas only supported for SQLTableStore"
+        assert isinstance(table_store, SQLTableStore), "delete-schemas only supported for SQLTableStore"
 
         prefix = table_store.schema_prefix
         suffix = table_store.schema_suffix
 
         inspector = sa.inspect(table_store.engine)
         schema_names = inspector.get_schema_names()
-        schema_names = [
-            schema
-            for schema in schema_names
-            if schema.startswith(prefix) and schema.endswith(suffix)
-        ]
+        schema_names = [schema for schema in schema_names if schema.startswith(prefix) and schema.endswith(suffix)]
 
         if len(schema_names) == 0:
             click.echo("No matching schemas found. Aborting.")

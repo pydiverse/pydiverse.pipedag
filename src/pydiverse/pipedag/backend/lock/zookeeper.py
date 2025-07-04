@@ -1,13 +1,15 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import atexit
 import warnings
 from typing import Any
 
+from pydiverse.common.util import requires
 from pydiverse.pipedag import ConfigContext, Stage
 from pydiverse.pipedag.backend.lock.base import BaseLockManager, Lockable, LockState
 from pydiverse.pipedag.errors import DisposedError, LockError
-from pydiverse.pipedag.util import normalize_name, requires
+from pydiverse.pipedag.util import normalize_name
 
 try:
     import kazoo
@@ -99,9 +101,7 @@ class ZooKeeperLockManager(BaseLockManager):
         elif isinstance(lock, str):
             return self.base_path + lock
         else:
-            raise NotImplementedError(
-                f"Can't lock object of type '{type(lock).__name__}'"
-            )
+            raise NotImplementedError(f"Can't lock object of type '{type(lock).__name__}'")
 
     def _lock_listener(self, state):
         if state == KazooState.SUSPENDED:

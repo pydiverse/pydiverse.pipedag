@@ -1,10 +1,11 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import tempfile
 
+from pydiverse.common.util.structlog import setup_logging
 from pydiverse.pipedag import Flow, GroupNode, Stage, VisualizationStyle, materialize
 from pydiverse.pipedag.core.config import create_basic_pipedag_config
-from pydiverse.pipedag.util.structlog import setup_logging
 
 
 @materialize
@@ -39,9 +40,7 @@ def main():
                     with GroupNode(
                         "group1",
                         ordering_barrier=True,
-                        style=VisualizationStyle(
-                            hide_content=True, box_color_always="#ccccff"
-                        ),
+                        style=VisualizationStyle(hide_content=True, box_color_always="#ccccff"),
                     ):
                         task1 = task_within_group()
                         _ = task_within_group2(task1)

@@ -1,4 +1,7 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
+from pydiverse.common.errors import DisposedError
 
 
 class FlowError(Exception):
@@ -50,8 +53,21 @@ class RemoteProcessError(IPCError):
     """
 
 
-class DisposedError(Exception):
+class HookCheckException(Exception):
     """
-    Exception raise when an object has been disposed, but some attributes are
-    being accessed nevertheless.
+    Exception raised if a hook check fails. It is caught to surface as a
+    normal task failure.
     """
+
+
+__all__ = [
+    "FlowError",
+    "StageError",
+    "GroupNodeError",
+    "CacheError",
+    "LockError",
+    "DuplicateNameError",
+    "IPCError",
+    "RemoteProcessError",
+    "DisposedError",
+]

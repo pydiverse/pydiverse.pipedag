@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
 import sqlalchemy as sa
@@ -60,9 +61,7 @@ def test_literal(mocker):
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(
-                cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT
-            )
+            result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
             assert result.get(out) == 0
             assert result.get(child) == 0
             out_spy.assert_not_called()
@@ -115,9 +114,7 @@ def test_table(mocker):
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(
-                cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT
-            )
+            result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
             assert result.get(child) == 0
             out_spy.assert_not_called()
             child_spy.assert_not_called()
@@ -249,9 +246,7 @@ def test_blob(mocker):
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(
-                cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT
-            )
+            result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
             assert result.get(out) == 0
             assert result.get(child) == 0
             out_spy.assert_not_called()
@@ -274,6 +269,8 @@ def ref(tbl):
 @skip_instances(
     "mssql",
     "mssql_pytsql",
+    "mssql_nobulk",
+    "mssql_noaodbc",
     "mssql_columnstore",
     "ibm_db2",
     "ibm_db2_avoid_schema",
@@ -326,9 +323,7 @@ def test_raw_sql(mocker):
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(
-                cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT
-            )
+            result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
             assert result.get(child, as_type=pd.DataFrame)["x"][0] == 0
             out_spy.assert_called_once()
             child_spy.assert_not_called()
@@ -439,9 +434,7 @@ def test_cache_temporarily_different(mocker):
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(
-                cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT
-            )
+            result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
             assert result.get(out) == 0
             assert result.get(child) == 0
             out_spy.assert_not_called()

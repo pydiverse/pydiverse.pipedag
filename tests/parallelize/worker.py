@@ -1,15 +1,15 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 from abc import ABC
 from multiprocessing import Queue
 
 import pytest
+import structlog
 from _pytest.config import Config
 
 
-def start_worker(
-    worker_id: int, work_queue: Queue, msg_queue: Queue, args: list, option_dict: dict
-):
+def start_worker(worker_id: int, work_queue: Queue, msg_queue: Queue, args: list, option_dict: dict):
     option_dict["plugins"].append("no:terminal")
     config = Config.fromdictargs(option_dict, args)
     config.args = args
@@ -20,12 +20,13 @@ def start_worker(
         def write(*_):
             pass
 
-    # TODO: find a way to fix assert inspection code of pytest raised in threads
-    # The following code meant to do this, but prevents tests from running at all.
-    # # register dummy terminal reporter since it is needed by pytest even with
-    # # plugins:"no:terminal" option
-    # terminal_reporter = TerminalReporter(config, DontPrint())
-    # config.pluginmanager.register(terminal_reporter, "terminalreporter")
+    # fix assert inspection code of pytest raised in threads
+    # register dummy terminal reporter since it is needed by pytest even with
+    # plugins:"no:terminal" option
+    from _pytest.terminal import TerminalReporter
+
+    terminal_reporter = TerminalReporter(config, DontPrint())
+    config.pluginmanager.register(terminal_reporter, "terminalreporter")
 
     # Remove workers option to prevent triggering main plugin
     config.option.workers = None
@@ -43,6 +44,7 @@ class Worker:
         self.worker_id = worker_id
         self.work_queue = work_queue
         self.msg_queue = msg_queue
+        self.logger = structlog.get_logger(__name__, worker_id=worker_id)
 
         self.session_items = {}
 
@@ -75,9 +77,20 @@ class Worker:
         self.send("logreport", report=data)
 
     @pytest.hookimpl
+    def pytest_report_teststatus(self, report):
+        """Overriding this hook is important with our custom terminal reporter.
+
+        Otherwise, this hook will return None and multi-tests will abort after
+        running first test. Unfortunately, this is silent and looks as everything
+        is good. There were just hardly any tests run.
+        """
+        from _pytest.terminal import pytest_report_teststatus
+
+        return pytest_report_teststatus(report)
+
+    @pytest.hookimpl
     def pytest_runtestloop(self, session):
         self.session_items = {item.nodeid: item for item in session.items}
-
         should_terminate = False
         while not should_terminate:
             command, args = self.work_queue.get()

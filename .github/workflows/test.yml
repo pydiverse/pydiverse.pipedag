@@ -49,7 +49,14 @@ jobs:
 
       - name: Install Microsoft ODBC
         if: ${{ contains(inputs.docker-services, 'mssql') }}
-        run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+        run: |
+          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+          sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18
+          echo /opt/mssql-tools18/bin >> $GITHUB_PATH
+
+      - name: Test BCP
+        if: ${{ contains(inputs.docker-services, 'mssql') }}
+        run: bcp -v
 
       - name: Wait for Docker Servers
         if: ${{ inputs.docker-services != '' }}
@@ -62,6 +69,10 @@ jobs:
         env:
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}        
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          PREFECT_API_URL: http://127.0.0.1:4200/api
+          PREFECT_SERVER_ALLOW_EPHEMERAL_MODE: false
+          ERROR_ONLY: 1
+          LOG_TEST_NAME: 0
         run: |
           pixi run -e ${{ inputs.environment }} pytest tests ${RUNNER_DEBUG:+-v} --color=yes --workers=${{ inputs.workers }} ${{ inputs.pytest-arguments }}

@@ -1,11 +1,14 @@
-from __future__ import annotations
-
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+import importlib
 import warnings
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import sqlalchemy as sa
 
+from pydiverse.common import Dtype
 from pydiverse.pipedag import Table
 from pydiverse.pipedag.backend.table.sql.hooks import (
     IbisTableHook,
@@ -13,7 +16,6 @@ from pydiverse.pipedag.backend.table.sql.hooks import (
     PolarsTableHook,
 )
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
-from pydiverse.pipedag.backend.table.util import DType
 from pydiverse.pipedag.container import Schema
 from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
 
@@ -47,18 +49,19 @@ class DuckDBTableStore(SQLTableStore):
     def _default_isolation_level(self) -> str | None:
         return None  # "READ UNCOMMITTED" does not exist in DuckDB
 
-    def _init_database(self):
-        if not self.create_database_if_not_exists:
-            return
-
+    def _init_database_before_engine(self):
         # Duckdb already creates the database file automatically
         # However, the parent directory doesn't get created automatically
         database = self.engine_url.database
-        if database == ":memory:":
+        if database is None or database == ":memory:":
             return
 
         database_path = Path(database)
         database_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _init_database(self):
+        if not self.create_database_if_not_exists:
+            return
 
     def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
         _ = table, is_sql
@@ -70,26 +73,20 @@ class PandasTableHook(PandasTableHook):
     @classmethod
     def _execute_materialize(
         cls,
-        df: pd.DataFrame,
-        store: DuckDBTableStore,
         table: Table[pd.DataFrame],
+        store: DuckDBTableStore,
         schema: Schema,
-        dtypes: dict[str, DType],
+        dtypes: dict[str, Dtype],
     ):
+        df = table.obj
         engine = store.engine
         dtypes = cls._get_dialect_dtypes(dtypes, table)
-        if table.type_map:
-            dtypes.update(table.type_map)
 
-        store.check_materialization_details_supported(
-            resolve_materialization_details_label(table)
-        )
+        store.check_materialization_details_supported(resolve_materialization_details_label(table))
 
         # Create empty table with correct schema
-        cls._dialect_create_empty_table(store, df, table, schema, dtypes)
-        store.add_indexes_and_set_nullable(
-            table, schema, on_empty_table=True, table_cols=df.columns
-        )
+        cls._dialect_create_empty_table(store, table, schema, dtypes)
+        store.add_indexes_and_set_nullable(table, schema, on_empty_table=True, table_cols=df.columns)
 
         # Copy dataframe directly to duckdb
         # This is SIGNIFICANTLY faster than using pandas.to_sql
@@ -109,23 +106,35 @@ class PandasTableHook(PandasTableHook):
 
 
 try:
-    import polars
+    import polars as pl
 except ImportError as e:
     warnings.warn(str(e), ImportWarning)
-    polars = None
+    pl = importlib.import_module("polars")
+    pl.DataType = None
+    pl.DataFrame = None
+    pl.LazyFrame = None
 
 
-@DuckDBTableStore.register_table(polars, duckdb)
+@DuckDBTableStore.register_table(pl.DataFrame, duckdb)
 class PolarsTableHook(PolarsTableHook):
     @classmethod
-    def _execute_query(cls, query: str, connection_uri: str, store: SQLTableStore):
+    def download_table(
+        cls,
+        query: Any,
+        store: SQLTableStore,
+        dtypes: dict[str, pl.DataType] | None = None,
+    ) -> pl.DataFrame:
+        assert dtypes is None, (
+            "Polars reads SQL schema and loads the data in reasonable types."
+            "Thus, manual dtype manipulation can only done via query or afterwards."
+        )
+        engine = store.engine
         # Connectorx doesn't support duckdb.
         # Instead, we load it like this:  DuckDB -> PyArrow -> Polars
-        connection_uri = connection_uri.replace("duckdb:///", "", 1)
-        with duckdb.connect(connection_uri) as conn:
-            pl_table = conn.sql(query).arrow()
+        conn = engine.raw_connection()
+        pl_table = conn.sql(query).arrow()
 
-        df = polars.from_arrow(pl_table)
+        df = pl.from_arrow(pl_table)
         return df
 
 
@@ -139,4 +148,4 @@ except ImportError:
 class IbisTableHook(IbisTableHook):
     @classmethod
     def _conn(cls, store: DuckDBTableStore):
-        return ibis.duckdb._from_url(str(store.engine_url))
+        return ibis.duckdb.from_connection(store.engine.raw_connection())
