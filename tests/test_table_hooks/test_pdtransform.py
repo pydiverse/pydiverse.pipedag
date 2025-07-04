@@ -10,7 +10,8 @@ from pydiverse.pipedag import Flow, Stage, Table, materialize
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
 from tests.util.tasks_library import assert_table_equal
 
-pytestmark = [pytest.mark.pdtransform, with_instances(DATABASE_INSTANCES)]
+# unfortunately, pydiverse.transform currently does not support ibm_db2
+pytestmark = [pytest.mark.pdtransform, with_instances(tuple(set(DATABASE_INSTANCES) - {"ibm_db2"}))]
 
 try:
     import pydiverse.transform as pdt
