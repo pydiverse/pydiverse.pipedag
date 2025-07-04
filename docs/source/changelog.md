@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.10.0 (2025-04-dd)
+## 0.10.0 (2025-07-04)
 - Added ParquetTableStore which is based on duckdb SQLTableStore. It stores all tables as parquet files but still
   references them inside a duckdb database file as views to `FROM read_parquet(file)`. It supports both normal
   file systems and fsspec supported blob stores like AWS S3, Azure Blob Storage, and Google Cloud Storage.
@@ -8,9 +8,8 @@
 - Pandas table hook reads date/datetime columns as 'datetime64[us]' and thus does not need clipping
   and extra year columns any more
 - Materialize Local Table Cache before actual Table Store
-- InputType class which can be used to defer the decision which actual input type to use until runtime.
-
-## 0.9.11 (2025-XX-XX)
+- Mssql based SQLTableStore uses mssqlkit or bcpandas for bulk upload and arrow-odbc for download by default
+- Postgres based SQLTableStore uses ADBC for download by default (already supports bulk upload)
 - Fix numpy import issue on OS X
 - CI: Use SQL Server docker image instead of Azure Edge
 - Improve documentation for materialization details.
