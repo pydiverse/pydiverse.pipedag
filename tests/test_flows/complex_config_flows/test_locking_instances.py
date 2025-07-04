@@ -5,6 +5,7 @@ import pytest
 
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.core.config import PipedagConfig
+from tests.fixtures.instances import with_instances
 from tests.test_flows.complex_config_flows.test_instance_selection import (
     cfg_file_path,
     check_result,
@@ -12,6 +13,7 @@ from tests.test_flows.complex_config_flows.test_instance_selection import (
 )
 
 _ = cfg_file_path
+pytestmark = [with_instances("postgres")]
 
 
 @pytest.mark.parametrize("instance", ["lock_zookeeper", "lock_file"])

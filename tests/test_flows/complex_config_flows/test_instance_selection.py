@@ -12,6 +12,9 @@ import sqlalchemy as sa
 from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.core.config import PipedagConfig
+from tests.fixtures.instances import with_instances
+
+pytestmark = [with_instances("postgres")]
 
 
 @pytest.fixture(

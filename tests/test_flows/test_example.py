@@ -9,6 +9,9 @@ from example.visualization import main as visualization_main
 from example_imperative.run_pipeline import main as example_imperative_flow_main
 from example_interactive.run_tasks_interactively import main as example_interactive_main
 from example_postgres.run_pipeline import main as example_postgres_flow_main
+from tests.fixtures.instances import with_instances
+
+pytestmark = [with_instances("postgres")]
 
 
 @pytest.mark.parametrize(

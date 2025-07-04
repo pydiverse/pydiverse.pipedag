@@ -13,6 +13,7 @@ from tests.util import tasks_library as m
 from tests.util.spy import spy_task
 
 
+@with_instances("postgres")
 def test_run_specific_task(mocker):
     cache_function_call_allowed = True
 
@@ -121,6 +122,7 @@ def test_run_specific_task(mocker):
     assert_task_state(res.task_states, y2.name, FinalTaskState.COMPLETED)
 
 
+@with_instances("postgres")
 def test_run_specific_task_ambiguous_input(mocker):
     with Flow() as f:
         with Stage("subflow_t1") as s1:
@@ -150,6 +152,7 @@ def test_run_specific_task_ambiguous_input(mocker):
     s2_spy.assert_not_called()
 
 
+@with_instances("postgres")
 def test_run_specific_stage(mocker):
     with Flow() as f:
         with Stage("subflow_s1") as s1:
@@ -217,6 +220,7 @@ def test_run_specific_stage(mocker):
     s3_spy.assert_called_once()
 
 
+@with_instances("postgres")
 def test_run_specific_stage_ambiguous_input(mocker):
     with Flow() as f:
         with Stage("subflow_s1") as s1:
