@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.2 (2025-07-08)
+- switch from psycopg2 to psycopg2-binary for pypi version (does not affect conda-forge)
+
 ## 0.10.1 (2025-07-08)
 - Fix pypi dependencies in `pyproject.toml` which prevented conda-forge build of 0.10.0
 

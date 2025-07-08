@@ -8,9 +8,10 @@ while read -r package version; do
     if [[ $package == "python" ]]; then
         continue
     fi
-
+    export package="$(echo "${package}" | sed 's/msgpack-python/msgpack/')"
+    export package="$(echo "${package}" | sed 's/psycopg2/psycopg2-binary/')"
     dependency="${package} ${version}"
-    contains_dependency=$(yq -r '.project.dependencies | map((.|sub("msgpack";"msgpack-python")) == "'"${dependency}\") | any" pyproject.toml)
+    contains_dependency=$(yq -r '.project.dependencies | map(. == "'"${dependency}\") | any" pyproject.toml)
     if [[ $contains_dependency == "false" ]]; then
         echo "${dependency} not found in pyproject.toml"
         contains_dependency_all=false

@@ -37,6 +37,13 @@ jobs:
       - name: Check build
         run: pixi run -e release twine check dist/*
 
+      - name: Check install
+        shell: pixi exec -s python -s pip -- bash -e {0}
+        run: |
+          pip install dist/*.whl
+          python -c "from pydiverse.pipedag import *"
+          pip check
+
       - name: List files
         run: ls -l dist/
 
