@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.1 (2025-07-08)
+- Fix pypi dependencies in `pyproject.toml` which prevented conda-forge build of 0.10.0
+
 ## 0.10.0 (2025-07-04)
 - Added ParquetTableStore which is based on duckdb SQLTableStore. It stores all tables as parquet files but still
   references them inside a duckdb database file as views to `FROM read_parquet(file)`. It supports both normal
