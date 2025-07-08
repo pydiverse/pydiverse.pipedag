@@ -51,7 +51,7 @@ dask = ">=2022.1.0"
 
 [feature.prefect2.dependencies]
 prefect = ">=2.13.5,<3a0"
-pydantic = ">=1.10.9,<2"
+pydantic = ">=1.10.9"
 
 [feature.prefect3.dependencies]
 prefect = ">=3.4.6,<4a0"
