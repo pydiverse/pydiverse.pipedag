@@ -136,8 +136,8 @@ jobs:
       environment: ${{ matrix.environment }}
       docker-services: |
         postgres
-        zoo
         minio
+        zoo
       pytest-arguments: --s3 --ibis --pdtransform --no-duckdb --no-postgres
 
   colspec_test:
@@ -179,7 +179,6 @@ jobs:
       os: ${{ matrix.os }}
       environment: ${{ matrix.environment }}
       docker-services: |
-        zoo
         ibm_db2
       # and --ibis not supported
       pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform --no-postgres --no-duckdb

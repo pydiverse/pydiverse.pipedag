@@ -18,6 +18,7 @@ try:
 except ImportError as e:
     warnings.warn(str(e), ImportWarning)
     kazoo = None
+    KazooClient = None
 
 
 @requires(kazoo, ImportError("ZooKeeperLockManager requires 'kazoo' to be installed."))

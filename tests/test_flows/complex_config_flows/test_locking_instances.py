@@ -3,6 +3,7 @@
 
 import pytest
 
+from pydiverse.pipedag.backend.lock.zookeeper import KazooClient
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.core.config import PipedagConfig
 from tests.fixtures.instances import with_instances
@@ -16,8 +17,7 @@ _ = cfg_file_path
 pytestmark = [with_instances("postgres")]
 
 
-@pytest.mark.parametrize("instance", ["lock_zookeeper", "lock_file"])
-def test_lock_manager_instances(cfg_file_path, instance):
+def do_test_lock_manager_instances(cfg_file_path, instance):
     # At this point, an instance is chosen from multi-pipedag-instance
     # configuration file
     pipedag_config = PipedagConfig(cfg_file_path)
@@ -28,3 +28,14 @@ def test_lock_manager_instances(cfg_file_path, instance):
     with StageLockContext():
         result = flow.run(config=cfg)
         check_result(result, out1, out2)
+
+
+@pytest.mark.parametrize("instance", ["lock_zookeeper"])
+@pytest.mark.skipif(KazooClient is None, reason="requires kazoo")
+def test_lock_manager_instances_kazoo(cfg_file_path, instance):
+    do_test_lock_manager_instances(cfg_file_path, instance)
+
+
+@pytest.mark.parametrize("instance", ["lock_file"])
+def test_lock_manager_instances(cfg_file_path, instance):
+    do_test_lock_manager_instances(cfg_file_path, instance)
