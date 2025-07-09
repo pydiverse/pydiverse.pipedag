@@ -61,7 +61,7 @@ jobs:
       - name: Wait for Docker Servers
         if: ${{ inputs.docker-services != '' }}
         run: |
-          until bash ./.github/scripts/docker_compose_ready.sh; do
+          until bash ./.github/scripts/docker_compose_ready.sh ${{ inputs.docker-services }}; do
             sleep 1
           done
 
