@@ -635,7 +635,7 @@ class PolarsTableHook(DataframeMsSQLTableHook, PolarsTableHook):
             try:
                 return cls.upload_table_bulk_insert(table, schema, dtypes, store, early)
             except:  # noqa
-                store.logger.warning("Failed to upload table using bulk insert, falling back to arrow odbc.")
+                store.logger.warning("Failed to upload table using bulk insert, falling back to polars.write_database.")
         super().upload_table(table, schema, dtypes, store, early)
 
 
