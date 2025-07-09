@@ -8,6 +8,7 @@ from typing import Callable
 import pytest
 
 from pydiverse.pipedag.backend.lock import BaseLockManager, LockState
+from pydiverse.pipedag.backend.lock.zookeeper import KazooClient
 from tests.fixtures.instances import with_instances
 
 
@@ -89,9 +90,8 @@ def _test_lock_manager(create_lock_manager: Callable[[], BaseLockManager]):
 
 
 @pytest.mark.parallelize
+@pytest.mark.skipif(KazooClient is None, reason="requires kazoo")
 def test_zookeeper():
-    from kazoo.client import KazooClient
-
     from pydiverse.pipedag.backend.lock import ZooKeeperLockManager
 
     def create_lock_manager():
