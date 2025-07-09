@@ -61,7 +61,11 @@ jobs:
       - name: Wait for Docker Servers
         if: ${{ inputs.docker-services != '' }}
         run: |
-          until bash ./.github/scripts/docker_compose_ready.sh ${{ inputs.docker-services }}; do
+          # store the (possibly multiline) input in a variable
+          services="${{ inputs.docker-services }}"
+          # replace every newline with a single space
+          services="${services//$'\n'/ }"
+          until bash ./.github/scripts/docker_compose_ready.sh ${services}; do
             sleep 1
           done
 
