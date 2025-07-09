@@ -8,6 +8,8 @@ set -o pipefail
 POSTGRES=0
 MSSQL=0
 IBM_DB2=0
+MINIO=0
+PREFECT=0
 ZOO=0
 
 while test x"$1" != x; do
@@ -23,6 +25,9 @@ while test x"$1" != x; do
       ;;
     minio)
       MINIO=1
+      ;;
+    prefect)
+      PREFECT=1
       ;;
     zoo)
       ZOO=1
@@ -64,7 +69,7 @@ if [[ "$MINIO" != 0 ]]; then
 fi
 
 if [[ "$PREFECT" != 0 ]]; then
-	if ! [[ "$running_services" =~ "prefect" ]] || ! docker compose logs prefect 2>&1 | grep "Check out the dashboard at http://0.0.0.0" > /dev/null; then
+	if ! [[ "$running_services" =~ "prefect" ]] || ! docker compose logs prefect 2>&1 | grep "Check out the dashboard at" > /dev/null; then
     echo "PREFECT is not ready yet."
     exit 1
   fi
