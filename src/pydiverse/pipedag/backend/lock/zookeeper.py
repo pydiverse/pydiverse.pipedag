@@ -18,6 +18,7 @@ try:
 except ImportError as e:
     warnings.warn(str(e), ImportWarning)
     kazoo = None
+    KazooClient = None
 
 
 @requires(kazoo, ImportError("ZooKeeperLockManager requires 'kazoo' to be installed."))
@@ -48,7 +49,7 @@ class ZooKeeperLockManager(BaseLockManager):
         base_path = f"/pipedag/locks/{instance_id}/"
         return cls(client, base_path)
 
-    def __init__(self, client: "KazooClient", base_path: str):
+    def __init__(self, client: KazooClient, base_path: str):
         super().__init__()
 
         self.client = client
