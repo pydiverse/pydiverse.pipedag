@@ -14,6 +14,7 @@ from pydiverse.common.util.computation_tracing import ComputationTracer
 from pydiverse.pipedag import Table
 from pydiverse.pipedag._typing import T, TableHookResolverT
 from pydiverse.pipedag.context import RunContext
+from pydiverse.pipedag.errors import StoreIncompatibleException
 from pydiverse.pipedag.materialize.materializing_task import (
     AutoVersionSupport,
     MaterializingTask,
@@ -29,6 +30,17 @@ class CanMatResult(Enum):
     @staticmethod
     def new(bool_val: bool):
         return CanMatResult.YES if bool_val else CanMatResult.NO
+
+
+class CanRetResult(Enum):
+    NO = 0
+    YES = 1
+    # For store and type combination it is expected that no hook can retrieve
+    NO_HOOK_IS_EXPECTED = 2
+
+    @staticmethod
+    def new(bool_val: bool):
+        return CanRetResult.YES if bool_val else CanRetResult.NO
 
 
 class TableHook(Generic[TableHookResolverT], ABC):
@@ -52,11 +64,15 @@ class TableHook(Generic[TableHookResolverT], ABC):
 
     @classmethod
     @abstractmethod
-    def can_retrieve(cls, type_: type) -> bool:
+    def can_retrieve(cls, type_: type) -> CanRetResult:
         """
-        Return `True` if this hook can retrieve a table from the store
-        and convert it to the specified type. If `True` is returned, the
+        Return `CanRetResult.YES` if this hook can retrieve a table from the store
+        and convert it to the specified type. If `CanRetResult.YES` is returned, the
         `retrieve` method MUST be implemented for the type.
+
+        If `CanRetResult.NO_HOOK_IS_EXPECTED` is returned, it is expected that no
+        hook can retrieve the table as the type. This is used in parquet table cache
+        which does not make sense for SQL references to suppress a warning.
         """
 
     @classmethod
@@ -277,7 +293,7 @@ class TableHookResolver:
             f"Can't materialize Table with underlying type {type_}. " + self.__hook_unmet_requirements_message()
         )
 
-    def get_r_table_hook(self: Self, type_: type[T] | tuple | dict) -> type[TableHook[Self]]:
+    def get_r_table_hook(self: Self, type_: type[T] | tuple | dict) -> type[TableHook[Self]] | None:
         """Get a table hook that can retrieve the specified type"""
         if isinstance(type_, tuple):
             type_ = type_[0]
@@ -291,9 +307,14 @@ class TableHookResolver:
             return self._resolver_state().r_hook_cache[type_]
 
         for hook in self.__all_registered_table_hooks():
-            if hook.can_retrieve(type_):
+            can_ret = hook.can_retrieve(type_)
+            if can_ret == CanRetResult.YES:
                 self._resolver_state().r_hook_cache[type_] = hook
                 return hook
+            elif can_ret == CanRetResult.NO_HOOK_IS_EXPECTED:
+                raise StoreIncompatibleException(
+                    f"Can't retrieve Table as type {type_}. This type is incompatible with store {self}."
+                )
 
         raise TypeError(f"Can't retrieve Table as type {type_}. " + self.__hook_unmet_requirements_message())
 

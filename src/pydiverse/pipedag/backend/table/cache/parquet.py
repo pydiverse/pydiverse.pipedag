@@ -8,6 +8,7 @@ import types
 from typing import Any
 
 import pandas as pd
+import sqlalchemy as sa
 from packaging.version import Version
 from upath import UPath
 
@@ -15,7 +16,7 @@ import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
 from pydiverse.pipedag import ConfigContext, Stage, Table
 from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.store import BaseTableCache
-from pydiverse.pipedag.materialize.table_hook_base import CanMatResult, TableHook
+from pydiverse.pipedag.materialize.table_hook_base import CanMatResult, CanRetResult, TableHook
 from pydiverse.pipedag.util import normalize_name
 from pydiverse.pipedag.util.path import is_file_uri
 
@@ -103,8 +104,8 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         return CanMatResult.new(issubclass(type_, pd.DataFrame))
 
     @classmethod
-    def can_retrieve(cls, type_) -> bool:
-        return type_ == pd.DataFrame
+    def can_retrieve(cls, type_) -> CanRetResult:
+        return CanRetResult.new(type_ == pd.DataFrame)
 
     @classmethod
     def materialize(
@@ -185,8 +186,8 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
         return CanMatResult.new(issubclass(type_, (pl.DataFrame, pl.LazyFrame)))
 
     @classmethod
-    def can_retrieve(cls, type_) -> bool:
-        return issubclass(type_, (pl.DataFrame, pl.LazyFrame))
+    def can_retrieve(cls, type_) -> CanRetResult:
+        return CanRetResult.new(issubclass(type_, (pl.DataFrame, pl.LazyFrame)))
 
     @classmethod
     def materialize(
@@ -266,10 +267,10 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
         return CanMatResult.YES_BUT_DONT_CACHE if issubclass(type_, PandasTableImpl) else CanMatResult.NO
 
     @classmethod
-    def can_retrieve(cls, type_) -> bool:
+    def can_retrieve(cls, type_) -> CanRetResult:
         from pydiverse.transform.eager import PandasTableImpl
 
-        return issubclass(type_, PandasTableImpl)
+        return CanRetResult.new(issubclass(type_, PandasTableImpl))
 
     @classmethod
     def materialize(
@@ -327,10 +328,10 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
             return CanMatResult.YES_BUT_DONT_CACHE
 
     @classmethod
-    def can_retrieve(cls, type_) -> bool:
+    def can_retrieve(cls, type_) -> CanRetResult:
         from pydiverse.transform.extended import Polars
 
-        return issubclass(type_, Polars)
+        return CanRetResult.new(issubclass(type_, Polars))
 
     @classmethod
     def materialize(
@@ -375,3 +376,18 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
             return pdt.Table(df)
 
         raise ValueError(f"Invalid type {as_type}")
+
+
+@ParquetTableCache.register_table()
+class SqlAlchemyTableHook(TableHook[ParquetTableCache]):
+    @classmethod
+    def can_materialize(cls, tbl: Table) -> CanMatResult:
+        return CanMatResult.NO
+
+    @classmethod
+    def can_retrieve(cls, type_) -> CanRetResult:
+        # retrieving SQLAlchemy reference from parquet table cache does not make sense
+        if type_ == sa.Table:
+            return CanRetResult.NO_HOOK_IS_EXPECTED
+        else:
+            return CanRetResult.NO

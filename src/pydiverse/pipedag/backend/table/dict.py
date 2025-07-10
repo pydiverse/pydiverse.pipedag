@@ -11,7 +11,7 @@ from pydiverse.pipedag.errors import CacheError, StageError
 from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import LazyTableMetadata, TaskMetadata
 from pydiverse.pipedag.materialize.store import BaseTableStore
-from pydiverse.pipedag.materialize.table_hook_base import CanMatResult, TableHook
+from pydiverse.pipedag.materialize.table_hook_base import CanMatResult, CanRetResult, TableHook
 
 
 class DictTableStore(BaseTableStore):
@@ -134,8 +134,8 @@ class PandasTableHook(TableHook[DictTableStore]):
         return CanMatResult.new(issubclass(type_, pd.DataFrame))
 
     @classmethod
-    def can_retrieve(cls, type_) -> bool:
-        return type_ == pd.DataFrame
+    def can_retrieve(cls, type_) -> CanRetResult:
+        return CanRetResult.new(type_ == pd.DataFrame)
 
     @classmethod
     def materialize(
@@ -192,10 +192,10 @@ class PydiverseTransformTableHook(TableHook[DictTableStore]):
             return CanMatResult.YES_BUT_DONT_CACHE if issubclass(type_, pdt.Table) else CanMatResult.NO
 
     @classmethod
-    def can_retrieve(cls, type_) -> bool:
+    def can_retrieve(cls, type_) -> CanRetResult:
         from pydiverse.transform import Pandas, Polars
 
-        return type_ is Polars or type_ is Pandas
+        return CanRetResult.new(type_ is Polars or type_ is Pandas)
 
     @classmethod
     def materialize(

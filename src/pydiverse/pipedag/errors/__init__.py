@@ -60,6 +60,12 @@ class HookCheckException(Exception):
     """
 
 
+class StoreIncompatibleException(Exception):
+    """
+    Exception raised if a store is incompatible for retrieving a table type.
+    """
+
+
 __all__ = [
     "FlowError",
     "StageError",

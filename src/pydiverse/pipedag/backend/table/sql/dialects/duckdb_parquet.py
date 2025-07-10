@@ -21,6 +21,7 @@ from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.materialize.table_hook_base import (
     AutoVersionSupport,
     CanMatResult,
+    CanRetResult,
     TableHook,
 )
 from pydiverse.pipedag.util import normalize_name
@@ -584,8 +585,8 @@ class PandasTableHook(TableHook[ParquetTableStore]):
         return CanMatResult.new(issubclass(type_, pd.DataFrame))
 
     @classmethod
-    def can_retrieve(cls, type_) -> bool:
-        return issubclass(type_, pd.DataFrame)
+    def can_retrieve(cls, type_) -> CanRetResult:
+        return CanRetResult.new(issubclass(type_, pd.DataFrame))
 
     @classmethod
     def materialize(
