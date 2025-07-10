@@ -1,10 +1,11 @@
 # Changelog
 
-## 0.10.3 (2025-07-09)
+## 0.10.3 (2025-07-10)
 - Fix: Do not implicitly depend on `kazoo`
+- Fix some misleading warnings
 
 ## 0.10.2 (2025-07-08)
-- switch from psycopg2 to psycopg2-binary for pypi version (does not affect conda-forge)
+- Switch from psycopg2 to psycopg2-binary for pypi version (does not affect conda-forge)
 
 ## 0.10.1 (2025-07-08)
 - Fix pypi dependencies in `pyproject.toml` which prevented conda-forge build of 0.10.0
