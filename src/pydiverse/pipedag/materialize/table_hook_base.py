@@ -20,7 +20,7 @@ from pydiverse.pipedag.materialize.materializing_task import (
 )
 
 
-class CanResult(Enum):
+class CanMatResult(Enum):
     NO = 0
     YES = 1
     # Don't assume that other tables of same obj type can be materialized the same way
@@ -28,7 +28,7 @@ class CanResult(Enum):
 
     @staticmethod
     def new(bool_val: bool):
-        return CanResult.YES if bool_val else CanResult.NO
+        return CanMatResult.YES if bool_val else CanMatResult.NO
 
 
 class TableHook(Generic[TableHookResolverT], ABC):
@@ -43,7 +43,7 @@ class TableHook(Generic[TableHookResolverT], ABC):
 
     @classmethod
     @abstractmethod
-    def can_materialize(cls, tbl: Table) -> CanResult:
+    def can_materialize(cls, tbl: Table) -> CanMatResult:
         """
         Return `True` if this hook can materialize a table with the specified
         underlying type. If `True` is returned, the `materialize` method
@@ -268,8 +268,8 @@ class TableHookResolver:
 
         for hook in self.__all_registered_table_hooks():
             can = hook.can_materialize(tbl)
-            if can != CanResult.NO and can is not False:
-                if can == CanResult.YES:
+            if can != CanMatResult.NO and can is not False:
+                if can == CanMatResult.YES:
                     self._resolver_state().m_hook_cache[type_] = hook
                 return hook
 
