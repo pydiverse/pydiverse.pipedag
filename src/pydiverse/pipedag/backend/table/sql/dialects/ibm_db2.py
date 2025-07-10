@@ -10,7 +10,8 @@ import pandas as pd
 import polars as pl
 import sqlalchemy as sa
 
-from pydiverse.common import Dtype, String
+import pydiverse.common as pdc
+from pydiverse.common import Dtype
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateTableWithSuffix,
     LockSourceTable,
@@ -242,6 +243,11 @@ class IBMDB2TableStore(SQLTableStore):
 
 class DataframeIbmDb2TableHook:
     @classmethod
+    def dialect_has_adbc_driver(cls):
+        # No ADBC driver for IBM DB2 is available.
+        return False
+
+    @classmethod
     def _get_dialect_dtypes(
         cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame | pl.DataFrame]
     ) -> dict[str, sa.types.TypeEngine]:
@@ -253,13 +259,20 @@ class DataframeIbmDb2TableHook:
         if primary_key := table.primary_key:
             index_columns |= set(primary_key)
 
-        sql_dtypes = ({name: dtype.to_sql() for name, dtype in dtypes.items()}) | (
-            {
+        sql_dtypes = (
+            {name: dtype.to_sql() for name, dtype in dtypes.items()}
+            | {
                 name: (sa.String(length=256) if name in index_columns else sa.String(length=32_672))
                 for name, dtype in dtypes.items()
-                if dtype == String()
+                if dtype == pdc.String()
+            }
+            | {
+                name: sa.String(length=max(len(c.encode("utf")) for c in dtype.categories))
+                for name, dtype in dtypes.items()
+                if isinstance(dtype, pdc.Enum)
             }
         )
+
         if table.type_map:
             sql_dtypes.update(table.type_map)
         return sql_dtypes
