@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
+import polars as pl
 import sqlalchemy as sa
 
 from pydiverse.pipedag import ConfigContext, Flow, Stage, Table, materialize
@@ -26,24 +27,43 @@ def test_local_table_cache(mocker):
         # Supported by local caching
         return Table(pd.DataFrame({"x": [x]}), "pandas")
 
+    @materialize(version="1.0")
+    def select_polars(x):
+        # Supported by local caching
+        return Table(pl.DataFrame({"x": [x]}), "polars")
+
     @materialize(lazy=True)
     def select_sql(x):
         # Not supported by local caching
         return Table(sa.select(sa.literal(x).label("x")), "sql")
 
     @materialize(version="1.0", input_type=pd.DataFrame)
-    def sink(*args):
+    def sink_pandas(*args):
         for arg in args:
             assert arg["x"][0] == input_val_
+
+    @materialize(version="1.0", input_type=pl.DataFrame)
+    def sink_polars(*args):
+        for arg in args:
+            assert arg["x"][0] == input_val_
+
+    @materialize(version="1.0", input_type=sa.Table)
+    def sink_sql(*args):
+        for arg in args:
+            # check that column x exists
+            _ = arg.c.x
 
     with Flow() as f:
         with Stage("stage"):
             x = input_val()
 
             s_pandas = select_pandas(x)
+            s_polars = select_polars(x)
             s_sql = select_sql(x)
 
-            _ = sink(s_pandas, s_sql)
+            _ = sink_pandas(s_pandas, s_polars, s_sql)
+            _ = sink_polars(s_pandas, s_polars, s_sql)
+            _ = sink_sql(s_pandas, s_polars, s_sql)
 
     # Initial run to invalidate cache
     input_val_ = -1
@@ -68,17 +88,17 @@ def test_local_table_cache(mocker):
     # Initial Run
     f.run()
 
-    expected_retrieve_table_obj = 2
-    expected_successful_retrieve_table_obj = 1 * so * siac  # pandas
-    expected_store_table = 2
-    expected_store_input = 2 - expected_successful_retrieve_table_obj
+    expected_retrieve_table_obj = 3 * 3
+    expected_successful_retrieve_table_obj = 2 * so * siac + 3 * siac
+    expected_store_table = 3
+    expected_store_input = expected_store_table * 3 - expected_successful_retrieve_table_obj
 
     assert store_table_spy.call_count == expected_store_table
     assert store_input_spy.call_count == expected_store_input
     assert retrieve_table_obj_spy.call_count == expected_retrieve_table_obj
 
     assert _store_table_spy.call_count == (expected_store_input * si) + (expected_store_table * so)
-    assert _retrieve_table_obj_spy.call_count == expected_successful_retrieve_table_obj
+    assert _retrieve_table_obj_spy.call_count == expected_successful_retrieve_table_obj + siac * expected_store_table
 
     # Second Run
     store_table_spy.reset_mock()

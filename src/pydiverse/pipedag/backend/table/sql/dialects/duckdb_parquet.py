@@ -20,7 +20,8 @@ from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.materialize.table_hook_base import (
     AutoVersionSupport,
-    CanResult,
+    CanMatResult,
+    CanRetResult,
     TableHook,
 )
 from pydiverse.pipedag.util import normalize_name
@@ -579,13 +580,13 @@ class PandasTableHook(TableHook[ParquetTableStore]):
     auto_version_support = AutoVersionSupport.TRACE
 
     @classmethod
-    def can_materialize(cls, tbl: Table) -> CanResult:
+    def can_materialize(cls, tbl: Table) -> CanMatResult:
         type_ = type(tbl.obj)
-        return CanResult.new(issubclass(type_, pd.DataFrame))
+        return CanMatResult.new(issubclass(type_, pd.DataFrame))
 
     @classmethod
-    def can_retrieve(cls, type_) -> bool:
-        return issubclass(type_, pd.DataFrame)
+    def can_retrieve(cls, type_) -> CanRetResult:
+        return CanRetResult.new(issubclass(type_, pd.DataFrame))
 
     @classmethod
     def materialize(

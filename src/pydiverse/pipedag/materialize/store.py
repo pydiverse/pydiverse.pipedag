@@ -22,6 +22,7 @@ from pydiverse.pipedag.errors import (
     DuplicateNameError,
     HookCheckException,
     StageError,
+    StoreIncompatibleException,
 )
 from pydiverse.pipedag.materialize.cache import TaskCacheInfo, lazy_table_cache_key
 from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
@@ -542,6 +543,9 @@ class BaseTableCache(ABC, TableHookResolver, Disposable):
             obj = hook.retrieve(self, table, table.stage.name, as_type)
             self.logger.info("Retrieved table from local table cache", table=table)
             return obj
+        except StoreIncompatibleException:
+            # This is expected for example when ParquetTableCache is asked to retrieve a SQL reference
+            return None
         except Exception as e:
             self.logger.warning(
                 "Failed to retrieve table from local table cache",

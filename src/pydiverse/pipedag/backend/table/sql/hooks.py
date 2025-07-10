@@ -37,7 +37,8 @@ from pydiverse.pipedag.errors import HookCheckException
 from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
 from pydiverse.pipedag.materialize.table_hook_base import (
     AutoVersionSupport,
-    CanResult,
+    CanMatResult,
+    CanRetResult,
     TableHook,
 )
 from pydiverse.pipedag.util.sql import compile_sql
@@ -304,13 +305,13 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         return ret
 
     @classmethod
-    def can_materialize(cls, tbl: Table) -> CanResult:
+    def can_materialize(cls, tbl: Table) -> CanMatResult:
         type_ = type(tbl.obj)
-        return CanResult.new(issubclass(type_, (sa.sql.expression.TextClause, sa.sql.expression.Selectable)))
+        return CanMatResult.new(issubclass(type_, (sa.sql.expression.TextClause, sa.sql.expression.Selectable)))
 
     @classmethod
-    def can_retrieve(cls, type_) -> bool:
-        return type_ == sa.Table
+    def can_retrieve(cls, type_) -> CanRetResult:
+        return CanRetResult.new(type_ == sa.Table)
 
     @classmethod
     def retrieve_as_reference(cls, type_):
@@ -510,13 +511,13 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 @SQLTableStore.register_table()
 class ExternalTableReferenceHook(TableHook[SQLTableStore]):
     @classmethod
-    def can_materialize(cls, tbl: Table) -> CanResult:
+    def can_materialize(cls, tbl: Table) -> CanMatResult:
         type_ = type(tbl.obj)
-        return CanResult.new(issubclass(type_, ExternalTableReference))
+        return CanMatResult.new(issubclass(type_, ExternalTableReference))
 
     @classmethod
-    def can_retrieve(cls, type_) -> bool:
-        return False
+    def can_retrieve(cls, type_) -> CanRetResult:
+        return CanRetResult.NO
 
     @classmethod
     def materialize(
@@ -768,13 +769,13 @@ class PandasTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         return df
 
     @classmethod
-    def can_materialize(cls, tbl: Table) -> CanResult:
+    def can_materialize(cls, tbl: Table) -> CanMatResult:
         type_ = type(tbl.obj)
-        return CanResult.new(issubclass(type_, pd.DataFrame))
+        return CanMatResult.new(issubclass(type_, pd.DataFrame))
 
     @classmethod
-    def can_retrieve(cls, type_) -> bool:
-        return type_ == pd.DataFrame
+    def can_retrieve(cls, type_) -> CanRetResult:
+        return CanRetResult.new(type_ == pd.DataFrame)
 
     @classmethod
     def auto_table(cls, obj: pd.DataFrame):
@@ -1073,15 +1074,15 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         return df
 
     @classmethod
-    def can_materialize(cls, tbl: Table) -> CanResult:
+    def can_materialize(cls, tbl: Table) -> CanMatResult:
         # there is a separate hook for LazyFrame
         type_ = type(tbl.obj)
         # attention: tidypolars.Tibble is subclass of polars DataFrame
-        return CanResult.new(issubclass(type_, pl.DataFrame))
+        return CanMatResult.new(issubclass(type_, pl.DataFrame))
 
     @classmethod
-    def can_retrieve(cls, type_) -> bool:
-        return type_ == pl.DataFrame
+    def can_retrieve(cls, type_) -> CanRetResult:
+        return CanRetResult.new(type_ == pl.DataFrame)
 
     @classmethod
     def materialize(
@@ -1192,16 +1193,16 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
     auto_version_support = AutoVersionSupport.LAZY
 
     @classmethod
-    def can_materialize(cls, tbl: Table) -> CanResult:
+    def can_materialize(cls, tbl: Table) -> CanMatResult:
         type_ = type(tbl.obj)
-        return CanResult.new(type_ == pl.LazyFrame)
+        return CanMatResult.new(type_ == pl.LazyFrame)
 
     @classmethod
-    def can_retrieve(cls, type_) -> bool:
+    def can_retrieve(cls, type_) -> CanRetResult:
         if dy is not None and issubclass(type_, dy.LazyFrame):
             # optionally support input_type=dy.LazyFrame
-            return True
-        return type_ == pl.LazyFrame
+            return CanRetResult.YES
+        return CanRetResult.new(type_ == pl.LazyFrame)
 
     @classmethod
     def materialize(
@@ -1284,13 +1285,13 @@ except ImportError as e:
 @SQLTableStore.register_table(tidypolars, pl)
 class TidyPolarsTableHook(TableHook[SQLTableStore]):
     @classmethod
-    def can_materialize(cls, tbl: Table) -> CanResult:
+    def can_materialize(cls, tbl: Table) -> CanMatResult:
         type_ = type(tbl.obj)
-        return CanResult.new(issubclass(type_, Tibble))
+        return CanMatResult.new(issubclass(type_, Tibble))
 
     @classmethod
-    def can_retrieve(cls, type_) -> bool:
-        return type_ == Tibble
+    def can_retrieve(cls, type_) -> CanRetResult:
+        return CanRetResult.new(type_ == Tibble)
 
     @classmethod
     def materialize(
@@ -1378,16 +1379,16 @@ except ImportError as e:
 @SQLTableStore.register_table(pdt_old)
 class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
     @classmethod
-    def can_materialize(cls, tbl: Table) -> CanResult:
+    def can_materialize(cls, tbl: Table) -> CanMatResult:
         type_ = type(tbl.obj)
-        return CanResult.new(issubclass(type_, pdt.Table))
+        return CanMatResult.new(issubclass(type_, pdt.Table))
 
     @classmethod
-    def can_retrieve(cls, type_) -> bool:
+    def can_retrieve(cls, type_) -> CanRetResult:
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
 
-        return issubclass(type_, (PandasTableImpl, SQLTableImpl))
+        return CanRetResult.new(issubclass(type_, (PandasTableImpl, SQLTableImpl)))
 
     @classmethod
     def retrieve_as_reference(cls, type_) -> bool:
@@ -1459,19 +1460,19 @@ class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
 @SQLTableStore.register_table(pdt_new)
 class PydiverseTransformTableHook(TableHook[SQLTableStore]):
     @classmethod
-    def can_materialize(cls, tbl: Table) -> CanResult:
+    def can_materialize(cls, tbl: Table) -> CanMatResult:
         type_ = type(tbl.obj)
-        return CanResult.new(issubclass(type_, pdt.Table))
+        return CanMatResult.new(issubclass(type_, pdt.Table))
 
     @classmethod
-    def can_retrieve(cls, type_) -> bool:
+    def can_retrieve(cls, type_) -> CanRetResult:
         from pydiverse.transform.extended import (
             Pandas,
             Polars,
             SqlAlchemy,
         )
 
-        return issubclass(type_, (Polars, SqlAlchemy, Pandas))
+        return CanRetResult.new(issubclass(type_, (Polars, SqlAlchemy, Pandas)))
 
     @classmethod
     def retrieve_as_reference(cls, type_) -> bool:
@@ -1593,14 +1594,14 @@ class IbisTableHook(TableHook[SQLTableStore]):
         return ibis.connect(store.engine_url.render_as_string(hide_password=False))
 
     @classmethod
-    def can_materialize(cls, tbl: Table) -> CanResult:
+    def can_materialize(cls, tbl: Table) -> CanMatResult:
         type_ = type(tbl.obj)
         # Operations on a table like mutate() or join() don't change the type
-        return CanResult.new(issubclass(type_, ibis.api.Table))
+        return CanMatResult.new(issubclass(type_, ibis.api.Table))
 
     @classmethod
-    def can_retrieve(cls, type_) -> bool:
-        return issubclass(type_, ibis.api.Table)
+    def can_retrieve(cls, type_) -> CanRetResult:
+        return CanRetResult.new(issubclass(type_, ibis.api.Table))
 
     @classmethod
     def retrieve_as_reference(cls, type_) -> bool:
