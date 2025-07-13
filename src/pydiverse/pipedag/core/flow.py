@@ -409,8 +409,11 @@ class Flow:
                 orchestration_engine = config.create_orchestration_engine()
             result = orchestration_engine.run(subflow, ignore_position_hashes, inputs, **kwargs)
 
-            visualization_url = result.visualize_url()
-            self.logger.info("Flow visualization", url=visualization_url)
+            try:
+                visualization_url = result.visualize_url()
+                self.logger.info("Flow visualization", url=visualization_url)
+            except RuntimeError as e:
+                self.logger.info("Flow visualization disabled", reason=str(e))
 
         trace_hook.run_complete(result)
 
@@ -532,7 +535,7 @@ class Subflow:
 
     def visualize_url(self, result: Result | None = None, visualization_tag: str | None = None) -> str:
         if pydot.Dot is None:
-            return "<please install pydot to receive a visualization URL>"
+            raise RuntimeError("please install pydot to receive a visualization URL")
         dot = self.visualize_pydot(result, visualization_tag)
         return _pydot_url(dot, result.config_context if result else None)
 
