@@ -87,4 +87,13 @@ def main():
 
 if __name__ == "__main__":
     setup_logging()  # you can setup the logging and/or structlog libraries as you wish
+
+    # for running this pipeline with postgres SQLAlchemy URL, please make sure to install
+    # ```shell
+    # pip install pydiverse-pipedag pydot psycopg2-binary adbc-driver-postgresql
+    # ```
+    # or
+    # ```shell
+    # conda install -c conda-forge pydiverse-pipedag pydot psycopg2 adbc-driver-postgresql
+    # ```
     main()

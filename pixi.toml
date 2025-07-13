@@ -21,8 +21,6 @@ pyparsing = ">=3.2.3,<4"
 sqlalchemy = ">=1.4.54,<3"
 pandas = ">=1.5.3,<3"
 pyarrow = ">=20.0.0,<21"
-adbc-driver-postgresql = ">=1.6.0,<2"
-psycopg2 = ">=2.9.10"
 duckdb = ">=0.10.3,<2"
 duckdb-engine = ">=0.15.0,<0.16"
 polars = ">=1.2.1,<2"
@@ -40,6 +38,10 @@ hatchling = "*"
 
 [feature.pydot.dependencies]
 pydot = ">=4.0.0,<5"
+
+[feature.postgres.dependencies]
+adbc-driver-postgresql = ">=1.6.0,<2"
+psycopg2 = ">=2.9.10"
 
 [feature.filelock.dependencies]
 filelock = ">=3.7.1"
@@ -177,37 +179,37 @@ connectorx = ">=0.3.3"
 polars = "==1.2.1"
 
 [environments]
-default = ["py312", "all-tests", "mssql", "pdtransform-new", "dev", "filelock", "zookeeper", "dask", "prefect3", "pd2", "sa2", "snowflake", "pydot"]
-all-tests = ["py312", "all-tests", "mssql", "pdtransform-new", "dev", "filelock", "zookeeper", "dask", "prefect3", "pd2", "sa2", "snowflake", "pydot"]
+default = ["py312", "all-tests", "mssql", "pdtransform-new", "dev", "filelock", "zookeeper", "dask", "prefect3", "pd2", "sa2", "snowflake", "pydot", "postgres"]
+all-tests = ["py312", "all-tests", "mssql", "pdtransform-new", "dev", "filelock", "zookeeper", "dask", "prefect3", "pd2", "sa2", "snowflake", "pydot", "postgres"]
 docs = ["docs"]
 lint = { features = ["lint"], no-default-feature = true }
 release = { features = ["release"], no-default-feature = true }
-py310 = ["py310", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1"]
-py311 = ["py311", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1"]
-py312 = ["py312", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1"]
-py313 = ["py313", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1"]
-py310pdsa1 = ["py310", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx", "duckdb0", "pydot"]
-py311pdsa1 = ["py311", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx", "duckdb0", "pydot"]
-py310all = ["py310", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot"]
-py311all = ["py311", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "colspec", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot"]
-py312all = ["py312", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "colspec", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot"]
-py313all = ["py313", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "colspec", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot"]
-py310pdsa1all = ["py310", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx", "all-tests", "mssql", "pdtransform-old", "filelock", "dask", "prefect2", "snowflake", "pydot"]
-py311pdsa1all = ["py311", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx", "all-tests", "mssql", "pdtransform-old", "filelock", "dask", "prefect2", "snowflake", "pydot"]
+py310 = ["py310", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1", "postgres"]
+py311 = ["py311", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1", "postgres"]
+py312 = ["py312", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1", "postgres"]
+py313 = ["py313", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1", "postgres"]
+py310pdsa1 = ["py310", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx", "duckdb0", "pydot", "postgres"]
+py311pdsa1 = ["py311", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx", "duckdb0", "pydot", "postgres"]
+py310all = ["py310", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
+py311all = ["py311", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "colspec", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
+py312all = ["py312", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "colspec", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
+py313all = ["py313", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "colspec", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
+py310pdsa1all = ["py310", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx", "all-tests", "mssql", "pdtransform-old", "filelock", "dask", "prefect2", "snowflake", "pydot", "postgres"]
+py311pdsa1all = ["py311", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx", "all-tests", "mssql", "pdtransform-old", "filelock", "dask", "prefect2", "snowflake", "pydot", "postgres"]
 py310ibm = ["py310", "dev", "pd2", "sa2", "dask", "ibm-db", "all-tests", "mssql", "pdtransform-new", "pydot"]
 py312ibm = ["py312", "dev", "pd2", "sa2", "dask", "ibm-db", "all-tests", "mssql", "pdtransform-new", "colspec", "dataframely", "pydot"]
-py311dy = ["py311", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "dataframely", "pydot"]
-py313dy = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "dataframely", "pydot"]
-py311cs = ["py311", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "pydot"]
-py313cs = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "pydot"]
-py310pdt = ["py310", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "pdtransform-new", "pydot"]
-py313pdt = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "pdtransform-new", "pydot"]
-py311cspdt = ["py311", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "pdtransform-new", "pydot"]
-py313cspdt = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "pdtransform-new", "pydot"]
-py311csdy = ["py311", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "dataframely", "pydot"]
-py313csdy = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "dataframely", "pydot"]
-py310dapre = ["py310", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "dask", "prefect3", "pd2", "sa2", "pydot"]
-py313dapre = ["py313", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "dask", "prefect3", "pd2", "sa2", "pydot"]
+py311dy = ["py311", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "dataframely", "pydot", "postgres"]
+py313dy = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "dataframely", "pydot", "postgres"]
+py311cs = ["py311", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "pydot", "postgres"]
+py313cs = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "pydot", "postgres"]
+py310pdt = ["py310", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "pdtransform-new", "pydot", "postgres"]
+py313pdt = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "pdtransform-new", "pydot", "postgres"]
+py311cspdt = ["py311", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "pdtransform-new", "pydot", "postgres"]
+py313cspdt = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "pdtransform-new", "pydot", "postgres"]
+py311csdy = ["py311", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "dataframely", "pydot", "postgres"]
+py313csdy = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "dataframely", "pydot", "postgres"]
+py310dapre = ["py310", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "dask", "prefect3", "pd2", "sa2", "pydot", "postgres"]
+py313dapre = ["py313", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "dask", "prefect3", "pd2", "sa2", "pydot", "postgres"]
 py310mssqlpdt = ["py310", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "mssql", "pdtransform-new", "pydot"]
 py313mssqlpdt = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "mssql", "pdtransform-new", "pydot"]
 py311mssqldy = ["py311", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "mssql", "dataframely", "pydot"]

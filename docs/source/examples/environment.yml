@@ -4,7 +4,5 @@ channels:
   - nodefaults
 dependencies:
   - pydiverse-pipedag
-  - duckdb
-  - duckdb-engine
   - ipython
   - jupyter

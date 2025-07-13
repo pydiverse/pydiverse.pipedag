@@ -6,7 +6,16 @@ about concurrent read-/writes on a single table. They work beyond 1 Bio rows, bu
 See [Table Backends](table_backends.md) for a list of currently supported databases.
 
 The following example shows how to launch a postgres database in a container with docker-compose and how to work with it
-using pipedag.
+using pipedag. Please make sure, you installed psycopg2 and adbc-driver-postgresql. When installing via pip, it might be
+easier to install psycopg2-binary instead of psycopg.
+
+```shell
+pip install pydiverse-pipedag pydot psycopg2-binary adbc-driver-postgresql
+```
+
+```shell
+conda install -c conda-forge pydiverse-pipedag pydot psycopg2 adbc-driver-postgresql
+```
 
 You can put the following example pipedag code in a file called `run_pipedag.py`:
 
@@ -154,7 +163,6 @@ instances:
 If you don't have a postgres database at hand, you can start a postgres database, with the following `docker-compose.yaml` file:
 
 ```yaml
-version: "3.9"
 services:
   postgres:
     image: postgres

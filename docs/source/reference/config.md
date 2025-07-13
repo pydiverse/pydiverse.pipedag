@@ -88,6 +88,16 @@ instances:
       class: "pydiverse.pipedag.engine.SequentialEngine"
 ```
 
+When using this config, please make sure, you installed psycopg2 and adbc-driver-postgresql.
+When installing via pip, it might be easier to install psycopg2-binary instead of psycopg.
+
+```shell
+pip install pydiverse-pipedag pydot psycopg2-binary adbc-driver-postgresql
+```
+
+```shell
+conda install -c conda-forge pydiverse-pipedag pydot psycopg2 adbc-driver-postgresql
+```
 
 * * *
 

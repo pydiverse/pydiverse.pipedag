@@ -190,11 +190,12 @@ A few features are still missing so pipedag can handle this job in all envisione
    two complementing syntax styles. Transformation tools would have full access to the underlying computations and
    could convert them to other forms (like ONNX for example) in order to optimize execution performance, target specific
    hardware or make production deployments more robust.
-6. Currently, pipedag supports the database backends Postgres, MSSQL/TSQL, and DB2 in a tested way that is used in
-   real projects. Duckdb is supported for testing and demonstration purposes. Pipedag can be extended by users. However,
+6. Currently, pipedag supports the database backends Postgres, duckdb, MSSQL/TSQL, and DB2 in a tested way that is used in
+   real projects. There exists also a parquet based backend which uses duckdb but makes sure each table is written to
+   parquet files and only views to those parquet files end up in the .duckdb file. Pipedag can be extended by users. However,
    support for Snowflake, BigQuery, and common cloud scalabale databases with Postgres compatible SQL dialect are on the
-   list to be supported out-of-the-box in the future. Parquet and in-memory apache arrow backed table backends
-   are also likely to come.
+   list to be supported out-of-the-box in the future. An in-memory apache arrow backed table backend
+   is also likely to come.
 
 ## Related Work: Standing on the Shoulders of Giants
 

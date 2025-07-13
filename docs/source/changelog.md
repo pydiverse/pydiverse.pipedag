@@ -2,6 +2,7 @@
 
 ## 0.10.4 (2025-07-13)
 - Make pydot optional dependency for visualization of flow execution
+- Make psycopg2/adbc-driver-postgres optional dependency
 
 ## 0.10.3 (2025-07-10)
 - Fix: Do not implicitly depend on `kazoo`
