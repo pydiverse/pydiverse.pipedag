@@ -8,11 +8,11 @@ To use it, just install it with pip, conda, or pixi. We recommend also installin
 code:
 
 ```shell
-pip install pydiverse-pipedag duckdb duckdb-engine
+pip install pydiverse-pipedag pydot
 ```
 
 ```shell
-conda install pydiverse-pipedag duckdb duckdb-engine
+conda install -c conda-forge pydiverse-pipedag pydot
 ```
 
 ## What is a Flow, a Task, and a Stage?

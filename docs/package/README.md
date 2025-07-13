@@ -12,8 +12,8 @@ comment on existing issues to extend them to your needs or to add solution ideas
 
 ## Usage
 
-pydiverse.pipedag can either be installed via pypi with `pip install pydiverse-pipedag duckdb duckdb-engine` or via
-conda-forge with `conda install pydiverse-pipedag duckdb duckdb-engine -c conda-forge`. If you don't use duckdb for
+pydiverse.pipedag can either be installed via pypi with `pip install pydiverse-pipedag pydot` or via
+conda-forge with `conda install pydiverse-pipedag pydot -c conda-forge`. If you don't use duckdb for
 testing, you can obmit it here. However, it is needed to run the following example.
 
 ## Example
@@ -90,6 +90,8 @@ def main():
             # Attention: If uncommented, stage and task names might be sent to the following URL.
             #   You can self-host kroki if you like:
             #   https://docs.kroki.io/kroki/setup/install/
+            #   You need to install optional dependency 'pydot' for any visualization
+            #   URL to appear.
             # kroki_url="https://kroki.io",
         ).get("default")
         with cfg:

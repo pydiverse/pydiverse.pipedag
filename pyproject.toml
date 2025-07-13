@@ -1,6 +1,6 @@
 [project]
 name = "pydiverse-pipedag"
-version = "0.10.3"
+version = "0.10.4"
 description = "A pipeline orchestration library executing tasks within one python session. It takes care of SQL table (de)materialization, caching and cache invalidation. Blob storage is supported as well for example for storing model files."
 authors = [
   { name = "QuantCo, Inc." },
@@ -41,7 +41,6 @@ dependencies = [
   "python-box >=7.3.2,<8",
   "pyyaml >=6.0.2,<7",
   "cryptography >=45.0.4,<46",
-  "pydot >=4.0.0,<5",
   "click >=8.1.8,<9",
   "pyparsing >=3.2.3,<4",
   "sqlalchemy >=1.4.54,<3",

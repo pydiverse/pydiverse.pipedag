@@ -42,6 +42,8 @@ def main():
                 # Attention: stage and task names might be sent to the
                 #   following URL. You can self-host kroki if you like:
                 #   https://docs.kroki.io/kroki/setup/install/
+                #   You need to install optional dependency 'pydot' for any visualization
+                #   URL to appear.
                 kroki_url="https://kroki.io",
                 fail_fast=False,
             )

@@ -57,6 +57,7 @@ instances:
     # Attention: For disable_kroki: false, stage and task names might be sent to the kroki_url.
     #   You can self-host kroki if you like:
     #   https://docs.kroki.io/kroki/setup/install/
+    #   You need to install optional dependency 'pydot' for any visualization URL to appear
     disable_kroki: true
     kroki_url: "https://kroki.io"
 
