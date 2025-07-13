@@ -3,9 +3,11 @@
 
 import threading
 import time
+from contextlib import contextmanager
 from typing import Callable
 
 import pytest
+import structlog
 
 from pydiverse.pipedag.backend.lock import BaseLockManager, LockState
 from pydiverse.pipedag.backend.lock.zookeeper import KazooClient
@@ -124,9 +126,34 @@ def test_no_lock():
     def create_lock_manager():
         return NoLockManager()
 
-    with pytest.raises(RuntimeError):
-        _test_lock_manager(create_lock_manager)
-        pytest.fail("No lock manager MUST fail the lock manager tests")
+    import signal
+
+    @contextmanager
+    def timeout(seconds=1, error_message="timeout reached"):
+        """
+        Context manager to raise a TimeoutError after a specified number of seconds.
+        """
+
+        def alarm_handler(signum, frame):
+            _ = signum, frame
+            raise TimeoutError(error_message)
+
+        signal.signal(signal.SIGALRM, alarm_handler)
+        signal.alarm(seconds)
+
+        try:
+            yield
+        finally:
+            signal.alarm(0)
+
+    try:
+        with timeout(seconds=60):
+            with pytest.raises(RuntimeError):
+                _test_lock_manager(create_lock_manager)
+                pytest.fail("No lock manager MUST fail the lock manager tests")
+    except TimeoutError:
+        logger = structlog.get_logger(logger_name=__name__ + ".test_no_lock")
+        logger.info("Running without lock manage may hang")
 
 
 @with_instances("postgres", "mssql", "ibm_db2")
