@@ -25,6 +25,7 @@ from pydiverse.pipedag.context.context import (
     TaskContext,
 )
 from pydiverse.pipedag.core.config import PipedagConfig
+from pydiverse.pipedag.core.flow import pydot
 from tests.fixtures.instances import (
     ORCHESTRATION_INSTANCES,
     skip_instances,
@@ -145,6 +146,7 @@ def fake_cache_status_deterministic_for_baseline_tests(result: Result):
 )
 @pytest.mark.parametrize("ordering_barrier", [True, False])
 @pytest.mark.parametrize("nesting", [False])
+@pytest.mark.skipif(pydot.Dot is None, reason="pydot is not installed")
 def test_run_specific_task_sequential(label, style, ordering_barrier, nesting):
     num = [0]
 
@@ -232,6 +234,7 @@ def test_run_specific_task_sequential(label, style, ordering_barrier, nesting):
         VisualizationStyle(hide_content=True, box_color_all_cache_valid="#cc88cc"),
     ],
 )
+@pytest.mark.skipif(pydot.Dot is None, reason="pydot is not installed")
 def test_run_specific_task_sequential_styles(label, style):
     test_run_specific_task_sequential(label, style, ordering_barrier=False, nesting=True)
 
@@ -251,6 +254,7 @@ def test_run_specific_task_sequential_styles(label, style):
         VisualizationStyle(),
     ],
 )
+@pytest.mark.skipif(pydot.Dot is None, reason="pydot is not installed")
 def test_run_specific_task_config(label, style):
     group_nodes = dict(
         group=dict(tasks=["task4"]),

@@ -3,7 +3,6 @@
 
 from typing import TYPE_CHECKING, Any
 
-import pydot
 import structlog
 from attrs import frozen
 
@@ -18,6 +17,7 @@ from pydiverse.pipedag.errors import LockError
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.core import Flow, Subflow
+    from pydiverse.pipedag.core.flow import pydot
 
 
 @frozen
@@ -130,7 +130,7 @@ class Result:
         """
         return self.subflow.visualize_url(self, visualization_tag)
 
-    def visualize_pydot(self, visualization_tag: str | None = None) -> pydot.Dot:
+    def visualize_pydot(self, visualization_tag: str | None = None) -> "pydot.Dot":
         """
         Wrapper for :py:meth:`Flow.visualize_pydot()`.
         """

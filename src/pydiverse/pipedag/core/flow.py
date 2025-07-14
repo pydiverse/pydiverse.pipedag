@@ -3,12 +3,12 @@
 
 import base64
 import random
+import types
 from collections import defaultdict
 from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING
 
 import networkx as nx
-import pydot
 import structlog
 
 from pydiverse.pipedag import ExternalTableReference
@@ -26,6 +26,13 @@ from pydiverse.pipedag.core.group_node import BarrierTask, VisualizationStyle
 from pydiverse.pipedag.core.stage import CommitStageTask
 from pydiverse.pipedag.core.task import TaskGetItem
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
+
+try:
+    # pydot should be an optional dependency
+    import pydot
+except ImportError:
+    pydot = types.ModuleType("pydot")
+    pydot.Dot = None
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.engine import OrchestrationEngine
@@ -402,8 +409,11 @@ class Flow:
                 orchestration_engine = config.create_orchestration_engine()
             result = orchestration_engine.run(subflow, ignore_position_hashes, inputs, **kwargs)
 
-            visualization_url = result.visualize_url()
-            self.logger.info("Flow visualization", url=visualization_url)
+            try:
+                visualization_url = result.visualize_url()
+                self.logger.info("Flow visualization", url=visualization_url)
+            except RuntimeError as e:
+                self.logger.info("Flow visualization disabled", reason=str(e))
 
         trace_hook.run_complete(result)
 
@@ -524,6 +534,8 @@ class Subflow:
         return dot
 
     def visualize_url(self, result: Result | None = None, visualization_tag: str | None = None) -> str:
+        if pydot.Dot is None:
+            raise RuntimeError("please install pydot to receive a visualization URL")
         dot = self.visualize_pydot(result, visualization_tag)
         return _pydot_url(dot, result.config_context if result else None)
 
@@ -925,6 +937,9 @@ def _build_pydot(
         task_style = {}
     if edge_style is None:
         edge_style = {}
+
+    if pydot.Dot is None:
+        raise RuntimeError("Please install pydot to visualize the flow execution.")
 
     dot = pydot.Dot(compound="true")
     subgraphs: dict[Stage | GroupNode, pydot.Subgraph] = {}

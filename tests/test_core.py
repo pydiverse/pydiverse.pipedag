@@ -6,6 +6,7 @@ import pytest
 
 from pydiverse.pipedag import Flow, Stage
 from pydiverse.pipedag.core import UnboundTask
+from pydiverse.pipedag.core.flow import pydot
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError, StageError
 
 
@@ -535,15 +536,27 @@ def test_flow_visualize_url():
 
     # Kroki is disabled by default
     with PipedagConfig.default.get().evolve():
-        visualization_url = f.visualize_url()
-        assert visualization_url.startswith("<disable_kroki=True>/graphviz/")
+        if pydot.Dot is not None:
+            visualization_url = f.visualize_url()
+            assert visualization_url.startswith("<disable_kroki=True>/graphviz/")
+        else:
+            with pytest.raises(RuntimeError, match="please install pydot"):
+                f.visualize_url()
 
     # Use kroki.io as default url
     with PipedagConfig.default.get().evolve(disable_kroki=False):
-        visualization_url = f.visualize_url()
-        assert visualization_url.startswith("https://kroki.io/graphviz/")
+        if pydot.Dot is not None:
+            visualization_url = f.visualize_url()
+            assert visualization_url.startswith("https://kroki.io/graphviz/")
+        else:
+            with pytest.raises(RuntimeError, match="please install pydot"):
+                f.visualize_url()
 
     # Check that overriding works
     with PipedagConfig.default.get().evolve(disable_kroki=False, kroki_url="THIS_IS_A_TEST_URL"):
-        visualization_url = f.visualize_url()
-        assert visualization_url.startswith("THIS_IS_A_TEST_URL/graphviz/")
+        if pydot.Dot is not None:
+            visualization_url = f.visualize_url()
+            assert visualization_url.startswith("THIS_IS_A_TEST_URL/graphviz/")
+        else:
+            with pytest.raises(RuntimeError, match="please install pydot"):
+                f.visualize_url()

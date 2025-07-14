@@ -54,11 +54,11 @@ pixi run pre-commit install
 You can also use alternative environments as you find them in [pixi.toml](pixi.toml):
 
 ```bash
-pixi install -e py312
-pixi run -e py312 pre-commit install
+pixi install -e py312all
+pixi run -e py312all pre-commit install
 ```
 
-Please, bear in mind, that we currently still want to be python 3.9 compatible while
+Please, bear in mind, that we currently still want to be python 3.10 compatible while
 always supporting the newest python version available on conda-forge.
 
 When using Pycharm, you might find it useful that we install a `conda` executable stub you can
@@ -164,6 +164,8 @@ def main():
             # Attention: If uncommented, stage and task names might be sent to the following URL.
             #   You can self-host kroki if you like:
             #   https://docs.kroki.io/kroki/setup/install/
+            #   You need to install optional dependency 'pydot' for any visualization
+            #   URL to appear.
             # kroki_url="https://kroki.io",
         ).get("default")
         with cfg:

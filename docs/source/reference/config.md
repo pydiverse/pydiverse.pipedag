@@ -88,6 +88,16 @@ instances:
       class: "pydiverse.pipedag.engine.SequentialEngine"
 ```
 
+When using this config, please make sure, you installed psycopg2 and adbc-driver-postgresql.
+When installing via pip, it might be easier to install psycopg2-binary instead of psycopg.
+
+```shell
+pip install pydiverse-pipedag pydot psycopg2-binary adbc-driver-postgresql
+```
+
+```shell
+conda install -c conda-forge pydiverse-pipedag pydot psycopg2 adbc-driver-postgresql
+```
 
 * * *
 
@@ -637,6 +647,8 @@ technical_setups:
     # Attention: For disable_kroki: false, stage and task names might be sent to the kroki_url.
     #   You can self-host kroki if you like:
     #   https://docs.kroki.io/kroki/setup/install/
+    #   You need to install optional dependency 'pydot' for any visualization
+    #   URL to appear.
     disable_kroki: true
     kroki_url: "https://kroki.io"
 
