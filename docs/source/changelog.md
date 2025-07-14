@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.10.4 (2025-07-13)
+## 0.10.4 (2025-07-14)
 - Make pydot optional dependency for visualization of flow execution
 - Make psycopg2/adbc-driver-postgres optional dependency
 
