@@ -4,8 +4,8 @@
 
 pydiverse.pipedag is distributed on [PyPi](https://pypi.org/project/pydiverse-pipedag/)
 and [Conda-Forge](https://anaconda.org/conda-forge/pydiverse-pipedag).
-To use it, just install it with pip, conda, or pixi. We recommend also installing duckdb since it is used in example
-code:
+To use it, just install it with pip, conda, or pixi. We recommend also installing pydot since it helps visualizing flow
+execution:
 
 ```shell
 pip install pydiverse-pipedag pydot
@@ -14,6 +14,19 @@ pip install pydiverse-pipedag pydot
 ```shell
 conda install -c conda-forge pydiverse-pipedag pydot
 ```
+
+or much faster than conda after installing [pixi](https://pixi.sh/latest/installation/):
+```shell
+mkdir my_data_proj
+cd my_data_proj
+pixi init
+pixi add pydiverse-pipedag pydot
+```
+
+With pixi, you need to run python with `pixi run python` or `pixi run python quickstart.py`. This looks cumbersome,
+but it actually fits much better with posix shell principles of not modifying the parent process environment
+than environment activation scripts. There is still `pixi shell` which opens a new shell ready to run pip, pixi, and
+python commands. The first run of a flow with a newly built environment might be slow.
 
 ## What is a Flow, a Task, and a Stage?
 
@@ -160,7 +173,7 @@ also just be recorded and lazily evaluated with consuming tasks.
 Please note the `input_type` parameter of the {py:func}`@materialize <pydiverse.pipedag.materialize>` decorator. It is
 used to specify the type in which the task likes to process tabular inputs. Pipedag takes care of reading the table from
 the configured table store and to present it to the task in the requested form. The typical table store is a SQL
-database. Any tabular outputs of the task are written to the table store independent of its form. You can find a list
+database. All tabular outputs of the task are written to the table store independent of its form. You can find a list
 of supported input_type choices [here](/backend_types).
 
 ## Automatic cache invalidation with `lazy=True`
@@ -168,7 +181,7 @@ of supported input_type choices [here](/backend_types).
 For SQL tasks, a common input_type is `sqlalchemy.Table`. This would provide SQLAlchemy table references to input tables
 which are already auto-loaded, so they would know about columns and column types of the respective table in the
 database. Ideally, this is combined with `lazy=True`. In this case, the task must produce a SQLAlchemy expression for
-any tabular outputs without executing them. Pipedag can render the query and will only produce a table based on this
+all tabular outputs without executing them. Pipedag can render the query and will only produce a table based on this
 query expression if the query changed or one of the inputs to the task changed.
 
 ## Manual cache invalidation with `version` parameter
@@ -179,3 +192,12 @@ did not materially change and will produce the same outputs given the same input
 inspecting any python code changes since this would break at shared code changes where it is very hard to distinguish
 material changes. Not setting the version parameter for non-lazy tasks, will result in the task always being called
 without any cache validity checks.
+
+## Automatic cache invalidation with `version=AUTO_VERSION`
+
+There is a special case for example when using `input_type=polars.LazyFrame`, where we can't use `lazy=True` because
+the data would always be loaded from the table store to polars, but we still can do automatic cache invalidation.
+`version=AUTO_VERSION` loads empty input lazyframes with the correct column types, then executes the task to determine
+any lazyframe expressions in the output of the task. The version is then automatically computed from a hash of the
+computation graph. In case the cache for the task is invalid, the full data is loaded and the task is executed a
+second time.
