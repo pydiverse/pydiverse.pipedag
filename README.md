@@ -92,7 +92,7 @@ for `--ibm_db2`, see the [IBM DB2 development](#ibm-db2-development) section.
 
 ## Example
 
-A flow can look like this (see [`example/run_pipeline.py`](`example/run_pipeline.py`)):
+A flow can look like this (see [`example/run_pipeline.py`](example/run_pipeline.py)):
 
 ```python
 import tempfile
