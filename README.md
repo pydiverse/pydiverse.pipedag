@@ -51,10 +51,17 @@ pixi install  # see pixi.toml for more environments
 pixi run pre-commit install
 ```
 
+You can either put src/ directory on PYTHONPATH (e.g. in PyCharm use `Mark directory as ... Sources Root`) or install
+this checkout editable by running:
+```bash
+pixi run postinstall
+```
+
 You can also use alternative environments as you find them in [pixi.toml](pixi.toml):
 
 ```bash
 pixi install -e py312all
+pixi run -e py312all postinstall
 pixi run -e py312all pre-commit install
 ```
 
@@ -201,6 +208,12 @@ if __name__ == "__main__":
 
 Attention: sa.Alias only exists for SQLAlchemy >= 2.0. Use sa.Table or sa.sql.expression.Alias for older versions.
 
+You can run this example with:
+
+```bash
+pixi run python example/run_pipeline.py
+```
+
 The `with tempfile.TemporaryDirectory()` is only needed to have an OS independent temporary directory available.
 You can also get rid of it like this:
 
@@ -242,13 +255,13 @@ Check out the `NAMES` column in `docker ps` output. If the name of your postgres
 `example_postgres_1`, then you can look at output tables like this:
 
 ```bash
-docker exec example_postgres_1 psql --username=sa --dbname=pipedag_default -c 'select * from stage_1.dfa;'
+docker exec example_postgres-postgres-1 psql --username=sa --dbname=pipedag_default -c 'select * from stage_1.dfa;'
 ```
 
 Or more interactively:
 
 ```bash
-docker exec -t -i example_postgres_1 bash
+docker exec -t -i example_postgres-postgres-1 bash
 psql --username=sa --dbname=pipedag_default
 \dt stage_*.*
 select * from stage_2.task_2_out;
@@ -261,9 +274,21 @@ The `ibm_db` package is only available on the following platforms: linux-64, osx
 > [!NOTE]
 > Because of this, the IBM DB2 drivers are only available in the `py312ibm` and `py310ibm`
 > environments.
-> You can run tests using `pixi run -e py312ibm pytest --ibm_db2`.
+> You can run tests using `pixi run -e py312ibm pytest --ibm_db2 -m ibm_db2`.
 
 ## Troubleshooting
+
+### IBM DB2 container not yet up and running
+
+The IBM DB2 container takes a long time to start. You can find out the name of the container with `docker ps`
+(see column `NAMES`):
+```
+CONTAINER ID   IMAGE                                        COMMAND                  CREATED         STATUS         PORTS                                                                                 NAMES
+8578e0e471ff   icr.io/db2_community/db2                     "/var/db2_setup/lib/…"   3 minutes ago   Up 3 minutes   22/tcp, 55000/tcp, 60006-60007/tcp, 0.0.0.0:50000->50000/tcp, [::]:50000->50000/tcp   pydiversepipedag-ibm_db2-1
+```
+
+If it is `pydiversepipedag-ibm_db2-1`, then you can look for `Setup has completed` in the log with
+`docker logs pydiversepipedag-ibm_db2-1`.
 
 ### Installing mssql odbc driver for macOS and Linux
 
