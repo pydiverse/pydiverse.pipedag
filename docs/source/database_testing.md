@@ -17,7 +17,15 @@ pip install pydiverse-pipedag pydot psycopg2-binary adbc-driver-postgresql
 conda install -c conda-forge pydiverse-pipedag pydot psycopg2 adbc-driver-postgresql
 ```
 
-You can put the following example pipedag code in a file called `run_pipedag.py`:
+or much faster than conda after installing [pixi](https://pixi.sh/latest/installation/):
+```shell
+mkdir my_data_proj
+cd my_data_proj
+pixi init
+pixi add pydiverse-pipedag pydot psycopg2 adbc-driver-postgresql
+```
+
+You can put the following example pipedag code in a file called `run_pipedag.py` (see directory example_postgres/):
 
 ```python
 import pandas as pd
@@ -173,29 +181,25 @@ services:
       - "6543:5432"
 ```
 
-Run `docker-compose up` in the directory of your `docker-compose.yaml` and then execute
-the flow script as follows with a shell like `bash` and a python environment that
-includes `pydiverse-pipedag`, `pandas`, and `sqlalchemy`:
+Run `docker-compose up` in the directory of your `docker-compose.yaml` in order to launch your postgres database.
 
-```bash
-python run_pipeline.py
-```
+To run the actual pipeline, call `python run_pipeline.py` or `pixi run python run_pipeline.py`.
 
 Finally, you may connect to your localhost postgres database `pipedag_default` and
 look at tables in schemas `stage_1`..`stage_3`.
 
 If you don't have a SQL UI at hand, you may use `psql` command line tool inside the docker container.
 Check out the `NAMES` column in `docker ps` output. If the name of your postgres container is
-`example_postgres_1`, then you can look at output tables like this:
+`example_postgres-postgres-1`, then you can look at output tables like this:
 
 ```bash
-docker exec example_postgres_1 psql --username=sa --dbname=pipedag_default -c 'select * from stage_1.dfa;'
+docker exec example_postgres-postgres-1 psql --username=sa --dbname=pipedag_default -c 'select * from stage_1.dfa;'
 ```
 
 Or more interactively:
 
 ```bash
-docker exec -t -i example_postgres_1 bash
+docker exec -t -i example_postgres-postgres-1 bash
 psql --username=sa --dbname=pipedag_default
 \dt stage_*.*
 select * from stage_2.task_2_out;
