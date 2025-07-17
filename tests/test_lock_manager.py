@@ -1,6 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
-
+import sys
 import threading
 import time
 from typing import Callable
@@ -124,20 +124,20 @@ def test_filelock():
     _test_lock_manager(create_lock_manager)
 
 
+@pytest.mark.skipif(
+    sys.version_info >= (3, 13),
+    "We get deprecation warning in 3.13 for forking multithreaded process and "
+    "we see this test hanging in a way that cannot be caught by a timeout.",
+)
 def test_no_lock():
     from pydiverse.pipedag.backend.lock import NoLockManager
 
     def create_lock_manager():
         return NoLockManager()
 
-    try:
-        with timeout(seconds=60):
-            with pytest.raises(RuntimeError):
-                _test_lock_manager(create_lock_manager)
-                pytest.fail("No lock manager MUST fail the lock manager tests")
-    except TimeoutError:
-        logger = structlog.get_logger(logger_name=__name__ + ".test_no_lock")
-        logger.info("Running without lock manage may hang")
+    with pytest.raises(RuntimeError):
+        _test_lock_manager(create_lock_manager)
+        pytest.fail("No lock manager MUST fail the lock manager tests")
 
 
 @with_instances("postgres", "mssql", "ibm_db2")
