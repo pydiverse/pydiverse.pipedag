@@ -418,7 +418,7 @@ class DataframeMsSQLTableHook:
 
         if mssqlkit:
             mss.table.bulk_upload(
-                engine=store.table_store.engine,
+                engine=store.engine,
                 table_name=f"{schema_name}.{table.name}",
                 data=df,
             )
