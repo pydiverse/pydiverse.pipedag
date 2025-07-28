@@ -17,14 +17,15 @@ See [best practices around SQL](best_practices_sql) for how to move from raw SQL
 and thus more fine-grained cache invalidation.
 
 ```python
+import os
 from pathlib import Path
 
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, materialize
-from pydiverse.pipedag.context import ConfigContext, StageLockContext
 from pydiverse.pipedag.container import RawSql
-from tests.fixtures.instances import with_instances
+from pydiverse.pipedag.context import ConfigContext, StageLockContext
+from pydiverse.common.util.structlog import setup_logging
 
 """
 Attention:
@@ -36,13 +37,13 @@ they can be gradually converted from text SQL to programmatically created SQL (p
 
 @materialize(input_type=sa.Table, lazy=True)
 def tsql(
-        name: str,
-        script_directory: Path,
-        *,
-        out_stage: Stage | None = None,
-        in_sql=None,
-        helper_sql=None,
-        depend=None,
+    name: str,
+    script_directory: Path,
+    *,
+    out_stage: Stage | None = None,
+    in_sql=None,
+    helper_sql=None,
+    depend=None,
 ):
     _ = depend  # only relevant for adding additional task dependency
     script_path = script_directory / name
@@ -53,9 +54,7 @@ def tsql(
     return RawSql(sql, Path(script_path).name)
 
 
-def raw_sql_bind_schema(
-        sql, prefix: str, stage: Stage | RawSql | None, *, transaction=False
-):
+def raw_sql_bind_schema(sql, prefix: str, stage: Stage | RawSql | None, *, transaction=False):
     if isinstance(stage, RawSql):
         stage = stage.stage
     config = ConfigContext.get()
@@ -67,40 +66,12 @@ def raw_sql_bind_schema(
     return sql
 
 
-@with_instances("mssql")
-def test_raw_sql():
-    instance_name = ConfigContext.get().instance_name
-    parent_dir = Path(__file__).parent / "raw_sql_scripts" / instance_name
-
-    with Flow() as flow:
-        with Stage("helper") as out_stage:
-            helper = tsql("create_db_helpers.sql", parent_dir, out_stage=out_stage)
-        with Stage("raw") as out_stage:
-            _dir = parent_dir / "raw"
-            raw = tsql("raw_views.sql", _dir, out_stage=out_stage, helper_sql=helper)
-        with Stage("prep") as prep_stage:
-            _dir = parent_dir / "prep"
-            prep = tsql(
-                "entity_checks.sql", _dir, in_sql=raw, out_stage=prep_stage, depend=raw
-            )
-            prep = tsql(
-                "more_tables.sql", _dir, in_sql=raw, out_stage=prep_stage, depend=prep
-            )
-            _ = prep
-
-    # on a fresh database, this will create indexes with Raw-SQL
-    _run_and_check(flow, prep_stage)
-    # make sure cached execution creates the same indexes
-    _run_and_check(flow, prep_stage)
-
-
 def _run_and_check(flow, prep_stage):
-    config_ctx = ConfigContext.get()
-
     with StageLockContext():
         flow_result = flow.run()
         assert flow_result.successful
 
+        config_ctx = flow_result.config_context
         schema = config_ctx.store.table_store.get_schema(prep_stage.name).get()
         inspector = sa.inspect(config_ctx.store.table_store.engine)
 
@@ -133,6 +104,39 @@ def _run_and_check(flow, prep_stage):
             sql = f"SELECT string_col FROM [{schema}].[special_chars_join]"
             str_val = conn.execute(sa.text(sql)).fetchone()[0]
             assert str_val == "äöüßéç"
+
+
+def test_raw_sql():
+    parent_dir = Path(__file__).parent / "raw_sql_scripts" / "mssql"
+
+    with Flow() as flow:
+        with Stage("helper") as out_stage:
+            helper = tsql("create_db_helpers.sql", parent_dir, out_stage=out_stage)
+        with Stage("raw") as out_stage:
+            _dir = parent_dir / "raw"
+            raw = tsql("raw_views.sql", _dir, out_stage=out_stage, helper_sql=helper)
+        with Stage("prep") as prep_stage:
+            _dir = parent_dir / "prep"
+            prep = tsql(
+                "entity_checks.sql", _dir, in_sql=raw, out_stage=prep_stage, depend=raw
+            )
+            prep = tsql(
+                "more_tables.sql", _dir, in_sql=raw, out_stage=prep_stage, depend=prep
+            )
+            _ = prep
+
+    # on a fresh database, this will create indexes with Raw-SQL
+    _run_and_check(flow, prep_stage)
+    # make sure cached execution creates the same indexes
+    _run_and_check(flow, prep_stage)
+
+
+if __name__ == "__main__":
+    os.environ["MSSQL_USERNAME"] = "sa"
+    os.environ["MSSQL_PASSWORD"] = "PydiQuant27"
+
+    setup_logging()
+    test_raw_sql()
 ```
 
 SQL scripts look as follows with placeholders like `{{out_schema}}` since pipedag manages schema names and schema swapping:
@@ -144,6 +148,7 @@ CREATE TABLE {{out_schema}}.table01 (
   , reason      VARCHAR(50)     NOT NULL
   PRIMARY KEY (entity, reason)
 )
+GO
 INSERT INTO {{out_schema}}.table01 WITH (TABLOCKX)
 SELECT DISTINCT raw01.entity        entity
              , 'Missing in raw01' reason
@@ -168,18 +173,17 @@ Furthermore, make sure you use 127.0.0.1 instead of localhost. It seems that /et
 
 The file [raw_sql.zip](raw_sql.zip) can be used as follows:
 
+Install [pixi](https://pixi.sh/latest/installation/).
+
 ```bash
 unzip raw_sql.zip
 cd raw_sql
-conda env create
-conda activate raw_sql
-docker-compose up
+pixi run docker-compose up
 ```
 
 and in another terminal within the same directory:
 
 ```bash
 cd raw_sql
-conda activate raw_sql
-python raw_sql.py
+pixi run python raw_sql.py
 ```

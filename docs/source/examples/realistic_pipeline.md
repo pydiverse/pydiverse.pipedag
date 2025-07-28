@@ -38,7 +38,7 @@ from pydiverse.transform.core.verbs import (
 )
 from pydiverse.transform.eager import PandasTableImpl
 from pydiverse.transform.lazy import SQLTableImpl
-
+from pydiverse.transform.core.dtypes import String
 
 @pdt.verb
 def transmute(tbl, **kwargs):
@@ -48,7 +48,7 @@ def transmute(tbl, **kwargs):
 @pdt.verb
 def trim_all_str(tbl):
     for col in tbl:
-        if col._.dtype == "str":
+        if isinstance(col._.dtype, String):
             tbl[col] = col.strip()
     return tbl
 
