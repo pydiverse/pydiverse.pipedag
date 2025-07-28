@@ -214,6 +214,13 @@ You can run this example with:
 pixi run python example/run_pipeline.py
 ```
 
+Each example directory has its own pixi.toml. So this also works:
+
+```bash
+cd example
+pixi run python run_pipeline.py
+```
+
 The `with tempfile.TemporaryDirectory()` is only needed to have an OS independent temporary directory available.
 You can also get rid of it like this:
 
