@@ -2,6 +2,7 @@
 
 ## 0.10.5 (2025-XX-XX)
 - Fix: Fix mssqlkit bulk upload
+- initialize_test_s3_bucket takes optional host, port, and test_bucket arguments
 
 ## 0.10.4 (2025-07-14)
 - Make pydot optional dependency for visualization of flow execution

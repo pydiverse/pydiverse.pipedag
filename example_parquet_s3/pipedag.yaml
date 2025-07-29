@@ -1,0 +1,44 @@
+instances:
+  __any__:
+    network_interface: "127.0.0.1"
+    auto_table:
+      - "pandas.DataFrame"
+      - "polars.DataFrame"
+      - "polars.LazyFrame"
+      - "sqlalchemy.sql.expression.TextClause"
+      - "sqlalchemy.sql.expression.Selectable"
+      - "pydiverse.transform.Table"
+
+    fail_fast: true
+    instance_id: pipedag_default
+
+    # Attention: For disable_kroki: false, stage and task names might be sent to the kroki_url.
+    #   You can self-host kroki if you like:
+    #   https://docs.kroki.io/kroki/setup/install/
+    #   You need to install optional dependency 'pydot' for any visualization
+    #   URL to appear.
+    disable_kroki: true
+    kroki_url: "https://kroki.io"
+
+    table_store:
+      class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
+      args:
+        parquet_base_path: "s3://pipedag-test-bucket/table_store/"
+        url: "duckdb:////tmp/pipedag/parquet_duckdb/{instance_id}.duckdb"
+        create_database_if_not_exists: true
+        print_materialize: true
+        print_sql: true
+    stage_commit_technique: READ_VIEWS
+    lock_manager:
+      # consider using FileLockManager or NoLockManager if you don't like to launch a ZooKeeper instance
+      class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
+      args:
+        hosts: "localhost:2181"
+
+    blob_store:
+      class: "pydiverse.pipedag.backend.blob.FileBlobStore"
+      args:
+        base_path: "/tmp/pipedag/blobs"
+
+    orchestration:
+      class: "pydiverse.pipedag.engine.SequentialEngine"

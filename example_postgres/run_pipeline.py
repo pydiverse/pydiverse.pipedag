@@ -88,12 +88,14 @@ def main():
 if __name__ == "__main__":
     setup_logging()  # you can setup the logging and/or structlog libraries as you wish
 
-    # for running this pipeline with postgres SQLAlchemy URL, please make sure to install
+    # You can run this pipeline with:
     # ```shell
-    # pip install pydiverse-pipedag pydot psycopg2-binary adbc-driver-postgresql
+    # pixi run python run_pipeline.py
     # ```
-    # or
+
+    # don't forget to run docker-compose in separate shell to launch postgres container:
     # ```shell
-    # conda install -c conda-forge pydiverse-pipedag pydot psycopg2 adbc-driver-postgresql
+    # pixi run docker-compose up
     # ```
+
     main()

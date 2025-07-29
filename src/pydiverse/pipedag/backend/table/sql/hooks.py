@@ -1459,6 +1459,8 @@ class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
 
 @SQLTableStore.register_table(pdt_new)
 class PydiverseTransformTableHook(TableHook[SQLTableStore]):
+    auto_version_support = AutoVersionSupport.LAZY
+
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanMatResult:
         type_ = type(tbl.obj)
@@ -1564,11 +1566,37 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             return str(query)
         return super().lazy_query_str(store, obj)
 
+    @classmethod
+    def retrieve_for_auto_versioning_lazy(
+        cls,
+        store: SQLTableStore,
+        table: Table,
+        stage_name: str,
+        as_type: type[pdt.Table],
+    ) -> pdt.Table:
+        polars_hook = store.get_r_table_hook(pl.LazyFrame)  # type: PolarsTableHook
+        lf = polars_hook.retrieve_for_auto_versioning_lazy(store, table, stage_name, as_type)
+        return pdt.Table(lf, name=table.name)
+
+    @classmethod
+    def get_auto_version_lazy(cls, obj) -> str:
+        from pydiverse.transform.extended import (
+            build_query,
+        )
+
+        query = obj >> build_query()
+
+        if query is not None:
+            # This is intended to throw a TypeError because version=AUTO_VERSION
+            # does not make sense for SQL tasks; use lazy=True instead
+            return super().get_auto_version_lazy(obj)
+
+        return LazyPolarsTableHook.get_auto_version_lazy(obj >> pdt.export(pdt.Polars(lazy=True)))
+
 
 # endregion
 
 # region IBIS
-
 
 try:
     import ibis

@@ -107,6 +107,7 @@ ibm_db_sa = ">=0.3.8"
 # S3
 [feature.s3.dependencies]
 s3fs = ">=2025.5.1,<2026"
+boto3 = ">=1.38.13,<2"
 
 [feature.docs.dependencies]
 Sphinx = ">=7.3.7"
@@ -191,9 +192,9 @@ py313 = ["py313", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1", "postgres
 py310pdsa1 = ["py310", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx", "duckdb0", "pydot", "postgres"]
 py311pdsa1 = ["py311", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx", "duckdb0", "pydot", "postgres"]
 py310all = ["py310", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
-py311all = ["py311", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "colspec", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
-py312all = ["py312", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "colspec", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
-py313all = ["py313", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "colspec", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
+py311all = ["py311", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "colspec", "dataframely", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
+py312all = ["py312", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "colspec", "dataframely", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
+py313all = ["py313", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "colspec", "dataframely", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
 py310pdsa1all = ["py310", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx", "all-tests", "mssql", "pdtransform-old", "filelock", "dask", "prefect2", "snowflake", "pydot", "postgres"]
 py311pdsa1all = ["py311", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx", "all-tests", "mssql", "pdtransform-old", "filelock", "dask", "prefect2", "snowflake", "pydot", "postgres"]
 py310ibm = ["py310", "dev", "pd2", "sa2", "dask", "ibm-db", "all-tests", "mssql", "pdtransform-new", "pydot"]
