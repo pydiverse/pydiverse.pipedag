@@ -10,5 +10,14 @@ version = "0.1.0"
 [dependencies]
 pydiverse-pipedag = ">=0.10.4,<0.11"
 pydot = ">=4.0.1,<5"
+# dependencies for postgres access
 psycopg2 = ">=2.9.10,<3"
 adbc-driver-postgresql = ">=1.7.0,<2"
+# optional dependency for using pydiverse-transform (pdt.Table)
+pydiverse-transform = ">=0.5.2,<0.6"
+# optional dependency for dataframely schema classes
+dataframely = ">=1.2.1,<2"
+# optional dependency for colspec classes (same as dataframely but with SQL support)
+pydiverse-colspec = ">=0.2.4,<0.3"
+# this could be installed in separate environment simply for running docker-compose
+docker-compose = ">=2.39.1,<3"
