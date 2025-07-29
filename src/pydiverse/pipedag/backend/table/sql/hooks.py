@@ -125,28 +125,33 @@ def _polars_apply_retrieve_annotation(df, table, store, intentionally_empty: boo
 
 def _polars_apply_materialize_annotation(df, table, store):
     if dy is not None:
+        column_spec = None
+        # support dy.LazyFrame[T] and dy.DataFrame[T] annotations
         if typing.get_origin(table.annotation) is not None and issubclass(
             typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
         ):
             anno_args = typing.get_args(table.annotation)
             if len(anno_args) == 1:
                 column_spec = anno_args[0]
-                if issubclass(column_spec, dy.Schema):
-                    df, failures = column_spec.filter(df, cast=True)
-                    if len(failures) > 0:
-                        with pl.Config() as cfg:
-                            cfg.set_tbl_cols(15)
-                            cfg.set_tbl_width_chars(120)
-                            try:
-                                fail_df = str(failures._lf.head(5).collect())
-                            except:  # noqa
-                                fail_df = str(failures.invalid().head(5))
-                        raise HookCheckException(
-                            f"Polars task output {table.name} failed "
-                            f"validation with {column_spec.__name__}; "
-                            f"Failure counts: {failures.counts()}; "
-                            f"\nInvalid:\n{fail_df}"
-                        )
+        # but also support Schema annotations directly since there is no dy.PdtTable[T]
+        if inspect.isclass(table.annotation) and issubclass(table.annotation, dy.Schema):
+            column_spec = table.annotation
+        if column_spec and issubclass(column_spec, dy.Schema):
+            df, failures = column_spec.filter(df, cast=True)
+            if len(failures) > 0:
+                with pl.Config() as cfg:
+                    cfg.set_tbl_cols(15)
+                    cfg.set_tbl_width_chars(120)
+                    try:
+                        fail_df = str(failures._lf.head(5).collect())
+                    except:  # noqa
+                        fail_df = str(failures.invalid().head(5))
+                raise HookCheckException(
+                    f"Polars task output {table.name} failed "
+                    f"validation with {column_spec.__name__}; "
+                    f"Failure counts: {failures.counts()}; "
+                    f"\nInvalid:\n{fail_df}"
+                )
     if cs is not None:
         if inspect.isclass(table.annotation) and issubclass(table.annotation, cs.ColSpec):
             column_spec = table.annotation

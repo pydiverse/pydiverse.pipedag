@@ -28,7 +28,14 @@ instances:
         create_database_if_not_exists: true
         print_materialize: true
         print_sql: true
-    stage_commit_technique: READ_VIEWS
+
+      hook_args:
+        sql:
+          cleanup_annotation_action_on_success: false
+          cleanup_annotation_action_intermediate_state: false
+
+    stage_commit_technique: READ_VIEWS  # duckdb does not support schema renaming
+
     lock_manager:
       # consider using FileLockManager or NoLockManager if you don't like to launch a ZooKeeper instance
       class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"

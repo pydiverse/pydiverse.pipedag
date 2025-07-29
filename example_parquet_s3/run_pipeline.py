@@ -18,9 +18,12 @@ from pydiverse.transform.extended import left_join
 
 @materialize(lazy=True)
 def lazy_task_1():
-    return sa.select(
-        sa.literal(1).label("x"),
-        sa.literal(2).label("y"),
+    return Table(
+        sa.select(
+            sa.literal(1).label("x"),
+            sa.literal(2).label("y"),
+        ),
+        name="lazy_1",
     )
 
 
@@ -100,7 +103,12 @@ def eager_task_dataframely(tbl1: dy.LazyFrame[Tbl1Schema], tbl2: pl.LazyFrame) -
 @materialize(version=AUTO_VERSION, input_type=pdt.Polars)
 def eager_task_dataframely_pdt(tbl1: Tbl1Schema, tbl2: pdt.Table) -> OutputSchema:
     # Pipedag automatically calls Tbl1Schema.cast() and OutputSchema.validate().
-    return tbl1 >> left_join(tbl2, tbl1.x == tbl2.x) >> pdt.alias("eager_task_dataframely_pdt_out")
+    return (
+        tbl1
+        >> left_join(tbl2, tbl1.x == tbl2.x)
+        >> pdt.rename({f"a_{tbl2._ast.name}": "a"})
+        >> pdt.alias("eager_task_dataframely_pdt_out")
+    )
 
 
 class Tbl1ColSpec(cs.ColSpec):
@@ -123,19 +131,31 @@ def eager_task_colspec(tbl1: Tbl1ColSpec, tbl2: pl.LazyFrame) -> OutputColSpec:
 def eager_task_colspec_pdt(tbl1: Tbl1ColSpec, tbl2: pdt.Table) -> OutputColSpec:
     # Pipedag automatically calls Tbl1ColSpec.cast_polars() and OutputColSpec.validate_polars()
     # which call dataframely in the background. ColSpec classes can also be used for SQL validations.
-    return tbl1 >> left_join(tbl2, tbl1.x == tbl2.x) >> pdt.alias("eager_task_colspec_pdt_out")
+    return (
+        tbl1
+        >> left_join(tbl2, tbl1.x == tbl2.x)
+        >> pdt.rename({f"a_{tbl2._ast.name}": "a"})
+        >> pdt.alias("eager_task_colspec_pdt_out")
+    )
 
 
 @materialize(lazy=True, input_type=sa.Table)
 def lazy_task_colspec(tbl1: Tbl1ColSpec, tbl2: sa.Alias) -> OutputColSpec:
     # Pipedag automatically calls Tbl1ColSpec.cast() and OutputColSpec.validate()
-    return sa.select(tbl1, tbl2.c.a).select_from(tbl1.outerjoin(tbl2, tbl1.c.x == tbl2.c.x))
+    return Table(
+        sa.select(tbl1, tbl2.c.a).select_from(tbl1.outerjoin(tbl2, tbl1.c.x == tbl2.c.x)), name="lazy_task_colspec"
+    )
 
 
 @materialize(lazy=True, input_type=pdt.SqlAlchemy)
 def lazy_task_colspec_pdt(tbl1: Tbl1ColSpec, tbl2: pdt.Table) -> OutputColSpec:
     # Pipedag automatically calls Tbl1ColSpec.cast() and OutputColSpec.validate()
-    return tbl1 >> left_join(tbl2, tbl1.x == tbl2.x) >> pdt.alias("lazy_task_colspec_pdt_out")
+    return (
+        tbl1
+        >> left_join(tbl2, tbl1.x == tbl2.x)
+        >> pdt.rename({f"a_{tbl2._ast.name}": "a"})
+        >> pdt.alias("lazy_task_colspec_pdt_out")
+    )
 
 
 def main():
@@ -157,11 +177,13 @@ def main():
             out5 = eager_task_dataframely(lazy_1, b)
             out6 = eager_task_dataframely_pdt(lazy_1, b)
             out7 = eager_task_colspec(lazy_1, b)
-            out8 = lazy_task_colspec(lazy_1, b)
+            out8 = eager_task_colspec_pdt(lazy_1, b)
+            out9 = lazy_task_colspec(lazy_1, b)
+            out10 = lazy_task_colspec_pdt(lazy_1, b)
 
         with Stage("stage_3"):
             lazy_4 = lazy_task_4(lazy_2)
-        _ = lazy_3, lazy_4, out, out2, out3, out4, out5, out6, out7, out8  # unused terminal output tables
+        _ = lazy_3, lazy_4, out, out2, out3, out4, out5, out6, out7, out8, out9, out10  # unused terminal output tables
 
     # Run flow
     result = f.run()
