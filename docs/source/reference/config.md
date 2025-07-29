@@ -99,6 +99,14 @@ pip install pydiverse-pipedag pydot psycopg2-binary adbc-driver-postgresql
 conda install -c conda-forge pydiverse-pipedag pydot psycopg2 adbc-driver-postgresql
 ```
 
+or much faster than conda after installing [pixi](https://pixi.sh/latest/installation/):
+```shell
+mkdir my_data_proj
+cd my_data_proj
+pixi init
+pixi add pydiverse-pipedag pydot psycopg2 adbc-driver-postgresql
+```
+
 * * *
 
 

@@ -125,28 +125,33 @@ def _polars_apply_retrieve_annotation(df, table, store, intentionally_empty: boo
 
 def _polars_apply_materialize_annotation(df, table, store):
     if dy is not None:
+        column_spec = None
+        # support dy.LazyFrame[T] and dy.DataFrame[T] annotations
         if typing.get_origin(table.annotation) is not None and issubclass(
             typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
         ):
             anno_args = typing.get_args(table.annotation)
             if len(anno_args) == 1:
                 column_spec = anno_args[0]
-                if issubclass(column_spec, dy.Schema):
-                    df, failures = column_spec.filter(df, cast=True)
-                    if len(failures) > 0:
-                        with pl.Config() as cfg:
-                            cfg.set_tbl_cols(15)
-                            cfg.set_tbl_width_chars(120)
-                            try:
-                                fail_df = str(failures._lf.head(5).collect())
-                            except:  # noqa
-                                fail_df = str(failures.invalid().head(5))
-                        raise HookCheckException(
-                            f"Polars task output {table.name} failed "
-                            f"validation with {column_spec.__name__}; "
-                            f"Failure counts: {failures.counts()}; "
-                            f"\nInvalid:\n{fail_df}"
-                        )
+        # but also support Schema annotations directly since there is no dy.PdtTable[T]
+        if inspect.isclass(table.annotation) and issubclass(table.annotation, dy.Schema):
+            column_spec = table.annotation
+        if column_spec and issubclass(column_spec, dy.Schema):
+            df, failures = column_spec.filter(df, cast=True)
+            if len(failures) > 0:
+                with pl.Config() as cfg:
+                    cfg.set_tbl_cols(15)
+                    cfg.set_tbl_width_chars(120)
+                    try:
+                        fail_df = str(failures._lf.head(5).collect())
+                    except:  # noqa
+                        fail_df = str(failures.invalid().head(5))
+                raise HookCheckException(
+                    f"Polars task output {table.name} failed "
+                    f"validation with {column_spec.__name__}; "
+                    f"Failure counts: {failures.counts()}; "
+                    f"\nInvalid:\n{fail_df}"
+                )
     if cs is not None:
         if inspect.isclass(table.annotation) and issubclass(table.annotation, cs.ColSpec):
             column_spec = table.annotation
@@ -578,6 +583,11 @@ class DataframeSqlTableHook:
     def dialect_has_adbc_driver(cls):
         # by default, we assume an ADBC driver exists
         return True
+
+    @classmethod
+    def dialect_supports_connectorx(cls):
+        # ConnectorX (used by Polars read_database_uri) does not support many dialects
+        return False
 
     @classmethod
     def download_table(
@@ -1044,9 +1054,13 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
                     "Failed retrieving query using ADBC, falling back to Pandas: %s",
                     query,
                 )
-        # This implementation requires connectorx which does not work for duckdb.
-        # Attention: In case this call fails, we simply fall-back to pandas hook.
-        df = pl.read_database_uri(query, connection_uri)
+        elif cls.dialect_supports_connectorx():
+            # This implementation requires connectorx which does not work for duckdb or ibm_db2.
+            # Attention: In case this call fails, we simply fall-back to pandas hook.
+            df = pl.read_database_uri(query, connection_uri)
+        else:
+            # Polars internally falls back to pandas which results in data dependent types
+            df = pl.read_database(query, store.engine)
         return cls._fix_dtypes(df, dtypes)
 
     @classmethod
@@ -1171,14 +1185,18 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         # Thus dtypes must be corrected after loading if needed.
         dtypes = None
         query = cls._compile_query(store, query)
-        try:
-            df = cls.download_table(query, store, dtypes)
-        except (RuntimeError, ModuleNotFoundError) as e:
-            store.logger.error(
-                "Fallback via Pandas since Polars failed to execute query on database %s: %s",
-                store.engine_url.render_as_string(hide_password=True),
-                e,
-            )
+        fallback_pandas = True
+        if cls.dialect_supports_polars_native_read():
+            try:
+                df = cls.download_table(query, store, dtypes)
+                fallback_pandas = False
+            except (RuntimeError, ModuleNotFoundError) as e:
+                store.logger.error(
+                    "Fallback via Pandas since Polars failed to execute query on database %s: %s",
+                    store.engine_url.render_as_string(hide_password=True),
+                    e,
+                )
+        if fallback_pandas:
             pandas_hook = store.get_r_table_hook(pd.DataFrame)  # type: PandasTableHook
             backend = PandasBackend.ARROW
             query, dtypes = pandas_hook._build_retrieve_query(store, table, stage_name)
@@ -1186,6 +1204,11 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
             pd_df = pandas_hook.download_table(query, store, dtypes)
             df = pl.from_pandas(pd_df)
         return df
+
+    @classmethod
+    def dialect_supports_polars_native_read(cls):
+        # for most dialects we find a way
+        return True
 
 
 @SQLTableStore.register_table(pl)
@@ -1459,6 +1482,8 @@ class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
 
 @SQLTableStore.register_table(pdt_new)
 class PydiverseTransformTableHook(TableHook[SQLTableStore]):
+    auto_version_support = AutoVersionSupport.LAZY
+
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanMatResult:
         type_ = type(tbl.obj)
@@ -1564,11 +1589,37 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             return str(query)
         return super().lazy_query_str(store, obj)
 
+    @classmethod
+    def retrieve_for_auto_versioning_lazy(
+        cls,
+        store: SQLTableStore,
+        table: Table,
+        stage_name: str,
+        as_type: type[pdt.Table],
+    ) -> pdt.Table:
+        polars_hook = store.get_r_table_hook(pl.LazyFrame)  # type: PolarsTableHook
+        lf = polars_hook.retrieve_for_auto_versioning_lazy(store, table, stage_name, as_type)
+        return pdt.Table(lf, name=table.name)
+
+    @classmethod
+    def get_auto_version_lazy(cls, obj) -> str:
+        from pydiverse.transform.extended import (
+            build_query,
+        )
+
+        query = obj >> build_query()
+
+        if query is not None:
+            # This is intended to throw a TypeError because version=AUTO_VERSION
+            # does not make sense for SQL tasks; use lazy=True instead
+            return super().get_auto_version_lazy(obj)
+
+        return LazyPolarsTableHook.get_auto_version_lazy(obj >> pdt.export(pdt.Polars(lazy=True)))
+
 
 # endregion
 
 # region IBIS
-
 
 try:
     import ibis

@@ -3,8 +3,11 @@ instances:
     network_interface: "127.0.0.1"
     auto_table:
       - "pandas.DataFrame"
+      - "polars.DataFrame"
+      - "polars.LazyFrame"
       - "sqlalchemy.sql.expression.TextClause"
       - "sqlalchemy.sql.expression.Selectable"
+      - "pydiverse.transform.Table"
 
     fail_fast: true
     instance_id: pipedag_default
@@ -25,6 +28,11 @@ instances:
 
         print_materialize: true
         print_sql: true
+
+      hook_args:
+        sql:
+          cleanup_annotation_action_on_success: false
+          cleanup_annotation_action_intermediate_state: false
 
       local_table_cache:
         store_input: true

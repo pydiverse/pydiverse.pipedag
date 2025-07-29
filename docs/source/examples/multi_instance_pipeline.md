@@ -34,6 +34,14 @@ pip install pydiverse-pipedag pydot psycopg2-binary adbc-driver-postgresql
 conda install -c conda-forge pydiverse-pipedag pydot psycopg2 adbc-driver-postgresql
 ```
 
+or much faster than conda after installing [pixi](https://pixi.sh/latest/installation/):
+```shell
+mkdir my_data_proj
+cd my_data_proj
+pixi init
+pixi add pydiverse-pipedag pydot psycopg2 adbc-driver-postgresql
+```
+
 Please save the following file as pipedag.yaml or download the following [zip](multi_instance_pipeline.zip):
 ```yaml
 name: data_pipeline
@@ -284,21 +292,20 @@ instances distinguishing fresh and stable pipelines.
 
 `multi_instance_pipeline.zip` can be used as follows:
 
+Install [pixi](https://pixi.sh/latest/installation/).
+
 ```bash
 unzip multi_instance_pipeline.zip
 cd multi_instance_pipeline
-conda env create
-conda activate multi_instance_pipeline
-docker-compose up
+pixi run docker-compose up
 ```
 
 and in another terminal within the same directory:
 
 ```bash
 cd multi_instance_pipeline
-conda activate multi_instance_pipeline
 # for full pipeline
-python multi_instance_pipeline.py
+pixi run python multi_instance_pipeline.py
 # for running mini/midi as unit tests
-pytest -s -v
+pixi run pytest -s -v
 ```

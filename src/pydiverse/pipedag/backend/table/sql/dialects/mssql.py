@@ -384,6 +384,11 @@ class DataframeMsSQLTableHook:
         return False
 
     @classmethod
+    def dialect_supports_connectorx(cls):
+        # ConnectorX (used by Polars read_database_uri) supports MSSQL
+        return True
+
+    @classmethod
     def _get_dialect_dtypes(
         cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame]
     ) -> dict[str, sa.types.TypeEngine]:
