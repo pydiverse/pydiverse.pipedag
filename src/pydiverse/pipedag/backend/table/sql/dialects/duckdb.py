@@ -118,6 +118,11 @@ except ImportError as e:
 @DuckDBTableStore.register_table(pl.DataFrame, duckdb)
 class PolarsTableHook(PolarsTableHook):
     @classmethod
+    def dialect_supports_connectorx(cls):
+        # ConnectorX (used by Polars read_database_uri) does not support DuckDB.
+        return False
+
+    @classmethod
     def download_table(
         cls,
         query: Any,

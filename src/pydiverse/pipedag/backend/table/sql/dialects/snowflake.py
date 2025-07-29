@@ -5,6 +5,7 @@ import time
 import warnings
 from typing import Literal
 
+from pydiverse.pipedag.backend.table.sql import hooks
 from pydiverse.pipedag.backend.table.sql.hooks import (
     IbisTableHook,
 )
@@ -59,6 +60,14 @@ class SnowflakeTableStore(SQLTableStore):
                     disable_exists_check=True,
                     create_database=create_database,
                 )
+
+
+@SnowflakeTableStore.register_table(snowflake)
+class PolarsTableHook(hooks.PolarsTableHook):
+    @classmethod
+    def dialect_supports_connectorx(cls):
+        # ConnectorX (used by Polars read_database_uri) supports Snowflake.
+        return True
 
 
 try:

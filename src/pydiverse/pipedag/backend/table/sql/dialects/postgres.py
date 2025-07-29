@@ -193,6 +193,11 @@ class PandasTableHook(hooks.PandasTableHook):
 @PostgresTableStore.register_table(pl)
 class PolarsTableHook(hooks.PolarsTableHook):
     @classmethod
+    def dialect_supports_connectorx(cls):
+        # ConnectorX (used by Polars read_database_uri) supports PostgreSQL.
+        return True
+
+    @classmethod
     def upload_table(
         cls,
         table: Table[pl.DataFrame],
