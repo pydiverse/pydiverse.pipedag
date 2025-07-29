@@ -126,7 +126,7 @@ def test_filelock():
 
 @pytest.mark.skipif(
     sys.version_info >= (3, 13),
-    "We get deprecation warning in 3.13 for forking multithreaded process and "
+    reason="We get deprecation warning in 3.13 for forking multithreaded process and "
     "we see this test hanging in a way that cannot be caught by a timeout.",
 )
 def test_no_lock():
