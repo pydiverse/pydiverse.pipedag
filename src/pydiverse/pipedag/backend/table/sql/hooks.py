@@ -585,6 +585,11 @@ class DataframeSqlTableHook:
         return True
 
     @classmethod
+    def dialect_supports_connectorx(cls):
+        # ConnectorX (used by Polars read_database_uri) does not support many dialects
+        return False
+
+    @classmethod
     def download_table(
         cls,
         query: Any,
@@ -1049,9 +1054,13 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
                     "Failed retrieving query using ADBC, falling back to Pandas: %s",
                     query,
                 )
-        # This implementation requires connectorx which does not work for duckdb.
-        # Attention: In case this call fails, we simply fall-back to pandas hook.
-        df = pl.read_database_uri(query, connection_uri)
+        elif cls.dialect_supports_connectorx():
+            # This implementation requires connectorx which does not work for duckdb or ibm_db2.
+            # Attention: In case this call fails, we simply fall-back to pandas hook.
+            df = pl.read_database_uri(query, connection_uri)
+        else:
+            # Polars internally falls back to pandas which results in data dependent types
+            df = pl.read_database(query, store.engine)
         return cls._fix_dtypes(df, dtypes)
 
     @classmethod
@@ -1176,14 +1185,18 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         # Thus dtypes must be corrected after loading if needed.
         dtypes = None
         query = cls._compile_query(store, query)
-        try:
-            df = cls.download_table(query, store, dtypes)
-        except (RuntimeError, ModuleNotFoundError) as e:
-            store.logger.error(
-                "Fallback via Pandas since Polars failed to execute query on database %s: %s",
-                store.engine_url.render_as_string(hide_password=True),
-                e,
-            )
+        fallback_pandas = True
+        if cls.dialect_supports_polars_native_read():
+            try:
+                df = cls.download_table(query, store, dtypes)
+                fallback_pandas = False
+            except (RuntimeError, ModuleNotFoundError) as e:
+                store.logger.error(
+                    "Fallback via Pandas since Polars failed to execute query on database %s: %s",
+                    store.engine_url.render_as_string(hide_password=True),
+                    e,
+                )
+        if fallback_pandas:
             pandas_hook = store.get_r_table_hook(pd.DataFrame)  # type: PandasTableHook
             backend = PandasBackend.ARROW
             query, dtypes = pandas_hook._build_retrieve_query(store, table, stage_name)
@@ -1191,6 +1204,11 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
             pd_df = pandas_hook.download_table(query, store, dtypes)
             df = pl.from_pandas(pd_df)
         return df
+
+    @classmethod
+    def dialect_supports_polars_native_read(cls):
+        # for most dialects we find a way
+        return True
 
 
 @SQLTableStore.register_table(pl)

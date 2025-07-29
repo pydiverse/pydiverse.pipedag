@@ -248,6 +248,11 @@ class DataframeIbmDb2TableHook:
         return False
 
     @classmethod
+    def dialect_supports_connectorx(cls):
+        # ConnectorX (used by Polars read_database_uri) does not support IBM DB2
+        return False
+
+    @classmethod
     def _get_dialect_dtypes(
         cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame | pl.DataFrame]
     ) -> dict[str, sa.types.TypeEngine]:
@@ -305,4 +310,8 @@ class PandasTableHook(DataframeIbmDb2TableHook, PandasTableHook):
 
 @IBMDB2TableStore.register_table(pd)
 class PolarsTableHook(DataframeIbmDb2TableHook, PolarsTableHook):
-    pass
+    @classmethod
+    def dialect_supports_polars_native_read(cls):
+        # Polars read_database is utterly broken for IBM DB2.
+        # Polars read_database_uri uses connectorx which does not support IBM DB2.
+        return False

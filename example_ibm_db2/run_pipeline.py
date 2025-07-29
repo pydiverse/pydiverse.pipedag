@@ -101,7 +101,12 @@ def eager_task_dataframely(tbl1: dy.LazyFrame[Tbl1Schema], tbl2: pl.LazyFrame) -
 @materialize(version=AUTO_VERSION, input_type=pdt.Polars)
 def eager_task_dataframely_pdt(tbl1: Tbl1Schema, tbl2: pdt.Table) -> OutputSchema:
     # Pipedag automatically calls Tbl1Schema.cast() and OutputSchema.validate().
-    return tbl1 >> left_join(tbl2, tbl1.x == tbl2.x) >> pdt.alias("eager_task_dataframely_pdt_out")
+    return (
+        tbl1
+        >> left_join(tbl2, tbl1.x == tbl2.x)
+        >> pdt.rename({f"a_{tbl2._ast.name}": "a"})
+        >> pdt.alias("eager_task_dataframely_pdt_out")
+    )
 
 
 class Tbl1ColSpec(cs.ColSpec):
