@@ -6,6 +6,7 @@
 - initialize_test_s3_bucket takes optional host, port, and test_bucket arguments
 - Fix: allow modulo operator in SQL queries (every sa.text(str(query)) duplicates '%')
 - Set pandas df.attrs["name"] consistently. By default this copies table names from input to output.
+- Reduced table name length for temporary colspec tables
 
 ## 0.10.5 (2025-07-29)
 - Fix: Fix mssqlkit bulk upload

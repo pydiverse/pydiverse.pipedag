@@ -234,8 +234,7 @@ def _sql_apply_materialize_annotation(
 
     def materialize_hook(tbl: pdt.Table, table_prefix):
         name = table_prefix or ""
-        name += tbl._ast.name or ""
-        name += stable_hash(str(random.randbytes(8)))
+        name += stable_hash(str(random.randbytes(8)))[0:6]
         intermediate_tbls.append(name)
         return write_pdt_table(tbl, name)
 

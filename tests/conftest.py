@@ -38,6 +38,8 @@ def setup_environ():
     os.environ["AWS_SECRET_ACCESS_KEY"] = "minioadmin"
     os.environ["AWS_ENDPOINT_URL"] = "http://localhost:9000"
 
+    os.environ["DATA_DIR_PREFIX"] = str(Path(__file__).parent.parent / "example_postgres") + os.path.sep
+
     from fsspec.config import conf  # fsspec’s global config
 
     conf.setdefault("s3", {})
