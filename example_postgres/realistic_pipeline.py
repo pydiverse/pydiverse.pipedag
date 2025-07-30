@@ -97,7 +97,7 @@ class AaColSpec(cs.ColSpec):
 
 
 class BbColSpec(cs.ColSpec):
-    pk = cs.String()
+    pk = cs.String(primary_key=True)
     x = cs.Float64()
     yz = cs.Float64()
 

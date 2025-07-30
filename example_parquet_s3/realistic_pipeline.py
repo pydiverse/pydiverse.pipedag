@@ -98,7 +98,7 @@ class AaColSpec(cs.ColSpec):
 
 
 class BbColSpec(cs.ColSpec):
-    pk = cs.String()
+    pk = cs.String(primary_key=True)
     x = cs.Float64()
     yz = cs.Float64()
 
@@ -129,7 +129,7 @@ def cc(c: pdt.Table) -> CcColSpec:
     return c >> transmute(pk=c.pk, x=c.x, yz=2 * c.y * c.z, xz=c.x * c.z) >> alias("cc")
 
 
-def transform(src_tbls: dict[str, Task | TaskGetItem]):
+def transform(src_tbls: dict[str, Task | TaskGetItem]) -> EconomicRepresentation:
     # Even though EconomicRepresentation is a @dataclass, it might be more convenient
     # to build it table by table instead of calling the constructor. Both is possible though.
     economic = EconomicRepresentation.build()
