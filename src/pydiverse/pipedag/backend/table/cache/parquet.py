@@ -1,6 +1,5 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
-
 import json
 import os
 import shutil
@@ -303,7 +302,7 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
     ):
         from pydiverse.transform.eager import PandasTableImpl
 
-        if isinstance(as_type, PandasTableImpl):
+        if as_type is PandasTableImpl:
             hook = store.get_r_table_hook(pd.DataFrame)
             df = hook.retrieve(store, table, stage_name, pd.DataFrame, limit)
             return pdt.Table(PandasTableImpl(table.name, df))
@@ -329,9 +328,15 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
 
     @classmethod
     def can_retrieve(cls, type_) -> CanRetResult:
-        from pydiverse.transform.extended import Polars
+        from pydiverse.transform.extended import Polars, SqlAlchemy
 
-        return CanRetResult.new(issubclass(type_, Polars))
+        if type_ is Polars:
+            return CanRetResult.YES
+        elif type_ is SqlAlchemy:
+            # retrieving SQLAlchemy reference from parquet table cache does not make sense
+            return CanRetResult.NO_HOOK_IS_EXPECTED
+        else:
+            return CanRetResult.NO
 
     @classmethod
     def materialize(
@@ -368,7 +373,7 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
     ):
         from pydiverse.transform.extended import Polars
 
-        if isinstance(as_type, Polars):
+        if as_type is Polars:
             import polars as pl
 
             hook = store.get_r_table_hook(pl.LazyFrame)

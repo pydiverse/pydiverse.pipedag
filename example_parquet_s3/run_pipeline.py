@@ -199,14 +199,14 @@ def main():
 if __name__ == "__main__":
     setup_logging()  # you can setup the logging and/or structlog libraries as you wish
 
-    # You can run this pipeline with:
-    # ```shell
-    # pixi run python run_pipeline.py
-    # ```
-
-    # don't forget to run docker-compose in separate shell to launch minio container:
+    # Run docker-compose in separate shell to launch minio container:
     # ```shell
     # pixi run docker-compose up
+    # ```
+
+    # Run this pipeline with (might take a bit longer on first run in pixi environment):
+    # ```shell
+    # pixi run python run_pipeline.py
     # ```
 
     # for testing, we simply create a test bucket in minio container if it does not exist
@@ -214,6 +214,12 @@ if __name__ == "__main__":
     os.environ["AWS_SECRET_ACCESS_KEY"] = "minioadmin"
     os.environ["AWS_ENDPOINT_URL"] = "http://localhost:9000"
     initialize_test_s3_bucket()
-    # initialize_test_s3_bucket(test_bucket="pipedag-test-bucket")
+    # wait for 0.10.6 release
+    # created = initialize_test_s3_bucket(test_bucket="pipedag-test-bucket")
+    # if created:
+    #     # we assume minio container was restarted and thus we need to delete caching metadata
+    #     db = Path("/tmp/pipedag/parquet_duckdb/pipedag_default.duckdb")
+    #     if db.exists():
+    #         db.unlink()
 
     main()

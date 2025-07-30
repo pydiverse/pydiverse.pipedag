@@ -1,8 +1,12 @@
 # Changelog
 
+## 0.10.6 (2025-MM-DD)
+- Fix: support empty tables in arrow-odbc download (mssql); batched reading failed
+- Reduce local table cache warnings for pydiverse.transform use
+- initialize_test_s3_bucket takes optional host, port, and test_bucket arguments
+
 ## 0.10.5 (2025-07-29)
 - Fix: Fix mssqlkit bulk upload
-- initialize_test_s3_bucket takes optional host, port, and test_bucket arguments
 - support version=AUTO_VERSION for input_type=pdt.Polars
 - support dataframely schema class annotations which allows using
   pydiverse.transform Table together with dataframely (only Polars backend)

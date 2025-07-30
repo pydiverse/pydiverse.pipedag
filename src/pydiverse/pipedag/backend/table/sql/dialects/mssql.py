@@ -3,6 +3,7 @@
 import copy
 import dataclasses
 import importlib
+import itertools
 import re
 import types
 from collections.abc import Iterable
@@ -501,17 +502,36 @@ class DataframeMsSQLTableHook:
         # dtypes = {}  # TODO: allow user to provide custom dtypes
         # column_types = reflect_pyodbc_column_types(query, odbc_string)
 
-        df = pl.concat(
-            pl.read_database(
+        dfs = pl.read_database(
+            query=query,
+            connection=odbc_string,
+            iter_batches=True,
+            batch_size=65536,
+            # schema_overrides=dtypes,
+            execute_options={"map_schema": map_pyarrow_schema_for_polars},
+        )
+
+        def peek(iterable):
+            try:
+                first = next(iterable)
+            except StopIteration:
+                return None, None
+            return first, itertools.chain([first], iterable)
+
+        first, dfs = peek(dfs)
+        if first is None:
+            # for empty dataframe we need to resort to unbatched read
+            df = pl.read_database(
                 query=query,
                 connection=odbc_string,
-                iter_batches=True,
-                batch_size=65536,
                 # schema_overrides=dtypes,
                 execute_options={"map_schema": map_pyarrow_schema_for_polars},
-            ),
-            rechunk=True,
-        )
+            )
+        else:
+            df = pl.concat(
+                dfs,
+                rechunk=True,
+            )
 
         return df
 

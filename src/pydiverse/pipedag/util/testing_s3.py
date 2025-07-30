@@ -11,11 +11,12 @@ except ImportError:
     ClientError = None
 
 
-def create_bucket_if_not_exists(bucket_name: str, s3_client, region: str | None = None):
+def create_bucket_if_not_exists(bucket_name: str, s3_client, region: str | None = None) -> bool:
     logger = structlog.get_logger(__name__ + ":create_bucket_if_not_exists")
     try:
         s3_client.head_bucket(Bucket=bucket_name)
         logger.info(f"Bucket '{bucket_name}' already exists.")
+        return False
     except ClientError as e:
         error_code = int(e.response["Error"]["Code"])
         if error_code == 404:
@@ -25,20 +26,25 @@ def create_bucket_if_not_exists(bucket_name: str, s3_client, region: str | None 
                 CreateBucketConfiguration={"LocationConstraint": region} if region is not None else {},
             )
             logger.info(f"Bucket '{bucket_name}' created.")
+            return True
         elif error_code == 403:
             logger.info(f"Bucket '{bucket_name}' exists but is owned by someone else.")
+            return False
         else:
             raise
 
 
-def initialize_test_s3_bucket():
+def initialize_test_s3_bucket(
+    host: str = "127.0.0.1", port: str | int = 9000, test_bucket: str = "pipedag-test-bucket"
+) -> bool:
     if boto3 is not None:
         minio_client = boto3.client(
             "s3",
-            endpoint_url="http://localhost:9000",
+            endpoint_url=f"http://{host}:{port}",
             aws_access_key_id="minioadmin",  # default MinIO credentials
             aws_secret_access_key="minioadmin",
             region_name="us-east-1",
             config=boto3.session.Config(s3={"addressing_style": "path"}),
         )
-        create_bucket_if_not_exists("pipedag-test-bucket", minio_client)
+        return create_bucket_if_not_exists(test_bucket, minio_client)
+    return False
