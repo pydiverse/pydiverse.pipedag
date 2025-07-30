@@ -12,6 +12,7 @@ import pydiverse.colspec as cs
 import pydiverse.transform as pdt
 from pydiverse.common import String
 from pydiverse.pipedag import Blob, Flow, Stage, Table, Task, TaskGetItem, materialize
+from pydiverse.pipedag.util.testing_s3 import initialize_test_s3_bucket
 from pydiverse.transform.extended import (
     C,
     alias,
@@ -271,7 +272,7 @@ if __name__ == "__main__":
 
     setup_logging(log_level=logging.INFO)
 
-    # Run docker-compose in separate shell to launch postgres container:
+    # Run docker-compose in separate shell to launch minio container:
     # ```shell
     # pixi run docker-compose up
     # ```
@@ -280,5 +281,18 @@ if __name__ == "__main__":
     # ```shell
     # pixi run python realistic_pipeline.py
     # ```
+
+    # for testing, we simply create a test bucket in minio container if it does not exist
+    os.environ["AWS_ACCESS_KEY_ID"] = "minioadmin"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "minioadmin"
+    os.environ["AWS_ENDPOINT_URL"] = "http://localhost:9000"
+    initialize_test_s3_bucket()
+    # wait for 0.10.6 release
+    # created = initialize_test_s3_bucket(test_bucket="pipedag-test-bucket")
+    # if created:
+    #     # we assume minio container was restarted and thus we need to delete caching metadata
+    #     db = Path("/tmp/pipedag/parquet_duckdb/pipedag_default.duckdb")
+    #     if db.exists():
+    #         db.unlink()
 
     main()
