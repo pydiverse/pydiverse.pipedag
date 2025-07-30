@@ -2,6 +2,8 @@ instances:
   __any__:
     network_interface: "127.0.0.1"
     auto_table:
+      # When a Task returns an object of these classes, they will automatically be wrapped
+      # in a pipedag Table object and materialized with the table store.
       - "pandas.DataFrame"
       - "polars.DataFrame"
       - "polars.LazyFrame"
@@ -9,7 +11,7 @@ instances:
       - "sqlalchemy.sql.expression.Selectable"
       - "pydiverse.transform.Table"
 
-    fail_fast: true
+    fail_fast: true  # this provides better stack traces but less fault tolerance
     instance_id: pipedag_default
 
     # Attention: For disable_kroki: false, stage and task names might be sent to the kroki_url.
@@ -23,7 +25,11 @@ instances:
     table_store:
       class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
       args:
+        # This is the main location where the ParquetTableStore will store tables.
         parquet_base_path: "s3://pipedag-test-bucket/table_store/"
+        # There is still a duckdb file which keeps read views to all the parquet files.
+        # This database file can also be used with a SQL UI to access the parquet files
+        # associated with a specific pipeline instance.
         url: "duckdb:////tmp/pipedag/parquet_duckdb/{instance_id}.duckdb"
         create_database_if_not_exists: true
         print_materialize: true
@@ -31,10 +37,12 @@ instances:
 
       hook_args:
         sql:
+          # This controls when temporary tables created by ColSpec will be cleaned up
           cleanup_annotation_action_on_success: false
           cleanup_annotation_action_intermediate_state: false
 
-    stage_commit_technique: READ_VIEWS  # duckdb does not support schema renaming
+    # duckdb does not support schema renaming so this is mandatory:
+    stage_commit_technique: READ_VIEWS
 
     lock_manager:
       # consider using FileLockManager or NoLockManager if you don't like to launch a ZooKeeper instance
