@@ -703,7 +703,7 @@ def test_cache_validation_mode(ignore_task_version, disable_cache_function, mode
 
     @materialize(lazy=True, cache=cache)
     def return_cache_table_lazy():
-        tbl = Table(select_as(cache_value, "x"))
+        tbl = Table(select_as(cache_value, "x"), name="return_cache_table_lazy")
         return tbl.materialize() if imperative else tbl
 
     @materialize(version=None, cache=cache)
@@ -713,6 +713,7 @@ def test_cache_validation_mode(ignore_task_version, disable_cache_function, mode
 
     @materialize(version=AUTO_VERSION, cache=cache2, input_type=pd.DataFrame)
     def return_cache_table_auto(df: pd.DataFrame):
+        del df.attrs["name"]  # remove table name since it is used as default output name
         return Table(df).materialize() if imperative else df
 
     @materialize(version="1.0", cache=cache)

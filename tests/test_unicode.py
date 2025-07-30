@@ -4,7 +4,7 @@
 import pandas as pd
 import sqlalchemy as sa
 
-from pydiverse.pipedag import Flow, Stage, materialize
+from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import StageLockContext
 
 # Parameterize all tests in this file with several instance_id configurations
@@ -23,7 +23,7 @@ pytestmark = [with_instances(ALL_INSTANCES, ORCHESTRATION_INSTANCES)]
 def test_unicode(unicode_str="äöüßéç"):
     @materialize(lazy=True, input_type=sa.Table)
     def unicode(src):
-        return sa.select(sa.literal(unicode_str).label("a")).select_from(src).limit(1)
+        return Table(sa.select(sa.literal(unicode_str).label("a")).select_from(src).limit(1), name="unicode")
 
     with Flow("flow") as f:
         with Stage("stage"):

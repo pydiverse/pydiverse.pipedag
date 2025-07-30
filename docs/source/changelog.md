@@ -1,9 +1,11 @@
 # Changelog
 
-## 0.10.6 (2025-MM-DD)
+## 0.10.6 (2025-07-30)
 - Fix: support empty tables in arrow-odbc download (mssql); batched reading failed
 - Reduce local table cache warnings for pydiverse.transform use
 - initialize_test_s3_bucket takes optional host, port, and test_bucket arguments
+- Fix: allow modulo operator in SQL queries (every sa.text(str(query)) duplicates '%')
+- Set pandas df.attrs["name"] consistently. By default this copies table names from input to output.
 
 ## 0.10.5 (2025-07-29)
 - Fix: Fix mssqlkit bulk upload

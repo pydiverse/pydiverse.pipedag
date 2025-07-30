@@ -509,7 +509,7 @@ class SQLTableStore(BaseTableStore):
                         # Some custom DDL statements contain multiple statements.
                         # They are all separated using a special separator.
                         query_str = str(cur_query.compile(self.engine, compile_kwargs={"literal_binds": True}))
-
+                        query_str = query_str.replace("%%", "%")  # undo %% quoting
                         for part in split_ddl_statement(query_str):
                             self._execute(part, conn, truncate_printed_select)
                     else:

@@ -157,6 +157,9 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         # We need to check this choice with future versions of pandas/pyarrow.
         for col in ret.dtypes[(ret.dtypes == "large_string[pyarrow]") | (ret.dtypes == "string[pyarrow]")].index:
             ret[col] = ret[col].astype(pd.StringDtype("pyarrow"))
+
+        if table.name is not None:
+            ret.attrs["name"] = table.name
         return ret
 
     @classmethod
@@ -378,7 +381,7 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
 
             hook = store.get_r_table_hook(pl.LazyFrame)
             df = hook.retrieve(store, table, stage_name, pd.DataFrame, limit)
-            return pdt.Table(df)
+            return pdt.Table(df, name=table.name)
 
         raise ValueError(f"Invalid type {as_type}")
 

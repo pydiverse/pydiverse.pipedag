@@ -49,6 +49,7 @@ def test_external_table_inputs():
 
     @materialize(input_type=pd.DataFrame)
     def identity(table: pd.DataFrame):
+        del table.attrs["name"]  # remove default table name taken from input
         return table
 
     with Flow() as f:
@@ -172,6 +173,7 @@ def test_external_table_inputs_nout():
 
     @materialize(input_type=pd.DataFrame)
     def identity(table: pd.DataFrame):
+        del table.attrs["name"]  # remove default table name taken from input
         return table
 
     with Flow() as f:
@@ -232,6 +234,7 @@ def test_external_table_inputs_no_run():
 
     @materialize(input_type=pd.DataFrame)
     def identity(table: pd.DataFrame):
+        del table.attrs["name"]  # remove default table name taken from input
         return table
 
     with Flow() as f:

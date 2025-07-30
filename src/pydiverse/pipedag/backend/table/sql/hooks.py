@@ -228,7 +228,7 @@ def _sql_apply_materialize_annotation(
     intermediate_tbls = None  # type: list[str] | None
 
     def write_pdt_table(tbl: pdt.Table, table_name: str, suffix: str | None = None):
-        query = sa.text(str(tbl >> pdt.build_query()))
+        query = sa.text(str(tbl >> pdt.build_query()).replace("%%", "%"))  # undo %% quoting
         schema = store.write_subquery(query, table_name, neighbor_table=table, unlogged=unlogged, suffix=suffix)
         return pdt.Table(table_name, pdt.SqlAlchemy(store.engine, schema=schema.get()))
 
@@ -891,6 +891,8 @@ class PandasTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         # Retrieve
         query, dtypes = cls._build_retrieve_query(store, table, stage_name, limit)
         dataframe = cls._execute_query_retrieve(store, query, dtypes, backend)
+        if table.name is not None:
+            dataframe.attrs["name"] = table.name
         return dataframe
 
     @classmethod
@@ -1525,14 +1527,14 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         # detect SQL by checking whether build_query() succeeds
         if query is not None:
             # continue with SQL case handling
-            table_cpy.obj = sa.text(str(query))
+            table_cpy.obj = sa.text(str(query).replace("%%", "%"))  # undo %% quoting
             hook = store.get_m_table_hook(table_cpy)
             assert hook, "fatal error: no hook for materialization of SqlAlchemy query found"
             cfg = hook.cfg()
             if not cfg.disable_materialize_annotation_action:
                 schema = store.get_schema(stage_name)
                 t = _sql_apply_materialize_annotation_pdt_early(table, schema, store)
-                table_cpy.obj = sa.text(str(t >> build_query()))
+                table_cpy.obj = sa.text(str(t >> build_query()).replace("%%", "%"))
             return hook.materialize(store, table_cpy, stage_name)
         else:
             # use Polars for dataframe handling
@@ -1561,8 +1563,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             hook = store.get_r_table_hook(sa.Table)
             sa_tbl = hook.retrieve(store, table, stage_name, sa.Table, limit)
             return pdt.Table(
-                sa_tbl.original.name,
-                SqlAlchemy(store.engine, schema=sa_tbl.original.schema),
+                sa_tbl.original.name, SqlAlchemy(store.engine, schema=sa_tbl.original.schema), name=table.name
             )
         elif issubclass(as_type, Pandas):
             import pandas as pd
