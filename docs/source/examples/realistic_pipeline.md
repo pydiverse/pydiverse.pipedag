@@ -8,14 +8,14 @@ This [example](../examples.md) shows a slightly more realistic pipeline with the
 - model training
 - evaluation
 
-It requires a few data files. You can unzip [realistic_pipeline.zip](realistic_pipeline.zip) to get the data files in the
-right place to execute:
+The following commands expect [pixi](https://pixi.sh/latest/installation/) to be installed on PATH.
+
+This example requires a few data files. You can unzip [realistic_pipeline.zip](realistic_pipeline.zip) to get the
+data files in the right place to execute:
 ```bash
 unzip realistic_pipeline.zip
 cd realistic_pipeline
-conda env create
-conda activate realistic_pipeline
-python realistic_pipeline.py
+pixi run python realistic_pipeline.py
 ```
 
 ```python

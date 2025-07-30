@@ -199,14 +199,14 @@ if __name__ == "__main__":
     # see https://pydiversepipedag.readthedocs.io/en/latest/table_backends.html#installing-mssql-odbc-driver-for-macos-and-linux
     # for how to install the ODBC driver for MSSQL on macOS and Linux.
 
-    # You can run this pipeline with:
-    # ```shell
-    # pixi run python run_pipeline.py
-    # ```
-
-    # don't forget to run docker-compose in separate shell to launch minio container:
+    # Run docker-compose in separate shell to launch Microsoft SQL Server container:
     # ```shell
     # pixi run docker-compose up
+    # ```
+
+    # Run this pipeline with (might take a bit longer on first run in pixi environment):
+    # ```shell
+    # pixi run python run_pipeline.py
     # ```
 
     main()

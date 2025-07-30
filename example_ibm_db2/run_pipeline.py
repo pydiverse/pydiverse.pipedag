@@ -194,14 +194,19 @@ def main():
 if __name__ == "__main__":
     setup_logging()  # you can setup the logging and/or structlog libraries as you wish
 
-    # You can run this pipeline with:
-    # ```shell
-    # pixi run python run_pipeline.py
-    # ```
-
-    # don't forget to run docker-compose in separate shell to launch minio container:
+    # Run docker-compose in separate shell to launch IBM DB2 container:
     # ```shell
     # pixi run docker-compose up
+    # ```
+
+    # Wait several minutes for container to be ready. You can check the logs with:
+    # ```shell
+    # docker logs example_ibm_db2-ibm_db2-1 | grep "Setup has completed"
+    # ```
+
+    # Run this pipeline with (might take a bit longer on first run in pixi environment):
+    # ```shell
+    # pixi run python run_pipeline.py
     # ```
 
     main()

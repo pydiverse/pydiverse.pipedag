@@ -18,6 +18,11 @@ try:
 except ImportError:
     cs = None
 
+try:
+    import xgboost as xgb
+except ImportError:
+    xgb = None
+
 from example.run_pipeline import main as example_flow_main
 from example.simple_pipeline import main as simple_pipeline_main
 from example.visualization import main as visualization_main
@@ -46,6 +51,15 @@ if dy and cs and pdt:
     s3_examples.append(example_s3_main)
     mssql_examples.append(example_mssql_flow_main)
     ibmdb_examples.append(example_ibmdb_flow_main)
+
+if cs and pdt and xgb:
+    from example_mssql.realistic_pipeline import main as example_mssql_realistic
+    from example_parquet_s3.realistic_pipeline import main as example_s3_realistic
+    from example_postgres.realistic_pipeline import main as example_postgres_realistic
+
+    examples.append(example_postgres_realistic)
+    s3_examples.append(example_s3_realistic)
+    mssql_examples.append(example_mssql_realistic)
 
 
 @pytest.mark.parametrize(

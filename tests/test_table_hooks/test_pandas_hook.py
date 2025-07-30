@@ -376,10 +376,12 @@ class TestPandasAutoVersion:
 
         @materialize(input_type=pd.DataFrame, version=AUTO_VERSION)
         def noop(df):
+            del df.attrs["name"]
             return df, Table(df)
 
         @materialize(input_type=pd.DataFrame, version=AUTO_VERSION)
         def global_df_task(df):
+            del df.attrs["name"]
             df["col"] *= global_df["global_col"]
             return df
 

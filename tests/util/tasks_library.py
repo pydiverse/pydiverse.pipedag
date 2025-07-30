@@ -19,11 +19,19 @@ except ImportError:
 
 @materialize(input_type=pd.DataFrame, version="1.0")
 def noop(x):
+    if isinstance(x, pd.DataFrame) and "name" in x.attrs:
+        del x.attrs["name"]  # remove table name
+    if isinstance(x, list | tuple):
+        for df in x:
+            if isinstance(df, pd.DataFrame) and "name" in df.attrs:
+                del df.attrs["name"]
     return x
 
 
 @materialize(input_type=pd.DataFrame, version="1.0")
 def noop2(x):
+    if isinstance(x, pd.DataFrame) and "name" in x.attrs:
+        del x.attrs["name"]  # remove table name
     return x
 
 
@@ -51,6 +59,7 @@ def noop_lazy_polars(x):
 def noop_subtask(x):
     @materialize(input_type=pd.DataFrame, version="1.0")
     def _noop(x):
+        del x.attrs["name"]  # remove default table name carried over from input
         return Table(x)
 
     # This is somewhat crazy behavior to call a task within a task. However, since we
@@ -82,6 +91,9 @@ def noop_subtask_fail_input_type(x):
 
 @materialize(nout=2, version="1.0", input_type=pd.DataFrame)
 def create_tuple(x, y):
+    if isinstance(x, pd.DataFrame):
+        del x.attrs["name"]
+        del y.attrs["name"]
     return x, y
 
 

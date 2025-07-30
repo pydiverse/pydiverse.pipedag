@@ -8,7 +8,7 @@ version = "0.1.0"
 [tasks]
 
 [dependencies]
-pydiverse-pipedag = ">=0.10.4,<0.11"
+pydiverse-pipedag = ">=0.10.5,<0.11"
 pydot = ">=4.0.1,<5"
 # dependencies for mssql access
 arrow-odbc = ">=8.1.1,<9"
@@ -21,5 +21,7 @@ pydiverse-transform = ">=0.5.2,<0.6"
 dataframely = ">=1.2.1,<2"
 # optional dependency for colspec classes (same as dataframely but with SQL support)
 pydiverse-colspec = ">=0.2.4,<0.3"
+# independent library used in realistic_pipeline.py
+xgboost = ">=3.0.2,<4"
 # this could be installed in separate environment simply for running docker-compose
 docker-compose = ">=2.39.1,<3"

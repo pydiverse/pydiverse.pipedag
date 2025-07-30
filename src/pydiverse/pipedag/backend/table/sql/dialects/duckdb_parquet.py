@@ -657,6 +657,8 @@ class PandasTableHook(TableHook[ParquetTableStore]):
                     as_type=as_type,
                     dtypes=df.dtypes,
                 )
+        if table.name is not None:
+            df.attrs["name"] = table.name
         return df
 
     @classmethod

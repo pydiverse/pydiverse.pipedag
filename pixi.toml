@@ -109,6 +109,10 @@ ibm_db_sa = ">=0.3.8"
 s3fs = ">=2025.5.1,<2026"
 boto3 = ">=1.38.13,<2"
 
+# XGBoost is used by some relistic pipeline examples
+[feature.xgboost.dependencies]
+xgboost = ">=3.0.2,<4"
+
 [feature.docs.dependencies]
 Sphinx = ">=7.3.7"
 furo = ">=2023.5.20"
@@ -198,20 +202,20 @@ py313all = ["py313", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new"
 py310pdsa1all = ["py310", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx", "all-tests", "mssql", "pdtransform-old", "filelock", "dask", "prefect2", "snowflake", "pydot", "postgres"]
 py311pdsa1all = ["py311", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx", "all-tests", "mssql", "pdtransform-old", "filelock", "dask", "prefect2", "snowflake", "pydot", "postgres"]
 py310ibm = ["py310", "dev", "pd2", "sa2", "dask", "ibm-db", "all-tests", "mssql", "pdtransform-new", "pydot"]
-py312ibm = ["py312", "dev", "pd2", "sa2", "dask", "ibm-db", "all-tests", "mssql", "pdtransform-new", "colspec", "dataframely", "pydot", "connectorx"]
+py312ibm = ["py312", "dev", "pd2", "sa2", "dask", "ibm-db", "all-tests", "mssql", "pdtransform-new", "colspec", "dataframely", "pydot", "connectorx", "xgboost"]
 py311dy = ["py311", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "dataframely", "pydot", "postgres"]
 py313dy = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "dataframely", "pydot", "postgres"]
 py311cs = ["py311", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "pydot", "postgres"]
 py313cs = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "pydot", "postgres"]
 py310pdt = ["py310", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "pdtransform-new", "pydot", "postgres"]
 py313pdt = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "pdtransform-new", "pydot", "postgres"]
-py311cspdt = ["py311", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "pdtransform-new", "pydot", "postgres"]
-py313cspdt = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "pdtransform-new", "pydot", "postgres"]
+py311cspdt = ["py311", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "pdtransform-new", "pydot", "postgres", "s3", "xgboost"]
+py313cspdt = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "pdtransform-new", "pydot", "postgres", "s3", "xgboost"]
 py311csdy = ["py311", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "dataframely", "pydot", "postgres"]
 py313csdy = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "dataframely", "pydot", "postgres"]
 py310dapre = ["py310", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "dask", "prefect3", "pd2", "sa2", "pydot", "postgres"]
 py313dapre = ["py313", "dev", "zookeeper", "all-tests", "mssql", "pdtransform-new", "dask", "prefect3", "pd2", "sa2", "pydot", "postgres"]
 py310mssqlpdt = ["py310", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "mssql", "pdtransform-new", "pydot"]
-py313mssqlpdt = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "mssql", "pdtransform-new", "pydot"]
+py313mssqlpdt = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "mssql", "pdtransform-new", "pydot", "colspec", "xgboost"]
 py311mssqldy = ["py311", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "mssql", "dataframely", "pydot"]
 py313mssqldy = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "mssql", "dataframely", "pydot"]

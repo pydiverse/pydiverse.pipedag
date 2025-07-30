@@ -912,7 +912,7 @@ class PipeDAGStore(Disposable):
                 # - If no name has been provided, generate on automatically
                 # - If the provided name ends with %%, perform name mangling
                 object_number = next(auto_suffix_counter)
-                auto_suffix = f"{task_cache_info.cache_key}_{object_number:04d}"
+                auto_suffix = f"{task_cache_info.cache_key[0:6]}_{object_number:04d}"
 
                 x.name = mangle_table_name(x.name, task.name, auto_suffix)
 

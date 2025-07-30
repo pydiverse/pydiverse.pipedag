@@ -130,6 +130,8 @@ jobs:
           - py311all
           - py312all
           - py313all
+          - py311cspdt
+          - py313cspdt
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
