@@ -113,6 +113,7 @@ def test_external_table_inputs_rawsql():
 
     @materialize(input_type=pd.DataFrame)
     def identity(table: pd.DataFrame):
+        del table.attrs["name"]  # remove default table name taken from input
         return table
 
     with Flow() as f:
