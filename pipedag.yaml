@@ -111,8 +111,6 @@ instances:
       table_store_connection: mssql
       args:
         disable_pytsql: true
-    blob_store:
-      blob_store_connection: no_blob
 
   mssql_nobulk:
     instance_id: pd_mssql_nobulk

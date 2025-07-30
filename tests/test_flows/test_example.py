@@ -53,11 +53,13 @@ if dy and cs and pdt:
     ibmdb_examples.append(example_ibmdb_flow_main)
 
 if cs and pdt and xgb:
+    from example_mssql.realistic_pipeline import main as example_mssql_realistic
     from example_parquet_s3.realistic_pipeline import main as example_s3_realistic
     from example_postgres.realistic_pipeline import main as example_postgres_realistic
 
     examples.append(example_postgres_realistic)
     s3_examples.append(example_s3_realistic)
+    mssql_examples.append(example_mssql_realistic)
 
 
 @pytest.mark.parametrize(

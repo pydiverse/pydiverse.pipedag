@@ -271,7 +271,7 @@ if __name__ == "__main__":
 
     setup_logging(log_level=logging.INFO)
 
-    # Run docker-compose in separate shell to launch postgres container:
+    # Run docker-compose in separate shell to launch Microsoft SQL Server container:
     # ```shell
     # pixi run docker-compose up
     # ```
