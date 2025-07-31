@@ -1,6 +1,7 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 import os
+from pathlib import Path
 
 import dataframely as dy
 import pandas as pd
@@ -141,7 +142,7 @@ def eager_task_colspec_pdt(tbl1: Tbl1ColSpec, tbl2: pdt.Table) -> OutputColSpec:
 
 @materialize(lazy=True, input_type=sa.Table)
 def lazy_task_colspec(tbl1: Tbl1ColSpec, tbl2: sa.Alias) -> OutputColSpec:
-    # Pipedag automatically calls Tbl1ColSpec.cast() and OutputColSpec.validate()
+    # Pipedag automatically calls OutputColSpec.filter() and only the result will be called lazy_task_colspec
     return Table(
         sa.select(tbl1, tbl2.c.a).select_from(tbl1.outerjoin(tbl2, tbl1.c.x == tbl2.c.x)), name="lazy_task_colspec"
     )
@@ -149,7 +150,7 @@ def lazy_task_colspec(tbl1: Tbl1ColSpec, tbl2: sa.Alias) -> OutputColSpec:
 
 @materialize(lazy=True, input_type=pdt.SqlAlchemy)
 def lazy_task_colspec_pdt(tbl1: Tbl1ColSpec, tbl2: pdt.Table) -> OutputColSpec:
-    # Pipedag automatically calls Tbl1ColSpec.cast() and OutputColSpec.validate()
+    # Pipedag automatically calls OutputColSpec.filter() and only the result will be called lazy_task_colspec_pdt_out
     return (
         tbl1
         >> left_join(tbl2, tbl1.x == tbl2.x)
@@ -213,13 +214,11 @@ if __name__ == "__main__":
     os.environ["AWS_ACCESS_KEY_ID"] = "minioadmin"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "minioadmin"
     os.environ["AWS_ENDPOINT_URL"] = "http://localhost:9000"
-    initialize_test_s3_bucket()
-    # wait for 0.10.6 release
-    # created = initialize_test_s3_bucket(test_bucket="pipedag-test-bucket")
-    # if created:
-    #     # we assume minio container was restarted and thus we need to delete caching metadata
-    #     db = Path("/tmp/pipedag/parquet_duckdb/pipedag_default.duckdb")
-    #     if db.exists():
-    #         db.unlink()
+    created = initialize_test_s3_bucket(test_bucket="pipedag-test-bucket")
+    if created:
+        # we assume minio container was restarted and thus we need to delete caching metadata
+        db = Path("/tmp/pipedag/parquet_duckdb/pipedag_default.duckdb")
+        if db.exists():
+            db.unlink()
 
     main()

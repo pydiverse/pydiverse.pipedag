@@ -138,7 +138,7 @@ def eager_task_colspec_pdt(tbl1: Tbl1ColSpec, tbl2: pdt.Table) -> OutputColSpec:
 
 @materialize(lazy=True, input_type=sa.Table)
 def lazy_task_colspec(tbl1: Tbl1ColSpec, tbl2: sa.Alias) -> OutputColSpec:
-    # Pipedag automatically calls Tbl1ColSpec.cast() and OutputColSpec.validate()
+    # Pipedag automatically calls OutputColSpec.filter() and only the result will be called lazy_task_colspec
     return Table(
         sa.select(tbl1, tbl2.c.a).select_from(tbl1.outerjoin(tbl2, tbl1.c.x == tbl2.c.x)), name="lazy_task_colspec"
     )
@@ -146,7 +146,7 @@ def lazy_task_colspec(tbl1: Tbl1ColSpec, tbl2: sa.Alias) -> OutputColSpec:
 
 @materialize(lazy=True, input_type=pdt.SqlAlchemy)
 def lazy_task_colspec_pdt(tbl1: Tbl1ColSpec, tbl2: pdt.Table) -> OutputColSpec:
-    # Pipedag automatically calls Tbl1ColSpec.cast() and OutputColSpec.validate()
+    # Pipedag automatically calls OutputColSpec.filter() and only the result will be called lazy_task_colspec_pdt_out
     return (
         tbl1
         >> left_join(tbl2, tbl1.x == tbl2.x)

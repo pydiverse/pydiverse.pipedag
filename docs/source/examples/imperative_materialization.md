@@ -9,7 +9,7 @@ subqueries. This example shows that switching from subquery to materialized subq
 This task is actually quite close to many realistic queries:
 ```python
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_4(input1: sa.sql.expression.Alias):
+def lazy_task_4(input1: sa.Alias):
     # imperatively materialize a subquery
     subquery = f"""
         SELECT input1.a, sum(input1.x5) as x_sum FROM {ref(input1)} as input1
@@ -26,7 +26,7 @@ Pipedag supports imperative materialization, which means you can call `Table(...
 This allows writing the subquery into a table called `_sub` with only one additional line:
 ```python
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_4(input1: sa.sql.expression.Alias):
+def lazy_task_4(input1: sa.Alias):
     # imperatively materialize a subquery
     subquery = f"""
         SELECT input1.a, sum(input1.x5) as x_sum FROM {ref(input1)} as input1
@@ -66,7 +66,7 @@ def lazy_task_1():
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_2(input1: sa.sql.expression.Alias, input2: sa.sql.expression.Alias):
+def lazy_task_2(input1: sa.Alias, input2: sa.Alias):
     query = sa.select(
         (input1.c.x * 5).label("x5"),
         input2.c.a,
@@ -75,19 +75,19 @@ def lazy_task_2(input1: sa.sql.expression.Alias, input2: sa.sql.expression.Alias
     return Table(query, name="task_2_out", primary_key=["a"]).materialize()
 
 
-def ref(tbl: sa.sql.expression.Alias):
+def ref(tbl: sa.Alias):
     return f'"{tbl.original.schema}"."{tbl.original.name}"'
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_3(input1: sa.sql.expression.Alias):
+def lazy_task_3(input1: sa.Alias):
     return Table(
         sa.text(f"SELECT * FROM {ref(input1)}")
     ).materialize()
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_4(input1: sa.sql.expression.Alias):
+def lazy_task_4(input1: sa.Alias):
     # imperatively materialize a subquery
     subquery = f"""
         SELECT input1.a, sum(input1.x5) as x_sum FROM {ref(input1)} as input1
@@ -165,7 +165,6 @@ if __name__ == "__main__":
     setup_logging()  # you can setup the logging and/or structlog libraries as you wish
     main()
 ```
-For SQLAlchemy >= 2.0, you can use sa.Alias instead of sa.sql.expression.Alias.
 
 Imperative materialization also has the advantage that the task stays in the stack trace in case exceptions happen
 during the materialization itself:

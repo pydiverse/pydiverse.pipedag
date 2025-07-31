@@ -8,7 +8,7 @@ version = "0.1.0"
 [tasks]
 
 [dependencies]
-pydiverse-pipedag = ">=0.10.5,<0.11"
+pydiverse-pipedag = ">=0.10.6,<0.11"
 pydot = ">=4.0.1,<5"
 # dependencies for IBM DB2 access
 ibm_db = ">=3.2.5"

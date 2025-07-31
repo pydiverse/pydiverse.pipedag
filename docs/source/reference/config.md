@@ -389,126 +389,127 @@ args
 : Any values in this subsection will be passed as arguments to the `__init__` or, if available, the `_init_conf_` method of the table store class.
   For a list of available options, look at the `__init__` method of the table store you are using.
 
+(hook_args)=
 hook_args
 : This subsection allows passing custom config arguments to the different table hooks to influence how tables get materialized and retrieved.
   The builtin hooks respect the following options:
 
   pandas
   : dtype_backend
-    : The default [dtype backend](https://pandas.pydata.org/docs/reference/arrays.html) to use.
+    :   The default [dtype backend](https://pandas.pydata.org/docs/reference/arrays.html) to use.
 
-    In both cases, the aim is to avoid `dtype=object` columns in the provided pd.DataFrame tables.
-    That is why date columns are converted to `datetime64[s]`/`pa.date32` and datetimes to
-    `datetime64[us]`/`pa.time64("us")`. Nanosecond precision is rarely needed and triggers conversion
-    to object dtype if year < 1677 or >  2262.
+        In both cases, the aim is to avoid `dtype=object` columns in the provided pd.DataFrame tables.
+        That is why date columns are converted to `datetime64[s]`/`pa.date32` and datetimes to
+        `datetime64[us]`/`pa.time64("us")`. Nanosecond precision is rarely needed and triggers conversion
+        to object dtype if year < 1677 or >  2262.
 
-    : Supported values:
-      - `numpy`: Use pandas' nullable extension dtypes for numpy.
-      - `arrow`: Use pyarrow backed dataframes.
+    :   Supported values:
+        - `numpy`: Use pandas' nullable extension dtypes for numpy.
+        - `arrow`: Use pyarrow backed dataframes.
 
-    (default: 'numpy')
+        (default: 'numpy')
 
   polars
   : disable_materialize_annotation_action
-    : Disable annotation based materialize actions.
+    :   Disable annotation based materialize actions.
 
-    By Default, pipedag will use validation functionality of dataframely or colspec
-    in case task return arguments are annotated with column specification classes.
-    This is also a way to specify more precise datatypes when writing to database.
-    Example:
-    ```python
-    import polars as pl
-    import pydiverse.colspec as cs
-    class MyColSpec(cs.ColSpec):
-        a: cs.Int16
-        b: cs.String
-    @materialize
-    def my_task() -> MyColSpec:
-        return pl.DataFrame(dict(a=[1, 2], b=["x", "y"]))
-    ```
+        By Default, pipedag will use validation functionality of dataframely or colspec
+        in case task return arguments are annotated with column specification classes.
+        This is also a way to specify more precise datatypes when writing to database.
+        Example:
+        ```python
+        import polars as pl
+        import pydiverse.colspec as cs
+        class MyColSpec(cs.ColSpec):
+            a: cs.Int16
+            b: cs.String
+        @materialize
+        def my_task() -> MyColSpec:
+            return pl.DataFrame(dict(a=[1, 2], b=["x", "y"]))
+        ```
 
-    (default: `False`)
+        (default: `False`)
 
   : disable_retrieve_annotation_action
-    : Disable annotation based retrieve actions.
+    :   Disable annotation based retrieve actions.
 
-    By Default, pipedag will use validation functionality of dataframely or colspec
-    in case task parameters are annotated with column specification classes.
-    This is also a way to specify more precise datatypes when writing to database.
-    Example:
-    ```python
-    import polars as pl
-    import pydiverse.colspec as cs
-    class MyColSpec(cs.ColSpec):
-        a: cs.Int16
-        b: cs.String
-    @materialize(input_type=pl.DataFrame)
-    def my_task(tbl: MyColSpec) -> pl.DataFrame:
-        return tbl.filter(pl.col("a") > 0)
-    ```
+        By Default, pipedag will use validation functionality of dataframely or colspec
+        in case task parameters are annotated with column specification classes.
+        This is also a way to specify more precise datatypes when writing to database.
+        Example:
+        ```python
+        import polars as pl
+        import pydiverse.colspec as cs
+        class MyColSpec(cs.ColSpec):
+            a: cs.Int16
+            b: cs.String
+        @materialize(input_type=pl.DataFrame)
+        def my_task(tbl: MyColSpec) -> pl.DataFrame:
+            return tbl.filter(pl.col("a") > 0)
+        ```
 
-    (default: `False`)
+        (default: `False`)
 
   : fault_tolerant_annotation_action
-    : If set to `True`, the annotation based actions will never fail.
+    :   If set to `True`, the annotation based actions will never fail.
         Instead, an error message is printed to the log.
 
-    (default: `False`)
+        (default: `False`)
 
   sql
   : disable_materialize_annotation_action
-    : Disable annotation based materialize actions.
+    :   Disable annotation based materialize actions.
 
-    By Default, pipedag will use validation functionality of dataframely or colspec
-    in case task return arguments are annotated with column specification classes.
-    For `input_type=pdt.SqlAlchemy`, this is also a way to specify more precise
-    datatypes when writing to database.
+        By Default, pipedag will use validation functionality of dataframely or colspec
+        in case task return arguments are annotated with column specification classes.
+        For `input_type=pdt.SqlAlchemy`, this is also a way to specify more precise
+        datatypes when writing to database.
 
-    Example:
-    ```python
-    import polars as pl
-    import pydiverse.colspec as cs
-    class MyColSpec(cs.ColSpec):
-        a: cs.Int16
-        b: cs.String
-    @materialize(input_type=pdt.SqlAlchemy)
-    def my_task(tbl: pdt.Table) -> MyColSpec:
-        return tbl >> mutate(a=1, b="b") >> pdt.select(tbl.a, tbl.b)
-    ```
+        Example:
+        ```python
+        import polars as pl
+        import pydiverse.colspec as cs
+        class MyColSpec(cs.ColSpec):
+            a: cs.Int16
+            b: cs.String
+        @materialize(input_type=pdt.SqlAlchemy)
+        def my_task(tbl: pdt.Table) -> MyColSpec:
+            return tbl >> mutate(a=1, b="b") >> pdt.select(tbl.a, tbl.b)
+        ```
 
-    (default: `False`)
+        (default: `False`)
 
   : disable_retrieve_annotation_action
-    : Disable annotation based retrieve actions.
+    :   Disable annotation based retrieve actions.
 
-    Currently, this has no effect for SQL based table hooks. This argument still
-    exists for consistency with polars table hooks.
+        Currently, this has no effect for SQL based table hooks. This argument still
+        exists for consistency with polars table hooks.
 
-    (default: `False`)
+        (default: `False`)
 
   : cleanup_annotation_action_on_success
-    : Whether to drop the table used for rows which failed the materialize validation.
+    :   Whether to drop the table used for rows which failed the materialize validation.
 
-    While it is nice to clean up empty tables, the downside of this is that the presence
-    of tables in a schema varies especially with `fault_tolerant_annotation_action=True`.
+        While it is nice to clean up empty tables, the downside of this is that the presence
+        of tables in a schema varies especially with `fault_tolerant_annotation_action=True`.
 
-    (default: `False`)
+        (default: `False`)
 
   : cleanup_annotation_action_intermediate_state
-    : Whether to drop intermediate tables used for validating output tables.
+    :   Whether to drop intermediate tables used for validating output tables.
 
-    Some checks require subqueries to perform. Subqueries are always a risk to confuse
-    the query optimizer. Thus it is nearly always better to materialize subqueries
-    before their use. Those intermediate tables, however, are not very interesting for
-    the user. Pipedag will still print the queries that produced those intermediate tables.
+        Some checks require subqueries to perform. Subqueries are always a risk to confuse
+        the query optimizer. Thus it is nearly always better to materialize subqueries
+        before their use. Those intermediate tables, however, are not very interesting for
+        the user. Pipedag will still print the queries that produced those intermediate tables.
 
-    (default: `True`)
+        (default: `True`)
 
   : fault_tolerant_annotation_action
-    : If set to `True`, the annotation based actions will never fail.
+    :   If set to `True`, the annotation based actions will never fail.
         Instead, an error message is printed to the log.
 
-    (default: `False`)
+        (default: `False`)
 
 local_table_cache
 : See [](#section-local_table_cache). *Optional*

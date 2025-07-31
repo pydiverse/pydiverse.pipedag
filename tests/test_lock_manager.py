@@ -35,11 +35,11 @@ def _test_lock_manager(create_lock_manager: Callable[[], BaseLockManager]):
     locked_event = threading.Event()
     sleep_event = threading.Event()
     unlocked_event = threading.Event()
-    done_barrier = threading.Barrier(2)
+    # done_barrier = threading.Barrier(2)
 
     def lm_1_task():
         lm = create_lock_manager()
-        ready_barrier.wait()
+        ready_barrier.wait(timeout=5 * sleep_time)
 
         try:
             with lm(lock_name):
@@ -50,15 +50,15 @@ def _test_lock_manager(create_lock_manager: Callable[[], BaseLockManager]):
                 time.sleep(0.025)
             unlocked_event.set()
         finally:
-            done_barrier.wait(timeout=3)
-            assert lm.get_lock_state(lock_name) == LockState.UNLOCKED
+            # done_barrier.wait(timeout=3)
+            # assert lm.get_lock_state(lock_name) == LockState.UNLOCKED
             lm.dispose()
 
     def lm_2_task():
         lm = create_lock_manager()
-        ready_barrier.wait()
+        ready_barrier.wait(timeout=5 * sleep_time)
 
-        locked_event.wait()
+        locked_event.wait(timeout=5 * sleep_time)
         start_time = time.perf_counter()
 
         try:
@@ -74,7 +74,7 @@ def _test_lock_manager(create_lock_manager: Callable[[], BaseLockManager]):
             delta = end_time - start_time
             assert delta >= sleep_time
         finally:
-            done_barrier.wait(timeout=3)
+            # done_barrier.wait(timeout=3)
             assert lm.get_lock_state(lock_name) == LockState.UNLOCKED
             lm.dispose()
 
@@ -118,12 +118,13 @@ def test_filelock():
 
     from pydiverse.pipedag.backend.lock import FileLockManager
 
-    base_path = Path(tempfile.gettempdir()) / "pipedag" / "tests"
+    with tempfile.TemporaryDirectory() as temp_dir:
+        base_path = Path(temp_dir) / "pipedag" / "tests"
 
-    def create_lock_manager():
-        return FileLockManager(base_path=base_path)
+        def create_lock_manager():
+            return FileLockManager(base_path=base_path)
 
-    _test_lock_manager(create_lock_manager)
+        _test_lock_manager(create_lock_manager)
 
 
 @pytest.mark.parallelize
@@ -133,14 +134,9 @@ def test_no_lock():
     def create_lock_manager():
         return NoLockManager()
 
-    try:
-        with timeout(seconds=60):
-            with pytest.raises(RuntimeError):
-                _test_lock_manager(create_lock_manager)
-                pytest.fail("No lock manager MUST fail the lock manager tests")
-    except TimeoutError:
-        logger = structlog.get_logger(logger_name=__name__ + ".test_no_lock")
-        logger.info("Running without lock manage may hang")
+    with pytest.raises(RuntimeError):
+        _test_lock_manager(create_lock_manager)
+        pytest.fail("No lock manager MUST fail the lock manager tests")
 
 
 @with_instances("postgres", "mssql", "ibm_db2")

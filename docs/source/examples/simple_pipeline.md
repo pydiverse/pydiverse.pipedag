@@ -29,7 +29,7 @@ def lazy_task_1():
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_2(input1: sa.sql.expression.Alias, input2: sa.sql.expression.Alias):
+def lazy_task_2(input1: sa.Alias, input2: sa.Alias):
     query = sa.select(
         (input1.c.x * 5).label("x5"),
         input2.c.a,
@@ -39,12 +39,12 @@ def lazy_task_2(input1: sa.sql.expression.Alias, input2: sa.sql.expression.Alias
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_3(input1: sa.sql.expression.Alias):
+def lazy_task_3(input1: sa.Alias):
     return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.original.name}")
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_4(input1: sa.sql.expression.Alias):
+def lazy_task_4(input1: sa.Alias):
     return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.original.name}")
 
 
@@ -112,6 +112,5 @@ if __name__ == "__main__":
     setup_logging()  # you can setup the logging and/or structlog libraries as you wish
     main()
 ```
-For SQLAlchemy >= 2.0, you can use sa.Alias instead of sa.sql.expression.Alias.
 
 ![Simple pipeline visualization](simple_pipeline01.svg)

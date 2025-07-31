@@ -206,8 +206,6 @@ if __name__ == "__main__":
     main()
 ```
 
-Attention: sa.Alias only exists for SQLAlchemy >= 2.0. Use sa.Table or sa.sql.expression.Alias for older versions.
-
 You can run this example with:
 
 ```bash

@@ -25,7 +25,11 @@ pixi init
 pixi add pydiverse-pipedag pydot psycopg2 adbc-driver-postgresql
 ```
 
-You can put the following example pipedag code in a file called `run_pipedag.py` (see directory example_postgres/):
+There are prepared example directories available for running similar example code with various database technologies:
+{ref}`table_backends <section-examples>`
+
+You can put the following example pipedag code in a file called `run_pipeline_simple.py`
+(see [example_postgres](https://github.com/pydiverse/pydiverse.pipedag/tree/main/example_postgres)):
 
 ```python
 import pandas as pd
@@ -45,7 +49,7 @@ def lazy_task_1():
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_2(input1: sa.sql.expression.Alias, input2: sa.sql.expression.Alias):
+def lazy_task_2(input1: sa.Alias, input2: sa.Alias):
     query = sa.select(
         (input1.c.x * 5).label("x5"),
         input2.c.a,
@@ -55,12 +59,12 @@ def lazy_task_2(input1: sa.sql.expression.Alias, input2: sa.sql.expression.Alias
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_3(input1: sa.sql.expression.Alias):
+def lazy_task_3(input1: sa.Alias):
     return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.original.name}")
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_4(input1: sa.sql.expression.Alias):
+def lazy_task_4(input1: sa.Alias):
     return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.original.name}")
 
 
@@ -116,7 +120,6 @@ if __name__ == "__main__":
     setup_logging()  # you can setup the logging and/or structlog libraries as you wish
     main()
 ```
-For SQLAlchemy >= 2.0, you can use sa.Alias instead of sa.sql.expression.Alias.
 
 Create a file called `pipedag.yaml` in the same directory:
 
@@ -148,6 +151,7 @@ instances:
         print_materialize: true
         print_sql: true
 
+      # A local table cache is optional. It keeps a local copy of parquet files when working with dataframe input types.
       local_table_cache:
         store_input: true
         store_output: true
@@ -157,14 +161,18 @@ instances:
           base_path: "/tmp/pipedag/table_cache"
 
     blob_store:
+      # Arbitrary objects can be stored in files when wrapped as a Blob. It uses pickle in the background.
       class: "pydiverse.pipedag.backend.blob.FileBlobStore"
       args:
         base_path: "/tmp/pipedag/blobs"
 
     lock_manager:
+      # The DatabaseLockManager is most convenient for databases which are supported (postgres, mssql, ibm_db2).
+      # It ensures that concurrent execution of the same pipeline instance are possible.
       class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
 
     orchestration:
+      # Task parallelization is often not needed if the database parallelizes each query
       class: "pydiverse.pipedag.engine.SequentialEngine"
 ```
 
@@ -183,7 +191,7 @@ services:
 
 Run `docker-compose up` in the directory of your `docker-compose.yaml` in order to launch your postgres database.
 
-To run the actual pipeline, call `python run_pipeline.py` or `pixi run python run_pipeline.py`.
+To run the actual pipeline, call `python run_pipeline_simple.py`.
 
 Finally, you may connect to your localhost postgres database `pipedag_default` and
 look at tables in schemas `stage_1`..`stage_3`.

@@ -195,8 +195,8 @@ def input_task():
 
 
 def has_copy_source_fresh_input(
-    tbls: dict[str, sa.sql.expression.Alias],
-    other_tbls: dict[str, sa.sql.expression.Alias],
+    tbls: dict[str, sa.Alias],
+    other_tbls: dict[str, sa.Alias],
     source_cfg: ConfigContext,
     *,
     attrs: dict[str, Any],
@@ -215,8 +215,8 @@ def has_copy_source_fresh_input(
     lazy=True,
 )
 def copy_filtered_inputs(
-    tbls: dict[str, sa.sql.expression.Alias],
-    source_tbls: dict[str, sa.sql.expression.Alias],
+    tbls: dict[str, sa.Alias],
+    source_tbls: dict[str, sa.Alias],
     source_cfg: ConfigContext,
     *,
     attrs: dict[str, Any],

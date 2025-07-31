@@ -3,6 +3,7 @@
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 import pandas as pd
 import xgboost
@@ -286,13 +287,11 @@ if __name__ == "__main__":
     os.environ["AWS_ACCESS_KEY_ID"] = "minioadmin"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "minioadmin"
     os.environ["AWS_ENDPOINT_URL"] = "http://localhost:9000"
-    initialize_test_s3_bucket()
-    # wait for 0.10.6 release
-    # created = initialize_test_s3_bucket(test_bucket="pipedag-test-bucket")
-    # if created:
-    #     # we assume minio container was restarted and thus we need to delete caching metadata
-    #     db = Path("/tmp/pipedag/parquet_duckdb/pipedag_default.duckdb")
-    #     if db.exists():
-    #         db.unlink()
+    created = initialize_test_s3_bucket(test_bucket="pipedag-test-bucket")
+    if created:
+        # we assume minio container was restarted and thus we need to delete caching metadata
+        db = Path("/tmp/pipedag/parquet_duckdb/pipedag_default.duckdb")
+        if db.exists():
+            db.unlink()
 
     main()
