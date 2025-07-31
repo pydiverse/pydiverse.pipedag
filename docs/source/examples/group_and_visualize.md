@@ -210,7 +210,6 @@ if __name__ == "__main__":
     setup_logging()  # you can setup the logging and/or structlog libraries as you wish
     main()
 ```
-For SQLAlchemy >= 2.0, you can use sa.Alias instead of sa.sql.expression.Alias.
 
 This code was used for creating the legend of colors:
 ```python

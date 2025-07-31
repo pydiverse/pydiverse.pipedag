@@ -50,7 +50,6 @@ def table01(raw01: sa.Alias):
 
     return query(raw01, raw01x(raw01))
 ```
-Attention: sa.Alias only exists for SQLAlchemy >= 2.0. Use sa.Table or sa.sql.expression.Alias for older versions.
 
 Another alternative is to use [imperative materialization](/examples/imperative_materialization):
 ```python

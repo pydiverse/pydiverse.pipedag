@@ -77,7 +77,7 @@ def lazy_task_1():
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_2(input1: sa.sql.expression.Alias, input2: sa.sql.expression.Alias):
+def lazy_task_2(input1: sa.Alias, input2: sa.Alias):
     query = sa.select(
         (input1.c.x * 5).label("x5"),
         input2.c.a,
@@ -152,7 +152,6 @@ if __name__ == "__main__":
     setup_logging()  # you can setup the logging and/or structlog libraries as you wish
     main()
 ```
-For SQLAlchemy >= 2.0, you can use sa.Alias instead of sa.sql.expression.Alias.
 
 Please note, that the validate_stage1 task is executed after all tasks in the stage that are called before it during
 flow wiring:

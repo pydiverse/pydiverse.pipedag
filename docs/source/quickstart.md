@@ -141,6 +141,8 @@ Somewhere within all the log lines you should see the following lines getting pr
 This means that everything went as expected.
 
 If you like to connect to a running database, you can find another way of configuring pipedag [here](database_testing.md).
+There are example directories prepared which make it easy to launch various databases as docker containers:
+{ref}`table_backends <section-examples>`
 
 There are various ways to [visualize](/examples/group_and_visualize) your flow which will color encode which
 tasks ran, which ones failed, which ones were cache, valid, etc.:

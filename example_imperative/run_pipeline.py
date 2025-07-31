@@ -23,7 +23,7 @@ def lazy_task_1():
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_2(input1: sa.sql.expression.Alias, input2: sa.sql.expression.Alias):
+def lazy_task_2(input1: sa.Alias, input2: sa.Alias):
     query = sa.select(
         (input1.c.x * 5).label("x5"),
         input2.c.a,
@@ -32,17 +32,17 @@ def lazy_task_2(input1: sa.sql.expression.Alias, input2: sa.sql.expression.Alias
     return Table(query, name="task_2_out", primary_key=["a"]).materialize()
 
 
-def ref(tbl: sa.sql.expression.Alias):
+def ref(tbl: sa.Alias):
     return f'"{tbl.original.schema}"."{tbl.original.name}"'
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_3(input1: sa.sql.expression.Alias):
+def lazy_task_3(input1: sa.Alias):
     return Table(sa.text(f"SELECT * FROM {ref(input1)}")).materialize()
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_4(input1: sa.sql.expression.Alias):
+def lazy_task_4(input1: sa.Alias):
     # imperatively materialize a subquery
     subquery = f"""
         SELECT input1.a, sum(input1.x5) as x_sum FROM {ref(input1)} as input1
