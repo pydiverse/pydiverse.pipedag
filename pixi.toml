@@ -114,13 +114,13 @@ boto3 = ">=1.38.13,<2"
 xgboost = ">=3.0.2,<4"
 
 [feature.docs.dependencies]
-Sphinx = ">=7.3.7"
-furo = ">=2023.5.20"
+sphinx = ">=8.2.3"
+furo = ">=2024.8.6"
 sphinxcontrib-apidoc = ">=0.3.0"
-myst-parser = ">=2.0.0"
-sphinx-autosummary-accessors = ">=2023.4.0"
-sphinx-click = ">=4.4.0"
-sphinx-autobuild = ">=2021.3.14"
+myst-parser = ">=4.0.1"
+sphinx-autosummary-accessors = ">=2025.3.1"
+sphinx-click = ">=6.0.0"
+sphinx-autobuild = ">=2024.10.3"
 sphinx-copybutton = ">=0.5.2"
 
 [tasks]
