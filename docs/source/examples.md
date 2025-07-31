@@ -18,6 +18,7 @@ pydiverse.pipedag already has quite a rich set of features. So we like to provid
 * [Best practices / inline views, CTEs, and subqueries](/examples/best_practices_inline)
 
 ```{toctree}
+:hidden:
 /quickstart
 /examples/simple_pipeline
 /database_testing

@@ -11,7 +11,12 @@ best practice suggestions:
 * [multiple instances: full_fresh, full_stable, mini_stable, midi_stable](/examples/best_practices_instances)
 * [inline views, CTEs, and subqueries](/examples/best_practices_inline)
 
+Pipeline best practices for high iteration speed were also presented on
+[PyData Amsterdam 2024](https://amsterdam2024.pydata.org/cfp/talk/VPCY79/). The
+recording is available on [youtube](https://www.youtube.com/watch?v=W7HWViXFcWw).
+
 ```{toctree}
+:hidden:
 /examples/best_practices_sql
 /examples/best_practices_instances
 /examples/best_practices_inline
