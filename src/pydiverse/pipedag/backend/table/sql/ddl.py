@@ -723,6 +723,18 @@ def visit_insert_into_select_mssql(insert: InsertIntoSelect, compiler, **kw):
     return _visit_fill_obj_as_select(insert, compiler, "", kw, cmd="INSERT INTO", sep=" WITH(TABLOCKX)")
 
 
+@compiles(InsertIntoSelect, "ibm_db_sa")
+def visit_insert_into_select_ibm_db2_load(insert: InsertIntoSelect, compiler, **kw):
+    name = compiler.preparer.quote(insert.name)
+    schema = compiler.preparer.format_schema(insert.schema.get())
+    kw["literal_binds"] = True
+    select = compiler.sql_compiler.process(insert.query, **kw)
+    return (
+        f"CALL SYSPROC.ADMIN_CMD('load from ({select}) of cursor REPLACE RESETDICTIONARY "
+        f"into {schema}.{name} STATISTICS YES NONRECOVERABLE')"
+    )
+
+
 @compiles(CreateTableAsSelect)
 def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
     return _visit_fill_obj_as_select(create, compiler, "TABLE", kw)
