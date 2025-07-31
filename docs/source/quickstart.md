@@ -155,9 +155,9 @@ Here is a legend of default colors:
 
 Here, you can find more [examples](/examples).
 
-### What is going on here?
+## What is going on here?
 
-## Declaration time vs. run time
+### Declaration time vs. run time
 
 It is important to understand that there is a difference between flow declaration time and flow run time.
 We really like that the code that wires the tasks looks like it could be actual code that produces tables and passes
@@ -170,7 +170,7 @@ decorator has a parameter called `nout`, which must match the number of elements
 decomposable. Tasks can also return lists and dictionaries. get-item access executed on them on declaration time will
 also just be recorded and lazily evaluated with consuming tasks.
 
-## Materialization, dematerialization, and `input_type` parameter
+### Materialization, dematerialization, and `input_type` parameter
 
 Please note the `input_type` parameter of the {py:func}`@materialize <pydiverse.pipedag.materialize>` decorator. It is
 used to specify the type in which the task likes to process tabular inputs. Pipedag takes care of reading the table from
@@ -178,7 +178,7 @@ the configured table store and to present it to the task in the requested form. 
 database. All tabular outputs of the task are written to the table store independent of its form. You can find a list
 of supported input_type choices [here](/backend_types).
 
-## Automatic cache invalidation with `lazy=True`
+### Automatic cache invalidation with `lazy=True`
 
 For SQL tasks, a common input_type is `sqlalchemy.Table`. This would provide SQLAlchemy table references to input tables
 which are already auto-loaded, so they would know about columns and column types of the respective table in the
@@ -186,7 +186,7 @@ database. Ideally, this is combined with `lazy=True`. In this case, the task mus
 all tabular outputs without executing them. Pipedag can render the query and will only produce a table based on this
 query expression if the query changed or one of the inputs to the task changed.
 
-## Manual cache invalidation with `version` parameter
+### Manual cache invalidation with `version` parameter
 
 For non-SQL tasks, the `version` parameter of the {py:func}`@materialize <pydiverse.pipedag.materialize>` decorator must
 be used for manual cache invalidation. As long as the version stays the same, it is assumed that the code of the task
@@ -195,7 +195,7 @@ inspecting any python code changes since this would break at shared code changes
 material changes. Not setting the version parameter for non-lazy tasks, will result in the task always being called
 without any cache validity checks.
 
-## Automatic cache invalidation with `version=AUTO_VERSION`
+### Automatic cache invalidation with `version=AUTO_VERSION`
 
 There is a special case for example when using `input_type=polars.LazyFrame`, where we can't use `lazy=True` because
 the data would always be loaded from the table store to polars, but we still can do automatic cache invalidation.
