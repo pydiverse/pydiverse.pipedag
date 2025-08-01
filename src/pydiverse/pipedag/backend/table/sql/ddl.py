@@ -729,8 +729,10 @@ def visit_insert_into_select_ibm_db2_load(insert: InsertIntoSelect, compiler, **
     schema = compiler.preparer.format_schema(insert.schema.get())
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(insert.query, **kw)
+    # using LOAD is much faster than an actual INSERT INTO for DB2
+    tick = "'"
     return (
-        f"CALL SYSPROC.ADMIN_CMD('load from ({select}) of cursor REPLACE RESETDICTIONARY "
+        f"CALL SYSPROC.ADMIN_CMD('load from ({select.replace(tick, tick + tick)}) of cursor REPLACE RESETDICTIONARY "
         f"into {schema}.{name} STATISTICS YES NONRECOVERABLE')"
     )
 
