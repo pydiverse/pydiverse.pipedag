@@ -219,7 +219,7 @@ jobs:
           - py310dapre
           - py313dapre
           - py311all
-          - py311pdsa1all
+#          - py311pdsa1all  # prefect and pydantac tend to cause trouble for old versions
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
