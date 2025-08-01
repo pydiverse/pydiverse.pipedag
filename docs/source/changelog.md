@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.7 (2025-08-01)
+- IBM DB2: massive speedup by using ADMIN_CMD('LOAD FROM (SELECT...') instead of INSERT INTO SELECT
+
 ## 0.10.6 (2025-07-30)
 - Fix: support empty tables in arrow-odbc download (mssql); batched reading failed
 - Reduce local table cache warnings for pydiverse.transform use
