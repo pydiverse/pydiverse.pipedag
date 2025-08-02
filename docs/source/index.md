@@ -292,6 +292,7 @@ instances.
 :hidden:
 
 quickstart
+parquet_s3
 examples
 table_backends
 database_testing

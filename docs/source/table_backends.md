@@ -2,9 +2,12 @@ from pydiverse.pipedag.backend.table.base import CanResult
 
 # Table Backends
 
-We currently only support one table backend battle tested:
+We currently support two table backends:
 
 - [](#pydiverse.pipedag.backend.table.SQLTableStore)
+- [](#pydiverse.pipedag.backend.table.parquet.ParquetTableStore)
+
+Support for in-memory storage based on [Apache Arrow](https://arrow.apache.org/) is planned.
 
 ## [](#pydiverse.pipedag.backend.table.SQLTableStore)
 
@@ -70,8 +73,24 @@ decorator out-of-the-box:
   and `version="X.Y.Z"`)
 - `polars.LazyFrame` (see [https://pola.rs/](https://pola.rs/); recommended with `version=AUTO_VERSION`)
 
+## [](#pydiverse.pipedag.backend.table.parquet.ParquetTableStore)
+
+The ParquetTableStore derived from the [SQLTableStore](#pydiverse.pipedag.backend.table.SQLTableStore)
+with flavor DuckDB. It can be used in much the same way. Just the performance for `input_type`
+`pl.DataFrame/pl.LazyFrame/pd.DataFrame` should be much better since they directly read from the
+parquet files.
+
+The ParquetTableStore has one additional `args` attribute:
+- `parquet_base_path`: Defines the fs_spec base location where parquet files are placed.
+It can be both a regular file system location or a cloud storage location.
+For regular file locations, directories are created automatically. For cloud storage
+locations the bucket must already exist and schemas are represented as key prefixes.
+The instance_id is still added as a directory/key prefix level below `parquet_base_path`.
+
+The usage of ParquetTableStore is described [here](parquet_s3.md) in more detail.
+
 (section-examples)=
-### Example pipelines for getting started
+## Example pipelines for getting started
 
 The following examples can all be run with [pixi](https://pixi.sh/latest/installation/). They require running
 `pixi run docker-compose up` in one shell and once the database is up, you can run `pixi run python <script>.py`.
@@ -80,12 +99,13 @@ Each includes `run_pipeline.py`. Some also include other pipelines like
 
 The examples are all part of the pipedag repository and can be executed from there for example with:
 ```bash
-git clone https://github.com/pydiverse/pydiverse.pipedag/
+git clone https://github.com/pydiverse/pydiverse.pipedag.git
 cd pydiverse.pipedag/example_postgres
 pixi run docker-compose up
 ```
-and
+and in a separate shell:
 ```bash
+cd pydiverse.pipedag/example_postgres
 pixi run python run_pipeline.py
 ```
 
@@ -93,11 +113,13 @@ A specific example to get started with one database technology can also be found
 - [Postgres example](examples/zip/example_postgres.zip)
 - [MSSQL example](examples/zip/example_mssql.zip)
 - [IBM DB2 example](examples/zip/example_ibm_db2.zip)
-- [Parquet S3 example](examples/zip/example_parquet_s3.zip): uses minio container as S3 compatible storage and stores parquet
-files there
+- [Parquet S3 example](examples/zip/example_parquet_s3.zip)
+
+The Parquet S3 example uses minio container as S3 compatible storage and is described
+[here](parquet_s3.md) in more detail.
 
 (section-mssql_odbc)=
-### Installing mssql odbc driver for macOS and Linux
+## Installing mssql odbc driver for macOS and Linux
 
 Install via Microsoft's
 instructions for [Linux](https://docs.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server)
