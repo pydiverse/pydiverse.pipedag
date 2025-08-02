@@ -57,21 +57,24 @@ SQLTableStore supports the following `input_type` arguments to the {py:func}`@ma
 decorator out-of-the-box:
 
 - `sqlalchemy.Table` (see [https://www.sqlalchemy.org/](https://www.sqlalchemy.org/); recommended with `lazy=True`;
-  can also be used for composing handwritten SQL strings)
-- `pydiverse.transform.eager.PandasTableImpl` (see
-  [https://pydiversetransform.readthedocs.io/en/latest/](https://pydiversetransform.readthedocs.io/en/latest/);
-  recommended with manual version bumping and `version="X.Y.Z"`)
-- `pydiverse.transform.lazy.SQLTableImpl` (
+  can also be used for composing handwritten SQL strings; please note that tables are given
+  as sqlalchemy.Alias to the task in order to produce more concise SQL queries -- the only
+  downside is that getting schema for `tbl: sa.Alias` requires `tbl.original.schema` instead
+  of `tbl.schema`)
+- `pydiverse.transform.SqlAlchemy` (
   see [https://pydiversetransform.readthedocs.io/en/latest/](https://pydiversetransform.readthedocs.io/en/latest/);
   recommended with `lazy=True`)
+- `pydiverse.transform.Polars` (
+  see [https://pydiversetransform.readthedocs.io/en/latest/](https://pydiversetransform.readthedocs.io/en/latest/);
+  recommended with `version=AUTO_VERSION`)
+- `polars.LazyFrame` (see [https://pola.rs/](https://pola.rs/); recommended with `version=AUTO_VERSION`)
+- `polars.DataFrame` (see [https://pola.rs/](https://pola.rs/); recommended with manual version bumping
+  and `version="X.Y.Z"`)
+- `pandas.DataFrame` (see [https://pandas.pydata.org/](https://pandas.pydata.org/); recommended with manual version
+  bumping and `version="X.Y.Z"`)
 - `ibis.Table` (see [https://ibis-project.org/](https://ibis-project.org/); recommended with `lazy=True`)
 - `tidypolars.Tibble` (see [https://github.com/markfairbanks/tidypolars](https://github.com/markfairbanks/tidypolars);
   recommended with `lazy=True`)
-- `pandas.DataFrame` (see [https://pandas.pydata.org/](https://pandas.pydata.org/); recommended with manual version
-  bumping and `version="X.Y.Z"`)
-- `polars.DataFrame` (see [https://pola.rs/](https://pola.rs/); recommended with manual version bumping
-  and `version="X.Y.Z"`)
-- `polars.LazyFrame` (see [https://pola.rs/](https://pola.rs/); recommended with `version=AUTO_VERSION`)
 
 ## [](#pydiverse.pipedag.backend.table.parquet.ParquetTableStore)
 
