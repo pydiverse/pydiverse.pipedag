@@ -78,7 +78,7 @@ decorator out-of-the-box:
 
 ## [](#pydiverse.pipedag.backend.table.parquet.ParquetTableStore)
 
-The ParquetTableStore derived from the [SQLTableStore](#pydiverse.pipedag.backend.table.SQLTableStore)
+The ParquetTableStore is derived from the [SQLTableStore](#pydiverse.pipedag.backend.table.SQLTableStore)
 with flavor DuckDB. It can be used in much the same way. Just the performance for `input_type`
 `pl.DataFrame/pl.LazyFrame/pd.DataFrame` should be much better since they directly read from the
 parquet files.

@@ -131,6 +131,10 @@ The ParquetTableStore is based on the SQLTableStore for duckdb, so you still nee
 a duckdb file location as `args: url`.
 Don't configure a local_table_cache with ParquetTableStore. It might work, but doesn't make much sense.
 
+The `parquet_base_path` is chosen as an S3 bucket location. Please make sure to install `s3fs` in this case.
+This enables `fsspec` to write to S3 compatible storage locations. There also exists a package `gcsfs` for
+Google Cloud Storage and `adlfs` for Azure Data Lake Storage.
+
 The main change that ParquetTableStore implemented is that `CREATE TABLE as SELECT` statements are
 turned into `COPY (SELECT ...) TO <fs_spec file location> WITH (FORMAT PARQUET)`. Additionally,
 it creates views to the the parquet files in the duckdb file with
