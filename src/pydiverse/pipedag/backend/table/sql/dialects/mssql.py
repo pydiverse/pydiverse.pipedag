@@ -543,13 +543,13 @@ class DataframeMsSQLTableHook:
         if arrow_odbc:
             # arrow-odbc does not handle VARCHAR(MAX) columns well, so we need to cut
             # strings
-            if any(isinstance(col.type, sa.String) for col in cols.values()):
+            if any(isinstance(col.type, sa.String) and col.type.length is None for col in cols.values()):
                 return {
                     name: sa.cast(
                         sa.func.substring(col, 1, max_string_length).label(name),
                         sa.String(max_string_length),
                     )
-                    if isinstance(col.type, sa.String)
+                    if isinstance(col.type, sa.String) and col.type.length is None
                     else col
                     for name, col in cols.items()
                 }, dtypes
