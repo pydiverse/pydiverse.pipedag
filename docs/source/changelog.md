@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.8 (2025-XX-XX)
+- Fix: Only cut MSSQL VARCHAR(N) in arrow-odbc download if N is MAX
+
 ## 0.10.7 (2025-08-01)
 - IBM DB2: massive speedup by using ADMIN_CMD('LOAD FROM (SELECT...') instead of INSERT INTO SELECT
 
