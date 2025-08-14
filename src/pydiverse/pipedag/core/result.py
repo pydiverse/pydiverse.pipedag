@@ -94,6 +94,9 @@ class Result:
             stored in the local table cache, if it is not already there and cache valid.
             If no local table cache is configured or the type as which the table is retrieved,
             is not compatible with the local table cache, this flag has no effect.
+
+            .. Warning:: It is not safe to call this method with `write_local_table_cache=True` from several threads at the same time.
+
         :return: The results of the task.
         """
         from pydiverse.pipedag.materialize.store import dematerialize_output_from_store
