@@ -16,8 +16,7 @@ from pydiverse.pipedag.core.task import Task, TaskGetItem
 from pydiverse.pipedag.errors import LockError
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag.core import Flow, Subflow
-    from pydiverse.pipedag.core.flow import pydot
+    pass
 
 
 @frozen
@@ -78,7 +77,7 @@ class Result:
         kwargs = {**dir(self), **changes}
         return Result(**kwargs)
 
-    def get(self, task: Task | TaskGetItem, as_type: type = None) -> Any:
+    def get(self, task: Task | TaskGetItem, as_type: type = None, write_local_table_cache: bool = False) -> Any:
         """Retrieve the output produced by a task.
 
         Any tables and blobs returned by a task get loaded from their
@@ -91,6 +90,10 @@ class Result:
         :param as_type: The type as which tables produced by this task should
             be dematerialized. If no type is specified, the input type of
             the task is used.
+        :param write_local_table_cache: Flag that determines, whether the result should be
+            stored in the local table cache, if it is not already there and cache valid.
+            If no local table cache is configured or the type as which the table is retrieved,
+            is not compatible with the local table cache, this flag has no effect.
         :return: The results of the task.
         """
         from pydiverse.pipedag.materialize.store import dematerialize_output_from_store
@@ -114,7 +117,9 @@ class Result:
         else:
             task_output = self.task_values[task.task]
 
-        with self.config_context, DematerializeRunContext(self.flow):
+        with self.config_context, DematerializeRunContext(
+            self.flow, allow_write_local_table_cache=write_local_table_cache
+        ):
             store = self.config_context.store
             return dematerialize_output_from_store(store, task, task_output, as_type)
 
