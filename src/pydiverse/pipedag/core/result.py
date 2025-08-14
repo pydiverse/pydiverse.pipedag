@@ -16,7 +16,8 @@ from pydiverse.pipedag.core.task import Task, TaskGetItem
 from pydiverse.pipedag.errors import LockError
 
 if TYPE_CHECKING:
-    pass
+    from pydiverse.pipedag.core import Flow, Subflow
+    from pydiverse.pipedag.core.flow import pydot
 
 
 @frozen
@@ -95,7 +96,8 @@ class Result:
             If no local table cache is configured or the type as which the table is retrieved,
             is not compatible with the local table cache, this flag has no effect.
 
-            .. Warning:: It is not safe to call this method with `write_local_table_cache=True` from several threads at the same time.
+            .. Warning:: It is not safe to call this method with `write_local_table_cache=True`
+                from several threads at the same time.
 
         :return: The results of the task.
         """
