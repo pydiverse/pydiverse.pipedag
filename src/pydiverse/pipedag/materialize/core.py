@@ -725,7 +725,7 @@ def _get_output_from_store(
     root_task = task if isinstance(task, Task) else task.task
 
     store = ConfigContext.get().store
-    with DematerializeRunContext(root_task.flow):
+    with DematerializeRunContext(root_task.flow, allow_write_local_table_cache=False):
         cached_output, _ = store.retrieve_most_recent_task_output_from_cache(
             root_task, ignore_position_hashes=ignore_position_hashes
         )
