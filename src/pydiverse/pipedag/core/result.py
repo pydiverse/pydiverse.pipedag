@@ -91,7 +91,7 @@ class Result:
         :param as_type: The type as which tables produced by this task should
             be dematerialized. If no type is specified, the input type of
             the task is used.
-        :param write_local_table_cache: Flag that determines, whether the result should be
+        :param write_local_table_cache: Flag that determines whether the table should be
             stored in the local table cache, if it is not already there and cache valid.
             If no local table cache is configured or the type as which the table is retrieved,
             is not compatible with the local table cache, this flag has no effect.
