@@ -211,14 +211,21 @@ class MaterializingTaskGetItem(TaskGetItem):
         """
         return super().__getitem__(item)
 
-    def get_output_from_store(self, as_type: type = None, ignore_position_hashes: bool = False) -> Any:
+    def get_output_from_store(
+        self, as_type: type = None, ignore_position_hashes: bool = False, write_local_table_cache: bool = False
+    ) -> Any:
         """
         Same as :py:meth:`MaterializingTask.get_output_from_store()`,
         except that it only loads the required subset of the output.
         """
         from pydiverse.pipedag.materialize.core import _get_output_from_store
 
-        return _get_output_from_store(self, as_type, ignore_position_hashes=ignore_position_hashes)
+        return _get_output_from_store(
+            self,
+            as_type,
+            ignore_position_hashes=ignore_position_hashes,
+            write_local_table_cache=write_local_table_cache,
+        )
 
 
 class MaterializingTask(Task):
@@ -323,7 +330,9 @@ class MaterializingTask(Task):
 
         return super().run(inputs, **kwargs)
 
-    def get_output_from_store(self, as_type: type = None, ignore_position_hashes: bool = False) -> Any:
+    def get_output_from_store(
+        self, as_type: type = None, ignore_position_hashes: bool = False, write_local_table_cache: bool = False
+    ) -> Any:
         """Retrieves the output of the task from the cache.
 
         No guarantees are made regarding whether the returned values are still
@@ -342,6 +351,13 @@ class MaterializingTask(Task):
             And for this to work, any task producing an input
             for the chosen subgraph may never be used more
             than once per stage.
+        :param write_local_table_cache: Flag that determines whether the table should be
+            stored in the local table cache, if it is not already there and cache valid.
+            If no local table cache is configured or the type as which the table is retrieved,
+            is not compatible with the local table cache, this flag has no effect.
+
+            .. Warning:: It is not safe to call this method with `write_local_table_cache=True`
+                from several threads at the same time.
         :return: The output of the task.
         :raise CacheError: if no outputs for this task could be found in the store.
 
@@ -362,7 +378,12 @@ class MaterializingTask(Task):
         """
         from pydiverse.pipedag.materialize.core import _get_output_from_store
 
-        return _get_output_from_store(self, as_type, ignore_position_hashes=ignore_position_hashes)
+        return _get_output_from_store(
+            self,
+            as_type,
+            ignore_position_hashes=ignore_position_hashes,
+            write_local_table_cache=write_local_table_cache,
+        )
 
 
 class AutoVersionType:

@@ -21,32 +21,45 @@ from tests.util import tasks_library_imperative as m2
     "local_table_cache_inout",
     "local_table_cache_inout_numpy",
 )
-@pytest.mark.parametrize("imperative", [False, True])
-def test_get_output_from_store(imperative):
+@pytest.mark.parametrize("imperative", [False, True], ids=["imperative", "not_imperative"])
+@pytest.mark.parametrize(
+    "write_local_table_cache", [True, False], ids=["write_local_table_cache", "no_write_local_table_cache"]
+)
+def test_get_output_from_store(mocker, imperative, write_local_table_cache):
     _m = m2 if imperative else m
     with Flow() as f:
-        with Stage("stage_1"):
+        with Stage("stage_1") as s:
             df1 = _m.pd_dataframe({"x": [0, 1, 2, 3]})
             df2 = _m.pd_dataframe({"y": [0, 1, 2, 3]})
             dataframes = _m.create_tuple(df1, df2)
 
     # We only use the StageLockContext for testing
     with StageLockContext():
+        # First run to ensure cache-validity -> No local cache writes during the second flow run
+        f.run()
+        local_table_cache = ConfigContext.get().store.local_table_cache
+        # A local table cache only exists when configured
+        if local_table_cache:
+            local_table_cache.clear_cache(s)
+            store_input_spy = mocker.spy(local_table_cache, "store_input")
+            _store_table_spy = mocker.spy(local_table_cache, "_store_table")
+            retrieve_table_obj_spy = mocker.spy(local_table_cache, "retrieve_table_obj")
+            _retrieve_table_obj_spy = mocker.spy(local_table_cache, "_retrieve_table_obj")
         result = f.run()
 
         # Call on MaterializingTask
         pd.testing.assert_frame_equal(
-            df1.get_output_from_store(as_type=pd.DataFrame),
+            df1.get_output_from_store(as_type=pd.DataFrame, write_local_table_cache=write_local_table_cache),
             result.get(df1, as_type=pd.DataFrame),
         )
 
         pd.testing.assert_frame_equal(
-            df2.get_output_from_store(as_type=pd.DataFrame),
+            df2.get_output_from_store(as_type=pd.DataFrame, write_local_table_cache=write_local_table_cache),
             result.get(df2, as_type=pd.DataFrame),
         )
 
         pd.testing.assert_frame_equal(
-            dataframes.get_output_from_store(as_type=pd.DataFrame)[1],
+            dataframes.get_output_from_store(as_type=pd.DataFrame, write_local_table_cache=write_local_table_cache)[1],
             result.get(dataframes, as_type=pd.DataFrame)[1],
         )
 
@@ -54,20 +67,40 @@ def test_get_output_from_store(imperative):
         # ignoring the position hash when retrieving
         # should just return the output from the latest call
         pd.testing.assert_frame_equal(
-            df1.get_output_from_store(as_type=pd.DataFrame, ignore_position_hashes=True),
+            df1.get_output_from_store(
+                as_type=pd.DataFrame, ignore_position_hashes=True, write_local_table_cache=write_local_table_cache
+            ),
             result.get(df2, as_type=pd.DataFrame),
         )
 
         # Call on MaterializingTaskGetItem
         pd.testing.assert_frame_equal(
-            dataframes[0].get_output_from_store(as_type=pd.DataFrame),
-            dataframes.get_output_from_store(as_type=pd.DataFrame)[0],
+            dataframes[0].get_output_from_store(as_type=pd.DataFrame, write_local_table_cache=write_local_table_cache),
+            dataframes.get_output_from_store(as_type=pd.DataFrame, write_local_table_cache=write_local_table_cache)[0],
         )
 
         pd.testing.assert_frame_equal(
-            dataframes[0].get_output_from_store(as_type=pd.DataFrame, ignore_position_hashes=True),
-            dataframes.get_output_from_store(as_type=pd.DataFrame, ignore_position_hashes=True)[0],
+            dataframes[0].get_output_from_store(
+                as_type=pd.DataFrame, ignore_position_hashes=True, write_local_table_cache=write_local_table_cache
+            ),
+            dataframes.get_output_from_store(
+                as_type=pd.DataFrame, ignore_position_hashes=True, write_local_table_cache=write_local_table_cache
+            )[0],
         )
+
+        if local_table_cache:
+            # We try to get a table 16 times after running the flow.
+            expected_retrieve_table_obj = 16
+            # If write_local_table_cache we attempt to store each of df1, df2, dataframes[0], dataframes[1]
+            # once because it was not yet in the cache. Otherwise, storing is never successful, so we attempt it for
+            # each attempted retrieval.
+            expected_store_input = 4 if write_local_table_cache else expected_retrieve_table_obj
+            expected_successful_retrieve_table_obj = expected_retrieve_table_obj - expected_store_input
+
+            assert store_input_spy.call_count == expected_store_input
+            assert _store_table_spy.call_count == expected_store_input
+            assert retrieve_table_obj_spy.call_count == expected_retrieve_table_obj
+            assert _retrieve_table_obj_spy.call_count == expected_successful_retrieve_table_obj
 
 
 @with_instances("postgres")
