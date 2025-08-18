@@ -717,6 +717,7 @@ def _get_output_from_store(
     task: MaterializingTask | MaterializingTaskGetItem,
     as_type: type,
     ignore_position_hashes: bool = False,
+    write_local_table_cache: bool = False,
 ) -> Any:
     """Helper to retrieve task output from store"""
     from pydiverse.pipedag.context.run_context import DematerializeRunContext
@@ -725,7 +726,7 @@ def _get_output_from_store(
     root_task = task if isinstance(task, Task) else task.task
 
     store = ConfigContext.get().store
-    with DematerializeRunContext(root_task.flow, allow_write_local_table_cache=False):
+    with DematerializeRunContext(root_task.flow, allow_write_local_table_cache=write_local_table_cache):
         cached_output, _ = store.retrieve_most_recent_task_output_from_cache(
             root_task, ignore_position_hashes=ignore_position_hashes
         )
