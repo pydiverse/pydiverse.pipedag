@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.10.8 (2025-XX-XX)
+## 0.10.8 (2025-08-18)
 - Fix: Only cut MSSQL VARCHAR(N) in arrow-odbc download if N is MAX
 - Feat: Add support for parameter `write_local_table_cache` in `Result.get()` and `get_output_from_store()`
 
