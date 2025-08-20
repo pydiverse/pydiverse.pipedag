@@ -19,7 +19,7 @@ from pandas.core.dtypes.base import ExtensionDtype
 
 from pydiverse.common import Date, Dtype, PandasBackend
 from pydiverse.common.util.computation_tracing import ComputationTracer
-from pydiverse.common.util.hashing import stable_hash
+from pydiverse.common.util.hashing import hash_polars_dataframe, stable_hash
 from pydiverse.pipedag import ConfigContext
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.backend.table.sql.ddl import (
@@ -1238,6 +1238,12 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
     def dialect_supports_polars_native_read(cls):
         # for most dialects we find a way
         return True
+
+    @classmethod
+    def lazy_query_str(cls, store: SQLTableStore, obj: pl.DataFrame) -> str:
+        _ = store
+        hash_of_df = hash_polars_dataframe(obj)
+        return hash_of_df
 
 
 @SQLTableStore.register_table(pl)

@@ -991,11 +991,10 @@ def test_ignore_task_version(mocker):
 def test_lazy_table_without_query_string(mocker):
     value = None
 
-    @materialize(lazy=True, nout=5)
+    @materialize(lazy=True, nout=4)
     def falsely_lazy_task():
         return (
             Table(pd.DataFrame({"x": [value]}), name="pd_table"),
-            Table(pl.DataFrame({"x": [value]}), name="pl_table"),
             Table(pl.DataFrame({"x": [value]}).lazy(), name="pl_lazy_table"),
             select_as(2, "y"),
             3,
@@ -1004,41 +1003,33 @@ def test_lazy_table_without_query_string(mocker):
     def get_flow():
         with Flow() as flow:
             with Stage("stage_1"):
-                pd_tbl, pl_tbl, pl_lazy_tbl, select_tbl, constant = falsely_lazy_task()
+                pd_tbl, pl_lazy_tbl, select_tbl, constant = falsely_lazy_task()
                 res_pd = m.take_first(pd_tbl, as_int=True)
-                res_pl = m.take_first(pl_tbl, as_int=True)
                 res_pl_lazy = m.take_first(pl_lazy_tbl, as_int=True)
                 res_select = m.noop(select_tbl)
                 res_constant = m.noop(constant)
-        return flow, res_pd, res_pl, res_pl_lazy, res_select, res_constant
+        return flow, res_pd, res_pl_lazy, res_select, res_constant
 
     value = 0
-    flow, res_pd, res_pl, res_pl_lazy, res_select, res_constant = get_flow()
+    flow, res_pd, res_pl_lazy, res_select, res_constant = get_flow()
     with StageLockContext():
         result = flow.run()
         assert result.get(res_pd) == 0
-        assert result.get(res_pl) == 0
         assert result.get(res_pl_lazy) == 0
 
     value = 1
-    flow, res_pd, res_pl, res_pl_lazy, res_select, res_constant = get_flow()
+    flow, res_pd, res_pl_lazy, res_select, res_constant = get_flow()
     res_pd_spy = spy_task(mocker, res_pd)
-    res_pl_spy = spy_task(mocker, res_pl)
     res_pl_lazy_spy = spy_task(mocker, res_pl_lazy)
     select_spy = spy_task(mocker, res_select)
     constant_spy = spy_task(mocker, res_constant)
     with StageLockContext():
         result = flow.run()
         assert result.get(res_pd) == 1
-        assert result.get(res_pl) == 1
         assert result.get(res_pl_lazy) == 1
         # res_pd is downstream of a pd.DataFrame from a lazy task,
         # which should always be cache invalid. Hence, it should always be called.
         res_pd_spy.assert_called_once()
-
-        # res_pd is downstream of a pl.DataFrame from a lazy task,
-        # which should always be cache invalid. Hence, it should always be called.
-        res_pl_spy.assert_called_once()
 
         # res_pd is downstream of a pl.LazyFrame from a lazy task,
         # which should always be cache invalid. Hence, it should always be called.
@@ -1054,3 +1045,35 @@ def test_lazy_table_without_query_string(mocker):
         # from a lazy task, hence res_constant should be cache valid and the task
         # producing res_select should not be called.
         constant_spy.assert_not_called()
+
+
+@pytest.mark.polars
+def test_lazy_polars_dataframe(mocker):
+    value = -1
+
+    @materialize(lazy=True)
+    def polars_task():
+        return Table(pl.DataFrame({"x": [value]}), name="polars_table")
+
+    with Flow() as flow:
+        with Stage("stage_1"):
+            polars_table = polars_task()
+            res_val = m.take_first(polars_table, as_int=True)
+
+    # Initial Call for cache invalidation
+    with StageLockContext():
+        res = flow.run()
+        assert res.get(res_val) == -1
+
+    # Change the value and run the flow again
+    value = 0
+    take_first_spy = spy_task(mocker, res_val)
+    with StageLockContext():
+        res = flow.run()
+        assert res.get(res_val) == 0
+
+    with StageLockContext():
+        res = flow.run()
+        assert res.get(res_val) == 0
+
+    take_first_spy.assert_called_once()
