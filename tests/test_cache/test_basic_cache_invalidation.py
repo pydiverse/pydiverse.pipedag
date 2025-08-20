@@ -280,12 +280,22 @@ def test_change_task_version_blob(mocker):
     child_spy.assert_called_once()
 
 
-def test_change_lazy_query(mocker):
+@pytest.mark.parametrize(
+    "get_tbl_obj",
+    [
+        lambda query_value: select_as(query_value, "x"),
+        (lambda query_value: pl.DataFrame({"x": [query_value]})) if pl else None,
+    ],
+    ids=["sql", "polars"],
+)
+def test_change_lazy_query(mocker, get_tbl_obj):
+    if get_tbl_obj is None:
+        pytest.skip("Polars is not installed, skipping Polars test.")
     query_value = 1
 
     @materialize(lazy=True, nout=2)
     def lazy_task():
-        return 0, Table(select_as(query_value, "x"), name="lazy_table")
+        return 0, Table(get_tbl_obj(query_value), name="lazy_table")
 
     @materialize(input_type=pd.DataFrame, version="1.0")
     def get_first(table, col):
@@ -1045,35 +1055,3 @@ def test_lazy_table_without_query_string(mocker):
         # from a lazy task, hence res_constant should be cache valid and the task
         # producing res_select should not be called.
         constant_spy.assert_not_called()
-
-
-@pytest.mark.polars
-def test_lazy_polars_dataframe(mocker):
-    value = -1
-
-    @materialize(lazy=True)
-    def polars_task():
-        return Table(pl.DataFrame({"x": [value]}), name="polars_table")
-
-    with Flow() as flow:
-        with Stage("stage_1"):
-            polars_table = polars_task()
-            res_val = m.take_first(polars_table, as_int=True)
-
-    # Initial Call for cache invalidation
-    with StageLockContext():
-        res = flow.run()
-        assert res.get(res_val) == -1
-
-    # Change the value and run the flow again
-    value = 0
-    take_first_spy = spy_task(mocker, res_val)
-    with StageLockContext():
-        res = flow.run()
-        assert res.get(res_val) == 0
-
-    with StageLockContext():
-        res = flow.run()
-        assert res.get(res_val) == 0
-
-    take_first_spy.assert_called_once()
