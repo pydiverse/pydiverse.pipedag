@@ -568,6 +568,11 @@ class ExternalTableReferenceHook(TableHook[SQLTableStore]):
     def retrieve(cls, *args, **kwargs):
         raise RuntimeError("This should never get called.")
 
+    @classmethod
+    def lazy_query_str(cls, store: SQLTableStore, obj: ExternalTableReference) -> str:
+        obj_hash = stable_hash(obj.name, obj.schema)
+        return obj_hash
+
 
 # endregion
 
@@ -1242,8 +1247,8 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
     @classmethod
     def lazy_query_str(cls, store: SQLTableStore, obj: pl.DataFrame) -> str:
         _ = store
-        hash_of_df = hash_polars_dataframe(obj)
-        return hash_of_df
+        obj_hash = hash_polars_dataframe(obj)
+        return obj_hash
 
 
 @SQLTableStore.register_table(pl)

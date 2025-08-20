@@ -323,14 +323,18 @@ are `sqlalchemy.Table`, `pandas.DataFrame`, `polars.DataFrame`, or `polars.LazyF
 
 ### Controlling automatic cache invalidation
 
-For input_type `sa.Table`, and `pdt.SqlAlchemy`, in general, it is best to set lazy=True. This means the task is always
+For input_type `sa.Table`, and `pdt.SqlAlchemy`, in general, it is best to set `lazy=True`. This means the task is always
 executed because producing a query is fast, but the query is only executed when it is actually needed. For
 `pl.LazyFrame`, `version=AUTO_VERSION` is a good choice, because then the task is executed once with empty input
-dataframes and only if resulting LazyFrame expressions change, the task is executed again with full input data. For
-`pd.DataFrame` and `pl.DataFrame`, we don't try to guess which changes of the code are actually meaningful. Thus the
-user needs to help manually bumpig a version number like `version="1.0.0"`. For development, `version=None` simply
+dataframes and only if resulting LazyFrame expressions change, the task is executed again with full input data.
+
+For `pd.DataFrame` and `pl.DataFrame`, we don't try to guess which changes of the code are actually meaningful. Thus the
+user needs to help manually bumping a version number like `version="1.0.0"`. For development, `version=None` simply
 deactivates caching until the code is more stable. It is recommended to always develop with small pipeline instances
-anyways to achieve high iteration speed (see [multi_instance_pipeline.md](multi_instance_pipeline.md)).
+anyways to achieve high iteration speed (see [multi_instance_pipeline.md](multi_instance_pipeline.md)).  Setting `lazy=True` and `version=None`
+for `pl.DataFrame` executes the task, but hashes the result to determine the cache-validity of the task output and hence
+the cache invalidation of downstream tasks. This is a good choice for small tasks which are quick to compute and
+where the bumping the version number adds unwanted complexity to the development process.
 
 ### Integration with pydiverse colspec (same as dataframely but with pydiverse transform based SQL support)
 

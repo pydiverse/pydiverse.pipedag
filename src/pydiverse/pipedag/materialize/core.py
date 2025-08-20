@@ -111,14 +111,40 @@ def materialize(
     :param lazy:
         Whether this task is lazy or not.
 
-        Unlike a normal task, lazy tasks always get executed. However, if a lazy
-        task produces a lazy table (e.g. a SQL query), the table store checks if
-        the same query has been executed before. If this is the case, then the
-        query doesn't get executed, and instead, the table gets copied from the cache.
+        Unlike a normal task, lazy tasks always get executed. However, before table
+        returned by a lazy task gets materialized, the table store checks if
+        the same table has been materialized before. If this is the case, then the
+        table doesn't get materialized, and instead, the table gets copied from the cache.
 
-        This behaviour is very useful, because you don't need to manually bump
-        the `version` of a lazy task. This only works because for lazy tables
-        generating the query is very cheap compared to executing it.
+        This is efficient for tasks that return SQL queries, because the query
+        only gets generated but will not be executed again if the resulting table is cache-valid.
+
+        The same also works for :py:class:`ExternalTableReference <pydiverse.pipedag.container.ExternalTableReference>`,
+        where the "query" is just the identifier of the table in the store.
+
+        .. Note:: For tasks returning an ``ExternalTableReference`` pipedag cannot automatically
+        know if the external tables has changed of not. This should be controlled via a cache function
+        given via the ``cache`` argument of ``materialize``.
+        See :py:class:`ExternalTableReference <pydiverse.pipedag.container.ExternalTableReference>`
+        for an example.
+
+
+        For tasks returning a Polars DataFrame, the output is deemed cache-valid
+        if the hash of the resulting DataFrame is the same as the hash of the previous run.
+        So, even though the task always gets executed, downstream tasks can remain cache-valid
+        if the DataFrame is the same as before. This is useful for small tasks that are hard to
+        implement using only LazyFrames, but where the DataFrame generation is cheap.
+
+
+
+        In both cases, you don't need to manually bump the ``version`` of a lazy task.
+
+        .. Warning:: A task returning a Polars LazyFrame should `not` be marked as lazy.
+            Use ``version=AUTO_VERSION`` instead. See :py:class:`AUTO_VERSION`.
+        .. Warning:: A task returning a Pandas DataFrame should `not` be marked as lazy.
+           No hashing is implemented for Pandas DataFrames, so the task will always
+           be deemed cache-invalid, and thus, cache-invalidate all downstream tasks.
+
     :param group_node_tag:
         Set a tag that may add this task to a configuration based group node.
     :param nout:
