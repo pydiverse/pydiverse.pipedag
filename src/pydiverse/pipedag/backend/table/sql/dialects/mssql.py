@@ -433,7 +433,7 @@ class DataframeMsSQLTableHook:
             from bcpandas import SqlCreds, to_sql
 
             if len(df) == 0:
-                # bcpands won't write an empty table
+                # bcpandas won't write an empty table
                 # (this method is inherited from PandasTableHook/PolarsTableHook)
                 cls._dialect_create_empty_table(store, table, schema, dtypes)
             else:

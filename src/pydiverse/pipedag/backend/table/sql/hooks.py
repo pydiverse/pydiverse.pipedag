@@ -232,8 +232,8 @@ def _sql_apply_materialize_annotation(
         schema = store.write_subquery(query, table_name, neighbor_table=table, unlogged=unlogged, suffix=suffix)
         return pdt.Table(table_name, pdt.SqlAlchemy(store.engine, schema=schema.get()))
 
-    def materialize_hook(tbl: pdt.Table, table_prefix):
-        name = table_prefix or ""
+    def materialize_hook(tbl: pdt.Table, table_prefix: str | None):
+        name = table_prefix or "_t_"
         name += stable_hash(str(random.randbytes(8)))[0:6]
         intermediate_tbls.append(name)
         return write_pdt_table(tbl, name)
@@ -242,7 +242,7 @@ def _sql_apply_materialize_annotation(
         if inspect.isclass(table.annotation) and issubclass(table.annotation, cs.ColSpec):
             column_spec = table.annotation
             if pdt_new is not None:
-                supported_dialects = ["duckdb", "sqlite", "postgresql", "mssql"]
+                supported_dialects = ["duckdb", "sqlite", "postgresql", "mssql", "ibm_db_sa"]
                 if store.engine.dialect.name in supported_dialects:
                     intermediate_tbls = []
                     cfg = cs.config.Config.default
@@ -429,7 +429,11 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         unlogged: bool,
     ):
         limit_query = store.get_limit_query(query, rows=0)
-        store.execute(cls._create_as_select_statements(table.name, schema, limit_query, store, suffix, unlogged))
+        store.execute(
+            cls._create_as_select_statements(
+                table.name, schema, limit_query, store, suffix, unlogged, guaranteed_empty=True
+            )
+        )
         store.add_indexes_and_set_nullable(table, schema, on_empty_table=True)
         statements = store.lock_table(table, schema)
         statements += store.lock_source_tables(source_tables)
@@ -449,8 +453,10 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         store: SQLTableStore,
         suffix: str,
         unlogged: bool,
+        guaranteed_empty: bool = False,
     ):
-        _ = store
+        # most dialects don't need to know whether CreateTableAsSelect executes an empty insert or not
+        _ = store, guaranteed_empty
         return [
             CreateTableAsSelect(
                 table_name,

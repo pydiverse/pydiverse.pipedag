@@ -17,6 +17,7 @@ __all__ = [
     "RenameSchema",
     "DropSchemaContent",
     "CreateTableAsSelect",
+    "CreateEmptyTableAsSelect",
     "InsertIntoSelect",
     "CreateTableWithSuffix",
     "CreateViewAsSelect",
@@ -116,6 +117,26 @@ class InsertIntoSelect(DDLElement):
 
 
 class CreateTableAsSelect(DDLElement):
+    def __init__(
+        self,
+        name: str,
+        schema: Schema,
+        query: Select | TextClause | sa.Text,
+        *,
+        unlogged: bool = False,
+        suffix: str = "",
+    ):
+        self.name = name
+        self.schema = schema
+        self.query = query
+        # Postgres supports creating unlogged tables. Flag should get ignored by
+        # other dialects
+        self.unlogged = unlogged
+        # Suffix to be appended to the statement, e.g. from materialization details
+        self.suffix = suffix
+
+
+class CreateEmptyTableAsSelect(DDLElement):
     def __init__(
         self,
         name: str,
@@ -763,8 +784,23 @@ def visit_create_table_as_select_mssql(create: CreateTableAsSelect, compiler, **
 
 @compiles(CreateTableAsSelect, "ibm_db_sa")
 def visit_create_table_as_select_ibm_db_sa(create: CreateTableAsSelect, compiler, **kw):
-    # Attention: for DB2, a CreateTableAsSelect must be followed by an InsertIntoSelect
-    # to actually fill data
+    # IBM DB2 cannot create table and fill it in one statement
+    insert_args = create.__dict__
+    del insert_args["unlogged"]
+    del insert_args["suffix"]
+    statements = [CreateEmptyTableAsSelect(**create.__dict__), InsertIntoSelect(**insert_args)]
+    return join_ddl_statements(statements, compiler, **kw)
+
+
+@compiles(CreateEmptyTableAsSelect)
+def visit_create_empty_table_as_select(create: CreateEmptyTableAsSelect, compiler, **kw):
+    _ = create, compiler, kw
+    # by default, dialects do not need to execute different CreateTableAsSelect statement for empty tables
+    raise NotImplementedError()
+
+
+@compiles(CreateEmptyTableAsSelect, "ibm_db_sa")
+def visit_create_empty_table_as_select_ibm_db_sa(create: CreateEmptyTableAsSelect, compiler, **kw):
     suffix = ") DEFINITION ONLY " + create.suffix
     return _visit_fill_obj_as_select(create, compiler, "TABLE", kw, prefix="(", suffix=suffix)
 

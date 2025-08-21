@@ -39,7 +39,7 @@ except ImportError:
 
 pytestmark = [
     pytest.mark.pdtransform,
-    with_instances(tuple(set(DATABASE_INSTANCES) - {"ibm_db2"})),
+    with_instances(DATABASE_INSTANCES),
 ]
 
 # ------------------------------------------------------------------------------------ #
@@ -49,7 +49,7 @@ pytestmark = [
 
 class MyFirstColSpec(cs.ColSpec):
     a = cs.Integer(primary_key=True)
-    b = cs.Int16()  # TODO: replace with cs.Int16 once ColSpec 0.2.2 is on conda-forge
+    b = cs.Int16()
     c = cs.String  # cs.Enum(["x", "y"], nullable=True)
 
 

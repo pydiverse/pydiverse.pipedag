@@ -16,7 +16,6 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateViewAsSelect,
     DropTable,
     DropView,
-    InsertIntoSelect,
 )
 from pydiverse.pipedag.container import ExternalTableReference, Schema, Table
 
@@ -38,19 +37,13 @@ def test_smoke_table_reference():
         table_store.execute(CreateSchema(schema, if_not_exists=True))
         table_store.execute(DropTable(table_name, schema, if_exists=True, cascade=True))
         query = sql_table_expr({"col": [0, 1, 2, 3]})
-        cmds = (
-            [CreateTableAsSelect, InsertIntoSelect]
-            if table_store.engine.dialect.name == "ibm_db_sa"
-            else [CreateTableAsSelect]
-        )
-        for cmd in cmds:
-            table_store.execute(
-                cmd(
-                    table_name,
-                    schema,
-                    query,
-                )
+        table_store.execute(
+            CreateTableAsSelect(
+                table_name,
+                schema,
+                query,
             )
+        )
         return Table(ExternalTableReference(table_name, schema=schema.get()))
 
     @materialize(input_type=sa.Table)
@@ -99,19 +92,13 @@ def test_table_store():
             pass
         table_store.execute(DropTable(table_name, schema, if_exists=True))
         query = sql_table_expr({"col": [0, 1, 2, 3]})
-        cmds = (
-            [CreateTableAsSelect, InsertIntoSelect]
-            if table_store.engine.dialect.name == "ibm_db_sa"
-            else [CreateTableAsSelect]
-        )
-        for cmd in cmds:
-            table_store.execute(
-                cmd(
-                    table_name,
-                    schema,
-                    query,
-                )
+        table_store.execute(
+            CreateTableAsSelect(
+                table_name,
+                schema,
+                query,
             )
+        )
         return Table(ExternalTableReference(table_name, schema=schema.get()))
 
     @materialize(input_type=sa.Table)
