@@ -669,6 +669,13 @@ def test_type_mapping():
     flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
 
 
+def standardize_dtype(dtype):
+    if type(dtype) is pdc.String:
+        return pdc.String()
+    else:
+        return dtype
+
+
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
@@ -696,7 +703,7 @@ def test_annotations_sql(with_filter: bool, with_violation: bool, validate_get_d
 
     @materialize(input_type=pdt.SqlAlchemy)
     def consumer(first: MyFirstColSpec, second: MySecondColSpec):
-        assert [(c.name, c.dtype()) for c in first] == [
+        assert [(c.name, standardize_dtype(c.dtype())) for c in first] == [
             ("a", pdc.Int64()),
             (
                 "b",
@@ -704,7 +711,7 @@ def test_annotations_sql(with_filter: bool, with_violation: bool, validate_get_d
             ),
             ("c", pdc.String()),
         ]
-        assert [(c.name, c.dtype()) for c in second] == [
+        assert [(c.name, standardize_dtype(c.dtype())) for c in second] == [
             ("a", pdc.Int64()),
             ("b", pdc.Int64()),
             ("c", pdc.String()),
@@ -730,7 +737,7 @@ def test_annotations_sql(with_filter: bool, with_violation: bool, validate_get_d
 
     @materialize(input_type=pdt.SqlAlchemy)
     def consumer2(first: MyFirstColSpec, second: MySecondColSpec):
-        assert [(c.name, c.dtype()) for c in first] == [
+        assert [(c.name, standardize_dtype(c.dtype())) for c in first] == [
             ("a", pdc.Int64()),
             (
                 "b",
@@ -738,7 +745,7 @@ def test_annotations_sql(with_filter: bool, with_violation: bool, validate_get_d
             ),
             ("c", pdc.String()),
         ]
-        assert [(c.name, c.dtype()) for c in second] == [
+        assert [(c.name, standardize_dtype(c.dtype())) for c in second] == [
             ("a", pdc.Int64()),
             ("b", pdc.Int64()),
             ("c", pdc.String()),

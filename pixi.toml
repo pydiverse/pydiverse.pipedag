@@ -85,13 +85,13 @@ pytsql = ">=1.4.0,<2"
 bcpandas = ">=2.6.3,<3"
 
 [feature.pdtransform-new.dependencies]
-pydiverse-transform = ">=0.5.5,<0.6"
+pydiverse-transform = ">=0.5.6,<0.6"
 
 [feature.pdtransform-old.dependencies]
 pydiverse-transform = "<0.2"
 
 [feature.colspec.dependencies]
-pydiverse-colspec = ">=0.2.7,<0.3"
+pydiverse-colspec = ">=0.2.8,<0.3"
 
 [feature.dataframely.dependencies]
 dataframely = ">=1.2.1,<2"
