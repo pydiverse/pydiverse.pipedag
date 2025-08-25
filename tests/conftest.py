@@ -36,7 +36,7 @@ def setup_environ():
     os.environ["PYDIVERSE_PIPEDAG_PYTEST"] = "1"
     os.environ["AWS_ACCESS_KEY_ID"] = "minioadmin"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "minioadmin"
-    os.environ["AWS_ENDPOINT_URL"] = "http://localhost:9000"
+    # unfortunately AWS_ENDPOINT_URL cannot be controlled via environment variable (see pipedag.yaml)
 
     os.environ["DATA_DIR_PREFIX"] = str(Path(__file__).parent.parent / "example_postgres") + os.path.sep
 

@@ -184,7 +184,15 @@ class ParquetTableStore(DuckDBTableStore):
         This is an fsspec compatible path to either a directory or an S3 bucket key
         prefix. Examples are '/tmp/pipedag/parquet/' or 's3://pipedag-test-bucket/table_store/'.
         `instance_id` will automatically be appended to parquet_base_bath.
-
+    :param s3_endpoint_url:
+        When using a non-standard S3 endpoint (like minio), this can be used to specify the URL.
+        Unfortunately, the AWS_ENDPOINT_URL environment variable is not automatically picked up by duckdb.
+        (default: None)
+    :param s3_use_ssl:
+        Whether to use SSL when connecting to S3 endpoint. (default: None)
+    :param s3_url_style:
+        Specify URL style when connecting to S3 endpoint. Minio for example requires s3_url_style='path'.
+        (default: None)
     """
 
     _dialect_name = DISABLE_DIALECT_REGISTRATION
@@ -214,7 +222,15 @@ class ParquetTableStore(DuckDBTableStore):
         max_concurrent_copy_operations: int = 5,
         sqlalchemy_pool_size: int = 12,
         sqlalchemy_pool_timeout: int = 300,
+        s3_endpoint_url: str | None = None,
+        s3_use_ssl: bool | None = None,
+        s3_url_style: str | None = None,
     ):
+        # must be initialized before super().__init__() call because self._create_engine() is called there
+        self.parquet_base_path = parquet_base_path
+        self.s3_endpoint_url = s3_endpoint_url
+        self.s3_use_ssl = s3_use_ssl
+        self.s3_url_style = s3_url_style
         super().__init__(
             engine_url,
             create_database_if_not_exists=create_database_if_not_exists,
@@ -231,7 +247,6 @@ class ParquetTableStore(DuckDBTableStore):
             sqlalchemy_pool_size=sqlalchemy_pool_size,
             sqlalchemy_pool_timeout=sqlalchemy_pool_timeout,
         )
-        self.parquet_base_path = parquet_base_path
 
         # ## state
 
@@ -254,19 +269,7 @@ class ParquetTableStore(DuckDBTableStore):
         )
 
     def _create_engine(self):
-        engine = super()._create_engine(
-            connect_args={
-                # configure s3 for minio (see docker-compose.yaml)
-                "config": {
-                    "s3_endpoint": "localhost:9000",
-                    "s3_url_style": "path",
-                    "s3_use_ssl": "false",
-                    # "s3_region": "us-east-1",
-                    "s3_access_key_id": "minioadmin",
-                    "s3_secret_access_key": "minioadmin",
-                },
-            }
-        )
+        engine = super()._create_engine()
 
         def execute(con, statement):
             """
@@ -282,14 +285,24 @@ class ParquetTableStore(DuckDBTableStore):
             execute(con, "INSTALL httpfs;")
             execute(con, "LOAD httpfs;")
 
-            # MinIO credentials (default unless you've changed them)
-            execute(con, "SET s3_access_key_id='minioadmin';")
-            execute(con, "SET s3_secret_access_key='minioadmin';")
-
-            # MinIO-specific settings
-            execute(con, "SET s3_use_ssl=false;")
-            execute(con, "SET s3_endpoint='localhost:9000';")  # MinIO server URL
-            execute(con, "SET s3_url_style='path';")  # Important: MinIO uses path-style URLs
+            s3_details = ""
+            if self.s3_endpoint_url is not None:
+                s3_details += f", ENDPOINT '{self.s3_endpoint_url}'"
+            if self.s3_use_ssl is not None:
+                s3_details += f", USE_SSL {str(self.s3_use_ssl).upper()}"
+            if self.s3_url_style is not None:
+                s3_details += f", URL_STYLE '{self.s3_url_style}'"
+            execute(
+                con,
+                f"""
+                CREATE OR REPLACE SECRET secret (
+                    TYPE s3,
+                    PROVIDER credential_chain,
+                    CHAIN 'env;config'
+                    {s3_details}
+                );
+            """,
+            )
 
             if sa.__version__ >= "2.0.0":
                 con.commit()
