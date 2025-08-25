@@ -413,6 +413,9 @@ class AutoVersionType:
     To use it, you must specify
     :external+pl:doc:`polars.LazyFrame <reference/lazyframe/index>`
     as the task input type and only use LazyFrames inside your task.
+    For Polars, "Not inspecting the contents of the input tables" means
+    "not :external+pl:doc:`collecting <reference/lazyframe/api/polars.LazyFrame.collect>`
+    the input tables or any tables derived from them".
 
     .. rubric:: Pandas
 

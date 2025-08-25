@@ -182,7 +182,8 @@ of supported input_type choices [here](/backend_types).
 
 For SQL tasks, a common input_type is `sqlalchemy.Table`. This would provide SQLAlchemy table references to input tables
 which are already auto-loaded, so they would know about columns and column types of the respective table in the
-database. Ideally, this is combined with `lazy=True`. In this case, the task must produce a SQLAlchemy expression for
+database. Ideally, this is combined with the parameter `lazy=True` in {py:func}`@materialize <pydiverse.pipedag.materialize>`.
+In this case, the task must produce a SQLAlchemy expression for
 all tabular outputs without executing them. Pipedag can render the query and will only produce a table based on this
 query expression if the query changed or one of the inputs to the task changed.
 
@@ -195,11 +196,11 @@ inspecting any python code changes since this would break at shared code changes
 material changes. Not setting the version parameter for non-lazy tasks, will result in the task always being called
 without any cache validity checks.
 
-### Automatic cache invalidation with `version=AUTO_VERSION`
+### Automatic cache invalidation with {py:class}`version=AUTO_VERSION <pydiverse.pipedag.AUTO_VERSION>`
 
 There is a special case for example when using `input_type=polars.LazyFrame`, where we can't use `lazy=True` because
 the data would always be loaded from the table store to polars, but we still can do automatic cache invalidation.
-`version=AUTO_VERSION` loads empty input lazyframes with the correct column types, then executes the task to determine
+{py:class}`version=AUTO_VERSION <pydiverse.pipedag.AUTO_VERSION>` loads empty input lazyframes with the correct column types, then executes the task to determine
 any lazyframe expressions in the output of the task. The version is then automatically computed from a hash of the
 computation graph. In case the cache for the task is invalid, the full data is loaded and the task is executed a
 second time.

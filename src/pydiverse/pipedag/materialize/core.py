@@ -90,7 +90,9 @@ def materialize(
         more information.
     :param version:
         The version of this task.
-        Unless the task is lazy, you always need to manually change this
+        Unless the task is lazy or
+        :py:class:`version=AUTO_VERSION <AUTO_VERSION>`,
+        you always need to manually change this
         version number when you change the implementation to ensure that the
         task gets executed and the cache flushed.
 
