@@ -187,9 +187,12 @@ In this case, the task must produce a SQLAlchemy expression for
 all tabular outputs without executing them. Pipedag can render the query and will only produce a table based on this
 query expression if the query changed or one of the inputs to the task changed.
 
+For tasks returning Polars DataFrame, the hash of the resulting DataFrame is used to determine whether to
+cache-invalidate downstream tasks.
+
 ### Manual cache invalidation with `version` parameter
 
-For non-SQL tasks, the `version` parameter of the {py:func}`@materialize <pydiverse.pipedag.materialize>` decorator must
+For non-lazy tasks, the `version` parameter of the {py:func}`@materialize <pydiverse.pipedag.materialize>` decorator must
 be used for manual cache invalidation. As long as the version stays the same, it is assumed that the code of the task
 did not materially change and will produce the same outputs given the same inputs. We refrained from automatically
 inspecting any python code changes since this would break at shared code changes where it is very hard to distinguish
