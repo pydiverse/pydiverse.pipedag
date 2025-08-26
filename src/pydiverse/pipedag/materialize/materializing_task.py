@@ -425,7 +425,8 @@ class AutoVersionType:
         :external+pl:doc:`scan_csv <reference/api/polars.scan_csv>`,
         :external+pl:doc:`scan_parquet <reference/api/polars.scan_parquet>`,...)
         must be covered by providing a cache function to the ``cache`` argument of
-        :py:func:`@materialize <pydiverse.pipedag.materialize>`.
+        :py:func:`@materialize <pydiverse.pipedag.materialize>` which detects any
+        changes within any scanned data sources (e.g. hash complete file content).
 
 
     .. rubric:: Pandas
