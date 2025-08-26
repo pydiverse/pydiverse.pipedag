@@ -770,7 +770,15 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
                 f"Writing polars table '{schema.get()}.{table.name}' to parquet",
                 file_path=file_path,
             )
-        df.write_parquet(file_path, storage_options=store.get_storage_options("polars", file_path.protocol))
+        if options := store.get_storage_options("polars", file_path.protocol):
+            if pl.__version__ < "1.3.0":
+                raise RuntimeError(
+                    "Storing polars tables with custom storage options is not supported for polars < 1.3.0. "
+                    f"Current version is {pl.__version__}: {options}"
+                )
+            df.write_parquet(file_path, storage_options=options)
+        else:
+            df.write_parquet(file_path)
         store.execute(CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path)))
 
     @classmethod

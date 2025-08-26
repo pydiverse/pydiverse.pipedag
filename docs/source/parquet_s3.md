@@ -89,8 +89,7 @@ instances:
       args:
         # This is the main location where the ParquetTableStore will store tables.
         parquet_base_path: "s3://pipedag-test-bucket/table_store/"
-        s3_endpoint_url: "localhost:9000"  # test with minio instead of AWS S3
-        s3_use_ssl: false
+        s3_endpoint_url: "http://localhost:9000"  # test with minio instead of AWS S3
         s3_url_style: "path"
         # There is still a duckdb file which keeps read views to all the parquet files.
         # This database file can also be used with a SQL UI to access the parquet files
@@ -137,6 +136,21 @@ Don't configure a local_table_cache with ParquetTableStore. It might work, but d
 The `parquet_base_path` is chosen as an S3 bucket location. Please make sure to install `s3fs` in this case.
 This enables `fsspec` to write to S3 compatible storage locations. There also exists a package `gcsfs` for
 Google Cloud Storage and `adlfs` for Azure Data Lake Storage.
+
+For S3, libraries like polars, pandas, duckdb, pyarrow, and fsspec/s3fs can typically configure authentication
+credentials via environment variables (e.g. AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY) or configuration files.
+However, configuring a non-AWS S3 endpoint URL (like MinIO) is done differently for all those libraries.
+Thus, ParquetTableStore offers additional parameters for configuring this and routes them to all those packages:
+```yaml
+    table_store:
+      class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
+      table_store_connection: parquet_duckdb
+      args:
+        parquet_base_path: "s3://pipedag-test-bucket/table_store/"
+        s3_endpoint_url: "http://localhost:9000"  # test with minio instead of AWS S3
+        s3_url_style: "path"
+```
+The region can also be configured via `s3_region`.
 
 The main change that ParquetTableStore implemented is that `CREATE TABLE as SELECT` statements are
 turned into `COPY (SELECT ...) TO <fs_spec file location> WITH (FORMAT PARQUET)`. Additionally,
