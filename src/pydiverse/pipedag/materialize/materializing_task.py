@@ -413,6 +413,21 @@ class AutoVersionType:
     To use it, you must specify
     :external+pl:doc:`polars.LazyFrame <reference/lazyframe/index>`
     as the task input type and only use LazyFrames inside your task.
+    For Polars, "Not inspecting the contents of the input tables" means
+    "not :external+pl:doc:`collecting <reference/lazyframe/api/polars.LazyFrame.collect>`
+    the input tables or any tables derived from them and not working eagerly with any
+    external data sources".
+
+    .. Warning::
+        Be careful not to collect any LazyFrames or work eagerly in such tasks
+        (especially don't use collected data in conditional statements).
+        Changes in any external data sources that are referenced (e.g. by
+        :external+pl:doc:`scan_csv <reference/api/polars.scan_csv>`,
+        :external+pl:doc:`scan_parquet <reference/api/polars.scan_parquet>`,...)
+        must be covered by providing a cache function to the ``cache`` argument of
+        :py:func:`@materialize <pydiverse.pipedag.materialize>` which detects any
+        changes within any scanned data sources (e.g. hash complete file content).
+
 
     .. rubric:: Pandas
 
