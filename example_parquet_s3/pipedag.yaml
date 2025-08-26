@@ -27,9 +27,9 @@ instances:
       args:
         # This is the main location where the ParquetTableStore will store tables.
         parquet_base_path: "s3://pipedag-test-bucket/table_store/"
-        s3_endpoint_url: "localhost:9000"  # test with minio instead of AWS S3
-        s3_use_ssl: false
+        s3_endpoint_url: "http://localhost:9000"  # test with minio instead of AWS S3
         s3_url_style: "path"
+        s3_region: "us-east-1"
         # There is still a duckdb file which keeps read views to all the parquet files.
         # This database file can also be used with a SQL UI to access the parquet files
         # associated with a specific pipeline instance.

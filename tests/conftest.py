@@ -36,29 +36,9 @@ def setup_environ():
     os.environ["PYDIVERSE_PIPEDAG_PYTEST"] = "1"
     os.environ["AWS_ACCESS_KEY_ID"] = "minioadmin"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "minioadmin"
-    # unfortunately AWS_ENDPOINT_URL cannot be controlled via environment variable (see pipedag.yaml)
+    # unfortunately duckdb does not read AWS_ENDPOINT_URL environment variable (see pipedag.yaml)
 
     os.environ["DATA_DIR_PREFIX"] = str(Path(__file__).parent.parent / "example_postgres") + os.path.sep
-
-    from fsspec.config import conf  # fsspec’s global config
-
-    conf.setdefault("s3", {})
-    conf["s3"].update(
-        {
-            "key": "minioadmin",
-            "secret": "minioadmin",
-            "client_kwargs": {
-                "endpoint_url": "http://localhost:9000",
-            },
-            # ─── botocore.config.Config parameters go here ────
-            "config_kwargs": {
-                "connect_timeout": 3,
-                "read_timeout": 5,
-                "retries": {"max_attempts": 2, "mode": "standard"},
-                "s3": {"addressing_style": "path"},  # MinIO needs path-style
-            },
-        }
-    )
 
 
 setup_environ()
