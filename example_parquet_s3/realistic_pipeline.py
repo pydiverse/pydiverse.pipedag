@@ -286,7 +286,7 @@ if __name__ == "__main__":
     # for testing, we simply create a test bucket in minio container if it does not exist
     os.environ["AWS_ACCESS_KEY_ID"] = "minioadmin"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "minioadmin"
-    os.environ["AWS_ENDPOINT_URL"] = "http://localhost:9000"
+    # unfortunately AWS_ENDPOINT_URL cannot be controlled via environment variable (see pipedag.yaml)
     created = initialize_test_s3_bucket(test_bucket="pipedag-test-bucket")
     if created:
         # we assume minio container was restarted and thus we need to delete caching metadata

@@ -104,12 +104,7 @@ def eager_task_dataframely(tbl1: dy.LazyFrame[Tbl1Schema], tbl2: pl.LazyFrame) -
 @materialize(version=AUTO_VERSION, input_type=pdt.Polars)
 def eager_task_dataframely_pdt(tbl1: Tbl1Schema, tbl2: pdt.Table) -> OutputSchema:
     # Pipedag automatically calls Tbl1Schema.cast() and OutputSchema.validate().
-    return (
-        tbl1
-        >> left_join(tbl2, tbl1.x == tbl2.x)
-        >> pdt.rename({f"a_{tbl2._ast.name}": "a"})
-        >> pdt.alias("eager_task_dataframely_pdt_out")
-    )
+    return tbl1 >> left_join(tbl2, tbl1.x == tbl2.x) >> pdt.alias("eager_task_dataframely_pdt_out")
 
 
 class Tbl1ColSpec(cs.ColSpec):
@@ -132,12 +127,7 @@ def eager_task_colspec(tbl1: Tbl1ColSpec, tbl2: pl.LazyFrame) -> OutputColSpec:
 def eager_task_colspec_pdt(tbl1: Tbl1ColSpec, tbl2: pdt.Table) -> OutputColSpec:
     # Pipedag automatically calls Tbl1ColSpec.cast_polars() and OutputColSpec.validate_polars()
     # which call dataframely in the background. ColSpec classes can also be used for SQL validations.
-    return (
-        tbl1
-        >> left_join(tbl2, tbl1.x == tbl2.x)
-        >> pdt.rename({f"a_{tbl2._ast.name}": "a"})
-        >> pdt.alias("eager_task_colspec_pdt_out")
-    )
+    return tbl1 >> left_join(tbl2, tbl1.x == tbl2.x) >> pdt.alias("eager_task_colspec_pdt_out")
 
 
 @materialize(lazy=True, input_type=sa.Table)
@@ -151,12 +141,7 @@ def lazy_task_colspec(tbl1: Tbl1ColSpec, tbl2: sa.Alias) -> OutputColSpec:
 @materialize(lazy=True, input_type=pdt.SqlAlchemy)
 def lazy_task_colspec_pdt(tbl1: Tbl1ColSpec, tbl2: pdt.Table) -> OutputColSpec:
     # Pipedag automatically calls OutputColSpec.filter() and only the result will be called lazy_task_colspec_pdt_out
-    return (
-        tbl1
-        >> left_join(tbl2, tbl1.x == tbl2.x)
-        >> pdt.rename({f"a_{tbl2._ast.name}": "a"})
-        >> pdt.alias("lazy_task_colspec_pdt_out")
-    )
+    return tbl1 >> left_join(tbl2, tbl1.x == tbl2.x) >> pdt.alias("lazy_task_colspec_pdt_out")
 
 
 def main():
@@ -213,7 +198,7 @@ if __name__ == "__main__":
     # for testing, we simply create a test bucket in minio container if it does not exist
     os.environ["AWS_ACCESS_KEY_ID"] = "minioadmin"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "minioadmin"
-    os.environ["AWS_ENDPOINT_URL"] = "http://localhost:9000"
+    # unfortunately AWS_ENDPOINT_URL cannot be controlled via environment variable (see pipedag.yaml)
     created = initialize_test_s3_bucket(test_bucket="pipedag-test-bucket")
     if created:
         # we assume minio container was restarted and thus we need to delete caching metadata

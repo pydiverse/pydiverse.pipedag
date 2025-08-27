@@ -5,7 +5,7 @@ platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"] # "linux-aarch64"
 
 [dependencies]
 python = ">=3.10.18,<3.14"
-pydiverse-common = ">=0.3.5,<0.4"
+pydiverse-common = ">=0.3.12,<0.4"
 typing-extensions = ">=4.14.1,<5"
 networkx = ">=3.4,<4"
 attrs = ">=25.3.0,<26"
@@ -85,13 +85,13 @@ pytsql = ">=1.4.0,<2"
 bcpandas = ">=2.6.3,<3"
 
 [feature.pdtransform-new.dependencies]
-pydiverse-transform = ">=0.5.2,<0.6"
+pydiverse-transform = ">=0.5.6,<0.6"
 
 [feature.pdtransform-old.dependencies]
 pydiverse-transform = "<0.2"
 
 [feature.colspec.dependencies]
-pydiverse-colspec = ">=0.2.4,<0.3"
+pydiverse-colspec = ">=0.2.8,<0.3"
 
 [feature.dataframely.dependencies]
 dataframely = ">=1.2.1,<2"

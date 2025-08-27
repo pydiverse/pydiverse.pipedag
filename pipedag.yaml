@@ -301,6 +301,9 @@ instances:
       table_store_connection: parquet_duckdb
       args:
         parquet_base_path: "s3://pipedag-test-bucket/table_store/"
+        s3_endpoint_url: "http://localhost:9000"  # test with minio instead of AWS S3
+        s3_url_style: "path"
+
     stage_commit_technique: READ_VIEWS
     lock_manager:
       class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"

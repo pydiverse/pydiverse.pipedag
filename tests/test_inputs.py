@@ -9,7 +9,6 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateSchema,
     CreateTableAsSelect,
     DropTable,
-    InsertIntoSelect,
 )
 from pydiverse.pipedag.container import ExternalTableReference, RawSql, Schema, Table
 from tests.fixtures.instances import with_instances
@@ -28,19 +27,13 @@ def test_external_table_inputs():
         table_store.execute(CreateSchema(schema, if_not_exists=True))
         table_store.execute(DropTable(table_name, schema, if_exists=True))
         query = sql_table_expr({"col": [0, 1, 2, 3]})
-        cmds = (
-            [CreateTableAsSelect, InsertIntoSelect]
-            if table_store.engine.dialect.name == "ibm_db_sa"
-            else [CreateTableAsSelect]
-        )
-        for cmd in cmds:
-            table_store.execute(
-                cmd(
-                    table_name,
-                    schema,
-                    query,
-                )
+        table_store.execute(
+            CreateTableAsSelect(
+                table_name,
+                schema,
+                query,
             )
+        )
         return Table(ExternalTableReference(table_name, schema=schema.get()))
 
     @materialize(input_type=sa.Table)
@@ -89,19 +82,13 @@ def test_external_table_inputs_rawsql():
         table_store.execute(CreateSchema(schema, if_not_exists=True))
         table_store.execute(DropTable(table_name, schema, if_exists=True))
         query = sql_table_expr({"col": [0, 1, 2, 3]})
-        cmds = (
-            [CreateTableAsSelect, InsertIntoSelect]
-            if table_store.engine.dialect.name == "ibm_db_sa"
-            else [CreateTableAsSelect]
-        )
-        for cmd in cmds:
-            table_store.execute(
-                cmd(
-                    table_name,
-                    schema,
-                    query,
-                )
+        table_store.execute(
+            CreateTableAsSelect(
+                table_name,
+                schema,
+                query,
             )
+        )
         return Table(ExternalTableReference(table_name, schema=schema.get()))
 
     @materialize(input_type=sa.Table)
@@ -153,19 +140,13 @@ def test_external_table_inputs_nout():
         table_store.execute(CreateSchema(schema, if_not_exists=True))
         table_store.execute(DropTable(table_name, schema, if_exists=True))
         query = sql_table_expr({"col": [0, 1, 2, 3]})
-        cmds = (
-            [CreateTableAsSelect, InsertIntoSelect]
-            if table_store.engine.dialect.name == "ibm_db_sa"
-            else [CreateTableAsSelect]
-        )
-        for cmd in cmds:
-            table_store.execute(
-                cmd(
-                    table_name,
-                    schema,
-                    query,
-                )
+        table_store.execute(
+            CreateTableAsSelect(
+                table_name,
+                schema,
+                query,
             )
+        )
         return Table(ExternalTableReference(table_name, schema=schema.get()))
 
     @materialize(input_type=sa.Table, nout=2)
@@ -214,19 +195,13 @@ def test_external_table_inputs_no_run():
         table_store.execute(CreateSchema(schema, if_not_exists=True))
         table_store.execute(DropTable(table_name, schema, if_exists=True))
         query = sql_table_expr({"col": [0, 1, 2, 3]})
-        cmds = (
-            [CreateTableAsSelect, InsertIntoSelect]
-            if table_store.engine.dialect.name == "ibm_db_sa"
-            else [CreateTableAsSelect]
-        )
-        for cmd in cmds:
-            table_store.execute(
-                cmd(
-                    table_name,
-                    schema,
-                    query,
-                )
+        table_store.execute(
+            CreateTableAsSelect(
+                table_name,
+                schema,
+                query,
             )
+        )
         return Table(ExternalTableReference(table_name, schema=schema.get()))
 
     @materialize(input_type=sa.Table)

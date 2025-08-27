@@ -1,6 +1,6 @@
 [project]
 name = "pydiverse-pipedag"
-version = "0.10.8"
+version = "0.10.9"
 description = "A pipeline orchestration library executing tasks within one python session. It takes care of SQL table (de)materialization, caching and cache invalidation. Blob storage is supported as well for example for storing model files."
 authors = [
   { name = "QuantCo, Inc." },
@@ -30,7 +30,7 @@ classifiers = [
 ]
 
 dependencies = [
-  "pydiverse-common >=0.3.5,<0.4",
+  "pydiverse-common >=0.3.12,<0.4",
   "typing-extensions >=4.14.1,<5",
   "networkx >=3.4,<4",
   "attrs >=25.3.0,<26",

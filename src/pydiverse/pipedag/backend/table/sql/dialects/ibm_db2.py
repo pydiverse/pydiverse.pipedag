@@ -13,11 +13,13 @@ import sqlalchemy as sa
 import pydiverse.common as pdc
 from pydiverse.common import Dtype
 from pydiverse.pipedag.backend.table.sql.ddl import (
+    CreateEmptyTableAsSelect,
+    CreateTableAsSelect,
     CreateTableWithSuffix,
     LockSourceTable,
     LockTable,
 )
-from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook, PolarsTableHook
+from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook, PolarsTableHook, SQLAlchemyTableHook
 from pydiverse.pipedag.backend.table.sql.reflection import PipedagDB2Reflection
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.container import Schema, Table
@@ -25,6 +27,9 @@ from pydiverse.pipedag.materialize.details import (
     BaseMaterializationDetails,
     resolve_materialization_details_label,
 )
+
+# import optional dependencies
+from ..hooks import Select, SqlText, TextClause
 
 _TABLE_SPACE_KEYWORD_MAP = {
     "table_space_data": "IN",
@@ -315,3 +320,33 @@ class PolarsTableHook(DataframeIbmDb2TableHook, PolarsTableHook):
         # Polars read_database is utterly broken for IBM DB2.
         # Polars read_database_uri uses connectorx which does not support IBM DB2.
         return False
+
+
+@IBMDB2TableStore.register_table(sa)
+class SQLAlchemyTableHook(SQLAlchemyTableHook):
+    """
+    SQLAlchemy Table Hook for IBM DB2.
+    """
+
+    @classmethod
+    def _create_as_select_statements(
+        cls,
+        table_name: str,
+        schema: Schema,
+        query: Select | TextClause | SqlText,
+        store: SQLTableStore,
+        suffix: str,
+        unlogged: bool,
+        guaranteed_empty: bool = False,
+    ):
+        _ = store
+        StmtClass = CreateTableAsSelect if not guaranteed_empty else CreateEmptyTableAsSelect
+        return [
+            StmtClass(
+                table_name,
+                schema,
+                query,
+                unlogged=unlogged,
+                suffix=suffix,
+            )
+        ]

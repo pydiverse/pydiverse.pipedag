@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.9 (2025-08-21)
+- allow setting S3 endpoint URL in pipedag.yaml
+- Fix: IBM DB2 works with colspec
+
 ## 0.10.8 (2025-08-18)
 - Fix: Only cut MSSQL VARCHAR(N) in arrow-odbc download if N is MAX
 - Feat: Add support for parameter `write_local_table_cache` in `Result.get()` and `get_output_from_store()`

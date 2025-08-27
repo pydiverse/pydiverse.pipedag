@@ -3,7 +3,7 @@
 
 import os
 import shutil
-from typing import Any
+from typing import Any, Literal
 
 import sqlalchemy as sa
 from upath import UPath
@@ -184,7 +184,15 @@ class ParquetTableStore(DuckDBTableStore):
         This is an fsspec compatible path to either a directory or an S3 bucket key
         prefix. Examples are '/tmp/pipedag/parquet/' or 's3://pipedag-test-bucket/table_store/'.
         `instance_id` will automatically be appended to parquet_base_bath.
-
+    :param s3_endpoint_url:
+        When using a non-standard S3 endpoint (like minio), this can be used to specify the URL.
+        Unfortunately, the AWS_ENDPOINT_URL environment variable is not automatically picked up by duckdb.
+        (default: None)
+    :param s3_use_ssl:
+        Whether to use SSL when connecting to S3 endpoint. (default: None)
+    :param s3_url_style:
+        Specify URL style when connecting to S3 endpoint. Minio for example requires s3_url_style='path'.
+        (default: None)
     """
 
     _dialect_name = DISABLE_DIALECT_REGISTRATION
@@ -214,7 +222,15 @@ class ParquetTableStore(DuckDBTableStore):
         max_concurrent_copy_operations: int = 5,
         sqlalchemy_pool_size: int = 12,
         sqlalchemy_pool_timeout: int = 300,
+        s3_endpoint_url: str | None = None,
+        s3_url_style: str | None = None,
+        s3_region: str | None = None,
     ):
+        # must be initialized before super().__init__() call because self._create_engine() is called there
+        self.parquet_base_path = parquet_base_path
+        self.s3_endpoint_url = s3_endpoint_url
+        self.s3_url_style = s3_url_style
+        self.s3_region = s3_region
         super().__init__(
             engine_url,
             create_database_if_not_exists=create_database_if_not_exists,
@@ -231,7 +247,6 @@ class ParquetTableStore(DuckDBTableStore):
             sqlalchemy_pool_size=sqlalchemy_pool_size,
             sqlalchemy_pool_timeout=sqlalchemy_pool_timeout,
         )
-        self.parquet_base_path = parquet_base_path
 
         # ## state
 
@@ -253,20 +268,30 @@ class ParquetTableStore(DuckDBTableStore):
             schema_suffix=self.schema_suffix,
         )
 
-    def _create_engine(self):
-        engine = super()._create_engine(
-            connect_args={
-                # configure s3 for minio (see docker-compose.yaml)
-                "config": {
-                    "s3_endpoint": "localhost:9000",
-                    "s3_url_style": "path",
-                    "s3_use_ssl": "false",
-                    # "s3_region": "us-east-1",
-                    "s3_access_key_id": "minioadmin",
-                    "s3_secret_access_key": "minioadmin",
-                },
+    def get_storage_options(self, kind: Literal["polars", "fsspec"], protocol) -> dict[str, Any] | None:
+        if protocol != "s3" or (self.s3_endpoint_url is None and self.s3_region is None):
+            return None
+        if kind == "polars":
+            return {
+                k: v
+                for k, v in dict(
+                    aws_endpoint_url=self.s3_endpoint_url,
+                    aws_region=self.s3_region,
+                    addressing_style=self.s3_url_style,
+                ).items()
+                if v is not None
             }
-        )
+        elif kind == "fsspec":
+            return {
+                "client_kwargs": {
+                    "endpoint_url": self.s3_endpoint_url,
+                    "region_name": self.s3_region,
+                },
+                "config_kwargs": {"s3": {"addressing_style": self.s3_url_style}},
+            }
+
+    def _create_engine(self):
+        engine = super()._create_engine()
 
         def execute(con, statement):
             """
@@ -282,14 +307,57 @@ class ParquetTableStore(DuckDBTableStore):
             execute(con, "INSTALL httpfs;")
             execute(con, "LOAD httpfs;")
 
-            # MinIO credentials (default unless you've changed them)
-            execute(con, "SET s3_access_key_id='minioadmin';")
-            execute(con, "SET s3_secret_access_key='minioadmin';")
+            if self.parquet_base_path.protocol == "s3":
+                # Unfortunately it is hard to configure S3 URL endpoint consistently for fsspec, duckdb, and polars.
+                # Thus, we take it as parameter to ParquetTableStore and pass it to duckdb and fsspec. Fsspec in turn
+                # is passed on to polars. This is only needed for non-standard S3 endpoints like minio.
+                from fsspec.config import conf  # fsspec’s global config
 
-            # MinIO-specific settings
-            execute(con, "SET s3_use_ssl=false;")
-            execute(con, "SET s3_endpoint='localhost:9000';")  # MinIO server URL
-            execute(con, "SET s3_url_style='path';")  # Important: MinIO uses path-style URLs
+                if "s3" not in conf and self.s3_endpoint_url is not None:
+                    conf.setdefault("s3", {})
+                    conf["s3"].update(
+                        {
+                            "client_kwargs": {
+                                "endpoint_url": self.s3_endpoint_url,
+                            },
+                            # ─── botocore.config.Config parameters go here ────
+                            "config_kwargs": {
+                                "connect_timeout": 3,
+                                "read_timeout": 5,
+                                "retries": {"max_attempts": 2, "mode": "standard"},
+                            },
+                        }
+                    )
+                    if self.s3_region:
+                        conf["s3"]["client_kwargs"]["region_name"] = self.s3_region
+                    if self.s3_url_style:
+                        # MinIO needs path-style
+                        conf["s3"]["config_kwargs"]["s3"] = dict(addressing_style=self.s3_url_style)
+
+                s3_details = ""
+                if self.s3_endpoint_url is not None:
+                    from urllib3.util import parse_url
+
+                    url = parse_url(self.s3_endpoint_url)
+                    if url.scheme not in ["https", "http"] or len(self.s3_endpoint_url) < 7:
+                        raise AttributeError("s3_endpoint_url must start with http:// or https://")
+                    s3_details += f", ENDPOINT '{self.s3_endpoint_url[len(url.scheme) + 3 :]}'"
+                    s3_details += f", USE_SSL {'TRUE' if url.scheme == 'https' else 'FALSE'}"
+                if self.s3_url_style is not None:
+                    s3_details += f", URL_STYLE '{self.s3_url_style}'"
+                if self.s3_region is not None:
+                    s3_details += f", REGION '{self.s3_region}'"
+                execute(
+                    con,
+                    f"""
+                    CREATE OR REPLACE SECRET secret (
+                        TYPE s3,
+                        PROVIDER credential_chain,
+                        CHAIN 'env;config'
+                        {s3_details}
+                    );
+                """,
+                )
 
             if sa.__version__ >= "2.0.0":
                 con.commit()
@@ -607,7 +675,7 @@ class PandasTableHook(TableHook[ParquetTableStore]):
             )
 
         df = table.obj
-        df.to_parquet(file_path)
+        df.to_parquet(file_path, index=False, storage_options=store.get_storage_options("fsspec", file_path.protocol))
         store.execute(CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path)))
 
     @classmethod
@@ -621,14 +689,27 @@ class PandasTableHook(TableHook[ParquetTableStore]):
     ):
         path = store.get_table_path(table, lookup_schema=True)
         import pyarrow.dataset as ds
+        import pyarrow.fs
+
+        if path.protocol == "s3" and (store.s3_endpoint_url or store.s3_region):
+            # Setting endpoint URL is different for fsspec, pyarrow, duckdb, polars, and pandas.
+            # ParquetTableStore allows setting endpoint_url in pipedag.yaml and copies it to fsspec and duckdb.
+            # Here, we copy it from fsspec to pyarrow.
+            pyarrow_path = path.path
+            # unfortunately, force_virtual_addressing=store.s3_url_style=="path" does not work for
+            # pyarrow.parquet.read_schema(pyarrow_path, filesystem=pyarrow_fs)
+            pyarrow_fs = pyarrow.fs.S3FileSystem(endpoint_override=store.s3_endpoint_url, region=store.s3_region)
+        else:
+            pyarrow_path = path
+            pyarrow_fs = None
 
         if limit is not None:
-            df = ds.dataset(path).scanner().head(limit).to_pandas()
+            df = ds.dataset(pyarrow_path, filesystem=pyarrow_fs).scanner().head(limit).to_pandas()
         else:
-            df = pd.read_parquet(path)
+            df = pd.read_parquet(path, storage_options=store.get_storage_options("fsspec", path.protocol))
         import pyarrow.parquet
 
-        schema = pyarrow.parquet.read_schema(path)
+        schema = pyarrow.parquet.read_schema(pyarrow_path, filesystem=pyarrow_fs)
         df = df.astype(
             {
                 col: "datetime64[s]"
@@ -689,7 +770,15 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
                 f"Writing polars table '{schema.get()}.{table.name}' to parquet",
                 file_path=file_path,
             )
-        df.write_parquet(file_path)
+        if options := store.get_storage_options("polars", file_path.protocol):
+            if pl.__version__ < "1.3.0":
+                raise RuntimeError(
+                    "Storing polars tables with custom storage options is not supported for polars < 1.3.0. "
+                    f"Current version is {pl.__version__}: {options}"
+                )
+            df.write_parquet(file_path, storage_options=options)
+        else:
+            df.write_parquet(file_path)
         store.execute(CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path)))
 
     @classmethod
@@ -703,7 +792,9 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
     ) -> pl.DataFrame:
         _ = as_type
         file_path = store.get_table_path(table)
-        df = pl.read_parquet(file_path, n_rows=limit)
+        df = pl.read_parquet(
+            file_path, n_rows=limit, storage_options=store.get_storage_options("polars", file_path.protocol)
+        )
         return df
 
 
