@@ -308,6 +308,15 @@ class ConfigContext(BaseAttrsContext):
             # replace the default derived class for a specific dialect, set
             # `_dialect_name = DISABLE_DIALECT_REGISTRATION`.
             table_store = load_object(table_store_config)
+            metadata_table_store_config = self._config_dict["table_store"].get("metadata_store", None)
+            if metadata_table_store_config:
+                if not hasattr(table_store, "set_metadata_store"):
+                    self.logger.error(
+                        "table_store has configured metadata_store but does not support it: it will be ignored"
+                    )
+                else:
+                    metadata_table_store = load_object(metadata_table_store_config)
+                    table_store.set_metadata_store(metadata_table_store)
         except Exception as e:
             raise RuntimeError("Failed loading table_store") from e
 

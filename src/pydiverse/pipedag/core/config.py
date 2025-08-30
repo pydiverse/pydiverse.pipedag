@@ -92,17 +92,18 @@ class PipedagConfig:
 
     def __expand_references(self, config):
         references = [
-            (None, "technical_setup", "technical_setups"),
-            ("table_store", "table_store_connection", "table_store_connections"),
-            ("blob_store", "blob_store_connection", "blob_store_connections"),
+            ([], "technical_setup", "technical_setups"),
+            (["table_store"], "table_store_connection", "table_store_connections"),
+            (["blob_store"], "blob_store_connection", "blob_store_connections"),
+            (["table_store", "metadata_table_store"], "table_store_connection", "table_store_connections"),
         ]
 
         for expand_path, ref_name_path, ref_src_path in references:
-            ref_name = _get(config, expand_path, ref_name_path, default=None)
+            ref_name = _get(config, *(expand_path + [ref_name_path]), default=None)
             if ref_name is None:
                 continue
 
-            base_dict = _get(config, expand_path)
+            base_dict = _get(config, *expand_path)
             merged_dict = deep_merge(base_dict, copy.deepcopy(_get(self.raw_config, ref_src_path, ref_name)))
             base_dict.update(merged_dict)
             _pop(base_dict, ref_name_path)
@@ -160,14 +161,15 @@ class PipedagConfig:
             )
 
         # Handle url_attrs_file
-        url_attrs_file = _pop(config, "table_store", "args", "url_attrs_file", default=None)
-        if url_attrs_file is not None:
-            with open(url_attrs_file, encoding="utf-8") as fh:
-                url_attrs = yaml.safe_load(fh)
+        for base in [["table_store"], ["table_store", "metadata_table_store"]]:
+            url_attrs_file = _pop(config, *(base + ["args", "url_attrs_file"]), default=None)
+            if url_attrs_file is not None:
+                with open(url_attrs_file, encoding="utf-8") as fh:
+                    url_attrs = yaml.safe_load(fh)
 
-            url = _get(config, "table_store", "args", "url")
-            url = expand_variables(url, url_attrs, skip_missing=True)
-            _set(config, url, "table_store", "args", "url")
+                url = _get(config, *(base + ["args", "url"]))
+                url = expand_variables(url, url_attrs, skip_missing=True)
+                _set(config, url, *(base + ["args", "url"]))
 
         # Finally, expand all normal variables
         config = self.__expand_variables(config)
@@ -233,6 +235,8 @@ class PipedagConfig:
         locations = [
             ("table_store", "args", "url"),
             ("table_store", "args", "url_attrs_file"),
+            ("table_store", "metadata_table_store", "args", "url"),
+            ("table_store", "metadata_table_store", "args", "url_attrs_file"),
         ]
 
         for location in locations:
@@ -249,6 +253,9 @@ class PipedagConfig:
             ("table_store", "args", "url"),
             ("table_store", "args", "schema_prefix"),
             ("table_store", "args", "schema_suffix"),
+            ("table_store", "metadata_table_store", "args", "url"),
+            ("table_store", "metadata_table_store", "args", "schema_prefix"),
+            ("table_store", "metadata_table_store", "args", "schema_suffix"),
         ]
 
         # TODO: Decide on a list of available variables
