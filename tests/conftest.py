@@ -115,7 +115,7 @@ supported_options = [
 
 default_options = ["postgres", "duckdb", "polars"]
 
-sub_backends = dict(duckdb=["parquet_backend"], s3=["parquet_s3_backend"])
+sub_backends = dict(duckdb=["parquet_backend"], s3=["parquet_s3_backend"], ibm_db2=["parquet_s3_backend_db2"])
 
 
 def pytest_addoption(parser):
