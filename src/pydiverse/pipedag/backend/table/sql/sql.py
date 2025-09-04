@@ -885,17 +885,21 @@ class SQLTableStore(BaseTableStore):
 
     def setup(self):
         super().setup()
+        if not self.avoid_drop_create_schema:
+            # always create metadata_schema
+            self.execute(CreateSchema(self.metadata_schema, if_not_exists=True))
         if self.metadata_store:
             # delete version_table to make sure changes in metadata_store will not result in usage of outdated metadata
-            with self.engine_connect() as parent_meta_conn:
-                parent_meta_conn.execute(self.version_table.delete().where(True))
+            try:
+                with self.engine_connect() as parent_meta_conn:
+                    parent_meta_conn.execute(self.version_table.delete().where(True))
+            except sa.exc.ProgrammingError:
+                # table metadata_version does not yet exist
+                pass
             # redirect setup of metadata tables
             self.metadata_store.setup()
             self.disable_caching = self.metadata_store.disable_caching
         else:
-            # attention: setup() is never modifying metadata tables for
-            if not self.avoid_drop_create_schema:
-                self.execute(CreateSchema(self.metadata_schema, if_not_exists=True))
             with self.engine_connect() as conn:
                 try:
                     version = conn.execute(sa.select(self.version_table.c.version)).scalar_one_or_none()
@@ -1070,6 +1074,12 @@ class SQLTableStore(BaseTableStore):
                 del conn  # prevent hard to test typos
                 self._commit_stage_update_metadata(stage, meta_conn)
 
+    def on_clear_schema(self, schema_name: str):
+        pass  # a hook for derived classes (see ParquetTableStore for example)
+
+    def on_read_view_alias(self, table_name: str, from_schema: str, to_schema: str):
+        pass  # a hook for derived classes (see ParquetTableStore for example)
+
     def _commit_stage_read_views(self, stage: Stage):
         dest_schema = self.get_schema(stage.name)
         src_schema = self.get_schema(stage.transaction_name)
@@ -1078,6 +1088,7 @@ class SQLTableStore(BaseTableStore):
             # Clear contents of destination schema
             self.execute(DropSchemaContent(dest_schema, self.engine), conn=conn)
             self.optional_pause_for_db_transactionality("table_drop")
+            self.on_clear_schema(dest_schema.get())
 
             # Create aliases for all tables in transaction schema
             inspector = sa.inspect(self.engine)
@@ -1085,6 +1096,7 @@ class SQLTableStore(BaseTableStore):
                 schema=src_schema.get()
             ):
                 self.execute(CreateAlias(table, src_schema, table, dest_schema))
+                self.on_read_view_alias(table, src_schema.get(), dest_schema.get())
 
             # Update metadata
             with self.metadata_connect(conn) as meta_conn:
@@ -1611,6 +1623,8 @@ class SQLTableStore(BaseTableStore):
     # DatabaseLockManager
 
     def get_engine_for_locking(self) -> Engine:
+        if self.metadata_store:
+            return self.metadata_store.get_engine_for_locking()
         return self._create_engine()
 
     def get_lock_schema(self) -> Schema:
