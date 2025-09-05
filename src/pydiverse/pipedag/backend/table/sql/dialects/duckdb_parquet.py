@@ -3,6 +3,7 @@
 
 import os
 import shutil
+import uuid
 from typing import Any, Literal
 
 import sqlalchemy as sa
@@ -12,12 +13,14 @@ import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
 from pydiverse.pipedag import ConfigContext, Schema, Stage, Table
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CopySelectTo,
+    CreateSchema,
     CreateViewAsSelect,
     DropView,
 )
 from pydiverse.pipedag.backend.table.sql.dialects.duckdb import DuckDBTableStore
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
 from pydiverse.pipedag.context import RunContext
+from pydiverse.pipedag.materialize.store import BaseTableStore
 from pydiverse.pipedag.materialize.table_hook_base import (
     AutoVersionSupport,
     CanMatResult,
@@ -248,6 +251,16 @@ class ParquetTableStore(DuckDBTableStore):
             sqlalchemy_pool_timeout=sqlalchemy_pool_timeout,
         )
 
+        # Add parquet specific metadata table for user id.
+        # This can be UUID which is constant per .duckdb file and used to sync with metadata_store.
+        self.sql_metadata_local = sa.MetaData(schema=self.metadata_schema.get())
+        self.user_id_table = sa.Table(
+            "user_id",
+            self.sql_metadata_local,
+            sa.Column("user_id", sa.String(64)),
+        )
+        self.sync_views_table = None
+
         # ## state
 
         # whether parquet files of stage are stored in __odd or __even
@@ -267,6 +280,36 @@ class ParquetTableStore(DuckDBTableStore):
             schema_prefix=self.schema_prefix,
             schema_suffix=self.schema_suffix,
         )
+
+    def set_metadata_store(self, store: BaseTableStore):
+        super().set_metadata_store(store)
+
+        # make sure sync_views_table exists in metadata_store
+        self.sync_views_table = sa.Table(
+            "sync_views",
+            store.sql_metadata,
+            sa.Column("schema", sa.String(128), primary_key=True),
+            sa.Column("view_name", sa.String(128), primary_key=True),
+            sa.Column("user_id", sa.String(64), primary_key=True),
+            sa.Column("target", sa.String(1024)),
+            sa.Column("target_type", sa.String(64)),
+            sa.Column("obsolete", sa.SmallInteger()),  # some databases have problems with bool
+        )
+
+    def setup(self):
+        super().setup()
+
+        if self.metadata_store:
+            # super().setup() already called self.metadata_store.setup() and
+            # self.metadata_store.sql_metadata.create_all() incl. sync_views_table
+
+            self.sql_metadata_local.create_all(self.engine, checkfirst=True)
+            with self.engine_connect() as conn:
+                self.user_id = conn.execute(sa.select(self.user_id_table.c.user_id)).scalar_one_or_none()
+                if self.user_id is None:
+                    # create a new UUID if it does not exist, yet
+                    self.user_id = uuid.uuid4().hex
+                    conn.execute(sa.insert(self.user_id_table).values(user_id=self.user_id))
 
     def get_storage_options(self, kind: Literal["polars", "fsspec"], protocol) -> dict[str, Any] | None:
         if protocol != "s3" or (self.s3_endpoint_url is None and self.s3_region is None):
@@ -364,10 +407,235 @@ class ParquetTableStore(DuckDBTableStore):
 
         return engine
 
+    def metadata_sync_views(self, schema_name: str):
+        """
+        Sync views between different users via metadata_store.
+
+        This function interacts with metadata_track_* functions to get input in the metadata table sync_views.
+
+        The per-user .duckdb file stores a sync_views_user_id table:
+        - user_id  # UUID identifying the user taking part in the synchronization
+
+        The sync_views table holds the following information:
+        - schema [PK]
+        - view_name [PK]
+        - user_id [PK]
+        - target  # parquet_file or target_schema
+        - target_type  # "parquet": target is a parquet_file, "schema": target is a redirect schema name
+        - obsolete  # if true (obsolete != 0), the parquet file is not in the correct place any more and
+                    # the view must be removed
+
+        Logic:
+        - any schema reset will remove parquet files, delete all entries for schema
+        - any view creation will insert or update the respective entry for the respective user_id; it will also update
+        all entries by other user_ids to obsolete=True;
+        - any view deletion will remove the respective entry for this user_id, and update all entries for other user_id
+        values to obsolete=True
+        - metadata_sync_views() will delete all views in the current schema if for the user_id, there is no entry for
+        this schema. If there is already an entry for this user_id, it will delete all views in the current schema
+          which are marked obsolete=True for this user_id, and it will create all views which are obsolete=False and
+          from another user.
+        """
+        if self.metadata_store:
+            with self.metadata_store.engine_connect() as meta_conn:
+                tbl = self.sync_views_table
+                match_user_id = (tbl.c.schema == schema_name) & (tbl.c.user_id == self.user_id)
+                obsolete_views = meta_conn.execute(
+                    sa.select(tbl.c.view_name).where(match_user_id & (tbl.c.obsolete != 0))
+                ).fetchall()
+                if len(obsolete_views) > 0:
+                    self.logger.info(
+                        "Removing obsolete views due to sync with metadata_store",
+                        schema=schema_name,
+                        views=[v[0] for v in obsolete_views],
+                    )
+                for view in obsolete_views:
+                    try:
+                        meta_conn.execute(DropView(view[0], schema_name, if_exists=False))
+                    except sa.exc.OperationalError:
+                        self.log.error(
+                            f"Drop view failed while reconciling views with metadata_store: {schema_name}.{view[0]}"
+                        )
+                deleted = meta_conn.execute(tbl.delete().where(match_user_id & (tbl.c.obsolete != 0))).rowcount
+                if deleted > 0:
+                    self.logger.info(
+                        "Deleted obsolete view entries in metadata_store",
+                        schema=schema_name,
+                        user_id=self.user_id,
+                        affected=deleted,
+                    )
+                if len(obsolete_views) == 0:
+                    user_id_cnt = meta_conn.execute(
+                        sa.select(sa.func.count(sa.text("*"))).where(match_user_id)
+                    ).fetchall()[0][0]
+                    if user_id_cnt == 0:
+                        # this user_id has no entry for this schema -> remove all views in this schema
+                        with self.engine_connect() as conn:
+                            existing_views = conn.execute(
+                                sa.text(f"FROM duckdb_views() SELECT view_name WHERE schema_name='{schema_name}'")
+                            ).fetchall()
+                            if len(existing_views) > 0:
+                                self.logger.info(
+                                    "Removing all views due to sync with metadata_store",
+                                    schema=schema_name,
+                                    views=[v[0] for v in existing_views],
+                                )
+                            for view in existing_views:
+                                try:
+                                    conn.execute(DropView(view[0], schema_name, if_exists=False))
+                                except sa.exc.OperationalError:
+                                    self.log.error(
+                                        "Drop view failed while reconciling views with metadata_store: "
+                                        f"{schema_name}.{view[0]}"
+                                    )
+
+                query = sa.select(tbl.c.view_name, tbl.c.target, tbl.c.target_type).where(
+                    (tbl.c.schema == schema_name) & (tbl.c.user_id != self.user_id) & (tbl.c.obsolete == 0)
+                )
+                create_views = meta_conn.execute(query).fetchall()
+                if len(create_views) > 0:
+                    self.logger.info(
+                        "Creating views due to sync with metadata_store",
+                        schema=schema_name,
+                        views=[v[0] for v in create_views],
+                    )
+                with self.engine_connect() as conn:
+                    del meta_conn  # prevent typo errors
+                    for view, target, target_type in create_views:
+                        try:
+                            conn.execute(DropView(view, schema_name, if_exists=True))
+                            schema = Schema(schema_name, prefix="", suffix="")
+                            if target_type == "parquet":
+                                conn.execute(CreateViewAsSelect(view, schema, self._read_parquet_query(target)))
+                            elif target_type == "schema":
+                                conn.execute(
+                                    CreateViewAsSelect(view, schema, sa.text(f"SELECT * FROM {target}.{view}"))
+                                )
+                            else:
+                                meta_engine = self.metadata_schema.engine
+                                self.log.error(
+                                    f"Unknown target_type in sync_views table: {target_type}\n"
+                                    f"{query.compile(meta_engine, compile_kwargs={'literal_binds': True})}"
+                                )
+                        except sa.exc.OperationalError:
+                            self.log.error(
+                                "Create view failed while reconciling views with metadata_store: "
+                                f"{schema_name}.{view} -> {target} ({target_type})"
+                            )
+
+    def metadata_track_view_flush(self, schema_name: str):
+        """
+        Flush all entries for schema in metadata_store.
+
+        see metadata_sync_views() for details.
+        """
+        if self.metadata_store:
+            with self.metadata_store.engine_connect() as meta_conn:
+                tbl = self.sync_views_table
+                deleted = meta_conn.execute(tbl.delete().where(tbl.c.schema == schema_name)).rowcount
+                if deleted > 0:
+                    self.logger.info(
+                        "Flushed all view entries in metadata_store for schema", schema=schema_name, deleted=deleted
+                    )
+
+    def metadata_track_view(
+        self, table_name: str, schema_name: str, target: str, target_type: Literal["parquet", "schema"]
+    ):
+        """
+        Track creation of a view in metadata_store.
+
+        see metadata_sync_views() for details.
+        """
+        if self.metadata_store:
+            with self.metadata_store.engine_connect() as meta_conn:
+                tbl = self.sync_views_table
+                view_match = (tbl.c.schema == schema_name) & (tbl.c.view_name == table_name)
+                # mark all other user views as obsolete
+                updated = meta_conn.execute(tbl.update().where(view_match).values(obsolete=1)).rowcount
+                if updated > 0:
+                    self.logger.info(
+                        "Marked views by other users as obsolete in metadata_store",
+                        schema=schema_name,
+                        view=table_name,
+                        affected=updated,
+                    )
+                # drop obsolete own match:
+                deleted = meta_conn.execute(tbl.delete().where(view_match & (tbl.c.user_id == self.user_id))).rowcount
+                if deleted > 0:
+                    self.logger.info(
+                        "Deleted obsolete own view entries in metadata_store",
+                        schema=schema_name,
+                        view=table_name,
+                        user_id=self.user_id,
+                        deleted=deleted,
+                    )
+                # insert view
+                meta_conn.execute(
+                    sa.insert(tbl).values(
+                        schema=schema_name,
+                        view_name=table_name,
+                        user_id=self.user_id,
+                        target=target,
+                        target_type=target_type,
+                        obsolete=0,
+                    )
+                )
+                self.logger.info(
+                    "Inserted view entry in metadata_store",
+                    schema=schema_name,
+                    view=table_name,
+                    target=target,
+                    target_type=target_type,
+                )
+
+    def metadata_track_view_drop(self, table_name: str, schema_name: str):
+        """
+        Track deletion of a view in metadata_store.
+
+        see metadata_sync_views() for details.
+        """
+        if self.metadata_store:
+            with self.metadata_store.engine_connect() as meta_conn:
+                tbl = self.sync_views_table
+                view_match = (tbl.c.schema == schema_name) & (tbl.c.view_name == table_name)
+                deleted = meta_conn.execute(tbl.delete().where(view_match & (tbl.c.user_id == self.user_id))).rowcount
+                if deleted > 0:
+                    self.logger.info(
+                        "Deleted view entry in metadata_store", schema=schema_name, view=table_name, deleted=deleted
+                    )
+                # mark all other user views as obsolete
+                updated = meta_conn.execute(tbl.update().where(view_match).values(obsolete=1)).rowcount
+                if updated > 0:
+                    self.logger.info(
+                        "Marked views by other users as obsolete in metadata_store",
+                        schema=schema_name,
+                        view=table_name,
+                        affected=updated,
+                    )
+
+    def on_clear_schema(self, schema_name: str):
+        # this callback is called by parent class in _commit_stage_read_views()
+        self.metadata_track_view_flush(schema_name)
+
+    def on_read_view_alias(self, table_name: str, from_schema: str, to_schema: str):
+        # this callback is called by parent class in _commit_stage_read_views()
+        self.metadata_track_view(table_name, to_schema, target=from_schema, target_type="schema")
+
     def init_stage(self, stage: Stage):
         # fetch existing tables from database before schema is deleted there
         old_transaction_name = self._get_read_view_transaction_name(stage.name)
         new_transaction_name = self._get_read_view_original_transaction_name(stage, old_transaction_name)
+
+        # first synchronize views to match the actual state in metadata_store
+        if self.metadata_store:
+            # Typically the parent schema stage.name references old_transaction schema.
+            # But we also need to sync the new transaction schema to avoid double deletion of parquet files.
+            schemas = [old_transaction_name] if old_transaction_name != "" else []
+            schemas = schemas + [self.get_schema(stage.name).get(), new_transaction_name]
+            for schema in schemas:
+                self.execute(CreateSchema(Schema(schema, prefix="", suffix=""), if_not_exists=True))
+                self.metadata_sync_views(schema)
+
         with self.engine_connect() as conn:
             existing_tables = self.execute(
                 f"FROM duckdb_views() SELECT view_name WHERE "
@@ -375,8 +643,10 @@ class ParquetTableStore(DuckDBTableStore):
                 f"and sql like '%%FROM read_parquet(%%'",
                 conn=conn,
             ).fetchall()
-        # this creates transaction schema and modifies stage.current_name
+        # This creates transaction schema and modifies stage.current_name.
+        # It also removes all views that were previously in transaction schema.
         super().init_stage(stage)
+        self.metadata_track_view_flush(new_transaction_name)
         # update cache: this is important since before this stage commits,
         # self._get_read_view_transaction_name() will yield the wrong name
         new_schema = self.get_schema(stage.current_name)
@@ -393,9 +663,11 @@ class ParquetTableStore(DuckDBTableStore):
             table = row[0]
             file_path = path / (table + ".parquet")
             try:
+                # import traceback
                 self.logger.info(
                     "Cleaning up parquet file in transaction schema",
                     file_path=file_path,
+                    # stacktrace="\n"+"\n".join(traceback.format_stack()),
                 )
                 file_path.unlink()
             except FileNotFoundError:
@@ -427,6 +699,7 @@ class ParquetTableStore(DuckDBTableStore):
             src_file_path.fs.copy(src_file_path.as_uri(), dest_file_path.as_uri(), on_error="raise")
         # create view in duckdb database file
         self.execute(CreateViewAsSelect(table.name, dest_schema, self._read_parquet_query(dest_file_path)))
+        self.metadata_track_view(table.name, dest_schema.get(), dest_file_path.as_uri(), "parquet")
 
     @staticmethod
     def _read_parquet_query(file_path):
@@ -477,6 +750,7 @@ class ParquetTableStore(DuckDBTableStore):
                 # replace view in duckdb database file (which was previously just
                 # alias to main schema)
                 self.execute(CreateViewAsSelect(table.name, schema, self._read_parquet_query(dest_file_path)))
+                self.metadata_track_view(table.name, schema.get(), dest_file_path.as_uri(), "parquet")
             # switch committed transaction path to the new transaction path
             self.parquet_schema_paths[self.get_schema(stage.name).name] = stage_transaction_path
         super().commit_stage(stage)
@@ -531,13 +805,15 @@ class ParquetTableStore(DuckDBTableStore):
             schema = self.get_schema(table.stage.transaction_name)
         file_path = self.get_table_schema_path(table.name, schema)
         file_path.unlink(missing_ok=True)
+        view_schema = self.get_schema(table.stage.transaction_name)
         self.execute(
             DropView(
                 table.name,
-                self.get_schema(table.stage.transaction_name),
+                view_schema,
                 if_exists=True,
             )
         )
+        self.metadata_track_view_drop(table.name, view_schema.get())
 
     def add_primary_key(
         self,
@@ -582,8 +858,10 @@ class ParquetTableStore(DuckDBTableStore):
                 schema,
             )
         )
+        self.metadata_track_view_drop(table.name, schema.get())
         # create view again
         self.execute(CreateViewAsSelect(to_name, schema, self._read_parquet_query(to_path)))
+        self.metadata_track_view(to_name, schema.get(), to_path.as_uri(), "parquet")
 
     def write_subquery(
         self,
@@ -611,6 +889,7 @@ class ParquetTableStore(DuckDBTableStore):
                 CreateViewAsSelect(to_name, schema, self._read_parquet_query(file_path)),
             ]
         )
+        self.metadata_track_view(to_name, schema.get(), file_path.as_uri(), "parquet")
         return schema
 
     def drop_subquery_table(
@@ -641,6 +920,7 @@ class ParquetTableStore(DuckDBTableStore):
                 schema,
             )
         )
+        self.metadata_track_view_drop(drop_name, schema.get())
 
 
 @ParquetTableStore.register_table(pd)
@@ -677,6 +957,7 @@ class PandasTableHook(TableHook[ParquetTableStore]):
         df = table.obj
         df.to_parquet(file_path, index=False, storage_options=store.get_storage_options("fsspec", file_path.protocol))
         store.execute(CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path)))
+        store.metadata_track_view(table.name, schema.get(), file_path.as_uri(), "parquet")
 
     @classmethod
     def retrieve(
@@ -780,6 +1061,7 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
         else:
             df.write_parquet(file_path)
         store.execute(CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path)))
+        store.metadata_track_view(table.name, schema.get(), file_path.as_uri(), "parquet")
 
     @classmethod
     def _execute_query(
@@ -816,6 +1098,7 @@ class SQLAlchemyTableHook(sql_hooks.SQLAlchemyTableHook):
         unlogged: bool,
     ):
         file_path = store.get_table_schema_path(table_name, schema)
+        store.metadata_track_view(table_name, schema.get(), file_path.as_uri(), "parquet")
         return [
             CopySelectTo(
                 file_path,

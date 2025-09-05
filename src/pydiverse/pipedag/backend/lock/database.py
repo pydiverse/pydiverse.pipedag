@@ -55,7 +55,9 @@ class DatabaseLockManager(BaseLockManager):
         # If calling DatabaseLockManager(engine), then we want to dynamically
         # instantiate the correct dialect specific subclass based on the engine dialect.
         dialect = engine.dialect.name
-        dialect_specific_cls = DatabaseLockManager.__registered_dialects.get(dialect, cls)
+        dialect_specific_cls = DatabaseLockManager.__registered_dialects.get(dialect, None)
+        if dialect_specific_cls is None:
+            raise RuntimeError(f"DatabaseLockManager is not supported for SQL dialect: '{dialect}'")
         return super(DatabaseLockManager, dialect_specific_cls).__new__(dialect_specific_cls)
 
     @classmethod
@@ -152,6 +154,7 @@ class DatabaseLockManager(BaseLockManager):
 
     @property
     def supports_stage_level_locking(self):
+        # this property is overridden by derived DatabaseLockManager classes
         raise NotImplementedError
 
     def acquire(self, lockable: Lockable):

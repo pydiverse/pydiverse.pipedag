@@ -6,9 +6,12 @@ import copy
 import pandas as pd
 import pytest
 import sqlalchemy as sa
+import structlog
+from pandas.testing import assert_frame_equal
 
 from pydiverse.pipedag import ConfigContext, Flow, Stage, StageLockContext, Table
 from pydiverse.pipedag.container import Schema
+from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.core.config import PipedagConfig, create_basic_pipedag_config
 from tests.fixtures.instances import with_instances
 from tests.util import tasks_library as m
@@ -235,3 +238,56 @@ def test_imperative_materialize_given_config():
     sa_tbl = sa.Table(tbl.name, sa.MetaData(), schema="dummy_schema", autoload_with=engine)
     assert [c.name for c in sa_tbl.columns] == ["x"]
     assert sa_tbl.name == tbl.name
+
+
+@with_instances("parquet_s3_backend")
+def test_metadata_store_synchronization():
+    logger = structlog.get_logger(__name__ + ".test_metadata_store_synchronization")
+    x = {"x": [0, 1, 2, 3]}
+    y = {"y": [0, 1, 2, 3]}
+    constant = dict(c=[0])
+    with Flow() as f:
+        with Stage("stage_1") as s:
+            df1 = m.pd_dataframe(x)
+            df2 = m.pd_dataframe(y)
+            dataframes = m.create_tuple(df1, df2)
+            out = m.noop(constant)  # prevent 100% cache valid stage
+            out2 = m.pd_dataframe(out)
+            _ = dataframes, out2
+
+    cfg1 = ConfigContext.get()
+    # setup second configuration with different local duckdb file
+    cfg2 = cfg1.evolve(
+        _config_dict=dict(
+            table_store=dict(args=dict(url="duckdb:////tmp/pipedag/parquet_duckdb/parquet_s3_backend2.duckdb"))
+        ),
+        _transfer_cache_=False,
+    )
+
+    is_odd = {}
+    for mode in [CacheValidationMode.FORCE_CACHE_INVALID, CacheValidationMode.NORMAL]:
+        for cfg in (cfg1, cfg2):
+            store = cfg.store.table_store  # keep this before f.run() to allow transfer of cached_property store
+            logger.info("** Running Pipeline for **", mode=mode, db_file=store.engine.url)
+            with StageLockContext():
+                f.run(config=cfg, cache_validation_mode=mode)
+                out_x, out_y = dataframes.get_output_from_store(as_type=pd.DataFrame)
+                assert_frame_equal(out_x, pd.DataFrame(x))
+                assert_frame_equal(out_y, pd.DataFrame(y))
+                query = sa.text(f"""
+                    FROM duckdb_views() SELECT sql WHERE
+                        schema_name='{store.get_schema(s.name).get()}'
+                """)
+                with store.engine.connect() as conn:
+                    views = store.execute(query, conn=conn).fetchall()
+                cnt_odd = sum(1 if "FROM stage_1__odd." in v[0] else 0 for v in views)
+                cnt_even = sum(1 if "FROM stage_1__even." in v[0] else 0 for v in views)
+                assert len(views) == 5
+                assert cnt_odd + cnt_even == 5
+                assert min(cnt_odd, cnt_even) == 0
+                is_odd[id(cfg)] = cnt_odd > 0
+
+            if mode == CacheValidationMode.NORMAL:
+                constant["c"][0] += 1  # prevent 100% cache valid stage
+
+        assert is_odd[id(cfg1)] != is_odd[id(cfg2)]

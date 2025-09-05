@@ -299,13 +299,29 @@ instances:
     table_store:
       class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
       table_store_connection: parquet_duckdb
+      metadata_table_store:
+        class: "pydiverse.pipedag.backend.table.SQLTableStore"
+        table_store_connection: postgres
       args:
         parquet_base_path: "s3://pipedag-test-bucket/table_store/"
         s3_endpoint_url: "http://localhost:9000"  # test with minio instead of AWS S3
         s3_url_style: "path"
-
     stage_commit_technique: READ_VIEWS
     lock_manager:
-      class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
+      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
+
+  parquet_s3_backend_db2:
+    instance_id: parquet_s3_backend_db2
+    table_store:
+      class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
+      table_store_connection: parquet_duckdb
+      metadata_table_store:
+        class: "pydiverse.pipedag.backend.table.SQLTableStore"
+        table_store_connection: ibm_db2
       args:
-        hosts: "localhost:2181"
+        parquet_base_path: "s3://pipedag-test-bucket/table_store/"
+        s3_endpoint_url: "http://localhost:9000"  # test with minio instead of AWS S3
+        s3_url_style: "path"
+    stage_commit_technique: READ_VIEWS
+    lock_manager:
+      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"

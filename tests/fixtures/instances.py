@@ -49,6 +49,7 @@ DATABASE_INSTANCES = (
     "duckdb",
     "parquet_backend",
     "parquet_s3_backend",
+    "parquet_s3_backend_db2",
 )
 
 ORCHESTRATION_INSTANCES = (

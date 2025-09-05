@@ -514,6 +514,22 @@ hook_args
 local_table_cache
 : See [](#section-local_table_cache). *Optional*
 
+metadata_store
+: This subsection can hold all attributes of a [`table_store`](#section-table_store) that is only used for metadata. *Optional*
+
+    This is useful to use a metadata store that is better for sharing between multiple users or for
+    locking. Especially, ParquetTableStore benefits from this, because it is hard to share access to .duckdb files since
+    this is not a supported feature of DuckDB.
+    Postgres is a good database for light-weight managing of synchronization.
+
+    You can also use DatabaseLockManager as lock manager if the metadata_store supports it.
+
+    Implementation Details:
+    The parent metadata tables will be flushed when using metadata_store to avoid errors when changing metadata_store
+    configuration. Specifically for ParquetTableStore, the metadata_store will also store information of changes in
+    views providing access to parquet files. This is necessary to keep all the local .duckdb files in-sync.
+
+    (default: None)
 
 (section-local_table_cache)=
 #### Local Table Cache

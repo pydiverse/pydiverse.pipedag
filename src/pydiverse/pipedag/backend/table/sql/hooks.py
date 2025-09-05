@@ -1052,20 +1052,42 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         # We try to use arrow_odbc (see mssql) or adbc (e.g. adbc-driver-postgresql)
         # if possible. Duckdb also has its own implementation.
         connection_uri = store.engine_url.render_as_string(hide_password=False)
+        df = None
         if cls.dialect_has_adbc_driver():
             try:
                 df = pl.read_database_uri(query, connection_uri, engine="adbc")
                 return cls._fix_dtypes(df, dtypes)
             except:  # noqa
-                store.logger.warning(
-                    "Failed retrieving query using ADBC, falling back to Pandas: %s",
-                    query,
-                )
+                msg = "Failed retrieving query using ADBC, falling back to Pandas: %s"
+                if store.engine.dialect.name == "postgresql":
+                    try:
+                        import adbc_driver_postgresql
+                    except ImportError:
+                        msg = (
+                            "Failed retrieving query using ADBC. Please install adbc-driver-postgresql. "
+                            "Falling back to Pandas: %s"
+                        )
+
+                store.logger.warning(msg, query)
         elif cls.dialect_supports_connectorx():
             # This implementation requires connectorx which does not work for duckdb or ibm_db2.
             # Attention: In case this call fails, we simply fall-back to pandas hook.
-            df = pl.read_database_uri(query, connection_uri)
-        else:
+            try:
+                df = pl.read_database_uri(query, connection_uri)
+            except:  # noqa
+                msg = "Failed retrieving query using ConnectorX, falling back to Pandas: %s"
+                try:
+                    import adbc_driver_postgresql
+
+                    _ = adbc_driver_postgresql
+                except ImportError:
+                    msg = (
+                        "Failed retrieving query using ConnectorX. Please install connectorx. "
+                        "Falling back to Pandas: %s"
+                    )
+                store.logger.warning(msg, query)
+
+        if not df:
             # Polars internally falls back to pandas which results in data dependent types
             df = pl.read_database(query, store.engine)
         return cls._fix_dtypes(df, dtypes)

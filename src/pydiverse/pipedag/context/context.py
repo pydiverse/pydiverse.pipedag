@@ -308,6 +308,15 @@ class ConfigContext(BaseAttrsContext):
             # replace the default derived class for a specific dialect, set
             # `_dialect_name = DISABLE_DIALECT_REGISTRATION`.
             table_store = load_object(table_store_config)
+            metadata_table_store_config = self._config_dict["table_store"].get("metadata_table_store", None)
+            if metadata_table_store_config:
+                if not hasattr(table_store, "set_metadata_store"):
+                    self.logger.error(
+                        "table_store has configured metadata_store but does not support it: it will be ignored"
+                    )
+                else:
+                    metadata_table_store = load_object(metadata_table_store_config)
+                    table_store.set_metadata_store(metadata_table_store)
         except Exception as e:
             raise RuntimeError("Failed loading table_store") from e
 
@@ -348,20 +357,26 @@ class ConfigContext(BaseAttrsContext):
         .. |attrs.evolve()| replace:: ``attrs.evolve()``
         .. _attrs.evolve(): https://www.attrs.org/en/stable/api.html#attrs.evolve
         """
+        transfer_cache = changes.pop("_transfer_cache_", True)
         dicts = {}
         for name, value in changes.items():
             if isinstance(value, Mapping):
                 dicts[name] = deep_merge(getattr(self, name), value)
         changes.update(dicts)
         changes.update(dict(is_evolved=True))
+        if "_config_dict" in changes:
+            # this renaming is needed to pass constructor
+            changes["config_dict"] = changes["_config_dict"]
+            del changes["_config_dict"]
         evolved = evolve(self, **changes)
 
         # Transfer cached properties
-        cached_properties = ["auto_table", "auto_blob", "store"]
-        for name in cached_properties:
-            if name in self.__dict__:
-                evolved.__dict__[name] = self.__dict__[name]
-                evolved.__dict__[f"__{name}_inherited"] = True
+        if transfer_cache:
+            cached_properties = ["auto_table", "auto_blob", "store"]
+            for name in cached_properties:
+                if name in self.__dict__:
+                    evolved.__dict__[name] = self.__dict__[name]
+                    evolved.__dict__[f"__{name}_inherited"] = True
 
         return evolved
 

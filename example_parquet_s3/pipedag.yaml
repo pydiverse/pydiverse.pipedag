@@ -38,6 +38,12 @@ instances:
         print_materialize: true
         print_sql: true
 
+      metadata_store:
+        class: "pydiverse.pipedag.backend.table.SQLTableStore"
+        args:
+          url: "postgresql://sa:Pydiverse23@127.0.0.1:6543/{instance_id}"
+          create_database_if_not_exists: True
+
       hook_args:
         sql:
           # This controls when temporary tables created by ColSpec will be cleaned up
