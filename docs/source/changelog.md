@@ -1,6 +1,7 @@
 # Changelog
 
-## 0.10.10 (2025-09-xx)
+## 0.10.10 (2025-09-05)
+- support separate metadata_table_store to allow team-synchronization for example for duckdb based ParquetTableStore
 - Fix: improve handling of missing ADBC/ConnectorX installations and error messages
 
 ## 0.10.9 (2025-08-21)
