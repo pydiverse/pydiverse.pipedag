@@ -13,6 +13,7 @@ import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
 from pydiverse.pipedag import ConfigContext, Schema, Stage, Table
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CopySelectTo,
+    CreateSchema,
     CreateViewAsSelect,
     DropView,
 )
@@ -252,7 +253,7 @@ class ParquetTableStore(DuckDBTableStore):
 
         # Add parquet specific metadata table for user id.
         # This can be UUID which is constant per .duckdb file and used to sync with metadata_store.
-        self.sql_metadata_local = sa.MetaData()
+        self.sql_metadata_local = sa.MetaData(schema=self.metadata_schema.get())
         self.user_id_table = sa.Table(
             "user_id",
             self.sql_metadata_local,
@@ -436,7 +437,7 @@ class ParquetTableStore(DuckDBTableStore):
           from another user.
         """
         if self.metadata_store:
-            with self.metadata_store.engine.connect() as meta_conn:
+            with self.metadata_store.engine_connect() as meta_conn:
                 tbl = self.sync_views_table
                 match_user_id = (tbl.c.schema == schema_name) & (tbl.c.user_id == self.user_id)
                 obsolete_views = meta_conn.execute(
@@ -455,14 +456,21 @@ class ParquetTableStore(DuckDBTableStore):
                         self.log.error(
                             f"Drop view failed while reconciling views with metadata_store: {schema_name}.{view[0]}"
                         )
-                meta_conn.execute(tbl.delete().where(match_user_id))
+                deleted = meta_conn.execute(tbl.delete().where(match_user_id & (tbl.c.obsolete != 0))).rowcount
+                if deleted > 0:
+                    self.logger.info(
+                        "Deleted obsolete view entries in metadata_store",
+                        schema=schema_name,
+                        user_id=self.user_id,
+                        affected=deleted,
+                    )
                 if len(obsolete_views) == 0:
                     user_id_cnt = meta_conn.execute(
                         sa.select(sa.func.count(sa.text("*"))).where(match_user_id)
                     ).fetchall()[0][0]
                     if user_id_cnt == 0:
                         # this user_id has no entry for this schema -> remove all views in this schema
-                        with self.engine.connect() as conn:
+                        with self.engine_connect() as conn:
                             existing_views = conn.execute(
                                 sa.text(f"FROM duckdb_views() SELECT view_name WHERE schema_name='{schema_name}'")
                             ).fetchall()
@@ -491,26 +499,29 @@ class ParquetTableStore(DuckDBTableStore):
                         schema=schema_name,
                         views=[v[0] for v in create_views],
                     )
-                for view, target, target_type in create_views:
-                    try:
-                        meta_conn.execute(DropView(view, schema_name, if_exists=True))
-                        schema = Schema(schema_name, prefix="", suffix="")
-                        if target_type == "parquet":
-                            meta_conn.execute(CreateViewAsSelect(view, schema, self._read_parquet_query(target)))
-                        elif target_type == "schema":
-                            meta_conn.execute(
-                                CreateViewAsSelect(view, schema, sa.text(f"SELECT * FROM {target}.{view}"))
-                            )
-                        else:
+                with self.engine_connect() as conn:
+                    del meta_conn  # prevent typo errors
+                    for view, target, target_type in create_views:
+                        try:
+                            conn.execute(DropView(view, schema_name, if_exists=True))
+                            schema = Schema(schema_name, prefix="", suffix="")
+                            if target_type == "parquet":
+                                conn.execute(CreateViewAsSelect(view, schema, self._read_parquet_query(target)))
+                            elif target_type == "schema":
+                                conn.execute(
+                                    CreateViewAsSelect(view, schema, sa.text(f"SELECT * FROM {target}.{view}"))
+                                )
+                            else:
+                                meta_engine = self.metadata_schema.engine
+                                self.log.error(
+                                    f"Unknown target_type in sync_views table: {target_type}\n"
+                                    f"{query.compile(meta_engine, compile_kwargs={'literal_binds': True})}"
+                                )
+                        except sa.exc.OperationalError:
                             self.log.error(
-                                f"Unknown target_type in sync_views table: {target_type}\n"
-                                f"{query.compile(self.metadata_schema.engine, compile_kwargs={'literal_binds': True})}"
+                                "Create view failed while reconciling views with metadata_store: "
+                                f"{schema_name}.{view} -> {target} ({target_type})"
                             )
-                    except sa.exc.OperationalError:
-                        self.log.error(
-                            "Create view failed while reconciling views with metadata_store: "
-                            f"{schema_name}.{view} -> {target} ({target_type})"
-                        )
 
     def metadata_track_view_flush(self, schema_name: str):
         """
@@ -519,7 +530,7 @@ class ParquetTableStore(DuckDBTableStore):
         see metadata_sync_views() for details.
         """
         if self.metadata_store:
-            with self.metadata_store.engine.connect() as meta_conn:
+            with self.metadata_store.engine_connect() as meta_conn:
                 tbl = self.sync_views_table
                 deleted = meta_conn.execute(tbl.delete().where(tbl.c.schema == schema_name)).rowcount
                 if deleted > 0:
@@ -536,7 +547,7 @@ class ParquetTableStore(DuckDBTableStore):
         see metadata_sync_views() for details.
         """
         if self.metadata_store:
-            with self.metadata_store.engine.connect() as meta_conn:
+            with self.metadata_store.engine_connect() as meta_conn:
                 tbl = self.sync_views_table
                 view_match = (tbl.c.schema == schema_name) & (tbl.c.view_name == table_name)
                 # mark all other user views as obsolete
@@ -549,7 +560,15 @@ class ParquetTableStore(DuckDBTableStore):
                         affected=updated,
                     )
                 # drop obsolete own match:
-                meta_conn.execute(tbl.delete().where(view_match & (tbl.c.user_id == self.user_id)))
+                deleted = meta_conn.execute(tbl.delete().where(view_match & (tbl.c.user_id == self.user_id))).rowcount
+                if deleted > 0:
+                    self.logger.info(
+                        "Deleted obsolete own view entries in metadata_store",
+                        schema=schema_name,
+                        view=table_name,
+                        user_id=self.user_id,
+                        deleted=deleted,
+                    )
                 # insert view
                 meta_conn.execute(
                     sa.insert(tbl).values(
@@ -576,7 +595,7 @@ class ParquetTableStore(DuckDBTableStore):
         see metadata_sync_views() for details.
         """
         if self.metadata_store:
-            with self.metadata_store.engine.connect() as meta_conn:
+            with self.metadata_store.engine_connect() as meta_conn:
                 tbl = self.sync_views_table
                 view_match = (tbl.c.schema == schema_name) & (tbl.c.view_name == table_name)
                 deleted = meta_conn.execute(tbl.delete().where(view_match & (tbl.c.user_id == self.user_id))).rowcount
@@ -600,12 +619,23 @@ class ParquetTableStore(DuckDBTableStore):
 
     def on_read_view_alias(self, table_name: str, from_schema: str, to_schema: str):
         # this callback is called by parent class in _commit_stage_read_views()
-        self.metadata_track_view(table_name, from_schema, target=to_schema, target_type="schema")
+        self.metadata_track_view(table_name, to_schema, target=from_schema, target_type="schema")
 
     def init_stage(self, stage: Stage):
         # fetch existing tables from database before schema is deleted there
         old_transaction_name = self._get_read_view_transaction_name(stage.name)
         new_transaction_name = self._get_read_view_original_transaction_name(stage, old_transaction_name)
+
+        # first synchronize views to match the actual state in metadata_store
+        if self.metadata_store:
+            # Typically the parent schema stage.name references old_transaction schema.
+            # But we also need to sync the new transaction schema to avoid double deletion of parquet files.
+            schemas = [old_transaction_name] if old_transaction_name != "" else []
+            schemas = schemas + [self.get_schema(stage.name).get(), new_transaction_name]
+            for schema in schemas:
+                self.execute(CreateSchema(Schema(schema, prefix="", suffix=""), if_not_exists=True))
+                self.metadata_sync_views(schema)
+
         with self.engine_connect() as conn:
             existing_tables = self.execute(
                 f"FROM duckdb_views() SELECT view_name WHERE "
@@ -617,7 +647,6 @@ class ParquetTableStore(DuckDBTableStore):
         # It also removes all views that were previously in transaction schema.
         super().init_stage(stage)
         self.metadata_track_view_flush(new_transaction_name)
-        self.metadata_sync_views(old_transaction_name)
         # update cache: this is important since before this stage commits,
         # self._get_read_view_transaction_name() will yield the wrong name
         new_schema = self.get_schema(stage.current_name)
@@ -634,9 +663,11 @@ class ParquetTableStore(DuckDBTableStore):
             table = row[0]
             file_path = path / (table + ".parquet")
             try:
+                # import traceback
                 self.logger.info(
                     "Cleaning up parquet file in transaction schema",
                     file_path=file_path,
+                    # stacktrace="\n"+"\n".join(traceback.format_stack()),
                 )
                 file_path.unlink()
             except FileNotFoundError:

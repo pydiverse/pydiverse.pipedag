@@ -379,18 +379,19 @@ class Flow:
             cache_validation_mode = CacheValidationMode.FORCE_CACHE_INVALID
 
         # Evolve config using the arguments passed to flow.run
-        config = config.evolve(
-            fail_fast=(fail_fast if fail_fast is not None else config.fail_fast),
-            cache_validation={
-                k: v
-                for k, v in [
-                    ("mode", cache_validation_mode),
-                    ("disable_cache_function", disable_cache_function),
-                    ("ignore_task_version", ignore_task_version),
-                ]
-                if v is not None
-            },
-        )
+        if any(x is not None for x in [fail_fast, cache_validation_mode, disable_cache_function, ignore_task_version]):
+            config = config.evolve(
+                fail_fast=(fail_fast if fail_fast is not None else config.fail_fast),
+                cache_validation={
+                    k: v
+                    for k, v in [
+                        ("mode", cache_validation_mode),
+                        ("disable_cache_function", disable_cache_function),
+                        ("ignore_task_version", ignore_task_version),
+                    ]
+                    if v is not None
+                },
+            )
 
         if (
             config.cache_validation.mode == CacheValidationMode.NORMAL
