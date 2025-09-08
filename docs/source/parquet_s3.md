@@ -57,6 +57,12 @@ offer configuration parameters to make this smooth:
   <img src="_images/datagrip_s3_options02.png" width="45%" />
 </p>
 
+Since duckdb files cannot be shared among team members, pipedag supports a field called `metadata_store:` under
+table store. It offers the configuration of a complete table store. However, it is only used for synchronizing
+metadata and for implementing database based locking. Since S3 does not support any synchronization or locking
+capabilities, the following example uses a small postgres database for this purpose. The postgres database can
+also help synchronizing other state like MLFlow experiments.
+
 The example uses the following configuration file `pipedag.yaml`:
 
 ```yaml
