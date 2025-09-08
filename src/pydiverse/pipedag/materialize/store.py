@@ -64,6 +64,11 @@ class BaseTableStore(TableHookResolver, Disposable):
     def __init__(self):
         self.logger = structlog.get_logger(logger_name=type(self).__name__)
         self.local_table_cache: BaseTableCache | None = None
+        # this field is initialized directly after construction in ConfigContext.store property
+        self.instance_id = "<not-yet-initialized>"
+
+    def set_instance_id(self, instance_id: str):
+        self.instance_id = instance_id
 
     def setup(self):
         """Setup function
