@@ -91,6 +91,7 @@ instances:
         parquet_base_path: "s3://pipedag-test-bucket/table_store/"
         s3_endpoint_url: "http://localhost:9000"  # test with minio instead of AWS S3
         s3_url_style: "path"
+        s3_region: "us-east-1"
         # There is still a duckdb file which keeps read views to all the parquet files.
         # This database file can also be used with a SQL UI to access the parquet files
         # associated with a specific pipeline instance.
@@ -98,6 +99,15 @@ instances:
         create_database_if_not_exists: true
         print_materialize: true
         print_sql: true
+
+      metadata_store:
+        # Postgres database can be used to synchronize a pipeline instance between multiple team members even though
+        # duckdb (basis for ParquetTableStore) does not support this. This also enables the use of the
+        # DatabaseLockManager
+        class: "pydiverse.pipedag.backend.table.SQLTableStore"
+        args:
+          url: "postgresql://sa:Pydiverse23@127.0.0.1:6543/{instance_id}"
+          create_database_if_not_exists: True
 
       hook_args:
         sql:
@@ -109,10 +119,7 @@ instances:
     stage_commit_technique: READ_VIEWS
 
     lock_manager:
-      # consider using FileLockManager or NoLockManager if you don't like to launch a ZooKeeper instance
-      class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
-      args:
-        hosts: "localhost:2181"
+      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
 
     blob_store:
       class: "pydiverse.pipedag.backend.blob.FileBlobStore"
