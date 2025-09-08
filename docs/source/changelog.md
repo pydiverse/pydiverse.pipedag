@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.11 (2025-09-08)
+- Fix: Late initialization of ParquetTableCache instance_id allows use of multi-config `@input_stage_versions`
+
 ## 0.10.10 (2025-09-05)
 - support separate metadata_table_store to allow team-synchronization for example for duckdb based ParquetTableStore
 - Fix: improve handling of missing ADBC/ConnectorX installations and error messages
