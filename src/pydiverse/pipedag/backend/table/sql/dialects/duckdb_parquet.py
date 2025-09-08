@@ -27,7 +27,6 @@ from pydiverse.pipedag.materialize.table_hook_base import (
     CanRetResult,
     TableHook,
 )
-from pydiverse.pipedag.util import normalize_name
 from pydiverse.pipedag.util.path import is_file_uri
 
 try:
@@ -203,8 +202,7 @@ class ParquetTableStore(DuckDBTableStore):
     @classmethod
     def _init_conf_(cls, config: dict[str, Any]):
         config = config.copy()
-        instance_id = normalize_name(ConfigContext.get().instance_id)
-        config["parquet_base_path"] = UPath(config["parquet_base_path"]) / instance_id
+        config["parquet_base_path"] = UPath(config["parquet_base_path"])
         return super()._init_conf_(config)
 
     def __init__(
@@ -763,7 +761,7 @@ class ParquetTableStore(DuckDBTableStore):
         self.parquet_deferred_copy.clear()
 
     def get_parquet_path(self, schema: Schema):
-        return self.parquet_base_path / schema.get()
+        return self.parquet_base_path / self.instance_id / schema.get()
 
     def get_parquet_schema_path(self, schema: Schema) -> UPath:
         # Parquet files are stored in transaction schema while stage.current_name
