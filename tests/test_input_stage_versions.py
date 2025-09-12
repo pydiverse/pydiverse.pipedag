@@ -16,6 +16,7 @@ from pydiverse.pipedag import (
     materialize,
 )
 from pydiverse.pipedag.context import StageLockContext
+from pydiverse.pipedag.optional_dependency.sqlalchemy import Alias
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import (
@@ -25,12 +26,6 @@ from tests.fixtures.instances import (
 )
 from tests.util import swallowing_raises
 from tests.util import tasks_library as m
-
-try:
-    from sqlalchemy import Alias
-except ImportError:
-    # For compatibility with sqlalchemy < 2.0
-    from sqlalchemy.sql import alias as Alias
 
 pytestmark = [with_instances(ALL_INSTANCES, ORCHESTRATION_INSTANCES)]
 

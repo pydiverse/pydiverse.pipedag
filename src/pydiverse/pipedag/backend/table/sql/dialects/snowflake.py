@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import time
-import warnings
 from typing import Literal
 
 from pydiverse.pipedag.backend.table.sql import hooks
@@ -10,12 +9,8 @@ from pydiverse.pipedag.backend.table.sql.hooks import (
     IbisTableHook,
 )
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
-
-try:
-    import snowflake
-except ImportError as e:
-    warnings.warn(str(e), ImportWarning)
-    snowflake = None
+from pydiverse.pipedag.optional_dependency.ibis import ibis
+from pydiverse.pipedag.optional_dependency.snowflake import snowflake
 
 
 class SnowflakeTableStore(SQLTableStore):
@@ -70,13 +65,7 @@ class PolarsTableHook(hooks.PolarsTableHook):
         return True
 
 
-try:
-    import ibis
-except ImportError:
-    ibis = None
-
-
-@SnowflakeTableStore.register_table(ibis)
+@SnowflakeTableStore.register_table(ibis.api.Table)
 class IbisTableHook(IbisTableHook):
     @classmethod
     def _conn(cls, store: SnowflakeTableStore):

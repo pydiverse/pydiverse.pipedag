@@ -4,6 +4,7 @@
 from pathlib import Path
 
 import pandas as pd
+import polars as pl
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.exc import ProgrammingError
@@ -69,12 +70,6 @@ def test_smoke_table_reference():
 
     with filelock.FileLock(lock_path):
         assert f.run().successful
-
-
-try:
-    import polars as pl
-except ImportError:
-    pl = None
 
 
 @skip_instances("parquet_backend", "parquet_s3_backend", "parquet_s3_backend_db2")

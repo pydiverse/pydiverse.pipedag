@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import sys
-import warnings
 
 import structlog
 
@@ -13,12 +12,7 @@ from pydiverse.pipedag.core import Result, Subflow, Task
 from pydiverse.pipedag.engine.base import (
     OrchestrationEngine,
 )
-
-try:
-    import dask
-except ImportError as e:
-    warnings.warn(str(e), ImportWarning)
-    dask = None
+from pydiverse.pipedag.optional_dependency.dask import dask
 
 
 @requires(dask, ImportError("DaskEngine requires 'dask' to be installed."))

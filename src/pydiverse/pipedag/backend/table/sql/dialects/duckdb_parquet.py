@@ -6,6 +6,9 @@ import shutil
 import uuid
 from typing import Any, Literal
 
+import duckdb
+import pandas as pd
+import polars as pl
 import sqlalchemy as sa
 from upath import UPath
 
@@ -27,27 +30,8 @@ from pydiverse.pipedag.materialize.table_hook_base import (
     CanRetResult,
     TableHook,
 )
+from pydiverse.pipedag.optional_dependency.sqlalchemy import Select, SqlText, TextClause
 from pydiverse.pipedag.util.path import is_file_uri
-
-try:
-    import pandas as pd
-except ImportError:
-    pd = None
-
-try:
-    import duckdb
-except ImportError:
-    duckdb = None
-
-try:
-    from sqlalchemy import Select, TextClause
-    from sqlalchemy import Text as SqlText
-except ImportError:
-    # For compatibility with sqlalchemy < 2.0
-    from sqlalchemy.sql.expression import TextClause
-    from sqlalchemy.sql.selectable import Select
-
-    SqlText = TextClause  # this is what sa.text() returns
 
 
 class ParquetTableStore(DuckDBTableStore):
@@ -1028,12 +1012,6 @@ class PandasTableHook(TableHook[ParquetTableStore]):
     @classmethod
     def get_computation_tracer(cls):
         return sql_hooks.PandasTableHook.ComputationTracer()
-
-
-try:
-    import polars as pl
-except ImportError:
-    pl = None
 
 
 @ParquetTableStore.register_table(pl, duckdb)

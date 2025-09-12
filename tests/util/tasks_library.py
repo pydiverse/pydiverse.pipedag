@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
+import polars as pl
 import sqlalchemy as sa
 from sqlalchemy import inspect
 
@@ -10,11 +11,6 @@ from pydiverse.pipedag.backend.table.sql.ddl import MAX_LENGTH_PK
 from pydiverse.pipedag.context import TaskContext
 from pydiverse.pipedag.debug import materialize_table
 from tests.util import select_as
-
-try:
-    import polars as pl
-except ImportError:
-    pl = None
 
 
 @materialize(input_type=pd.DataFrame, version="1.0")

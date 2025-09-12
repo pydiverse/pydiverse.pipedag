@@ -2,16 +2,16 @@
 # SPDX-License-Identifier: BSD-3-Clause
 import copy
 import dataclasses
-import importlib
 import itertools
 import re
-import types
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 import pandas as pd
+import polars as pl
+import pyarrow as pa
 import sqlalchemy as sa
 import sqlalchemy.dialects.mssql
 from pandas.core.dtypes.base import ExtensionDtype
@@ -35,13 +35,8 @@ from pydiverse.pipedag.materialize.details import (
     BaseMaterializationDetails,
     resolve_materialization_details_label,
 )
-
-try:
-    from sqlalchemy import URL, Connection, Engine
-except ImportError:
-    # For compatibility with sqlalchemy < 2.0
-    from sqlalchemy.engine import URL, Engine
-    from sqlalchemy.engine.base import Connection
+from pydiverse.pipedag.optional_dependency.ibis import ibis
+from pydiverse.pipedag.optional_dependency.sqlalchemy import URL, Connection, Engine
 
 
 @dataclass(frozen=True)
@@ -369,15 +364,6 @@ class MSSqlTableStore(SQLTableStore):
         )
 
 
-try:
-    import polars as pl
-except ImportError:
-    pl = importlib.import_module("polars")
-    pl.DataType = None
-    pl.DataFrame = None
-    pl.LazyFrame = None
-
-
 class DataframeMsSQLTableHook:
     @classmethod
     def dialect_has_adbc_driver(cls):
@@ -664,13 +650,7 @@ class PolarsTableHook(DataframeMsSQLTableHook, PolarsTableHook):
         super().upload_table(table, schema, dtypes, store, early)
 
 
-try:
-    import ibis
-except ImportError:
-    ibis = None
-
-
-@MSSqlTableStore.register_table(ibis)
+@MSSqlTableStore.register_table(ibis.api.Table)
 class IbisTableHook(IbisTableHook):
     @classmethod
     def _conn(cls, store: MSSqlTableStore):
@@ -682,13 +662,6 @@ class IbisTableHook(IbisTableHook):
             port=url.port,
             database=url.database,
         )
-
-
-try:
-    import pyarrow as pa
-except ImportError:
-    pa = types.ModuleType("pyarrow")
-    pa.Schema = None
 
 
 def map_pyarrow_schema_for_polars(schema: pa.Schema) -> pa.Schema:

@@ -7,6 +7,7 @@ from io import BytesIO, StringIO
 from typing import Any
 
 import pandas as pd
+import polars as pl
 import sqlalchemy as sa
 
 from pydiverse.common import Dtype
@@ -22,16 +23,6 @@ from pydiverse.pipedag.materialize.details import (
     BaseMaterializationDetails,
     resolve_materialization_details_label,
 )
-
-try:
-    import polars as pl
-except ImportError:
-    pl = None
-
-try:
-    import pyarrow as pa
-except ImportError:
-    pa = None
 
 
 @dataclass(frozen=True)

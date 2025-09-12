@@ -157,19 +157,18 @@ def json_default(o):
                 "args": o.__dict__,
             },
         }
-    try:
-        # provide better error message in case of pdt.Table
-        import polars as pl
+    # provide better error message in case of polars table
+    import polars as pl
 
-        if isinstance(o, pl.DataFrame | pl.LazyFrame):
-            raise TypeError(
-                "Polars Tables are not supposed to be JSON serialized. "
-                "It should be a pipedag Table instead."
-                "Consider adding polars.DataFrame and polars.LazyFrame to your "
-                "auto_table setting in the PipedagConfig."
-            )
-    except ImportError:
-        pass
+    if isinstance(o, pl.DataFrame | pl.LazyFrame):
+        raise TypeError(
+            "Polars Tables are not supposed to be JSON serialized. "
+            "It should be a pipedag Table instead."
+            "Consider adding polars.DataFrame and polars.LazyFrame to your "
+            "auto_table setting in the PipedagConfig."
+        )
+
+    # provide better error message in case of pandas table
     import pandas as pd
 
     if isinstance(o, pd.DataFrame):

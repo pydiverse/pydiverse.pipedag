@@ -1,12 +1,10 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-import warnings
 from typing import Any
 
 import structlog
 from packaging.specifiers import SpecifierSet
-from packaging.version import Version
 
 from pydiverse.common.util import requires
 from pydiverse.pipedag import ExternalTableReference, Table
@@ -16,16 +14,7 @@ from pydiverse.pipedag.core.result import Result
 from pydiverse.pipedag.engine.base import (
     OrchestrationEngine,
 )
-
-try:
-    import prefect
-
-    prefect_version = Version(prefect.__version__)
-except ImportError as e:
-    warnings.warn(str(e), ImportWarning)
-
-    prefect = None
-    prefect_version = Version("0")
+from pydiverse.pipedag.optional_dependency.prefect import prefect, prefect_version
 
 
 @requires(prefect, ImportError("Module 'prefect' not installed"))

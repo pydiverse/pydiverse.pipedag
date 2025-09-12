@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
+import polars as pl
 import pytest
 import sqlalchemy as sa
 
@@ -22,11 +23,6 @@ from tests.util import tasks_library as m
 from tests.util import tasks_library_imperative as m2
 from tests.util.spy import spy_task
 from tests.util.tasks_library import get_task_logger
-
-try:
-    import polars as pl
-except ImportError:
-    pl = None
 
 # snowflake tests are too slow, possibly they could move to nightly tests
 pytestmark = [with_instances(tuple(set(ALL_INSTANCES) - {"snowflake"}))]

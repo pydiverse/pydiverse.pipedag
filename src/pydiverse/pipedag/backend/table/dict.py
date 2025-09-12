@@ -1,7 +1,5 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
-import types
-import warnings
 
 import pandas as pd
 
@@ -12,6 +10,7 @@ from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import LazyTableMetadata, TaskMetadata
 from pydiverse.pipedag.materialize.store import BaseTableStore
 from pydiverse.pipedag.materialize.table_hook_base import CanMatResult, CanRetResult, TableHook
+from pydiverse.pipedag.optional_dependency.transform import C, pdt
 
 
 class DictTableStore(BaseTableStore):
@@ -163,19 +162,10 @@ class PandasTableHook(TableHook[DictTableStore]):
         return super().auto_table(obj)
 
 
-try:
-    import pydiverse.transform as pdt
-except ImportError as e:
-    warnings.warn(str(e), ImportWarning)
-    pdt = types.ModuleType("pydiverse.transform")
-    pdt.Table = None
-
-
-@DictTableStore.register_table(pdt)
+@DictTableStore.register_table(C)
 class PydiverseTransformTableHook(TableHook[DictTableStore]):
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanMatResult:
-        import pydiverse.transform as pdt
         from pydiverse.transform.extended import build_query
 
         if not isinstance(tbl, pdt.Table):

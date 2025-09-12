@@ -3,7 +3,6 @@
 
 import base64
 import random
-import types
 from collections import defaultdict
 from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING
@@ -26,13 +25,7 @@ from pydiverse.pipedag.core.group_node import BarrierTask, VisualizationStyle
 from pydiverse.pipedag.core.stage import CommitStageTask
 from pydiverse.pipedag.core.task import TaskGetItem
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError
-
-try:
-    # pydot should be an optional dependency
-    import pydot
-except ImportError:
-    pydot = types.ModuleType("pydot")
-    pydot.Dot = None
+from pydiverse.pipedag.optional_dependency.pydot import pydot
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.engine import OrchestrationEngine

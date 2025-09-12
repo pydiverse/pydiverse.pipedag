@@ -15,6 +15,7 @@ from attr import frozen
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.context import ConfigContext, TaskContext
 from pydiverse.pipedag.errors import DuplicateNameError
+from pydiverse.pipedag.optional_dependency.transform import C, pdt
 from pydiverse.pipedag.util import normalize_name
 
 if TYPE_CHECKING:
@@ -640,6 +641,87 @@ class ExternalTableReference:
         return f"<ExternalTableReference: {hex(id(self))} (schema: {self.schema})>"
 
 
+class View:
+    """Produces a view on pipedag managed tables with caching support.
+
+    Unlike for Table, pipedag needs to understand view queries much better in order
+    to be able to do proper cache invalidation with source tables changing their name
+    despite staying cache valid. That is why this View object includes all information
+    about how to create a view.
+
+    Only supported by :py:class:`~.SQLTableStore` and :py:class:`~.ParquetTableStore`.
+
+    Example
+    -------
+    A view can combine a set of parquet files as one read_parquet operation::
+
+        @materialize(input_type=sa.Table)
+        def task(tbls: list[sa.Alias]):
+            return Table(View(src=tbls), name="union")
+
+        @materialize(input_type=pdt.Table)
+        def task(tbls: list[pdt.Table]):
+            return Table(View(src=tbls), name="union")
+
+    It can also be used to load only a subset of a table and rename columns:
+
+        @materialize(input_type=sa.Table)
+        def task(tbl: sa.Alias):
+            cols = [c.name for c in tbl.c if c.name.startswith("a")]
+            return Table(
+                View(
+                    src=tbl,
+                    columns={f"c{col}":col for col in cols},
+                    sort=[dag.SortCol("id", desc=True, nulls_last=True), "id2"],
+                    limit=10,
+                ),
+                name="selection",
+            )
+
+    If you just like to filter columns without renaming:
+
+        @materialize(input_type=sa.Table)
+        def task(tbl: sa.Alias):
+            cols = [c.name for c in tbl.c if c.name.startswith("a")]
+            return Table(View(tbl, columns=cols, sort=tbl.c.id), name="selection")
+    """
+
+    def __init__(
+        self,
+        src: Any | Iterable[Any],
+        sort: str | Any | list[str] | list[Any],
+        columns: Iterable[str] | Iterable[Any] | dict[str, str] | dict[str, Any],
+        limit: int | None = None,
+    ):
+        """
+        :param src: The source table(s) or subquery to create the view from.
+            Objects should be identical to tables that were given to the function as inputs.
+            Consuming tasks will use the union of all those tables as input.
+        :param sort: Optional list of columns to sort the view by. They can be strings or column objects that
+            are understood by the table hook that would materialize the table if it wasn't a View.
+            Column names before renaming are used for sorting.
+        :param columns: The columns to include in the view. This can either be a list of strings or column
+            objects that are understood by the table hook that would materialize the table if it wasn't a View,
+        """
+        if not isinstance(src, Iterable) or isinstance(src, str):
+            src = [src]
+        self.src = src
+        if isinstance(columns, dict):
+            self.columns = columns
+        else:
+            self.columns = {col: col for col in columns}
+        if not isinstance(sort, list):
+            sort = [sort]
+        self.sort = sort
+        self.limit = limit
+
+    def __repr__(self):
+        return (
+            f"<View: {hex(id(self))} "
+            f"(src: {self.src}, columns: {self.columns}, sort: {self.sort}, limit: {self.limit})>"
+        )
+
+
 def attach_annotation(annotation: type, arg):
     """Recursive traversal for attaching type annotations to correct container."""
     if typing.get_origin(annotation) is not None:
@@ -674,8 +756,7 @@ def attach_annotation(annotation: type, arg):
         arg.annotation = annotation
 
 
-try:
-    import pydiverse.transform as pdt
+if C:
 
     @overload
     def materialize_table(name: str | None = None, table_prefix: str | None = None): ...
@@ -690,7 +771,7 @@ try:
         if tbl >> pdt.build_query():
             return Table(tbl, name=name).materialize(return_as_type=pdt.SqlAlchemy)
         return tbl >> pdt.alias()
-except ImportError:
+else:
     # If pydiverse.transform is not available, we cannot use the materialize_table verb
     def materialize_table(tbl: Any, table_prefix: str | None = None):
         raise ImportError(

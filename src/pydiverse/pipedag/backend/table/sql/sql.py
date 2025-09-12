@@ -48,13 +48,7 @@ from pydiverse.pipedag.materialize.metadata import (
     TaskMetadata,
 )
 from pydiverse.pipedag.materialize.store import BaseTableStore
-
-try:
-    from sqlalchemy import Connection, Engine
-except ImportError:
-    # For compatibility with sqlalchemy < 2.0
-    from sqlalchemy.engine import Engine
-    from sqlalchemy.engine.base import Connection
+from pydiverse.pipedag.optional_dependency.sqlalchemy import Connection, Engine
 
 DISABLE_DIALECT_REGISTRATION = "__DISABLE_DIALECT_REGISTRATION"
 
