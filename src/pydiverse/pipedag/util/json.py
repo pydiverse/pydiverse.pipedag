@@ -143,7 +143,7 @@ def json_default(o):
         if isinstance(o, pdt.Table):
             raise TypeError(
                 "pydiverse.transform.Table is not supposed to be JSON serialized. "
-                "It should be a pipedag Table instead."
+                "It should be a pipedag Table instead. "
                 "Consider adding pydiverse.transform.Table to your auto_table setting "
                 "in the PipedagConfig."
             )
@@ -163,7 +163,7 @@ def json_default(o):
     if isinstance(o, pl.DataFrame | pl.LazyFrame):
         raise TypeError(
             "Polars Tables are not supposed to be JSON serialized. "
-            "It should be a pipedag Table instead."
+            "It should be a pipedag Table instead. "
             "Consider adding polars.DataFrame and polars.LazyFrame to your "
             "auto_table setting in the PipedagConfig."
         )
@@ -174,7 +174,7 @@ def json_default(o):
     if isinstance(o, pd.DataFrame):
         raise TypeError(
             "Pandas Tables are not supposed to be JSON serialized. "
-            "It should be a pipedag Table instead."
+            "It should be a pipedag Table instead. "
             "Consider adding pandas.DataFrame to your "
             "auto_table setting in the PipedagConfig."
         )
