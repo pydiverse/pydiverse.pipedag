@@ -77,6 +77,8 @@ instances:
       - "polars.LazyFrame"
       - "sqlalchemy.sql.expression.TextClause"
       - "sqlalchemy.sql.expression.Selectable"
+      - "pydiverse.pipedag.ExternalTableReference"
+      - "pydiverse.pipedag.View"
       - "pydiverse.transform.Table"
 
     fail_fast: true  # this provides better stack traces but less fault tolerance
@@ -106,7 +108,7 @@ instances:
         print_materialize: true
         print_sql: true
 
-      metadata_store:
+      metadata_table_store:
         # Postgres database can be used to synchronize a pipeline instance between multiple team members even though
         # duckdb (basis for ParquetTableStore) does not support this. This also enables the use of the
         # DatabaseLockManager
@@ -125,6 +127,7 @@ instances:
     stage_commit_technique: READ_VIEWS
 
     lock_manager:
+      # the DatabaseLockManager uses the metadata_table_store for locking (here: the Postgres DB)
       class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
 
     blob_store:
