@@ -7,6 +7,7 @@ import uuid
 from typing import Any, Literal
 
 import duckdb
+import fsspec
 import pandas as pd
 import polars as pl
 import sqlalchemy as sa
@@ -328,14 +329,10 @@ class ParquetTableStore(DuckDBTableStore):
                 return con.execute(statement)
 
         with engine.connect() as con:
-            # Enable HTTPFS extension
-            execute(con, "INSTALL httpfs;")
-            execute(con, "LOAD httpfs;")
-
             if self.parquet_base_path.protocol == "s3":
                 # Unfortunately it is hard to configure S3 URL endpoint consistently for fsspec, duckdb, and polars.
-                # Thus, we take it as parameter to ParquetTableStore and pass it to duckdb and fsspec. Fsspec in turn
-                # is passed on to polars. This is only needed for non-standard S3 endpoints like minio.
+                # Thus, we take it as parameter to ParquetTableStore and pass it to fsspec. Fsspec in turn
+                # is passed on to duckdb and polars. This is only needed for non-standard S3 endpoints like minio.
                 from fsspec.config import conf  # fsspec’s global config
 
                 if "s3" not in conf and self.s3_endpoint_url is not None:
@@ -359,33 +356,13 @@ class ParquetTableStore(DuckDBTableStore):
                         # MinIO needs path-style
                         conf["s3"]["config_kwargs"]["s3"] = dict(addressing_style=self.s3_url_style)
 
-                s3_details = ""
-                if self.s3_endpoint_url is not None:
-                    from urllib3.util import parse_url
-
-                    url = parse_url(self.s3_endpoint_url)
-                    if url.scheme not in ["https", "http"] or len(self.s3_endpoint_url) < 7:
-                        raise AttributeError("s3_endpoint_url must start with http:// or https://")
-                    s3_details += f", ENDPOINT '{self.s3_endpoint_url[len(url.scheme) + 3 :]}'"
-                    s3_details += f", USE_SSL {'TRUE' if url.scheme == 'https' else 'FALSE'}"
-                if self.s3_url_style is not None:
-                    s3_details += f", URL_STYLE '{self.s3_url_style}'"
-                if self.s3_region is not None:
-                    s3_details += f", REGION '{self.s3_region}'"
-                execute(
-                    con,
-                    f"""
-                    CREATE OR REPLACE SECRET secret (
-                        TYPE s3,
-                        PROVIDER credential_chain,
-                        CHAIN 'env;config'
-                        {s3_details}
-                    );
-                """,
-                )
-
             if sa.__version__ >= "2.0.0":
                 con.commit()
+
+        # This is needed for gcsfs. For s3fs, it would also be possible to
+        # go with httpfs (https://duckdb.org/docs/stable/core_extensions/httpfs/s3api.html).
+        fs = fsspec.filesystem(self.parquet_base_path.protocol)
+        engine.raw_connection().register_filesystem(fs)
 
         return engine
 
