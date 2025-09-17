@@ -88,10 +88,10 @@ class DictTableStore(BaseTableStore):
     def retrieve_task_metadata(self, task: MaterializingTask, input_hash: str, cache_fn_hash: str) -> TaskMetadata:
         cache_key = input_hash + str(cache_fn_hash)
         try:
-            return self.metadata[task.stage][cache_key]
+            return self.metadata[task._stage][cache_key]
         except KeyError:
             raise CacheError(
-                f"There is no metadata for task '{task.name}' with cache key '{task.input_hash}', yet"
+                f"There is no metadata for task '{task._name}' with cache key '{task.input_hash}', yet"
             ) from None
 
     def retrieve_all_task_metadata(
@@ -99,10 +99,10 @@ class DictTableStore(BaseTableStore):
     ) -> list[TaskMetadata]:
         task_metadata = []
         for m in (
-            *self.metadata[task.stage].values(),
-            *self.t_metadata[task.stage].values(),
+            *self.metadata[task._stage].values(),
+            *self.t_metadata[task._stage].values(),
         ):
-            if m.name == task.name and ((m.position_hash == task.position_hash) or ignore_position_hashes):
+            if m.name == task._name and ((m.position_hash == task._position_hash) or ignore_position_hashes):
                 task_metadata.append(m)
         return task_metadata
 

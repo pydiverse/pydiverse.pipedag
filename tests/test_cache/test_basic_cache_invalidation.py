@@ -199,7 +199,7 @@ def test_change_task_version_literal(mocker):
             child = m.noop(out)
 
     # Initial Call
-    out._version = "VERSION 0"
+    out._internal_version = "VERSION 0"
     assert flow.run().successful
 
     # Second Call (Should be cached)
@@ -211,7 +211,7 @@ def test_change_task_version_literal(mocker):
 
     # Changing the version should invalidate the cache, but the child still
     # shouldn't get called because the parent task still returned the same value.
-    out._version = "VERSION 1"
+    out._internal_version = "VERSION 1"
     assert flow.run().successful
     out_spy.assert_called_once()
     child_spy.assert_not_called()
@@ -226,7 +226,7 @@ def test_change_task_version_table(mocker):
             child_lazy = m.noop_lazy(out)  # lazy=True task
 
     # Initial Call
-    out._version = "VERSION 0"
+    out._internal_version = "VERSION 0"
     assert flow.run().successful
 
     # Second Call (Should be cached)
@@ -242,7 +242,7 @@ def test_change_task_version_table(mocker):
 
     # Changing the version should invalidate the cache. This should also invalidate
     # the child task because it receives the table as input.
-    out._version = "VERSION 1"
+    out._internal_version = "VERSION 1"
     assert flow.run().successful
     out_spy.assert_called_once()
     child_spy.assert_called_once()
@@ -258,7 +258,7 @@ def test_change_task_version_blob(mocker):
             child = m.as_blob(out)
 
     # Initial Call
-    out._version = "VERSION 0"
+    out._internal_version = "VERSION 0"
     assert flow.run().successful
 
     # Second Call (Should be cached)
@@ -270,7 +270,7 @@ def test_change_task_version_blob(mocker):
 
     # Changing the version should invalidate the cache. This should also invalidate
     # the child task because it receives the blob as input.
-    out._version = "VERSION 1"
+    out._internal_version = "VERSION 1"
     assert flow.run().successful
     out_spy.assert_called_once()
     child_spy.assert_called_once()

@@ -224,7 +224,7 @@ class Table(Generic[T]):
                     "when task is regularly executed by pipedag orchestration."
                 )
             config_context = ConfigContext.get()
-            task_schema = config_context.store.table_store.get_schema(task_context.task.stage.transaction_name)
+            task_schema = config_context.store.table_store.get_schema(task_context.task._stage.transaction_name)
             if schema is not None and schema != task_schema:
                 raise ValueError(
                     "schema must be identical to Task Stage transaction schema "
@@ -241,14 +241,14 @@ class Table(Generic[T]):
             except (RuntimeError, DuplicateNameError):
                 # fall back to debug materialization when Table.materialize() is
                 # called twice for the same table
-                task_context.task.logger.info(
+                task_context.task._logger.info(
                     "Falling back to debug materialization due to duplicate materializtion of this table"
                 )
 
                 def return_type_mutator(return_as_type):
                     if return_as_type is None:
                         task: MaterializingTask = task_context.task  # type: ignore
-                        return_as_type = task.input_type
+                        return_as_type = task._input_type
                         if return_as_type is None or not config_context.store.table_store.get_r_table_hook(
                             return_as_type
                         ).retrieve_as_reference(return_as_type):

@@ -82,7 +82,7 @@ class UnboundTask:
         task = self._bound_task_type(self, bound_args, ctx.flow, ctx.stage)
         if ctx.group_node is not None:
             ctx.group_node.add_task(task)
-            task.group_node = ctx.group_node
+            task._group_node = ctx.group_node
         return task
 
     def _call_original_function(self, *args, **kwargs):
@@ -94,21 +94,25 @@ class TaskGetItem:
     Wrapper __getitem__ on tasks
     """
 
-    def __init__(self, task: "Task", parent: "Task | TaskGetItem", item: Any):
-        self.task = task
-        self.parent = parent
-        self.item = item
+    def __init__(self, task: "Task", parent: "Task | TaskGetItem", item: Any, *, is_member_lookup: bool = False):
+        self._task = task
+        self._parent = parent
+        self._item = item
+        self._is_member_lookup = is_member_lookup
 
-        self.position_hash = stable_hash("POS_GET_ITEM", parent.position_hash, repr(self.item))
+        self._position_hash = stable_hash("POS_GET_ITEM", parent._position_hash, repr(self._item))
 
     def __getitem__(self, item):
-        return type(self)(self.task, self, item)
+        return type(self)(self._task, self, item)
 
-    def resolve_value(self, task_value: Any):
-        parent_value = self.parent.resolve_value(task_value)
+    def _resolve_value(self, task_value: Any):
+        parent_value = self._parent._resolve_value(task_value)
         if parent_value is None:
-            raise TypeError(f"Parent ({self.parent}) value is None.")
-        return parent_value[self.item]
+            raise TypeError(f"Parent ({self._parent}) value is None.")
+        if self._is_member_lookup:
+            return getattr(parent_value, self._item)
+        else:
+            return parent_value[self._item]
 
 
 class Task:
@@ -119,29 +123,29 @@ class Task:
         flow: "Flow",
         stage: "Stage",
     ):
-        self.fn = unbound_task.fn
-        self.name = unbound_task.name
-        self.nout = unbound_task.nout
-        self.group_node_tag = unbound_task.group_node_tag
-        self.call_context = unbound_task.call_context
+        self._fn = unbound_task.fn
+        self._name = unbound_task.name
+        self._nout = unbound_task.nout
+        self._group_node_tag = unbound_task.group_node_tag
+        self._call_context = unbound_task.call_context
 
-        self.logger = structlog.get_logger(logger_name=f"Task '{self.name}'", task=self)
+        self._logger = structlog.get_logger(logger_name=f"Task '{self._name}'", task=self)
 
         self._bound_args = bound_args
-        self.flow = flow
-        self.stage = stage
-        self.group_node = None  # will be set by UnboundTask.__call__
-        self.position_hash = self.__compute_position_hash()
+        self._flow = flow
+        self._stage = stage
+        self._group_node = None  # will be set by UnboundTask.__call__
+        self._position_hash = self.__compute_position_hash()
 
         # The ID gets set by calling flow.add_task
-        self.id: int = None  # type: ignore
+        self._id: int = None  # type: ignore
 
         # Do the wiring
-        self.flow.add_task(self)
-        self.stage.tasks.append(self)
+        self._flow.add_task(self)
+        self._stage.tasks.append(self)
 
         # Compute input tasks
-        self.input_tasks: dict[int, Task] = {}
+        self._input_tasks: dict[int, Task] = {}
 
         # Flag is set if table was materialized for debugging.
         # Setting this flag will fail the task.
@@ -149,30 +153,30 @@ class Task:
 
         def visitor(x):
             if isinstance(x, Task):
-                self.input_tasks[x.id] = x
+                self._input_tasks[x._id] = x
             elif isinstance(x, TaskGetItem):
-                self.input_tasks[x.task.id] = x.task
+                self._input_tasks[x._task._id] = x._task
             return x
 
         deep_map(bound_args.args, visitor)
         deep_map(bound_args.kwargs, visitor)
 
         # Add upstream edges
-        self.upstream_stages: list[Stage] = []
+        self._upstream_stages: list[Stage] = []
 
         upstream_stages_set = set()
-        for input_task in self.input_tasks.values():
-            self.flow.add_edge(input_task, self)
+        for input_task in self._input_tasks.values():
+            self._flow.add_edge(input_task, self)
 
-            if input_task.stage not in upstream_stages_set:
-                upstream_stages_set.add(input_task.stage)
-                self.upstream_stages.append(input_task.stage)
+            if input_task._stage not in upstream_stages_set:
+                upstream_stages_set.add(input_task._stage)
+                self._upstream_stages.append(input_task._stage)
 
         # Private flags
         self._visualize_hidden = False
 
     def __repr__(self):
-        return f"<Task '{self.name}' {hex(id(self))} (id: {self.id})>"
+        return f"<Task '{self._name}' {hex(id(self))} (id: {self._id})>"
 
     def __hash__(self):
         return id(self)
@@ -181,12 +185,12 @@ class Task:
         return TaskGetItem(self, self, item)
 
     def __iter__(self) -> Iterable[TaskGetItem]:
-        if self.nout is None:
+        if self._nout is None:
             raise ValueError("Can't iterate over task without specifying `nout`.")
-        for i in range(self.nout):
+        for i in range(self._nout):
             yield TaskGetItem(self, self, i)
 
-    def run(
+    def _do_run(
         self,
         inputs: dict[int, Any],
         run_context: RunContext = None,
@@ -205,16 +209,16 @@ class Task:
             except Exception as e:
                 if config_context._swallow_exceptions:
                     # PIPEDAG INTERNAL
-                    self.logger.info("Task failed (raised an exception)", cause=str(e))
+                    self._logger.info("Task failed (raised an exception)", cause=str(e))
                 else:
-                    self.logger.exception("Task failed (raised an exception)")
-                self.did_finish(FinalTaskState.FAILED)
+                    self._logger.exception("Task failed (raised an exception)")
+                self._did_finish(FinalTaskState.FAILED)
                 raise e
             else:
                 if task_context.is_cache_valid:
-                    self.did_finish(FinalTaskState.CACHE_VALID)
+                    self._did_finish(FinalTaskState.CACHE_VALID)
                 else:
-                    self.did_finish(FinalTaskState.COMPLETED)
+                    self._did_finish(FinalTaskState.COMPLETED)
                 return result
 
     def _run(self, inputs: [int, Any]) -> tuple[Any, TaskContext]:
@@ -226,23 +230,23 @@ class Task:
         # because with multiprocessing it is impossible to even share state.
         def task_result_mapper(x):
             if isinstance(x, Task):
-                return x.resolve_value(inputs[x.id])
+                return x._resolve_value(inputs[x._id])
             if isinstance(x, TaskGetItem):
-                if isinstance(inputs[x.task.id], Table):
-                    return x.task.resolve_value(inputs[x.task.id])
+                if isinstance(inputs[x._task._id], Table):
+                    return x._task._resolve_value(inputs[x._task._id])
                 else:
-                    return x.resolve_value(inputs[x.task.id])
+                    return x._resolve_value(inputs[x._task._id])
             return x
 
         args = deep_map(args, task_result_mapper)
         kwargs = deep_map(kwargs, task_result_mapper)
 
         with TaskContext(task=self) as task_context:
-            if hasattr(self, "call_context") and self.call_context:
-                with self.call_context():
-                    result = self.fn(*args, **kwargs)
+            if hasattr(self, "_call_context") and self._call_context:
+                with self._call_context():
+                    result = self._fn(*args, **kwargs)
             else:
-                result = self.fn(*args, **kwargs)
+                result = self._fn(*args, **kwargs)
         return result, task_context
 
     def __compute_position_hash(self) -> str:
@@ -256,18 +260,18 @@ class Task:
 
         def visitor(x):
             if isinstance(x, (Task, TaskGetItem)):
-                return x.position_hash
+                return x._position_hash
             return x
 
         arguments = deep_map(self._bound_args.arguments, visitor)
         input_json = PipedagJSONEncoder().encode(arguments)
 
-        return stable_hash("POS_TASK", self.name, self.stage.name, input_json)
+        return stable_hash("POS_TASK", self._name, self._stage.name, input_json)
 
-    def did_finish(self, state: FinalTaskState):
+    def _did_finish(self, state: FinalTaskState):
         if state.is_successful():
-            self.logger.info("Task finished successfully", state=state)
+            self._logger.info("Task finished successfully", state=state)
         RunContext.get().did_finish_task(self, state)
 
-    def resolve_value(self, task_value: Any):
+    def _resolve_value(self, task_value: Any):
         return task_value

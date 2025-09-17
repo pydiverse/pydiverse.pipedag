@@ -66,19 +66,19 @@ class DaskEngine(OrchestrationEngine):
                 structlog.configure(**structlog_config)
 
                 with structlog.contextvars.bound_contextvars(**structlog_context):
-                    return t.run(**kwargs)
+                    return t._do_run(**kwargs)
 
-            run.__name__ = t.name
+            run.__name__ = t._name
             return dask.delayed(run, pure=False)
 
         for task in flow.get_tasks():
             task_inputs = {
                 **{
                     in_id: results[in_t]
-                    for in_id, in_t in task.input_tasks.items()
+                    for in_id, in_t in task._input_tasks.items()
                     if in_t in results and in_t not in inputs
                 },
-                **{in_id: Table(inputs[in_t]) for in_id, in_t in task.input_tasks.items() if in_t in inputs},
+                **{in_id: Table(inputs[in_t]) for in_id, in_t in task._input_tasks.items() if in_t in inputs},
             }
 
             results[task] = bind_run(task)(

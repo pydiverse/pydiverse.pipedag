@@ -422,7 +422,7 @@ def exception(x, r: bool):
 
 
 def get_task_logger():
-    return TaskContext.get().task.logger
+    return TaskContext.get().task._logger
 
 
 @materialize(input_type=sa.Table)

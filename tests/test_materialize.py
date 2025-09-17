@@ -93,6 +93,37 @@ def test_materialize_table(imperative):
     assert f.run().successful
 
 
+# @materialize(input_type=sa.Table, lazy=True)
+# def create_view1(tbl: Alias):
+#     return Table(View(src=tbl, sort=tbl.c.col2, columns=tbl.c.col1, limit=2))
+#
+#
+# @materialize(input_type=sa.Table, lazy=True)
+# def create_view2(tbl: Alias, tbl2: Alias):
+#     return Table(View(src=[tbl, tbl2], sort=[tbl.c.col2, tbl.c.col1], columns=[tbl.c.col1], limit=2))
+#
+#
+# @materialize(input_type=pdt.SqlAlchemy, lazy=True)
+# def create_view1(tbl: Alias):
+#     return Table(View(src=tbl, sort=tbl.c.col2, columns=tbl.c.col1, limit=2))
+#
+#
+# @materialize(input_type=sa.Table, lazy=True)
+# def create_view2(tbl: Alias, tbl2: Alias):
+#     return Table(View(src=[tbl, tbl2], sort=[tbl.c.col2, tbl.c.col1], columns=[tbl.c.col1], limit=2))
+
+
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_view(imperative):
+    _m = m if not imperative else m2
+    with Flow("flow") as f:
+        with Stage("stage"):
+            x = _m.simple_dataframe()
+            _m.assert_table_equal(x, x)
+
+    assert f.run().successful
+
+
 @pytest.mark.parametrize("imperative", [False, True])
 def test_materialize_table_subtask(imperative):
     _m = m if not imperative else m2
@@ -176,15 +207,15 @@ def test_imperative_minimal_example():
 
     print("Run 1:")
     for task in f.tasks:
-        print(f"{task.name}: {result1.task_states.get(task)}")
+        print(f"{task._name}: {result1.task_states.get(task)}")
 
     print("Run 2:")
     for task in f.tasks:
-        print(f"{task.name}: {result2.task_states.get(task)}")
+        print(f"{task._name}: {result2.task_states.get(task)}")
 
     # Expectation: In Run 2 all tasks should be cached
     for task in f.tasks:
-        if not task.name.startswith("Commit"):
+        if not task._name.startswith("Commit"):
             assert result2.task_states.get(task) == FinalTaskState.CACHE_VALID
 
 

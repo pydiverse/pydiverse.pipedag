@@ -48,20 +48,20 @@ class PipedagMock:
 
 def spy_task(mocker, task) -> PipedagMock:
     if isinstance(task, TaskGetItem):
-        task = task.task
+        task = task._task
     if isinstance(task, MaterializingTask):
-        task.fn = copy.copy(task.fn)
-        spy = mocker.spy(task.fn, "fn")
+        task._fn = copy.copy(task._fn)
+        spy = mocker.spy(task._fn, "fn")
     elif isinstance(task, Task):
-        task_fn = task.fn
+        task_fn = task._fn
 
         def fn(*args, **kwargs):
             return task_fn(*args, **kwargs)
 
-        task.fn = fn
-        spy = mocker.spy(task, "fn")
+        task._fn = fn
+        spy = mocker.spy(task, "_fn")
     else:
         raise TypeError("Expected object of type Task or TaskGetItem")
 
-    spy.mock.__dict__["_mock_name"] = task.name
+    spy.mock.__dict__["_mock_name"] = task._name
     return PipedagMock(spy)

@@ -1416,9 +1416,9 @@ class SQLTableStore(BaseTableStore):
                 result = (
                     meta_conn.execute(
                         self.tasks_table.select()
-                        .where(self.tasks_table.c.name == task.name)
-                        .where(self.tasks_table.c.stage == task.stage.name)
-                        .where(self.tasks_table.c.version == task.version)
+                        .where(self.tasks_table.c.name == task._name)
+                        .where(self.tasks_table.c.stage == task._stage.name)
+                        .where(self.tasks_table.c.version == task._version)
                         .where(self.tasks_table.c.input_hash == input_hash)
                         .where(
                             self.tasks_table.c.cache_fn_hash == cache_fn_hash
@@ -1452,12 +1452,12 @@ class SQLTableStore(BaseTableStore):
         self, task: MaterializingTask, ignore_position_hashes: bool = False
     ) -> list[TaskMetadata]:
         match_condition = sa.and_(
-            self.tasks_table.c.name == task.name,
-            self.tasks_table.c.stage == task.stage.name,
+            self.tasks_table.c.name == task._name,
+            self.tasks_table.c.stage == task._stage.name,
         )
 
         if not ignore_position_hashes:
-            match_condition = match_condition & (self.tasks_table.c.position_hash == task.position_hash)
+            match_condition = match_condition & (self.tasks_table.c.position_hash == task._position_hash)
         with self.metadata_connect() as meta_conn:
             results = meta_conn.execute(self.tasks_table.select().where(match_condition)).mappings().all()
         return [

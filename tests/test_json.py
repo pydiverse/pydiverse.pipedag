@@ -76,7 +76,7 @@ def test_json_coder_primitive():
 
 
 def set_stage(x, s: Stage):
-    x.stage = s
+    x._stage = s
     return x
 
 

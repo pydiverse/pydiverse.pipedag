@@ -18,6 +18,7 @@ from pydiverse.pipedag.optional_dependency.colspec import cs
 from pydiverse.pipedag.optional_dependency.dataframely import dy
 from pydiverse.pipedag.optional_dependency.transform import pdt
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.util import tasks_library
 
 pytestmark = [
     pytest.mark.pdtransform,
@@ -532,10 +533,6 @@ def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, val
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(
-    dy.Column is not None,
-    reason="This test only works if dataframely is not installed since we test a fallback mechanism in polars hook",
-)
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
@@ -612,6 +609,8 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
         name = f"with{'out' if not with_filter else ''}_filter_with{'out' if not with_violation else ''}_rule_violation"
         with Stage("s01"):
             collection = get_anno_collection(name)
+            tasks_library.noop(collection.first)  # extract single schema of collection
+            tasks_library.noop(collection.second)
             consumer_collection(collection)
         with Stage("s02"):
             consumer2_collection(collection)

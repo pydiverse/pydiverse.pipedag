@@ -18,6 +18,7 @@ from typing import get_args, get_origin
 
 from pydiverse.common.util.computation_tracing import fully_qualified_name
 from pydiverse.common.util.import_ import load_object
+from pydiverse.pipedag.container import View
 
 TYPE_KEY = "__pipedag_type__"
 
@@ -68,6 +69,7 @@ def json_default(o):
             "external_schema": o.external_schema,
             "shared_lock_allowed": o.shared_lock_allowed,
             "annotation": o.annotation,
+            "view": o.view,
             **kwargs,
         }
     if isinstance(o, RawSql):
@@ -83,6 +85,13 @@ def json_default(o):
             **kwargs,
         }
     if isinstance(o, Blob):
+        return {
+            TYPE_KEY: Type.BLOB,
+            "stage": o.stage.name if o.stage is not None else None,
+            "name": o.name,
+            "cache_key": o.cache_key,
+        }
+    if isinstance(o, View):
         return {
             TYPE_KEY: Type.BLOB,
             "stage": o.stage.name if o.stage is not None else None,
@@ -213,6 +222,7 @@ def json_object_hook(d: dict):
         tbl.external_schema = d.get("external_schema")
         tbl.shared_lock_allowed = d.get("shared_lock_allowed", True)
         tbl.assumed_dependencies = d.get("assumed_dependencies")
+        tbl.view = d.get("view", None)
         return tbl
     if type_ == Type.RAW_SQL:
         raw_sql = RawSql(name=d["name"])
