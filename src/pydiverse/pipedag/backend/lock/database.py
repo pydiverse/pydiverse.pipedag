@@ -17,14 +17,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
 )
 from pydiverse.pipedag.container import Schema
 from pydiverse.pipedag.errors import LockError
-
-try:
-    from sqlalchemy import Connection, Engine
-except ImportError:
-    # For compatibility with sqlalchemy < 2.0
-    from sqlalchemy.engine import Engine
-    from sqlalchemy.engine.base import Connection
-
+from pydiverse.pipedag.optional_dependency.sqlalchemy import Connection, Engine
 
 DISABLE_DIALECT_REGISTRATION = "__DISABLE_DIALECT_REGISTRATION"
 

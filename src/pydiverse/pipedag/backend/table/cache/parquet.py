@@ -3,10 +3,10 @@
 import json
 import os
 import shutil
-import types
 from typing import Any
 
 import pandas as pd
+import polars as pl
 import sqlalchemy as sa
 from packaging.version import Version
 from upath import UPath
@@ -16,6 +16,7 @@ from pydiverse.pipedag import ConfigContext, Stage, Table
 from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.store import BaseTableCache
 from pydiverse.pipedag.materialize.table_hook_base import CanMatResult, CanRetResult, TableHook
+from pydiverse.pipedag.optional_dependency.transform import pdt, pdt_new, pdt_old
 from pydiverse.pipedag.util import normalize_name
 from pydiverse.pipedag.util.path import is_file_uri
 
@@ -174,12 +175,6 @@ class PandasTableHook(TableHook[ParquetTableCache]):
             return pd.read_parquet(path, **pandas_kwargs)
 
 
-try:
-    import polars as pl
-except ImportError:
-    pl = None
-
-
 @ParquetTableCache.register_table(pl)
 class PolarsTableHook(sql_hooks.PolarsTableHook):
     @classmethod
@@ -225,36 +220,6 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
         if issubclass(as_type, pl.LazyFrame):
             return df.lazy()
         return df
-
-
-try:
-    import pydiverse.transform as pdt
-
-    try:
-        from pydiverse.transform.eager import PandasTableImpl
-
-        _ = PandasTableImpl
-
-        pdt_old = pdt
-        pdt_new = None
-    except ImportError:
-        try:
-            # detect if 0.2 or >0.2 is active
-            # this import would only work in <=0.2
-            from pydiverse.transform.extended import Polars
-
-            # ensures a "used" state for the import, preventing black from deleting it
-            _ = Polars
-
-            pdt_old = None
-            pdt_new = pdt
-        except ImportError:
-            raise NotImplementedError("pydiverse.transform 0.2.0 - 0.2.2 isn't supported") from None
-except ImportError:
-    pdt = types.ModuleType("pydiverse.transform")
-    pdt.Table = None
-    pdt_old = None
-    pdt_new = None
 
 
 @ParquetTableCache.register_table(pdt_old)

@@ -120,7 +120,7 @@ class Result:
         if isinstance(task, Task):
             task_output = self.task_values[task]
         else:
-            task_output = self.task_values[task.task]
+            task_output = self.task_values[task._task]
 
         with self.config_context, DematerializeRunContext(
             self.flow, allow_write_local_table_cache=write_local_table_cache

@@ -28,7 +28,7 @@ from pydiverse.pipedag import (
 )
 from pydiverse.pipedag.container import attach_annotation
 from pydiverse.pipedag.context import RunContext, TaskContext
-from pydiverse.pipedag.context.context import CacheValidationMode
+from pydiverse.pipedag.context.context import CacheValidationMode, DAGContext
 from pydiverse.pipedag.core import UnboundTask
 from pydiverse.pipedag.errors import CacheError
 from pydiverse.pipedag.materialize.cache import TaskCacheInfo, task_cache_key
@@ -165,13 +165,13 @@ class UnboundMaterializingTask(UnboundTask):
             # this is a subtask call. Thus we demand identical input_types
             sub_task: MaterializingTask = task_context.task  # type: ignore
             if (
-                sub_task.input_type is not None
+                sub_task._input_type is not None
                 and self.input_type is not None
-                and sub_task.input_type != self.input_type
+                and sub_task._input_type != self.input_type
             ):
                 raise RuntimeError(
                     f"Subtask input type {self.input_type} does not match parent task "
-                    f"input type {sub_task.input_type}: "
+                    f"input type {sub_task._input_type}: "
                     f"task={self}, sub_task={sub_task}"
                 )
         except LookupError:
@@ -201,8 +201,10 @@ class MaterializingTaskGetItem(TaskGetItem):
         task: "MaterializingTask",
         parent: "MaterializingTask | MaterializingTaskGetItem",
         item: Any,
+        *,
+        is_member_lookup: bool = False,
     ):
-        super().__init__(task, parent, item)
+        super().__init__(task, parent, item, is_member_lookup=is_member_lookup)
 
     def __getitem__(self, item) -> "MaterializingTaskGetItem":
         """
@@ -250,25 +252,26 @@ class MaterializingTask(Task):
     ):
         super().__init__(unbound_task, bound_args, flow, stage)
 
-        self.input_type = unbound_task.input_type
-        self.add_input_source = unbound_task.add_input_source
-        self._version = unbound_task.version
-        self.cache = unbound_task.cache
-        self.lazy = unbound_task.lazy
-        self.fn_annotations = typing.get_type_hints(unbound_task.fn)
+        self._input_type = unbound_task.input_type
+        self._add_input_source = unbound_task.add_input_source
+        self._internal_version = unbound_task.version
+        self._cache = unbound_task.cache
+        self._lazy = unbound_task.lazy
+        self._fn_annotations = typing.get_type_hints(unbound_task.fn)
 
     @property
-    def version(self):
+    def _version(self):
         try:
             if v := TaskContext.get().override_version:
                 return v
         except LookupError:
             pass
 
-        return self._version
+        # attention: do not rename _internal_version to __version because this changes python mechanics
+        return self._internal_version
 
-    @version.setter
-    def version(self, version):
+    @_version.setter
+    def _version(self, version):
         try:
             TaskContext.get().override_version = version
         except LookupError:
@@ -306,7 +309,30 @@ class MaterializingTask(Task):
         """
         return MaterializingTaskGetItem(self, self, item)
 
-    def run(self, inputs: dict[int, Any], ignore_position_hashes: bool = False, **kwargs):
+    def _field_lookup(self, item):
+        return MaterializingTaskGetItem(self, self, item, is_member_lookup=True)
+
+    def __getattr__(self, item) -> Any:
+        """Construct a :py:class:`~.MaterializingTaskGetItem`.
+
+        If the corresponding task returns a dataclass, member field access
+        can be used to forward only parts of the task's output to
+        the next task.
+        """
+        try:
+            _ = DAGContext.get()
+            # only when called during flow declaration time, create lazy TaskGetItem reference to field
+            if not item.startswith("_"):
+                return self._field_lookup(item)
+        except LookupError:
+            pass
+        if hasattr(super(), "__getattr__"):
+            return super().__getattr__(item)
+        if item in self.__dict__:
+            return self.__dict__[item]
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{item}'")
+
+    def _do_run(self, inputs: dict[int, Any], ignore_position_hashes: bool = False, **kwargs):
         # When running only a subset of an entire flow, not all inputs
         # get calculated during flow execution. As a consequence, we must load
         # those inputs from the cache.
@@ -318,7 +344,7 @@ class MaterializingTask(Task):
                 x.stage = PseudoStage(x.stage, did_commit=True)
             return x
 
-        for in_id, in_task in self.input_tasks.items():
+        for in_id, in_task in self._input_tasks.items():
             if in_id in inputs:
                 continue
 
@@ -328,7 +354,7 @@ class MaterializingTask(Task):
             cached_output = deep_map(cached_output, replace_stage_with_pseudo_stage)
             inputs[in_id] = cached_output
 
-        return super().run(inputs, **kwargs)
+        return super()._do_run(inputs, **kwargs)
 
     def get_output_from_store(
         self, as_type: type = None, ignore_position_hashes: bool = False, write_local_table_cache: bool = False
@@ -510,20 +536,20 @@ class MaterializationWrapper:
         # If this is the first task in this stage to be executed, ensure that
         # the stage has been initialized and locked.
         store = config_context.store
-        store.ensure_stage_is_ready(task.stage)
+        store.ensure_stage_is_ready(task._stage)
 
         # Compute the cache key for the task inputs
         input_json = store.json_encode(bound.arguments)
         input_hash = stable_hash("INPUT", input_json)
 
         cache_fn_hash = ""
-        if task.cache is not None:
+        if task._cache is not None:
             if config_context.cache_validation.disable_cache_function:
                 # choose random cache_fn_hash to ensure downstream tasks are
                 # invalidated for FORCE_FRESH_INPUT
                 cache_fn_hash = stable_hash("CACHE_FN", uuid.uuid4().hex)
             else:
-                cache_fn_output = store.json_encode(task.cache(*args, **kwargs))
+                cache_fn_output = store.json_encode(task._cache(*args, **kwargs))
                 cache_fn_hash = stable_hash("CACHE_FN", cache_fn_output)
 
         memo_cache_key = task_cache_key(task, input_hash, cache_fn_hash)
@@ -532,44 +558,45 @@ class MaterializationWrapper:
         # If yes, return memoized result. This prevents DuplicateNameExceptions
         with run_context.task_memo(task, memo_cache_key) as (success, memo):
             if success:
-                task.logger.info("Task has already been run with the same inputs. Using memoized results.")
+                task._logger.info("Task has already been run with the same inputs. Using memoized results.")
 
                 return memo
 
             # Cache Lookup (only required if task isn't lazy)
             force_task_execution = config_context.cache_validation.mode == CacheValidationMode.FORCE_CACHE_INVALID or (
-                config_context.cache_validation.mode == CacheValidationMode.FORCE_FRESH_INPUT and task.cache is not None
+                config_context.cache_validation.mode == CacheValidationMode.FORCE_FRESH_INPUT
+                and task._cache is not None
             )
             skip_cache_lookup = (
-                config_context.cache_validation.ignore_task_version and task.version != AUTO_VERSION
-            ) or task.version is None
+                config_context.cache_validation.ignore_task_version and task._version != AUTO_VERSION
+            ) or task._version is None
             assert_no_fresh_input = config_context.cache_validation.mode == CacheValidationMode.ASSERT_NO_FRESH_INPUT
 
-            if task.version is AUTO_VERSION:
+            if task._version is AUTO_VERSION:
                 if force_task_execution and config_context.cache_validation.disable_cache_function:
-                    task.version = None
+                    task._version = None
                     skip_cache_lookup = True
-                    task.logger.info(
+                    task._logger.info(
                         "Skipping determination of auto version of task due to forced "
                         "execution and disable_cache_function=True"
                     )
                 else:
-                    assert not task.lazy
+                    assert not task._lazy
 
                     auto_version = self.compute_auto_version(task, store, bound)
-                    task.version = auto_version
-                    task.logger.info("Assigned auto version to task", version=auto_version)
+                    task._version = auto_version
+                    task._logger.info("Assigned auto version to task", version=auto_version)
 
-            if not task.lazy and not skip_cache_lookup and not force_task_execution:
+            if not task._lazy and not skip_cache_lookup and not force_task_execution:
                 cache_metadata = None
                 try:
                     cached_output, cache_metadata = store.retrieve_cached_output(task, input_hash, cache_fn_hash)
                 except CacheError as e:
-                    task.logger.info(
+                    task._logger.info(
                         "Failed to retrieve task from cache",
                         input_hash=input_hash,
                         cache_fn_hash=cache_fn_hash,
-                        version=task.version,
+                        version=task._version,
                         cause=str(e),
                     )
                     TaskContext.get().is_cache_valid = False
@@ -578,7 +605,7 @@ class MaterializationWrapper:
                 if cache_metadata is not None:
                     store.copy_cached_output_to_transaction_stage(cached_output, cache_metadata, task)
                     run_context.store_task_memo(task, memo_cache_key, cached_output)
-                    task.logger.info(
+                    task._logger.info(
                         "Found task in cache. Using cached result.",
                         input_hash=input_hash,
                         cache_fn_hash=cache_fn_hash,
@@ -589,8 +616,8 @@ class MaterializationWrapper:
                     )
                     return cached_output
 
-            if not task.lazy:
-                if assert_no_fresh_input and task.cache is not None:
+            if not task._lazy:
+                if assert_no_fresh_input and task._cache is not None:
                     raise AssertionError(
                         "cache_validation.mode=ASSERT_NO_FRESH_INPUT is a "
                         "protection mechanism to prevent execution of "
@@ -598,7 +625,7 @@ class MaterializationWrapper:
                         "this task was still triggered."
                     ) from None
 
-            if task.lazy:
+            if task._lazy:
                 # For lazy tasks, is_cache_valid gets set to false during the
                 # store.materialize_task procedure
                 TaskContext.get().is_cache_valid = True
@@ -616,19 +643,19 @@ class MaterializationWrapper:
                             task, input_hash, cache_fn_hash, cache_metadata, lazy=True
                         )
                     except CacheError as e:
-                        task.logger.info(
+                        task._logger.info(
                             "Failed to retrieve lazy task from cache",
                             cause=str(e),
                             input_hash=input_hash,
-                            version=task.version,
+                            version=task._version,
                             cache_fn_hash=cache_fn_hash,
                         )
 
             # Prepare TaskCacheInfo
-            if not task.lazy and skip_cache_lookup:
+            if not task._lazy and skip_cache_lookup:
                 # Assign random version to disable caching for this task
                 task = copy.copy(task)
-                task.version = uuid.uuid4().hex
+                task._version = uuid.uuid4().hex
 
             task_cache_info = TaskCacheInfo(
                 task=task,
@@ -671,7 +698,7 @@ class MaterializationWrapper:
 
                     def get_return_obj(return_as_type):
                         if return_as_type is None:
-                            return_as_type = task.input_type
+                            return_as_type = task._input_type
                             if return_as_type is None or not my_store.table_store.get_r_table_hook(
                                 return_as_type
                             ).retrieve_as_reference(return_as_type):
@@ -693,7 +720,7 @@ class MaterializationWrapper:
             run_context.trace_hook.task_post_call(task)
             task_context.imperative_materialize_callback = None
             if task.debug_tainted:
-                raise RuntimeError(f"The task {task.name} has been tainted by interactive debugging. Aborting.")
+                raise RuntimeError(f"The task {task._name} has been tainted by interactive debugging. Aborting.")
 
             def result_finalization_mutator(x):
                 state = task_cache_info.imperative_materialization_state
@@ -740,11 +767,11 @@ class MaterializationWrapper:
         # For this, we go off the `auto_version_support` flag of the retrieve
         # table hook of the input type
 
-        hook = store.table_store.get_r_table_hook(task.input_type)
+        hook = store.table_store.get_r_table_hook(task._input_type)
         auto_version_support = hook.auto_version_support
 
         if auto_version_support == AutoVersionSupport.NONE:
-            raise TypeError(f"Auto versioning not supported for input type {task.input_type}.")
+            raise TypeError(f"Auto versioning not supported for input type {task._input_type}.")
 
         # Perform auto versioning
         info = None

@@ -22,7 +22,7 @@ def test_run_specific_task(mocker):
         task_name: str,
         expected_state: FinalTaskState,
     ):
-        tasks = [t for t in task_states if t.name == task_name]
+        tasks = [t for t in task_states if t._name == task_name]
         assert len(tasks) > 0
         assert all(task_states[t] == expected_state for t in tasks)
 
@@ -67,7 +67,7 @@ def test_run_specific_task(mocker):
     y1_spy.assert_not_called()
     y2_spy.assert_not_called()
     s2_spy.assert_not_called()
-    assert_task_state(res.task_states, x1.name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, x1._name, FinalTaskState.COMPLETED)
 
     res = f.run(y1)
     x1_spy.assert_not_called()
@@ -77,7 +77,7 @@ def test_run_specific_task(mocker):
     y1_spy.assert_called_once()
     y2_spy.assert_not_called()
     s2_spy.assert_not_called()
-    assert_task_state(res.task_states, y1.name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, y1._name, FinalTaskState.COMPLETED)
 
     # Run multiple tasks at once
 
@@ -89,8 +89,8 @@ def test_run_specific_task(mocker):
     y1_spy.assert_not_called()
     y2_spy.assert_called_once()
     s2_spy.assert_not_called()
-    assert_task_state(res.task_states, x2.name, FinalTaskState.COMPLETED)
-    assert_task_state(res.task_states, y2.name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, x2._name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, y2._name, FinalTaskState.COMPLETED)
 
     res = f.run(l1)
     x1_spy.assert_not_called()
@@ -100,7 +100,7 @@ def test_run_specific_task(mocker):
     y1_spy.assert_not_called()
     y2_spy.assert_not_called()
     s2_spy.assert_not_called()
-    assert_task_state(res.task_states, l1.name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, l1._name, FinalTaskState.COMPLETED)
 
     cache_function_call_allowed = False
 
@@ -115,11 +115,11 @@ def test_run_specific_task(mocker):
     y1_spy.assert_called_once()
     y2_spy.assert_called_once()
     s2_spy.assert_called_once()
-    assert_task_state(res.task_states, x1.name, FinalTaskState.COMPLETED)
-    assert_task_state(res.task_states, x2.name, FinalTaskState.COMPLETED)
-    assert_task_state(res.task_states, l1.name, FinalTaskState.COMPLETED)
-    assert_task_state(res.task_states, y1.name, FinalTaskState.COMPLETED)
-    assert_task_state(res.task_states, y2.name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, x1._name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, x2._name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, l1._name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, y1._name, FinalTaskState.COMPLETED)
+    assert_task_state(res.task_states, y2._name, FinalTaskState.COMPLETED)
 
 
 @with_instances("postgres")

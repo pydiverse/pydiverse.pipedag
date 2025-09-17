@@ -108,6 +108,7 @@ ibm_db_sa = ">=0.3.8"
 [feature.s3.dependencies]
 s3fs = ">=2025.5.1,<2026"
 boto3 = ">=1.38.13,<2"
+gcsfs = ">=2025.9.0,<2026"
 
 # XGBoost is used by some relistic pipeline examples
 [feature.xgboost.dependencies]

@@ -1,11 +1,7 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-try:
-    from sqlalchemy import Engine
-except ImportError:
-    # For compatibility with sqlalchemy < 2.0
-    from sqlalchemy.engine import Engine
+from pydiverse.pipedag.optional_dependency.sqlalchemy import Engine
 
 
 class PipedagDB2Reflection:

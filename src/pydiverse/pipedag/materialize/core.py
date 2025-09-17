@@ -497,7 +497,7 @@ def input_stage_versions(
         lock_source_stages,
     ):
         _task = TaskContext.get().task
-        stage = _task.stage
+        stage = _task._stage
         pass_kwargs = {k: v for k, v in kwargs.items() if k in set(pass_args)}
 
         (
@@ -603,7 +603,7 @@ def input_stage_versions(
                                 f"Table not found in other stage version: {PipedagJSONEncoder().encode(tbl2)}"
                             )
                     except Exception as e:
-                        _task.logger.error(
+                        _task._logger.error(
                             "Failed to dematerialize table from other stage version",
                             table=ref,
                             stage=tbl2.stage,
@@ -725,10 +725,10 @@ def _get_output_from_store(
     from pydiverse.pipedag.context.run_context import DematerializeRunContext
     from pydiverse.pipedag.materialize.store import dematerialize_output_from_store
 
-    root_task = task if isinstance(task, Task) else task.task
+    root_task = task if isinstance(task, Task) else task._task
 
     store = ConfigContext.get().store
-    with DematerializeRunContext(root_task.flow, allow_write_local_table_cache=write_local_table_cache):
+    with DematerializeRunContext(root_task._flow, allow_write_local_table_cache=write_local_table_cache):
         cached_output, _ = store.retrieve_most_recent_task_output_from_cache(
             root_task, ignore_position_hashes=ignore_position_hashes
         )

@@ -45,14 +45,7 @@ from sqlalchemy.sql.type_api import TypeEngine
 
 from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import Schema
-
-try:
-    from sqlalchemy import Connection, Engine
-except ImportError:
-    # For compatibility with sqlalchemy < 2.0
-    from sqlalchemy.engine import Engine
-    from sqlalchemy.engine.base import Connection
-
+from pydiverse.pipedag.optional_dependency.sqlalchemy import Connection, Engine
 
 # Postgres truncates identifiers at 63 characters
 # MSSQL does not allow identifiers longer than 128 characters
@@ -1320,7 +1313,7 @@ try:
             f"THEN CAST({value} AS {target_type}) ELSE NULL END"
         )
 except ImportError:
-    # no TryCast implementation for SQLAlchemy < 1.0
+    # no TryCast implementation for SQLAlchemy < 2.0
     pass
 
 

@@ -1,8 +1,7 @@
 # Copyright (c) QuantCo and pydiverse contributors 2024-2025
 # SPDX-License-Identifier: BSD-3-Clause
-import types
 from dataclasses import dataclass
-from typing import Generic, Mapping, TypeVar
+from typing import Mapping
 
 import polars as pl
 import pytest
@@ -13,57 +12,8 @@ from polars.testing import assert_frame_equal
 from pydiverse.pipedag import ConfigContext, Flow, Stage, materialize
 from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.errors import HookCheckException
+from pydiverse.pipedag.optional_dependency.dataframely import FrameType, dy
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
-
-try:
-    import dataframely as dy
-    from dataframely._polars import FrameType
-except ImportError:
-    T = TypeVar("T")
-
-    class DyDataFrame(Generic[T]):
-        pass
-
-    class DyDummyClass:
-        def __init__(self, *args, **kwargs):
-            pass
-
-    FrameType = None
-    dy = types.ModuleType("dataframely")
-    dy.DataFrame = DyDataFrame
-    dy.LazyFrame = DyDataFrame
-    dy.FailureInfo = None
-    dy.Column = None
-    dy.Collection = object
-    dy.Schema = object
-    dy.filter = lambda: lambda fn: fn  # noqa
-    dy.rule = lambda: lambda fn: fn  # noqa
-    for _type in [
-        "Int8",
-        "Int16",
-        "Int32",
-        "Int64",
-        "UInt8",
-        "UInt16",
-        "UInt32",
-        "UInt64",
-        "Float32",
-        "Float64",
-        "Bool",
-        "String",
-        "Decimal",
-        "Enum",
-        "Struct",
-        "List",
-        "Date",
-        "Datetime",
-        "Time",
-        "Duration",
-        "Float",
-        "Integer",
-    ]:
-        setattr(dy, _type, DyDummyClass)
-
 
 pytestmark = [
     with_instances(DATABASE_INSTANCES),

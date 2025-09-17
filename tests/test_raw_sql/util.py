@@ -19,7 +19,7 @@ def sql_script(
     depend=None,
 ):
     _ = depend  # only relevant for adding additional task dependency
-    stage = TaskContext.get().task.stage
+    stage = TaskContext.get().task._stage
 
     script_path = script_directory / name
     sql = Path(script_path).read_text(encoding="utf-8")

@@ -9,10 +9,7 @@ import pytest
 import structlog
 from _pytest.capture import EncodedFile
 
-try:
-    import dask
-except ImportError:
-    dask = None
+from pydiverse.pipedag.optional_dependency.dask import dask
 
 
 class A(io.TextIOWrapper):

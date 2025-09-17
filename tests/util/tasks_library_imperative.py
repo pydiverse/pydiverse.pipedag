@@ -2,15 +2,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
+import polars as pl
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Table, Task, materialize
 from pydiverse.pipedag.core.task import TaskGetItem
-
-try:
-    import polars as pl
-except ImportError:
-    pl = None
 
 
 def noop(x):

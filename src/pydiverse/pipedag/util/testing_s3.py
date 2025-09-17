@@ -3,12 +3,7 @@
 
 import structlog
 
-try:
-    import boto3
-    from botocore.exceptions import ClientError
-except ImportError:
-    boto3 = None
-    ClientError = None
+from pydiverse.pipedag.optional_dependency.boto import ClientError, boto3
 
 
 def create_bucket_if_not_exists(bucket_name: str, s3_client, region: str | None = None) -> bool:

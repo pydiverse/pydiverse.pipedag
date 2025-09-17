@@ -5,13 +5,14 @@ import inspect
 import random
 import re
 import time
-import types
 import typing
 import warnings
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+import pandas as pd
+import polars as pl
 import sqlalchemy as sa
 import sqlalchemy.exc
 from packaging.version import Version
@@ -41,41 +42,20 @@ from pydiverse.pipedag.materialize.table_hook_base import (
     CanRetResult,
     TableHook,
 )
+from pydiverse.pipedag.optional_dependency.colspec import cs
+from pydiverse.pipedag.optional_dependency.dataframely import dy
+from pydiverse.pipedag.optional_dependency.ibis import ibis
+from pydiverse.pipedag.optional_dependency.sqlalchemy import Select, SqlText, TextClause
+from pydiverse.pipedag.optional_dependency.tidypolars import Tibble, tidypolars
+from pydiverse.pipedag.optional_dependency.transform import Polars, pdt, pdt_new, pdt_old
 from pydiverse.pipedag.util.sql import compile_sql
-
-# optional imports
-try:
-    import polars as pl
-except ImportError:
-    pl = None
-
-try:
-    import dataframely as dy
-except ImportError:
-    dy = None
-
-try:
-    import pydiverse.colspec as cs
-except ImportError:
-    cs = None
-
-# region SQLALCHEMY
-try:
-    from sqlalchemy import Select, TextClause
-    from sqlalchemy import Text as SqlText
-except ImportError:
-    # For compatibility with sqlalchemy < 2.0
-    from sqlalchemy.sql.expression import TextClause
-    from sqlalchemy.sql.selectable import Select
-
-    SqlText = TextClause  # this is what sa.text() returns
 
 
 def _polars_apply_retrieve_annotation(df, table, store, intentionally_empty: bool = False):
     if cs is not None:
         if inspect.isclass(table.annotation) and issubclass(table.annotation, cs.ColSpec):
             column_spec = table.annotation  # type: cs.ColSpec
-            if dy is not None:
+            if dy.Column is not None:
                 # Try colspec polars specific operation which uses dataframely
                 # in the back (casting is not done by SQL based colspec)
                 try:
@@ -95,7 +75,7 @@ def _polars_apply_retrieve_annotation(df, table, store, intentionally_empty: boo
                         f"Failure counts: {failures.counts()}; "
                         f"\nInvalid:\n{fail_df}"
                     ) from e
-    if dy is not None:
+    if dy.Column is not None:
         if typing.get_origin(table.annotation) is not None and issubclass(
             typing.get_origin(table.annotation), dy.LazyFrame | dy.DataFrame
         ):
@@ -124,7 +104,7 @@ def _polars_apply_retrieve_annotation(df, table, store, intentionally_empty: boo
 
 
 def _polars_apply_materialize_annotation(df, table, store):
-    if dy is not None:
+    if dy.Column is not None:
         column_spec = None
         # support dy.LazyFrame[T] and dy.DataFrame[T] annotations
         if typing.get_origin(table.annotation) is not None and issubclass(
@@ -155,7 +135,7 @@ def _polars_apply_materialize_annotation(df, table, store):
     if cs is not None:
         if inspect.isclass(table.annotation) and issubclass(table.annotation, cs.ColSpec):
             column_spec = table.annotation
-            if dy is not None:
+            if dy.Column is not None:
                 # Try colspec polars specific operation which uses dataframely
                 # in the back
                 df, failures = column_spec.filter_polars(df, cast=True)
@@ -311,7 +291,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanMatResult:
         type_ = type(tbl.obj)
-        return CanMatResult.new(issubclass(type_, (sa.sql.expression.TextClause, sa.sql.expression.Selectable)))
+        return CanMatResult.new(issubclass(type_, (TextClause, sa.sql.expression.Selectable)))
 
     @classmethod
     def can_retrieve(cls, type_) -> CanRetResult:
@@ -325,7 +305,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     def materialize(
         cls,
         store: SQLTableStore,
-        table: Table[sa.sql.expression.TextClause | sa.sql.expression.Selectable],
+        table: Table[TextClause | sa.sql.expression.Selectable],
         stage_name,
         without_config_context: bool = False,
     ):
@@ -572,10 +552,6 @@ class ExternalTableReferenceHook(TableHook[SQLTableStore]):
 # endregion
 
 # region PANDAS
-try:
-    import pandas as pd
-except ImportError:
-    pd = None
 
 
 class DataframeSqlTableHook:
@@ -1251,7 +1227,7 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
 
     @classmethod
     def can_retrieve(cls, type_) -> CanRetResult:
-        if dy is not None and issubclass(type_, dy.LazyFrame):
+        if dy.Column is not None and issubclass(type_, dy.LazyFrame):
             # optionally support input_type=dy.LazyFrame
             return CanRetResult.YES
         return CanRetResult.new(type_ == pl.LazyFrame)
@@ -1325,15 +1301,6 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         return str(obj.serialize())
 
 
-try:
-    import tidypolars
-    from tidypolars import Tibble
-except ImportError as e:
-    warnings.warn(str(e), ImportWarning)
-    tidypolars = None
-    Tibble = None
-
-
 @SQLTableStore.register_table(tidypolars, pl)
 class TidyPolarsTableHook(TableHook[SQLTableStore]):
     @classmethod
@@ -1392,40 +1359,6 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
 # endregion
 
 # region PYDIVERSE TRANSFORM
-
-try:
-    # optional dependency to pydiverse-transform
-    import pydiverse.transform as pdt
-
-    try:
-        # Detect which version of pdtransform is installed
-        # this import only exists in version <0.2
-        from pydiverse.transform.eager import PandasTableImpl
-
-        # ensures a "used" state for the import, preventing black from deleting it
-        _ = PandasTableImpl
-
-        pdt_old = pdt
-        pdt_new = None
-    except ImportError:
-        try:
-            # detect if 0.2 or >0.2 is active
-            # this import would only work in <=0.2
-            from pydiverse.transform.extended import Polars
-
-            # ensures a "used" state for the import, preventing black from deleting it
-            _ = Polars
-
-            pdt_old = None
-            pdt_new = pdt
-        except ImportError:
-            raise NotImplementedError("pydiverse.transform 0.2.0 - 0.2.2 isn't supported") from None
-except ImportError as e:
-    warnings.warn(str(e), ImportWarning)
-    pdt = types.ModuleType("pydiverse.transform")
-    pdt.Table = None
-    pdt_old = None
-    pdt_new = None
 
 
 @SQLTableStore.register_table(pdt_old)
@@ -1648,14 +1581,6 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
 # endregion
 
 # region IBIS
-
-try:
-    import ibis
-except ImportError as e:
-    warnings.warn(str(e), ImportWarning)
-    ibis = types.ModuleType("ibis")
-    ibis.api = types.ModuleType("ibis.api")
-    ibis.api.Table = None
 
 
 @SQLTableStore.register_table(ibis.api.Table)

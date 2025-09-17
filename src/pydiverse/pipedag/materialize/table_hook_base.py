@@ -363,7 +363,7 @@ class TableHookResolver:
         # In case of deferred operations, inform run context that stage
         # isn't 100% cache valid anymore.
         if task is not None:
-            RunContext.get().set_stage_has_changed(task.stage)
+            RunContext.get().set_stage_has_changed(task._stage)
 
         # Materialize
         hook = self.get_m_table_hook(table)

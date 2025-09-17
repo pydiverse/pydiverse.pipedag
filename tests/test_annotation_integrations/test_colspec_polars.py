@@ -1,6 +1,5 @@
 # Copyright (c) QuantCo and pydiverse contributors 2024-2025
 # SPDX-License-Identifier: BSD-3-Clause
-import types
 from dataclasses import dataclass
 
 import polars as pl
@@ -12,18 +11,9 @@ from polars.testing import assert_frame_equal
 from pydiverse.pipedag import Flow, Stage, materialize
 from pydiverse.pipedag.context.context import CacheValidationMode, ConfigContext
 from pydiverse.pipedag.errors import HookCheckException
+from pydiverse.pipedag.optional_dependency.colspec import cs
+from pydiverse.pipedag.optional_dependency.dataframely import dy
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
-
-try:
-    import dataframely as dy
-
-    import pydiverse.colspec as cs
-except ImportError:
-    cs = types.ModuleType("pydiverse.colspec")
-    fn = lambda *args, **kwargs: (lambda *args, **kwargs: None)  # noqa: E731
-    cs.__getattr__ = lambda name: object if name in ["ColSpec", "Collection"] else fn
-    dy = None
-
 
 pytestmark = [
     with_instances(DATABASE_INSTANCES),
@@ -109,7 +99,7 @@ def test_dataclass():
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(dy is None, reason="dataframely needs to be installed")
+@pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 def test_enum_violation():
     second = pl.LazyFrame({"a": [2, 3, 4, 5], "b": [0, 1, 2, 3], "c": ["z", "y", "y", "x"]})
     # it is expected that cast fails on invalid enum value
@@ -151,7 +141,7 @@ def exec_filter_polars(c: cs.Collection):
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(dy is None, reason="dataframely needs to be installed")
+@pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 def test_filter_without_filter_without_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
@@ -175,7 +165,7 @@ def test_filter_without_filter_without_rule_violation():
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(dy is None, reason="dataframely needs to be installed")
+@pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 def test_filter_without_filter_with_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
@@ -198,7 +188,7 @@ def test_filter_without_filter_with_rule_violation():
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(dy is None, reason="dataframely needs to be installed")
+@pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 def test_filter_with_filter_without_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
@@ -234,7 +224,7 @@ def test_filter_with_filter_without_rule_violation():
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(dy is None, reason="dataframely needs to be installed")
+@pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 def test_filter_with_filter_with_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
@@ -269,7 +259,7 @@ def test_filter_with_filter_with_rule_violation():
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(dy is None, reason="dataframely needs to be installed")
+@pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
@@ -351,7 +341,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(dy is None, reason="dataframely needs to be installed")
+@pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
@@ -412,7 +402,7 @@ def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, vali
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(dy is None, reason="dataframely needs to be installed")
+@pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
@@ -487,7 +477,7 @@ def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, val
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(dy is None, reason="dataframely needs to be installed")
+@pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
@@ -568,7 +558,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(dy is None, reason="dataframely needs to be installed")
+@pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 def test_type_mapping():
     @materialize(nout=2)
     def get_anno_data() -> tuple[MyFirstColSpec, MySecondColSpec]:

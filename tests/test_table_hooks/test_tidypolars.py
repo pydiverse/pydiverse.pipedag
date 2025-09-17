@@ -4,6 +4,7 @@
 import pytest
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
+from pydiverse.pipedag.optional_dependency.tidypolars import tidypolars as tp
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
@@ -14,12 +15,6 @@ pytestmark = [
     with_instances(DATABASE_INSTANCES),
     skip_instances("duckdb"),
 ]
-
-
-try:
-    import tidypolars as tp
-except ImportError:
-    tp = None
 
 
 @pytest.mark.skipif(tp is None, reason="Test requires tidypolars to be installed")
