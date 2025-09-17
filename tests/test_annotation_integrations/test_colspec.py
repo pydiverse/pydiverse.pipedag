@@ -611,6 +611,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
             collection = get_anno_collection(name)
             tasks_library.noop(collection.first)  # extract single schema of collection
             tasks_library.noop(collection.second)
+            tasks_library.noop_lazy(collection.first)  # extract single schema of collection
             consumer_collection(collection)
         with Stage("s02"):
             consumer2_collection(collection)
