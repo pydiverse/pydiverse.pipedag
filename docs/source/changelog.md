@@ -4,6 +4,7 @@
 - Support View as task output to allow multi-parquet fusion in ParquetTableStore or basic column selection/renaming
   outside consumer task.
 - Support dataclass lazy field access at wiring time when a task returns a dataclass
+- Support Google Cloud Storage in ParquetTableStore (despite fsspec/gcsfs, configuration is a mess for s3 and gcs)
 - Expose optional dependency imports
 - Fix: S3 example and error messages
 
