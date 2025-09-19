@@ -104,11 +104,14 @@ class TaskContext(BaseContext):
     """
 
     task: "Task"
-    input_tables: list["Table"] = None
+    input_tables: list["Table"] | None = None
     is_cache_valid: bool | None = None
     name_disambiguator: NameDisambiguator = field(factory=NameDisambiguator)
     override_version: str | None = None
     imperative_materialize_callback = None
+
+    input_table_mapping: dict[int, tuple["Table", Any]] | None = None
+    """Mapping IDs of dematerialized objects to both dag.Table and dematerialized object itself."""
 
     _context_var = ContextVar("task_context")
 

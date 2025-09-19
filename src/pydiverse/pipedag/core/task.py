@@ -59,7 +59,7 @@ class UnboundTask:
         self._signature = inspect.signature(fn)
 
     def __repr__(self):
-        return f"<UnboundTask 'name' {hex(id(self))}>"
+        return f"<UnboundTask '{self.name}' {hex(id(self))}>"
 
     def __call__(self, *args, **kwargs) -> "Task":
         """
@@ -176,7 +176,7 @@ class Task:
         self._visualize_hidden = False
 
     def __repr__(self):
-        return f"<Task '{self._name}' {hex(id(self))} (id: {self._id})>"
+        return f"<Task '{self._name}' (id: {self._id})>"
 
     def __hash__(self):
         return id(self)

@@ -6,7 +6,7 @@ import polars as pl
 import sqlalchemy as sa
 from sqlalchemy import inspect
 
-from pydiverse.pipedag import Blob, RawSql, Table, materialize
+from pydiverse.pipedag import Blob, RawSql, Table, View, materialize
 from pydiverse.pipedag.backend.table.sql.ddl import MAX_LENGTH_PK
 from pydiverse.pipedag.context import TaskContext
 from pydiverse.pipedag.debug import materialize_table
@@ -39,6 +39,11 @@ def noop_sql(x):
 @materialize(input_type=sa.Table, lazy=True)
 def noop_lazy(x):
     return x
+
+
+@materialize(input_type=sa.Table, lazy=True)
+def noop_view(x):
+    return View(x)
 
 
 @materialize(input_type=pl.DataFrame if pl else "<polars task without polars>")

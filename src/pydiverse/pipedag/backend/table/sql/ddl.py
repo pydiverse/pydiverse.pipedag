@@ -443,12 +443,14 @@ class LockTable(DDLElement):
 
 
 class LockSourceTable(DDLElement):
-    def __init__(self, name: str, schema: Schema):
+    def __init__(self, name: str, schema: Schema | str):
         """
         Lock Table in shared mode for reading.
         """
         self.name = name
+        assert schema is not None
         self.schema = schema.get() if isinstance(schema, Schema) else schema
+        assert isinstance(self.schema, str)
 
 
 @compiles(CreateSchema)
@@ -1279,6 +1281,7 @@ def visit_lock_source_table_postgres(lock_source_table: LockSourceTable, compile
     _ = kw
     preparer = compiler.preparer
     name = preparer.quote(lock_source_table.name)
+    assert lock_source_table.schema is not None
     schema = preparer.format_schema(lock_source_table.schema)
 
     return f"LOCK TABLE {schema}.{name} IN SHARE MODE"

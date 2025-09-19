@@ -28,6 +28,7 @@ class Type(str, Enum):
     TABLE = "table"
     RAW_SQL = "raw_sql"
     BLOB = "blob"
+    VIEW = "view"
     STAGE = "stage"
     PIPEDAG_CONFIG = "pipedag_config"
     CONFIG_CONTEXT = "config_context"
@@ -56,8 +57,11 @@ def json_default(o):
 
     if isinstance(o, Table):
         kwargs = {}
+        # maintain cache in case new features are not used
         if o.assumed_dependencies is not None:
-            kwargs["assumed_dependencies"] = o.assumed_dependencies  # [json_default(t) for t in o.assumed_dependencies]
+            kwargs["assumed_dependencies"] = o.assumed_dependencies
+        if o.view is not None:
+            kwargs["view"] = o.view
         return {
             TYPE_KEY: Type.TABLE,
             "stage": o.stage.name if o.stage is not None else None,
@@ -69,7 +73,6 @@ def json_default(o):
             "external_schema": o.external_schema,
             "shared_lock_allowed": o.shared_lock_allowed,
             "annotation": o.annotation,
-            "view": o.view,
             **kwargs,
         }
     if isinstance(o, RawSql):
@@ -92,11 +95,13 @@ def json_default(o):
             "cache_key": o.cache_key,
         }
     if isinstance(o, View):
+        assert o.assert_normalized  # only normalized form can be serialized
         return {
-            TYPE_KEY: Type.BLOB,
-            "stage": o.stage.name if o.stage is not None else None,
-            "name": o.name,
-            "cache_key": o.cache_key,
+            TYPE_KEY: Type.VIEW,
+            "src": o.src,
+            "sort_by": o.sort_by,
+            "columns": o.columns,
+            "limit": o.limit,
         }
     if isinstance(o, Stage):
         return {
@@ -166,6 +171,16 @@ def json_default(o):
                 "args": o.__dict__,
             },
         }
+    if isinstance(o, Enum):
+        # can be constructed the same way as a data class
+        return {
+            TYPE_KEY: Type.DATA_CLASS,
+            "config_dict": {
+                "class": fully_qualified_name(o),
+                "args": dict(value=o.value),
+            },
+        }
+
     # provide better error message in case of polars table
     import polars as pl
 
@@ -236,6 +251,9 @@ def json_object_hook(d: dict):
         blob.stage = get_stage(d["stage"])
         blob.cache_key = d["cache_key"]
         return blob
+    if type_ == Type.VIEW:
+        view = View(src=d["src"], sort_by=d["sort_by"], columns=d["columns"], limit=d["limit"], assert_normalized=True)
+        return view
     if type_ == Type.STAGE:
         return get_stage(d["name"])
     if type_ == Type.PIPEDAG_CONFIG:
