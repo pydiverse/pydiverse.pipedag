@@ -357,6 +357,7 @@ class BaseTableStore(TableHookResolver, Disposable):
             return super().retrieve_table_obj(table, as_type, for_auto_versioning)
 
         if self.local_table_cache:
+            # This works both for real tables and for views (the view output is stored as parquet)
             obj = self.local_table_cache.retrieve_table_obj(table, as_type)
             if obj is not None:
                 return obj

@@ -21,7 +21,7 @@ import sqlalchemy.exc
 from packaging.version import Version
 from pandas.core.dtypes.base import ExtensionDtype
 from pre_commit.errors import FatalError
-from sqlalchemy.sql.base import ColumnCollection, ReadOnlyColumnCollection
+from sqlalchemy.sql.base import ColumnCollection
 
 from pydiverse.common import Date, Dtype, PandasBackend
 from pydiverse.common.util.computation_tracing import ComputationTracer
@@ -269,6 +269,7 @@ def _sql_apply_materialize_annotation(
 
 
 def get_view_query(view: View, store: SQLTableStore):
+    assert view.assert_normalized  # otherwise, view.src might be iterable for various reasons
     if isinstance(view.src, Iterable):
         src_tables = [
             SQLAlchemyTableHook.retrieve(store, src_tbl, src_tbl.stage.current_name, sa.Table) for src_tbl in view.src
@@ -284,7 +285,15 @@ def get_view_query(view: View, store: SQLTableStore):
             col.table = expr
             return col
 
-        base_from.c = ReadOnlyColumnCollection(ColumnCollection([(c.name, bind(c, base_from)) for c in cols]))
+        try:
+            from sqlalchemy.sql.base import ReadOnlyColumnCollection
+
+            base_from.c = ReadOnlyColumnCollection(ColumnCollection([(c.name, bind(c, base_from)) for c in cols]))
+        except ImportError:
+            # support sqlalchemy < 2.0
+            from sqlalchemy.sql.base import ImmutableColumnCollection
+
+            base_from.c = ImmutableColumnCollection(ColumnCollection([(c.name, bind(c, base_from)) for c in cols]))
     else:
         base_from = SQLAlchemyTableHook.retrieve(store, view.src, view.src.stage.current_name, sa.Table)
         if not view.sort_by and not view.columns and not view.limit:
@@ -673,6 +682,10 @@ class BaseViewMaterializationHook(TableHook[SQLTableStore], abc.ABC):
         )
 
     @classmethod
+    def is_iterable_table(cls, src: Any) -> bool:
+        return False
+
+    @classmethod
     def replace_view_src_tables(cls, src: Iterable[Any] | Any, input_table_mapping: dict[Any, Table]):
         # For Views, we check whether the source tables actually exist as references that
         # were going into the task. We then replace the sources with dag.Table objects.
@@ -680,11 +693,18 @@ class BaseViewMaterializationHook(TableHook[SQLTableStore], abc.ABC):
             "View source table `View(src=...)` not found in input tables. Please make sure to put the "
             "exact table references as you received them as task inputs. "
         )
-        if isinstance(src, Iterable):
-            replaced_src = [input_table_mapping.get(id(src_tbl)) for src_tbl in src]
+        if isinstance(src, Iterable) and not cls.is_iterable_table(src):
+            # Lookup both the src and src.obj if it is a Table. This is necessary for auto-table classes.
+            replaced_src = [
+                input_table_mapping.get(id(src_tbl))
+                or (input_table_mapping.get(id(src_tbl.obj)) if isinstance(src, Table) else None)
+                for src_tbl in src
+            ]
             if any(tbl is None for tbl in replaced_src):
                 for src_tbl in src:
-                    src_raw_tbl = input_table_mapping.get(id(src_tbl))
+                    src_raw_tbl = input_table_mapping.get(id(src_tbl)) or (
+                        input_table_mapping.get(id(src_tbl.obj)) if isinstance(src, Table) else None
+                    )
                     if src_raw_tbl is None:
                         raise ValueError(msg + f"View source({type(src_tbl)}): '{src_tbl}'")
             replaced_src = [tbl for tbl, _ in replaced_src]  # only dag.Table is relevant in tuple result
@@ -696,7 +716,10 @@ class BaseViewMaterializationHook(TableHook[SQLTableStore], abc.ABC):
                 return replaced_src[0]
             return replaced_src
 
-        src_raw_tbl = input_table_mapping.get(id(src))
+        # Lookup both the src and src.obj if it is a Table. This is necessary for auto-table classes.
+        src_raw_tbl = input_table_mapping.get(id(src)) or (
+            input_table_mapping.get(id(src.obj)) if isinstance(src, Table) else None
+        )
         if src_raw_tbl is None:
             raise ValueError(msg + f"View source({type(src)}): '{src}'")
         return src_raw_tbl[0]  # drop second tuple result
@@ -806,11 +829,16 @@ class ViewStrMaterializationHook(BaseViewMaterializationHook):
 class ViewSqlalchemyMaterializationHook(BaseViewMaterializationHook):
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanMatResult:
-        task = TaskContext.get().task
+        try:
+            task = TaskContext.get().task
+        except LookupError:
+            # This happens for SqlTableStore._copy_table() in background thread, but this will never
+            # happen for materializing views (which is more preparing for serialization).
+            return CanMatResult.NO
         if not isinstance(task, MaterializingTask):
             return CanMatResult.NO
         input_type = task._input_type
-        return CanMatResult.new(tbl.view is not None and input_type == sa.Table)
+        return CanMatResult.YES_BUT_DONT_CACHE if tbl.view is not None and input_type == sa.Table else CanMatResult.NO
 
     @classmethod
     def get_column_label(cls, col: sa.Column | sa.sql.elements.Label | str):
@@ -1885,24 +1913,64 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
 class ViewPdtMaterializationHook(BaseViewMaterializationHook):
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanMatResult:
-        task = TaskContext.get().task
+        try:
+            task = TaskContext.get().task
+        except LookupError:
+            # This happens for SqlTableStore._copy_table() in background thread, but this will never
+            # happen for materializing views (which is more preparing for serialization).
+            return CanMatResult.NO
         if not isinstance(task, MaterializingTask):
             return CanMatResult.NO
         input_type = task._input_type
-        return CanMatResult.new(tbl.view is not None and issubclass(input_type, (Polars, SqlAlchemy, Pandas)))
+        return (
+            CanMatResult.YES_BUT_DONT_CACHE
+            if tbl.view is not None and issubclass(input_type, (Polars, SqlAlchemy, Pandas))
+            else CanMatResult.NO
+        )
+
+    @classmethod
+    def is_iterable_table(cls, src: Any) -> bool:
+        # pydiverse transform tables are iterable thus the detection of multiple source tables must be adjusted
+        return isinstance(src, pdt.Table)
 
     @classmethod
     def get_column_name(cls, col: ColExpr | str):
         if isinstance(col, str):
             return col
+        # use pydiverse.transform iternals to get underlying Column of expressions like col.ascending()
+        from pydiverse.transform._internal.tree.col_expr import ColFn
+
+        while isinstance(col, ColFn):
+            col = next(col.iter_children())
         return col.name
 
     @classmethod
     def get_column_order(cls, col: str | SortCol | ColExpr):
         if isinstance(col, SortCol):
-            return SortCol(cls.get_column_name(col.col), col.order)
+            return SortCol(cls.get_column_name(col.col), col.order, col.nulls_first)
         else:
-            return SortCol(cls.get_column_name(col), SortOrder.ASC)
+            order, nulls_first = cls.extract_sort_opts(col)
+            return SortCol(cls.get_column_name(col), order, nulls_first)
+
+    @staticmethod
+    def extract_sort_opts(col: str | ColExpr) -> tuple[SortOrder, bool]:
+        # use pydiverse.transform iternals to figure out descending()/ascending() or nulls_first()/nulls_last()
+        from pydiverse.transform._internal.tree.col_expr import ColFn
+
+        order = None
+        nulls_first = None
+        col_it = col
+        while isinstance(col_it, ColFn):
+            if col_it.op.name == "descending":
+                order = SortOrder.DESC
+            elif col_it.op.name == "ascending":
+                order = SortOrder.ASC
+            elif col_it.op.name == "nulls_first":
+                nulls_first = True
+            elif col_it.op.name == "nulls_last":
+                nulls_first = False
+            col_it = next(col_it.iter_children())
+        return order, nulls_first
 
 
 # endregion

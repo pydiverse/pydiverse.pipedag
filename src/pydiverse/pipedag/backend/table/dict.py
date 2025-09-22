@@ -150,6 +150,8 @@ class PandasTableHook(TableHook[DictTableStore]):
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type, limit: int | None = None):
+        if table.view is not None:
+            raise NotImplementedError("View is not implemented for DictTableStore")
         df = store.store[stage_name][table.name]
         if limit:
             df = df[:limit]
@@ -203,6 +205,8 @@ class PydiverseTransformTableHook(TableHook[DictTableStore]):
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type, limit: int | None = None):
+        if table.view is not None:
+            raise NotImplementedError("View is not implemented for DictTableStore")
         df = PandasTableHook.retrieve(store, table, stage_name, pd.DataFrame, limit)
         from pydiverse.transform import Polars
 

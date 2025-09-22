@@ -788,14 +788,21 @@ class View:
                 assert all(tbl.view is None for tbl in src)
             else:
                 assert isinstance(src, Table)
-                assert src.view is None
+                assert src.view is None  # nested Views must be fused
             if isinstance(columns, Mapping):
                 assert all(isinstance(c, str) for c in columns.keys())
                 assert all(isinstance(c, str) for c in columns.values())
             elif isinstance(columns, Iterable) and not isinstance(columns, str):
                 assert all(isinstance(c, str) for c in columns)
             else:
-                assert isinstance(columns, str)
+                assert isinstance(columns, str | None)
+            if isinstance(sort_by, Iterable) and not isinstance(sort_by, str):
+                assert all(isinstance(c, SortCol) for c in sort_by)
+                assert all(isinstance(c.col, str) for c in sort_by)
+            elif isinstance(sort_by, SortCol):
+                assert isinstance(sort_by.col, str)
+            else:
+                assert sort_by is None
 
     def clone_assert_normalized(self):
         return View(self.src, columns=self.columns, sort_by=self.sort_by, limit=self.limit, assert_normalized=True)
