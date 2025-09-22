@@ -19,6 +19,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     DropView,
 )
 from pydiverse.pipedag.container import ExternalTableReference, Schema, Table
+from pydiverse.pipedag.context.context import CacheValidationMode
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
@@ -163,6 +164,7 @@ def test_table_store():
             _ = m.assert_table_equal(external_view_polars, expected_external_view, check_dtype=False)
             _ = m.assert_table_equal(external_view_lazy_polars, expected_external_view, check_dtype=False)
 
+    assert f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID).successful
     assert f.run().successful
     assert f.run().successful
 

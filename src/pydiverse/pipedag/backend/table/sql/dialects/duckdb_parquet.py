@@ -961,6 +961,8 @@ class PandasTableHook(TableHook[ParquetTableStore]):
             ads = ads.scanner(columns={k: pc.field(v) for k, v in view.columns.items()} if view.columns else None)
             if view.limit is not None:
                 ads = ads.head(view.limit)
+            else:
+                ads = ads.to_table()  # whole table (needed for to_pandas below)
             df = ads.to_pandas()
         else:
             if limit is not None:
@@ -1066,15 +1068,22 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
         _ = as_type
         if table.view:
             view = table.view
-            # file_paths = [store.get_table_path(tbl) for tbl in view.src]
-            file_paths = store.get_table_paths(view.src)
+            if isinstance(view.src, Iterable):
+                file_paths = [store.get_table_path(tbl) for tbl in view.src]
+                protocol = file_paths[0].protocol
+            else:
+                file_paths = store.get_table_path(view.src)
+                protocol = file_paths.protocol
             lf = pl.scan_parquet(
-                file_paths, n_rows=limit, storage_options=store.get_storage_options("polars", file_paths[0].protocol)
+                file_paths, n_rows=limit, storage_options=store.get_storage_options("polars", protocol)
             )
             if view.sort_by is not None:
-                lf = lf.sort_by(view.sort_by)
+                sort_cols = [c.col for c in view.sort_by]
+                sort_desc = [c.order == SortOrder.DESC for c in view.sort_by]
+                sort_nulls_last = [c.nulls_first == False for c in view.sort_by]  # noqa: E712
+                lf = lf.sort(sort_cols, descending=sort_desc, nulls_last=sort_nulls_last)
             if view.columns is not None:
-                lf = lf.select(view.columns)
+                lf = lf.select(**view.columns)
             if view.limit:
                 lf = lf.limit(view.limit)
             return lf.collect()
