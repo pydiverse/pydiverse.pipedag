@@ -794,7 +794,7 @@ class MaterializationWrapper:
         store: "PipeDAGStore",
         bound: inspect.BoundArguments,
     ) -> str:
-        args, kwargs = store.dematerialize_task_inputs(task, bound.args, bound.kwargs, for_auto_versioning=True)
+        args, kwargs, _ = store.dematerialize_task_inputs(task, bound.args, bound.kwargs, for_auto_versioning=True)
 
         try:
             result = self.fn(*args, **kwargs)

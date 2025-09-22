@@ -311,6 +311,50 @@ def get_view_query(view: View, store: SQLTableStore):
     return query
 
 
+def get_view_query_pdt(view: View, store: SQLTableStore, name: str, stage_name: str, limit: int | None):
+    assert view.assert_normalized
+    if isinstance(view.src, Iterable):
+        raise NotImplementedError(
+            "View dematerialization with pydiverse.transform input_type and "
+            "multiple source tables is not implemented yet."
+        )
+        # src_tables = [
+        #     SQLAlchemyTableHook.retrieve(store, src_tbl, src_tbl.stage.current_name, sa.Table) for src_tbl in view.src
+        # ]
+        # assert len(src_tables) > 0
+        # tbls = [
+        #     pdt.Table(alias.original.name, SqlAlchemy(store.engine, schema=alias.original.schema), name=src_tbl.name)
+        #     for alias, src_tbl in zip(src_tables, view.src)
+        # ]
+        # base_from = pdt.union_all(*tbls)
+    hook = store.get_r_table_hook(sa.Table)
+    sa_tbl = hook.retrieve(store, view.src, stage_name, sa.Table, limit=None)
+    tbl = pdt.Table(sa_tbl.original.name, SqlAlchemy(store.engine, schema=sa_tbl.original.schema), name=name)
+
+    def pdt_sort_col(tbl: pdt.Table, col: SortCol):
+        if col.order == SortOrder.DESC:
+            c = tbl[col.col].descending()
+        else:
+            c = tbl[col.col]
+        if col.nulls_first:
+            c = c.nulls_first()
+        elif col.nulls_first == False:  # noqa: E712
+            c = c.nulls_last()
+        return c
+
+    if view.sort_by is not None:
+        tbl = tbl >> pdt.arrange(*[pdt_sort_col(tbl, col) for col in view.sort_by])
+
+    if view.columns is not None:
+        tbl = tbl >> pdt.rename({v: k for k, v in view.columns.items()}) >> pdt.select(*view.columns.keys())
+
+    limit = min(limit, view.limit) if limit is not None and view.limit is not None else (view.limit or limit)
+    if limit is not None:
+        tbl = tbl >> pdt.slice_head(limit)
+
+    return tbl
+
+
 @SQLTableStore.register_table()
 class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @dataclass  # consider using pydantic instead
@@ -1851,11 +1895,14 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
             lf = hook.retrieve(store, table, stage_name, pl.DataFrame, limit)
             return pdt.Table(lf, name=table.name)
         elif issubclass(as_type, SqlAlchemy):
-            hook = store.get_r_table_hook(sa.Table)
-            sa_tbl = hook.retrieve(store, table, stage_name, sa.Table, limit)
-            return pdt.Table(
-                sa_tbl.original.name, SqlAlchemy(store.engine, schema=sa_tbl.original.schema), name=table.name
-            )
+            if table.view is not None:
+                return get_view_query_pdt(table.view, store, table.name, stage_name, limit)
+            else:
+                hook = store.get_r_table_hook(sa.Table)
+                sa_tbl = hook.retrieve(store, table, stage_name, sa.Table, limit)
+                return pdt.Table(
+                    sa_tbl.original.name, SqlAlchemy(store.engine, schema=sa_tbl.original.schema), name=table.name
+                )
         elif issubclass(as_type, Pandas):
             import pandas as pd
 

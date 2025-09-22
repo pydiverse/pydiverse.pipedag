@@ -127,6 +127,12 @@ def create_view_pdt2(tbl: pdt.Table, tbl2: pdt.Table):
 
 
 @materialize(input_type=pdt.SqlAlchemy, lazy=True)
+def create_view_pdt2b(tbl: pdt.Table, tbl2: pdt.Table):
+    # currently, multi-source views are not supported by consuming tasks with input_type=pdt.Sqlalchemy
+    return Table(View(src=tbl, sort_by=[tbl.col2.descending(), tbl2.col1], columns=[C.col1], limit=2))
+
+
+@materialize(input_type=pdt.SqlAlchemy, lazy=True)
 def create_view_view_pdt1(tbl: pdt.Table):
     return Table(View(src=tbl, columns=tbl.c1))
 
@@ -170,12 +176,16 @@ def test_materialize_view(imperative):
 @pytest.mark.parametrize("imperative", [False, True])
 def test_materialize_view_pdt(imperative):
     @materialize(input_type=pdt.SqlAlchemy, lazy=True)
-    def noop_lazy_pdt(tbl: pdt.Table):
-        return tbl
+    def noop_lazy_pdt(tbl: pdt.Table, name: str | None = None):
+        if name is None:
+            return tbl
+        return tbl >> pdt.alias(name)
 
     @materialize(input_type=pdt.Polars, version=AUTO_VERSION)
-    def noop_pdt(tbl: pdt.Table):
-        return tbl
+    def noop_pdt(tbl: pdt.Table, name: str | None = None):
+        if name is None:
+            return tbl
+        return tbl >> pdt.alias(name)
 
     logger = structlog.getLogger(__name__ + ".test_materialize_view_pdt")
     _m = m if not imperative else m2
@@ -186,25 +196,26 @@ def test_materialize_view_pdt(imperative):
             a = create_view1(x)
             y = create_view_pdt1(x)
             z = create_view_pdt2(x, x2)
+            zb = create_view_pdt2b(x, x2)  # workaround
             k = create_view_view_pdt1(y)
             la = create_view_view_pdt1(a)
-            n = create_view_view_pdt2(z)
+            n = create_view_view_pdt2(zb)
             yy = _m.noop(y)
             zz = _m.noop(z)
             kk = _m.noop(k)
             nn = _m.noop(n)
-            pdt_aa = noop_pdt(a)
-            pdt_yy = noop_pdt(y)
-            pdt_zz = noop_pdt(z)
-            pdt_kk = noop_pdt(k)
-            pdt_nn = noop_pdt(n)
+            pdt_aa = noop_pdt(a, name="aa")
+            pdt_yy = noop_pdt(y, name="yy")
+            pdt_zz = noop_pdt(z, name="zz")
+            pdt_kk = noop_pdt(k, name="kk")
+            pdt_nn = noop_pdt(n, name="nn")
             yy_lazy = _m.noop_lazy(y)
             zz_lazy = _m.noop_lazy(z)
-            pdt_aa_lazy = noop_lazy_pdt(a)
-            pdt_yy_lazy = noop_lazy_pdt(y)
-            pdt_zz_lazy = noop_lazy_pdt(z)
-            pdt_kk_lazy = noop_lazy_pdt(k)
-            pdt_nn_lazy = noop_lazy_pdt(n)
+            pdt_aa_lazy = noop_lazy_pdt(a, name="laa")
+            pdt_yy_lazy = noop_lazy_pdt(y, name="lyy")
+            pdt_zz_lazy = noop_lazy_pdt(zb, name="lzz")
+            pdt_kk_lazy = noop_lazy_pdt(k, name="lkk")
+            pdt_nn_lazy = noop_lazy_pdt(n, name="lnn")
             _ = (
                 la,
                 yy,
