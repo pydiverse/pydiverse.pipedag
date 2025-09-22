@@ -30,7 +30,7 @@ pytestmark = [with_instances(DATABASE_INSTANCES)]
 
 @skip_instances("parquet_backend", "parquet_s3_backend", "parquet_s3_backend_db2")
 def test_smoke_table_reference():
-    @materialize(version="1.1")
+    @materialize(lazy=True)
     def in_table():
         table_store = ConfigContext.get().store.table_store
         schema = Schema("user_controlled_schema", prefix="", suffix="")

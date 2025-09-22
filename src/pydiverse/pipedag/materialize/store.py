@@ -136,6 +136,7 @@ class BaseTableStore(TableHookResolver, Disposable):
         Used when `lazy = True` is set for a materializing task.
         """
         config_context = ConfigContext.get()
+        hook = None
         try:
             hook = self.get_m_table_hook(table)
             query_str = hook.lazy_query_str(self, table.obj)
@@ -176,7 +177,13 @@ class BaseTableStore(TableHookResolver, Disposable):
                 cache_metadata=metadata,
             )
             RunContext.get().trace_hook.cache_init_transfer(task, table)
-            self.copy_lazy_table_to_transaction(metadata, table)
+            if table.external_schema is None and table.view is None:
+                # skip copying for external table references and views
+                self.copy_lazy_table_to_transaction(metadata, table)
+            elif table.view is not None:
+                assert hook is not None
+                # materialization of view needs to be called for converting view into JSON serializable form
+                hook.materialize(self, table, table.stage.current_name)
             self.logger.info(f"Lazy cache of table '{table.name}' found")
         except CacheError as e:
             # Either not found in cache, or copying failed
@@ -754,7 +761,7 @@ class PipeDAGStore(Disposable):
         kwargs: dict[str, Materializable],
         *,
         for_auto_versioning: bool = False,
-    ) -> tuple[tuple, dict]:
+    ) -> tuple[tuple[Any], dict[str, Any], dict[Any, Table]]:
         """Loads the inputs for a task from the storage backends
 
         Traverses the function arguments and replaces all `Table` and
@@ -769,6 +776,7 @@ class PipeDAGStore(Disposable):
         """
 
         ctx = RunContext.get()
+        input_table_mapping = {}
 
         def dematerialize_mapper(x):
             ret = self.dematerialize_item(
@@ -777,6 +785,8 @@ class PipeDAGStore(Disposable):
                 ctx=ctx,
                 for_auto_versioning=for_auto_versioning,
             )
+            if isinstance(x, Table):
+                input_table_mapping[id(ret)] = x, ret
             if task._add_input_source and isinstance(x, (Table, Blob, RawSql)):
                 return ret, x
             return ret
@@ -784,7 +794,7 @@ class PipeDAGStore(Disposable):
         d_args = deep_map(args, dematerialize_mapper)
         d_kwargs = deep_map(kwargs, dematerialize_mapper)
 
-        return d_args, d_kwargs
+        return d_args, d_kwargs, input_table_mapping
 
     def materialize_task(
         self,

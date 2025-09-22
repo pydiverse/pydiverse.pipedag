@@ -8,11 +8,14 @@ import pytest
 import sqlalchemy as sa
 import structlog
 
-from pydiverse.pipedag import ConfigContext, Flow, Stage, Table, materialize
+from pydiverse.pipedag import AUTO_VERSION, ConfigContext, Flow, Stage, Table, materialize
+from pydiverse.pipedag.container import SortCol, SortOrder, View
 from pydiverse.pipedag.context import FinalTaskState, RunContext, StageLockContext
 from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.context.trace_hook import PrintTraceHook
 from pydiverse.pipedag.core.config import PipedagConfig
+from pydiverse.pipedag.optional_dependency.sqlalchemy import Alias
+from pydiverse.pipedag.optional_dependency.transform import C, pdt
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import (
@@ -93,35 +96,139 @@ def test_materialize_table(imperative):
     assert f.run().successful
 
 
-# @materialize(input_type=sa.Table, lazy=True)
-# def create_view1(tbl: Alias):
-#     return Table(View(src=tbl, sort=tbl.c.col2, columns=tbl.c.col1, limit=2))
-#
-#
-# @materialize(input_type=sa.Table, lazy=True)
-# def create_view2(tbl: Alias, tbl2: Alias):
-#     return Table(View(src=[tbl, tbl2], sort=[tbl.c.col2, tbl.c.col1], columns=[tbl.c.col1], limit=2))
-#
-#
-# @materialize(input_type=pdt.SqlAlchemy, lazy=True)
-# def create_view1(tbl: Alias):
-#     return Table(View(src=tbl, sort=tbl.c.col2, columns=tbl.c.col1, limit=2))
-#
-#
-# @materialize(input_type=sa.Table, lazy=True)
-# def create_view2(tbl: Alias, tbl2: Alias):
-#     return Table(View(src=[tbl, tbl2], sort=[tbl.c.col2, tbl.c.col1], columns=[tbl.c.col1], limit=2))
+@materialize(input_type=sa.Table, lazy=True)
+def create_view1(tbl: Alias):
+    return Table(View(src=tbl, sort_by=tbl.c.col2, columns=tbl.c.col1.label("c1"), limit=2))
+
+
+@materialize(input_type=sa.Table, lazy=True)
+def create_view2(tbl: Alias, tbl2: Alias):
+    return Table(View(src=[tbl, tbl2], sort_by=[tbl.c.col2.desc(), tbl.c.col1], columns=[tbl.c.col1], limit=2))
+
+
+@materialize(input_type=sa.Table, lazy=True)
+def create_view_view1(tbl: Alias):
+    return Table(View(src=tbl, columns=tbl.c.c1))
+
+
+@materialize(input_type=sa.Table, lazy=True)
+def create_view_view2(tbl: Alias):
+    return Table(View(src=tbl, sort_by=SortCol(tbl.c.col1, SortOrder.DESC), limit=3))
+
+
+@materialize(input_type=pdt.SqlAlchemy, lazy=True)
+def create_view_pdt1(tbl: pdt.Table):
+    return Table(View(src=tbl, sort_by=tbl.col2, columns=dict(c1=tbl.col1), limit=2))
+
+
+@materialize(input_type=pdt.SqlAlchemy, lazy=True)
+def create_view_pdt2(tbl: pdt.Table, tbl2: pdt.Table):
+    return Table(View(src=[tbl, tbl2], sort_by=[tbl.col2.descending(), tbl2.col1], columns=[C.col1], limit=2))
+
+
+@materialize(input_type=pdt.SqlAlchemy, lazy=True)
+def create_view_view_pdt1(tbl: pdt.Table):
+    return Table(View(src=tbl, columns=tbl.c1))
+
+
+@materialize(input_type=pdt.SqlAlchemy, lazy=True)
+def create_view_view_pdt2(tbl: pdt.Table):
+    return Table(View(src=tbl, sort_by=[tbl.col1], limit=3))
 
 
 @pytest.mark.parametrize("imperative", [False, True])
 def test_materialize_view(imperative):
+    logger = structlog.getLogger(__name__ + ".test_materialize_view")
     _m = m if not imperative else m2
     with Flow("flow") as f:
         with Stage("stage"):
             x = _m.simple_dataframe()
-            _m.assert_table_equal(x, x)
+            x2 = _m.noop(x)
+            y = create_view1(x)
+            z = create_view2(x, x2)
+            k = create_view_view1(y)
+            n = create_view_view2(z)
+            yy = _m.noop(y)
+            zz = _m.noop(z)
+            kk = _m.noop(k)
+            nn = _m.noop(n)
+            yy_lazy = _m.noop_lazy(y)
+            zz_lazy = _m.noop_lazy(z)
+            kk_lazy = _m.noop_lazy(k)
+            nn_lazy = _m.noop_lazy(n)
+            _ = yy, zz, kk, nn, yy_lazy, zz_lazy, kk_lazy, nn_lazy
 
-    assert f.run().successful
+    assert f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID).successful
+
+    for i in range(2):
+        logger.info(f"** Starting run: {i}")
+        # run three times to test some caching behavior (this is at least a smoke test for caching)
+        assert f.run().successful
+
+
+@pytest.mark.skipif(C is None, reason="Pydiverse.transform not available")
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_view_pdt(imperative):
+    @materialize(input_type=pdt.SqlAlchemy, lazy=True)
+    def noop_lazy_pdt(tbl: pdt.Table):
+        return tbl
+
+    @materialize(input_type=pdt.Polars, version=AUTO_VERSION)
+    def noop_pdt(tbl: pdt.Table):
+        return tbl
+
+    logger = structlog.getLogger(__name__ + ".test_materialize_view_pdt")
+    _m = m if not imperative else m2
+    with Flow("flow") as f:
+        with Stage("stage"):
+            x = _m.simple_dataframe()
+            x2 = _m.noop(x)
+            a = create_view1(x)
+            y = create_view_pdt1(x)
+            z = create_view_pdt2(x, x2)
+            k = create_view_view_pdt1(y)
+            la = create_view_view_pdt1(a)
+            n = create_view_view_pdt2(z)
+            yy = _m.noop(y)
+            zz = _m.noop(z)
+            kk = _m.noop(k)
+            nn = _m.noop(n)
+            pdt_aa = noop_pdt(a)
+            pdt_yy = noop_pdt(y)
+            pdt_zz = noop_pdt(z)
+            pdt_kk = noop_pdt(k)
+            pdt_nn = noop_pdt(n)
+            yy_lazy = _m.noop_lazy(y)
+            zz_lazy = _m.noop_lazy(z)
+            pdt_aa_lazy = noop_lazy_pdt(a)
+            pdt_yy_lazy = noop_lazy_pdt(y)
+            pdt_zz_lazy = noop_lazy_pdt(z)
+            pdt_kk_lazy = noop_lazy_pdt(k)
+            pdt_nn_lazy = noop_lazy_pdt(n)
+            _ = (
+                la,
+                yy,
+                zz,
+                kk,
+                nn,
+                pdt_aa,
+                pdt_yy,
+                pdt_zz,
+                pdt_kk,
+                pdt_nn,
+                yy_lazy,
+                zz_lazy,
+                pdt_aa_lazy,
+                pdt_yy_lazy,
+                pdt_zz_lazy,
+                pdt_kk_lazy,
+                pdt_nn_lazy,
+            )
+
+    for i in range(3):
+        logger.info(f"** Starting run: {i}")
+        # run three times to test some caching behavior (this is at least a smoke test for caching)
+        assert f.run().successful
 
 
 @pytest.mark.parametrize("imperative", [False, True])

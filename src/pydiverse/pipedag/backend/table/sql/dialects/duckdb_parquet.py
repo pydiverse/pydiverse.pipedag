@@ -4,7 +4,7 @@
 import os
 import shutil
 import uuid
-from typing import Any, Literal
+from typing import Any, Iterable, Literal
 
 import duckdb
 import fsspec
@@ -23,6 +23,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
 )
 from pydiverse.pipedag.backend.table.sql.dialects.duckdb import DuckDBTableStore
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
+from pydiverse.pipedag.container import SortOrder
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.materialize.store import BaseTableStore
 from pydiverse.pipedag.materialize.table_hook_base import (
@@ -746,7 +747,6 @@ class ParquetTableStore(DuckDBTableStore):
         self,
         table: Table,
         file_extension: str = ".parquet",
-        lookup_schema: bool = False,
     ) -> UPath:
         store = ConfigContext.get().store.table_store
         schema_name = table.stage.current_name
@@ -927,29 +927,50 @@ class PandasTableHook(TableHook[ParquetTableStore]):
         as_type: type,
         limit: int | None = None,
     ):
-        path = store.get_table_path(table, lookup_schema=True)
+        path = store.get_table_path(table)
         import pyarrow.dataset as ds
-        import pyarrow.fs
 
-        if path.protocol == "s3" and (store.s3_endpoint_url or store.s3_region):
-            # Setting endpoint URL is different for fsspec, pyarrow, duckdb, polars, and pandas.
-            # ParquetTableStore allows setting endpoint_url in pipedag.yaml and copies it to fsspec and duckdb.
-            # Here, we copy it from fsspec to pyarrow.
-            pyarrow_path = path.path
-            # unfortunately, force_virtual_addressing=store.s3_url_style=="path" does not work for
-            # pyarrow.parquet.read_schema(pyarrow_path, filesystem=pyarrow_fs)
-            pyarrow_fs = pyarrow.fs.S3FileSystem(endpoint_override=store.s3_endpoint_url, region=store.s3_region)
-        else:
-            pyarrow_path = path
-            pyarrow_fs = None
+        pyarrow_path, pyarrow_fs = cls.get_pyarrow_path(path, store)
+        first_pyarrow_path = pyarrow_path
 
-        if limit is not None:
-            df = ds.dataset(pyarrow_path, filesystem=pyarrow_fs).scanner().head(limit).to_pandas()
+        if table.view:
+            view = table.view
+            if isinstance(view.src, Iterable):
+                path = [store.get_table_path(tbl) for tbl in view.src]
+                pyarrow_path = [cls.get_pyarrow_path(p, store)[0] for p in path]
+                first_pyarrow_path = pyarrow_path[0]
+            else:
+                path = store.get_table_path(view.src)
+                pyarrow_path, _ = cls.get_pyarrow_path(path, store)
+                first_pyarrow_path = pyarrow_path
+
+            ads = ds.dataset(pyarrow_path, filesystem=pyarrow_fs)
+            if view.sort_by is not None:
+                # Unfortunately this loads the full table with all columns in memory.
+                # Calling PolarsTableHook might be more efficient if a dataset is large and many
+                # columns are dropped in view.columns.
+                sort_cols = view.sort_by if isinstance(view.sort_by, Iterable) else [view.sort_by]
+                ads = ads.sort_by(
+                    [
+                        (sort_col.col, "descending" if sort_col.order == SortOrder.DESC else "ascending")
+                        for sort_col in sort_cols
+                    ]
+                )
+            import pyarrow.compute as pc
+
+            ads = ads.scanner(columns={k: pc.field(v) for k, v in view.columns.items()} if view.columns else None)
+            if view.limit is not None:
+                ads = ads.head(view.limit)
+            df = ads.to_pandas()
         else:
-            df = pd.read_parquet(path, storage_options=store.get_storage_options("fsspec", path.protocol))
+            if limit is not None:
+                df = ds.dataset(pyarrow_path, filesystem=pyarrow_fs).scanner().head(limit).to_pandas()
+            else:
+                df = pd.read_parquet(path, storage_options=store.get_storage_options("fsspec", path.protocol))
         import pyarrow.parquet
 
-        schema = pyarrow.parquet.read_schema(pyarrow_path, filesystem=pyarrow_fs)
+        # attention: with categorical columns, it might be necessary to fuse dictionaries of all parquet files
+        schema = pyarrow.parquet.read_schema(first_pyarrow_path, filesystem=pyarrow_fs)
         df = df.astype(
             {
                 col: "datetime64[s]"
@@ -981,6 +1002,23 @@ class PandasTableHook(TableHook[ParquetTableStore]):
         if table.name is not None:
             df.attrs["name"] = table.name
         return df
+
+    @staticmethod
+    def get_pyarrow_path(path: UPath, store: ParquetTableStore) -> tuple[str, fsspec.AbstractFileSystem]:
+        if path.protocol == "s3" and (store.s3_endpoint_url or store.s3_region):
+            # Setting endpoint URL is different for fsspec, pyarrow, duckdb, polars, and pandas.
+            # ParquetTableStore allows setting endpoint_url in pipedag.yaml and copies it to fsspec and duckdb.
+            # Here, we copy it from fsspec to pyarrow.
+            pyarrow_path = path.path
+            # unfortunately, force_virtual_addressing=store.s3_url_style=="path" does not work for
+            # pyarrow.parquet.read_schema(pyarrow_path, filesystem=pyarrow_fs)
+            import pyarrow.fs
+
+            pyarrow_fs = pyarrow.fs.S3FileSystem(endpoint_override=store.s3_endpoint_url, region=store.s3_region)
+        else:
+            pyarrow_path = path
+            pyarrow_fs = None
+        return pyarrow_path, pyarrow_fs
 
     @classmethod
     def auto_table(cls, obj: pd.DataFrame):
@@ -1026,11 +1064,26 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
         limit: int | None = None,
     ) -> pl.DataFrame:
         _ = as_type
-        file_path = store.get_table_path(table)
-        df = pl.read_parquet(
-            file_path, n_rows=limit, storage_options=store.get_storage_options("polars", file_path.protocol)
-        )
-        return df
+        if table.view:
+            view = table.view
+            # file_paths = [store.get_table_path(tbl) for tbl in view.src]
+            file_paths = store.get_table_paths(view.src)
+            lf = pl.scan_parquet(
+                file_paths, n_rows=limit, storage_options=store.get_storage_options("polars", file_paths[0].protocol)
+            )
+            if view.sort_by is not None:
+                lf = lf.sort_by(view.sort_by)
+            if view.columns is not None:
+                lf = lf.select(view.columns)
+            if view.limit:
+                lf = lf.limit(view.limit)
+            return lf.collect()
+        else:
+            file_path = store.get_table_path(table)
+            df = pl.read_parquet(
+                file_path, n_rows=limit, storage_options=store.get_storage_options("polars", file_path.protocol)
+            )
+            return df
 
 
 @ParquetTableStore.register_table(pl)

@@ -4,7 +4,9 @@
 import copy
 import inspect
 import typing
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from enum import Enum
 from functools import total_ordering
 from typing import TYPE_CHECKING, Any, Generic, overload
 
@@ -108,6 +110,7 @@ class Table(Generic[T]):
         self.stage: Stage | None = None
         self.external_schema: str | None = None
         self.shared_lock_allowed: bool = True
+        self.view: View | None = None
 
         # arguments
         self.obj = obj
@@ -157,6 +160,11 @@ class Table(Generic[T]):
                 )
             self.name = self.obj.name
             self.shared_lock_allowed = self.obj.shared_lock_allowed
+
+        # View needs to be materialized and dematerialized within Table because it is
+        # executed during retrieval of consuming task inputs
+        if isinstance(self.obj, View):
+            self.view = self.obj
 
         # cache_key will be overridden shortly before handing over to downstream tasks
         # that use it to compute their input_hash for cache_invalidation due to input
@@ -333,7 +341,20 @@ class Table(Generic[T]):
         return state
 
     def __lt__(self, other):
+        if self.external_schema is not None or other.external_schema is not None:
+            if self.external_schema is None and other.external_schema is not None:
+                return True
+            if self.external_schema is not None and other.external_schema is None:
+                return False
+            if self.external_schema < other.external_schema:
+                return True
+            if self.external_schema > other.external_schema:
+                return False
         if self.stage is not None or other.stage is not None:
+            if self.stage is None and other.stage is not None:
+                return True
+            if self.stage is not None and other.stage is None:
+                return False
             if self.stage < other.stage:
                 return True
             if self.stage > other.stage:
@@ -343,10 +364,22 @@ class Table(Generic[T]):
     def __eq__(self, other: "Table"):
         if not isinstance(other, Table):
             return False
-        return self.name == other.name and (self.stage == other.stage or (self.stage is None and other.stage is None))
+        return (
+            self.name == other.name
+            and (self.stage == other.stage or (self.stage is None and other.stage is None))
+            and (
+                self.external_schema == other.external_schema
+                or (self.external_schema is None and other.external_schema is None)
+            )
+        )
 
     def __hash__(self):
-        return hash(self.name) if self.stage is None else hash((self.name, self.stage))
+        a = [self.name]
+        if self.stage is not None:
+            a.append(self.stage)
+        if self.external_schema is not None:
+            a.append(self.external_schema)
+        return hash(tuple(a))
 
 
 class RawSql:
@@ -638,9 +671,33 @@ class ExternalTableReference:
         self.shared_lock_allowed = shared_lock_allowed
 
     def __repr__(self):
-        return f"<ExternalTableReference: {hex(id(self))} (schema: {self.schema})>"
+        return (
+            f"<ExternalTableReference: '{self.name}' (schema: {self.schema}, lock_allowed={self.shared_lock_allowed})>"
+        )
 
 
+class SortOrder(Enum):
+    ASC = 0
+    DESC = 1
+
+
+@dataclass
+class SortCol:
+    col: str
+    order: SortOrder = SortOrder.ASC
+    nulls_first: bool | None = None  # whether nulls should be ordered first
+
+    def sql(self, sqlalchemy_collection):
+        ret = sqlalchemy_collection[self.col]
+        ret = ret.desc() if self.order == SortOrder.DESC else ret.asc()
+        if self.nulls_first:
+            ret = ret.nulls_first()
+        elif self.nulls_first == False:  # noqa: E712 (Don't match None)
+            ret = ret.nulls_last()
+        return ret
+
+
+@dataclass
 class View:
     """Produces a view on pipedag managed tables with caching support.
 
@@ -672,7 +729,7 @@ class View:
                 View(
                     src=tbl,
                     columns={f"c{col}":col for col in cols},
-                    sort=[dag.SortCol("id", desc=True, nulls_last=True), "id2"],
+                    sort_by=[dag.SortCol("id", SortOrder.DESC, nulls_last=True), "id2"],
                     limit=10,
                 ),
                 name="selection",
@@ -689,37 +746,73 @@ class View:
     def __init__(
         self,
         src: Any | Iterable[Any],
-        sort: str | Any | list[str] | list[Any],
-        columns: Iterable[str] | Iterable[Any] | dict[str, str] | dict[str, Any],
+        *,
+        sort_by: str | Any | Iterable[str] | Iterable[SortCol] | Iterable[Any] | None = None,
+        columns: Iterable[str] | Iterable[Any] | Mapping[str, str] | Mapping[str, Any] | str | Any | None = None,
         limit: int | None = None,
+        assert_normalized: bool = False,
     ):
         """
         :param src: The source table(s) or subquery to create the view from.
             Objects should be identical to tables that were given to the function as inputs.
             Consuming tasks will use the union of all those tables as input.
-        :param sort: Optional list of columns to sort the view by. They can be strings or column objects that
+        :param sort_by: Optional list of columns to sort the view by. They can be strings or column objects that
             are understood by the table hook that would materialize the table if it wasn't a View.
-            Column names before renaming are used for sorting.
+            Column names before renaming are used for sorting. SortCol objects may help configuring sort order.
         :param columns: The columns to include in the view. This can either be a list of strings or column
             objects that are understood by the table hook that would materialize the table if it wasn't a View,
+        :param limit:
+            limit number of rows returned by the view
+        :param assert_normalized:
+            Internally a normalization takes place at some point to ensure the View can be passed between tasks
+            of different input_type. This option triggers assertion of construction in case normalization failed.
+            Normalization is input_type dependent and thus needs to be done by materialization hooks.
         """
-        if not isinstance(src, Iterable) or isinstance(src, str):
-            src = [src]
         self.src = src
-        if isinstance(columns, dict):
-            self.columns = columns
-        else:
-            self.columns = {col: col for col in columns}
-        if not isinstance(sort, list):
-            sort = [sort]
-        self.sort = sort
+        self.columns = columns
+        self.sort_by = sort_by
         self.limit = limit
+        self.assert_normalized = assert_normalized
+        assert limit is None or (isinstance(limit, int) and limit >= 0)
+        if isinstance(columns, Mapping):
+            assert all(not isinstance(key, SortCol) for key in columns.keys())
+            assert all(not isinstance(value, SortCol) for value in columns.values())
+        elif isinstance(columns, Iterable):
+            assert all(not isinstance(col, SortCol) for col in columns)
+        else:
+            assert not isinstance(columns, SortCol)
+        if assert_normalized:
+            if isinstance(src, Iterable):
+                assert all(isinstance(tbl, Table) for tbl in src)
+                # nested Views are fused
+                assert all(tbl.view is None for tbl in src)
+            else:
+                assert isinstance(src, Table)
+                assert src.view is None
+            if isinstance(columns, Mapping):
+                assert all(isinstance(c, str) for c in columns.keys())
+                assert all(isinstance(c, str) for c in columns.values())
+            elif isinstance(columns, Iterable) and not isinstance(columns, str):
+                assert all(isinstance(c, str) for c in columns)
+            else:
+                assert isinstance(columns, str)
+
+    def clone_assert_normalized(self):
+        return View(self.src, columns=self.columns, sort_by=self.sort_by, limit=self.limit, assert_normalized=True)
 
     def __repr__(self):
-        return (
-            f"<View: {hex(id(self))} "
-            f"(src: {self.src}, columns: {self.columns}, sort: {self.sort}, limit: {self.limit})>"
-        )
+        # attention: don't put id(self) in here because it is used as lazy query string
+        ret = f"<View: {repr(self.src)}"  # str(src) returns empty string for sqlalchemy aliases
+        params = []
+        if self.columns is not None:
+            params.append(f"columns: {repr(self.columns)}")
+        if self.sort_by is not None:
+            params.append(f"sort_by: {repr(self.sort_by)}")
+        if self.limit is not None:
+            params.append(f"limit: {self.limit}")
+        if len(params) > 0:
+            ret += f" ({', '.join(params)})"
+        return ret + ">"
 
 
 def attach_annotation(annotation: type, arg):

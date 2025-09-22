@@ -250,6 +250,40 @@ def test_change_task_version_table(mocker):
     child_lazy_spy.assert_called_once()
 
 
+def test_change_task_version_table_view(mocker):
+    with Flow() as flow:
+        with Stage("stage_1"):
+            out = m.simple_dataframe()
+            view = m.noop_view(out)
+            child = m.noop(view)
+            child2 = m.noop_sql(view)  # lazy=False task
+            child_lazy = m.noop_lazy(view)  # lazy=True task
+
+    # Initial Call
+    out._internal_version = "VERSION 0"
+    assert flow.run().successful
+
+    # Second Call (Should be cached)
+    out_spy = spy_task(mocker, out)
+    child_spy = spy_task(mocker, child)
+    child2_spy = spy_task(mocker, child2)
+    child_lazy_spy = spy_task(mocker, child_lazy)
+    assert flow.run().successful
+    out_spy.assert_not_called()
+    child_spy.assert_not_called()
+    child2_spy.assert_not_called()
+    child_lazy_spy.assert_called_once()
+
+    # Changing the version should invalidate the cache. This should also invalidate
+    # the child task because it receives the table as input.
+    out._internal_version = "VERSION 1"
+    assert flow.run().successful
+    out_spy.assert_called_once()
+    child_spy.assert_called_once()
+    child2_spy.assert_called_once()
+    child_lazy_spy.assert_called_once()
+
+
 @with_instances("postgres")
 def test_change_task_version_blob(mocker):
     with Flow() as flow:

@@ -657,15 +657,6 @@ class MaterializationWrapper:
                 task = copy.copy(task)
                 task._version = uuid.uuid4().hex
 
-            task_cache_info = TaskCacheInfo(
-                task=task,
-                input_hash=input_hash,
-                cache_fn_hash=cache_fn_hash,
-                cache_key=task_cache_key(task, input_hash, cache_fn_hash),
-                assert_no_materialization=assert_no_fresh_input,
-                force_task_execution=force_task_execution,
-            )
-
             # Compute the input_tables value of the TaskContext
             input_tables = []
 
@@ -678,7 +669,18 @@ class MaterializationWrapper:
             task_context.input_tables = input_tables
 
             # Not found in cache / lazy -> Evaluate Function
-            args, kwargs = store.dematerialize_task_inputs(task, bound.args, bound.kwargs)
+            args, kwargs, task_context.input_table_mapping = store.dematerialize_task_inputs(
+                task, bound.args, bound.kwargs
+            )
+
+            task_cache_info = TaskCacheInfo(
+                task=task,
+                input_hash=input_hash,
+                cache_fn_hash=cache_fn_hash,
+                cache_key=task_cache_key(task, input_hash, cache_fn_hash),
+                assert_no_materialization=assert_no_fresh_input,
+                force_task_execution=force_task_execution,
+            )
 
             def imperative_materialize(
                 table: Table,

@@ -23,6 +23,7 @@ from .container import (
     RawSql,
     Schema,
     Table,
+    View,
     materialize_table,
 )
 from .context import ConfigContext, StageLockContext
@@ -51,6 +52,7 @@ __all__ = [
     "materialize",
     "input_stage_versions",
     "Table",
+    "View",
     "RawSql",
     "Blob",
     "ExternalTableReference",
