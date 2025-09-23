@@ -257,6 +257,7 @@ def test_filter_with_filter_with_rule_violation():
     dy.Column is not None,
     reason="This test only works if dataframely is not installed since we test a fallback mechanism in polars hook",
 )
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
@@ -364,6 +365,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
     dy.Column is not None,
     reason="This test only works if dataframely is not installed since we test a fallback mechanism in polars hook",
 )
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
@@ -441,6 +443,7 @@ def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, vali
     dy.Column is not None,
     reason="This test only works if dataframely is not installed since we test a fallback mechanism in polars hook",
 )
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
@@ -537,6 +540,7 @@ def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, val
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
@@ -636,6 +640,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
     dy.Column is not None,
     reason="This test only works if dataframely is not installed since we test a fallback mechanism in polars hook",
 )
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 def test_type_mapping():
     @materialize(nout=2)
     def get_anno_data() -> tuple[MyFirstColSpec, MySecondColSpec]:
@@ -663,6 +668,7 @@ def standardize_dtype(dtype):
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
