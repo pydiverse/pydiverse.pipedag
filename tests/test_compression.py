@@ -18,6 +18,7 @@ from tests.fixtures.instances import (
     skip_instances,
     with_instances,
 )
+from tests.util import swallowing_raises
 from tests.util import tasks_library as m
 
 pytestmark = [with_instances(DATABASE_INSTANCES)]
@@ -59,7 +60,7 @@ def test_compression(task, stage_materialization_details):
 
     for _ in range(3):
         if not isinstance(store, (MSSqlTableStore, IBMDB2TableStore)) and task != m.simple_dataframe_uncompressed:
-            with pytest.raises(
+            with swallowing_raises(
                 ValueError,
                 match="To silence this exception set strict_materialization_details=False",
             ):
