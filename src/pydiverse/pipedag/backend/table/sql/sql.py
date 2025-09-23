@@ -615,7 +615,7 @@ class SQLTableStore(BaseTableStore):
         if self.strict_materialization_details:
             raise ValueError(f"{error_msg} To silence this exception set strict_materialization_details=False")
         else:
-            self.logger.error(f"{error_msg}")
+            self.logger.warning(f"{error_msg}")
 
     def _set_materialization_details(self, materialization_details: dict[str, dict[str | list[str]]] | None) -> None:
         if materialization_details is not None or self.default_materialization_details is not None:

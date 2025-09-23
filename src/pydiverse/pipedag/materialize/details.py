@@ -76,7 +76,7 @@ class BaseMaterializationDetails(ABC):
             if strict:
                 raise ValueError(f"{error_msg} To silence this exception set strict_materialization_details=False")
             else:
-                logger.error(f"{error_msg} Using __any__ instead.")
+                logger.warning(f"{error_msg} Using __any__ instead.")
                 label = "__any__"
         return getattr(d[label], attribute)
 

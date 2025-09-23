@@ -270,8 +270,8 @@ class ConfigContext(BaseAttrsContext):
     table_hook_args: Box
 
     # INTERNAL FLAGS - ONLY FOR PIPEDAG USE
-    # When set to True, exceptions raised in a flow don't get logged
     _swallow_exceptions: bool = False
+    """When set to True, exceptions raised in a flow don't get logged as error message"""
     _is_evolved: bool = False  # if True, _config_dict might be out of date
 
     @cached_property

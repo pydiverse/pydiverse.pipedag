@@ -253,6 +253,8 @@ def test_materialize_table_subtask(imperative):
             _m.assert_table_equal(x, y)
             _m.assert_table_equal(x, z)
 
+    assert f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID).successful
+    assert f.run().successful
     assert f.run().successful
 
 
@@ -263,7 +265,7 @@ def test_materialize_table_subtask_fail_input_type(imperative):
         with Stage("stage"):
             x = _m.simple_dataframe_subtask()
             _ = _m.noop_subtask_fail_input_type(x)
-    with pytest.raises(RuntimeError, match="does not match parent task input type"):
+    with swallowing_raises(RuntimeError, match="does not match parent task input type"):
         try:
             f.run()
         except BrokenProcessPool as e:
