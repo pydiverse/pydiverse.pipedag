@@ -4,7 +4,7 @@
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 import structlog
 
@@ -12,7 +12,7 @@ from pydiverse.common.util import Disposable, deep_map
 from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import Blob, Schema, Stage, Table
 from pydiverse.pipedag._typing import Materializable, T
-from pydiverse.pipedag.container import RawSql, attach_annotation
+from pydiverse.pipedag.container import ExternalTableReference, RawSql, View, attach_annotation
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.core.config import PipedagConfig
@@ -889,6 +889,7 @@ class PipeDAGStore(Disposable):
         value: Materializable,
     ) -> tuple[Materializable, list[Table], list[RawSql], list[Blob]]:
         tables = []
+        view_src_tables: set[int] = set()
         raw_sqls = []
         blobs = []
 
@@ -898,7 +899,7 @@ class PipeDAGStore(Disposable):
         def preparation_mutator(x):
             # Automatically convert an object to a table / blob if its
             # type is inside either `config.auto_table` or `.auto_blob`.
-            if isinstance(x, config.auto_table):
+            if isinstance(x, config.auto_table) or isinstance(x, View | ExternalTableReference):
                 try:
                     hook = self.table_store.get_m_table_hook(Table(x))
                     x = hook.auto_table(x)
@@ -939,6 +940,15 @@ class PipeDAGStore(Disposable):
                     if x.obj is None:
                         raise TypeError("Underlying table object can't be None")
                     tables.append(x)
+                    if x.view:
+                        # attention: the View object is a dataclass and traversed by deep_map.
+                        # Prepare later removal of view source tables from tables list:
+                        if isinstance(x.view.src, Iterable):
+                            for src in x.view.src:
+                                if isinstance(src, Table):
+                                    view_src_tables.add(id(src))
+                        elif isinstance(x.view.src, Table):
+                            view_src_tables.add(id(x.view.src))
                 elif isinstance(x, RawSql):
                     if x.sql is None:
                         raise TypeError("Underlying raw sql string can't be None")
@@ -958,6 +968,8 @@ class PipeDAGStore(Disposable):
         value = deep_map(value, preparation_mutator)
         attach_annotation(task._fn_annotations.get("return"), value)
 
+        # remove view source tables from tables list
+        tables = [t for t in tables if id(t) not in view_src_tables]
         return value, tables, raw_sqls, blobs
 
     @staticmethod
