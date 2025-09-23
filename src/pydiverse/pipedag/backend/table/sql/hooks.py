@@ -57,7 +57,7 @@ from pydiverse.pipedag.util.sql import compile_sql
 
 
 def _polars_apply_retrieve_annotation(df, table, store, intentionally_empty: bool = False):
-    if cs is not None:
+    if cs.ColSpec is not object:
         if inspect.isclass(table.annotation) and issubclass(table.annotation, cs.ColSpec):
             column_spec = table.annotation  # type: cs.ColSpec
             if dy.Column is not None:
@@ -137,7 +137,7 @@ def _polars_apply_materialize_annotation(df, table, store):
                     f"Failure counts: {failures.counts()}; "
                     f"\nInvalid:\n{fail_df}"
                 )
-    if cs is not None:
+    if cs.ColSpec is not object:
         if inspect.isclass(table.annotation) and issubclass(table.annotation, cs.ColSpec):
             column_spec = table.annotation
             if dy.Column is not None:
@@ -184,7 +184,7 @@ def _polars_apply_materialize_annotation(df, table, store):
 
 def _sql_apply_materialize_annotation_pdt_early(table: Table, schema: Schema, store: SQLTableStore):
     tbl = table.obj  # type: pdt.Table
-    if cs is not None:
+    if cs.ColSpec is not object:
         if inspect.isclass(table.annotation) and issubclass(table.annotation, cs.ColSpec):
             column_spec = table.annotation
             if pdt_new is not None:
@@ -223,7 +223,7 @@ def _sql_apply_materialize_annotation(
         intermediate_tbls.append(name)
         return write_pdt_table(tbl, name)
 
-    if cs is not None:
+    if cs.ColSpec is not object:
         if inspect.isclass(table.annotation) and issubclass(table.annotation, cs.ColSpec):
             column_spec = table.annotation
             if pdt_new is not None:
