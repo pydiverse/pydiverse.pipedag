@@ -275,8 +275,8 @@ def get_view_query(view: View, store: SQLTableStore):
         ]
         assert len(src_tables) > 0
         cols = src_tables[0].c
-        src_tables = [sa.select(sa.text("*")).select_from(alias.original) for alias in src_tables]
-        base_from = sa.union_all(*src_tables).alias("sub")
+        src_select = [sa.select(sa.text("*")).select_from(alias.original) for alias in src_tables]
+        base_from = sa.union_all(*src_select).alias("sub")
 
         # reconstruct columns outside of UNION (this pain yields nicer query due to select("*") above)
         def bind(c: sa.Column, expr):
@@ -288,11 +288,9 @@ def get_view_query(view: View, store: SQLTableStore):
             from sqlalchemy.sql.base import ReadOnlyColumnCollection
 
             base_from.c = ReadOnlyColumnCollection(ColumnCollection([(c.name, bind(c, base_from)) for c in cols]))
-        except ImportError:
-            # support sqlalchemy < 2.0
-            from sqlalchemy.sql.base import ImmutableColumnCollection
-
-            base_from.c = ImmutableColumnCollection(ColumnCollection([(c.name, bind(c, base_from)) for c in cols]))
+        except:  # noqa
+            # support sqlalchemy < 2.0 and generally fall back to uglier query but more reliable code
+            base_from = sa.union_all(*[sa.select(t) for t in src_tables]).alias("sub")
     else:
         base_from = SQLAlchemyTableHook.retrieve(store, view.src, view.src.stage.current_name, sa.Table)
         if not view.sort_by and not view.columns and not view.limit:
