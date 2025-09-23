@@ -77,8 +77,6 @@ instances:
       - "polars.LazyFrame"
       - "sqlalchemy.sql.expression.TextClause"
       - "sqlalchemy.sql.expression.Selectable"
-      - "pydiverse.pipedag.ExternalTableReference"
-      - "pydiverse.pipedag.View"
       - "pydiverse.transform.Table"
 
     fail_fast: true  # this provides better stack traces but less fault tolerance

@@ -52,8 +52,6 @@ instances:
       - "polars.LazyFrame"
       - "sqlalchemy.sql.expression.TextClause"
       - "sqlalchemy.sql.expression.Selectable"
-      - "pydiverse.pipedag.ExternalTableReference"
-      - "pydiverse.pipedag.View"
       - "pydiverse.transform.Table"
 
     # Attention: For disable_kroki: false, stage and task names might be sent to the kroki_url.
