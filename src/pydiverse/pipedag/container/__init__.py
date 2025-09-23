@@ -774,14 +774,17 @@ class View:
         :param sort_by: Optional list of columns to sort the view by. They can be strings or column objects that
             are understood by the table hook that would materialize the table if it wasn't a View.
             Column names before renaming are used for sorting. SortCol objects may help configuring sort order.
-        :param columns: The columns to include in the view. This can either be a list of strings or column
-            objects that are understood by the table hook that would materialize the table if it wasn't a View,
+            For input_type `sa.Table` and `pdt.SqlAlchemy`, the sort order can be extracted from native column objects:
+            `tbl.c.colname.desc()` (`sa.Table`) or `tbl.colname.descending().nulls_first()` (`pdt.SqlAlchemy`).
+        :param columns: The columns to include in the view. This can either be strings or column
+            objects that are understood by the table hook that would materialize the table if it wasn't a View.
         :param limit:
-            limit number of rows returned by the view
+            Limit number of rows returned by the view.
         :param assert_normalized:
-            Internally a normalization takes place at some point to ensure the View can be passed between tasks
+            In user code, this parameter can be ignored.
+            [Internally, a normalization takes place at some point to ensure the View can be passed between tasks
             of different input_type. This option triggers assertion of construction in case normalization failed.
-            Normalization is input_type dependent and thus needs to be done by materialization hooks.
+            Normalization is input_type dependent and thus needs to be done by materialization hooks.]
         """
         self.src = src
         self.columns = columns
