@@ -173,7 +173,7 @@ class PrefectTwoEngine(OrchestrationEngine):
             for t in f.get_tasks():
                 task_kwargs = {"name": t._name}
                 if isinstance(t, MaterializingTask):
-                    task_kwargs["version"] = t._version
+                    task_kwargs["version"] = str(t._version)
 
                 task = prefect.task(**task_kwargs)(t._do_run)
 

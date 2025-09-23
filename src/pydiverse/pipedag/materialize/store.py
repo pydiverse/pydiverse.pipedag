@@ -845,7 +845,7 @@ class PipeDAGStore(Disposable):
                 metadata = TaskMetadata(
                     name=task._name,
                     stage=task._stage.name,
-                    version=task._version,
+                    version=str(task._version),
                     timestamp=datetime.now(),
                     run_id=ctx.run_id,
                     position_hash=task._position_hash,

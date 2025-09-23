@@ -1418,7 +1418,7 @@ class SQLTableStore(BaseTableStore):
                         self.tasks_table.select()
                         .where(self.tasks_table.c.name == task._name)
                         .where(self.tasks_table.c.stage == task._stage.name)
-                        .where(self.tasks_table.c.version == task._version)
+                        .where(self.tasks_table.c.version == str(task._version))
                         .where(self.tasks_table.c.input_hash == input_hash)
                         .where(
                             self.tasks_table.c.cache_fn_hash == cache_fn_hash
@@ -1439,7 +1439,7 @@ class SQLTableStore(BaseTableStore):
         return TaskMetadata(
             name=result.name,
             stage=result.stage,
-            version=result.version,
+            version=str(result.version),
             timestamp=result.timestamp,
             run_id=result.run_id,
             position_hash=result.position_hash,
@@ -1464,7 +1464,7 @@ class SQLTableStore(BaseTableStore):
             TaskMetadata(
                 name=result.name,
                 stage=result.stage,
-                version=result.version,
+                version=str(result.version),
                 timestamp=result.timestamp,
                 run_id=result.run_id,
                 position_hash=result.position_hash,
