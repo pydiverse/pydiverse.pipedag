@@ -279,7 +279,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
     def consumer(first: MyFirstColSpec, second: MySecondColSpec):
         assert [(c.name, c.dtype()) for c in first] == [
             ("a", pdc.Int64()),
-            ("b", pdc.Int16() if validate_get_data or dy else pdc.Int64()),
+            ("b", pdc.Int16() if validate_get_data or dy.Column else pdc.Int64()),
             ("c", pdc.String()),
         ]
         assert [(c.name, c.dtype()) for c in second] == [
@@ -317,7 +317,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
     def consumer2(first: MyFirstColSpec, second: MySecondColSpec):
         assert [(c.name, c.dtype()) for c in first] == [
             ("a", pdc.Int64()),
-            ("b", pdc.Int16() if validate_get_data or dy else pdc.Int64()),
+            ("b", pdc.Int16() if validate_get_data or dy.Column else pdc.Int64()),
             ("c", pdc.String()),
         ]
         assert [(c.name, c.dtype()) for c in second] == [
@@ -386,7 +386,7 @@ def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, vali
     def consumer(first: MyFirstColSpec, second: MySecondColSpec):
         assert [(c.name, c.dtype()) for c in first] == [
             ("a", pdc.Int64()),
-            ("b", pdc.Int16() if validate_get_data or dy else pdc.Int64()),
+            ("b", pdc.Int16() if validate_get_data or dy.Column else pdc.Int64()),
             ("c", pdc.String()),
         ]
         assert [(c.name, c.dtype()) for c in second] == [
@@ -409,7 +409,7 @@ def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, vali
     def consumer2(first: MyFirstColSpec, second: MySecondColSpec):
         assert [(c.name, c.dtype()) for c in first] == [
             ("a", pdc.Int64()),
-            ("b", pdc.Int16() if validate_get_data or dy else pdc.Int64()),
+            ("b", pdc.Int16() if validate_get_data or dy.Column else pdc.Int64()),
             ("c", pdc.String()),
         ]
         assert [(c.name, c.dtype()) for c in second] == [
@@ -465,7 +465,9 @@ def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, val
             ("a", pdc.Int64()),
             (
                 "b",
-                pdc.Int16() if (validate_get_data and (not with_violation or with_filter)) or dy else pdc.Int64(),
+                pdc.Int16()
+                if (validate_get_data and (not with_violation or with_filter)) or dy.Column
+                else pdc.Int64(),
             ),
             ("c", pdc.String()),
         ]
@@ -502,7 +504,9 @@ def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, val
             ("a", pdc.Int64()),
             (
                 "b",
-                pdc.Int16() if (validate_get_data and (not with_violation or with_filter)) or dy else pdc.Int64(),
+                pdc.Int16()
+                if (validate_get_data and (not with_violation or with_filter)) or dy.Column
+                else pdc.Int64(),
             ),
             ("c", pdc.String()),
         ]
