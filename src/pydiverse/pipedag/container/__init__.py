@@ -712,15 +712,21 @@ class View:
     -------
     A view can combine a set of parquet files as one read_parquet operation::
 
-        @materialize(input_type=sa.Table)
+        import sqlalachemy as sa
+        @materialize(input_type=sa.Table, lazy=True)
         def task(tbls: list[sa.Alias]):
             return Table(View(src=tbls), name="union")
 
-        @materialize(input_type=pdt.Table)
+    It also works specifying views with other input_types that support lazy table references.
+    In this case, you need to make sure that the `src` parameter only references input tables
+    exactly as they come in as parameters to the task::
+
+        import pydiverse.transform as pdt
+        @materialize(input_type=pdt.SqlAlchemy, lazy=True)
         def task(tbls: list[pdt.Table]):
             return Table(View(src=tbls), name="union")
 
-    It can also be used to load only a subset of a table and rename columns:
+    Furthermore, it can be used to load only a subset of a table and rename columns:
 
         @materialize(input_type=sa.Table)
         def task(tbl: sa.Alias):
@@ -729,13 +735,22 @@ class View:
                 View(
                     src=tbl,
                     columns={f"c{col}":col for col in cols},
-                    sort_by=[dag.SortCol("id", SortOrder.DESC, nulls_last=True), "id2"],
+                    sort_by=[tbl.c.id.desc().nulls_first(), "id2"],
                     limit=10,
                 ),
                 name="selection",
             )
 
-    If you just like to filter columns without renaming:
+    Please note, that the columns and sort_by parameters can be provided either as
+    strings or as column objects of the respective input_type. This works at least
+    for input_types sa.Table and pdt.Sqlalchemy.
+
+    You can also specify sort order with an explicit class::
+
+        from pydiverse.pipedag import SortCol, SortOrder
+        sort_by = [SortCol("id", SortOrder.DESC, nulls_first=True)]
+
+    If you just like to filter columns without renaming, any iterable will do::
 
         @materialize(input_type=sa.Table)
         def task(tbl: sa.Alias):
