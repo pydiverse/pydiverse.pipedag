@@ -24,6 +24,8 @@ from .container import (
     Schema,
     Table,
     View,
+    SortCol,
+    SortOrder,
     materialize_table,
 )
 from .context import ConfigContext, StageLockContext
@@ -53,6 +55,8 @@ __all__ = [
     "input_stage_versions",
     "Table",
     "View",
+    "SortCol",
+    "SortOrder",
     "RawSql",
     "Blob",
     "ExternalTableReference",

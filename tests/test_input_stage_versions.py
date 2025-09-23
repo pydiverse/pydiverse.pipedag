@@ -264,8 +264,9 @@ def test_input_versions_other_instance_table(per_user):
         run += 1
         val = -5
         f = get_flow(cfg)
-        with swallowing_raises(AssertionError, match=r"\[left\]:  \[-5\]\n\[right\]: \[12\]"):
-            f.run(config=cfg2)
+        with cfg2:
+            with swallowing_raises(AssertionError, match=r"\[left\]:  \[-5\]\n\[right\]: \[12\]"):
+                f.run()
         assert (
             pd.read_sql_table(
                 "x",

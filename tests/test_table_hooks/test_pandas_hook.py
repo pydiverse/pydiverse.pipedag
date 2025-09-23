@@ -31,6 +31,7 @@ from pydiverse.pipedag.engine import dask
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.util import swallowing_raises
 from tests.util.spy import spy_task
 from tests.util.sql import get_config_with_table_store
 
@@ -344,7 +345,7 @@ def test_pandas_table_hook_postgres_null_string():
         with Stage("stage_0"):
             t = m.pd_dataframe(data)
 
-    with ConfigContext.get().evolve(swallow_exceptions=True), StageLockContext():
+    with swallowing_raises(AssertionError, match=r"\[left\]:  \[-5\]\n\[right\]: \[12\]"), StageLockContext():
         result = f.run()
         df = result.get(t, as_type=pd.DataFrame)
 

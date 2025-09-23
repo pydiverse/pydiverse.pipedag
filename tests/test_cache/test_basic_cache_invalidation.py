@@ -18,7 +18,7 @@ from pydiverse.pipedag.util.sql import compile_sql
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import ALL_INSTANCES, skip_instances, with_instances
-from tests.util import select_as
+from tests.util import select_as, swallowing_raises
 from tests.util import tasks_library as m
 from tests.util import tasks_library_imperative as m2
 from tests.util.spy import spy_task
@@ -673,7 +673,7 @@ def test_cache_validation_mode_assert(ignore_task_version, disable_cache_functio
         assert result.get(s2, as_type=pd.DataFrame)["x"].iloc[0] == return_value
 
     if disable_cache_function or ignore_task_version:
-        with pytest.raises(error):
+        with swallowing_raises(error):
             result = flow.run(**kwargs)
             assert result.successful
 
@@ -687,12 +687,12 @@ def test_cache_validation_mode_assert(ignore_task_version, disable_cache_functio
         assert result.successful
 
     return_value = 1
-    with pytest.raises(error):
+    with swallowing_raises(error):
         flow.run(**kwargs)
 
     return_value = 0
     flow, _, _ = get_flow(version="1.1")
-    with pytest.raises(error):
+    with swallowing_raises(error):
         flow.run(**kwargs)
 
 
