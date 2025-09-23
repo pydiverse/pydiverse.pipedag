@@ -20,7 +20,6 @@ import sqlalchemy as sa
 import sqlalchemy.exc
 from packaging.version import Version
 from pandas.core.dtypes.base import ExtensionDtype
-from pre_commit.errors import FatalError
 from sqlalchemy.sql.base import ColumnCollection
 
 from pydiverse.common import Date, Dtype, PandasBackend
@@ -910,7 +909,7 @@ class ViewSqlalchemyMaterializationHook(BaseViewMaterializationHook):
             elif col.modifier.__name__ == "asc_op":
                 return SortCol(cls.get_column_name(col.element), SortOrder.ASC)
             else:
-                raise FatalError(
+                raise RuntimeError(
                     "Unsupported version of SqlAlchemy. "
                     "col.asc() / col.desc() should have modifier functions asc_op or desc_op. "
                     f"modifier={col.modifier.__name__}"
