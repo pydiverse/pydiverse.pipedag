@@ -24,10 +24,10 @@ class BaseMaterializationDetails(ABC):
     def from_dict(cls: type[_T], d: dict[str, dict[str | list[str]]], strict: bool, logger) -> _T:
         unsupported_arguments = set(d.keys()) - {field.name for field in dataclasses.fields(cls)}
         if unsupported_arguments:
-            error_msg = f"The materialization arguments {unsupported_arguments} are not supported for {cls.__name__}."
+            msg = f"The materialization arguments {unsupported_arguments} are not supported for {cls.__name__}."
             if strict:
-                raise TypeError(f"{error_msg} To silence this exception set strict_materialization_details=False")
-            logger.error(error_msg)
+                raise ValueError(f"{msg} To silence this exception set strict_materialization_details=False")
+            logger.warning(msg)
         details = cls(**{k: v for k, v in d.items() if k not in unsupported_arguments})
         return details
 
@@ -72,11 +72,11 @@ class BaseMaterializationDetails(ABC):
     ):
         label = label if label is not None else default_label if default_label is not None else "__any__"
         if label not in d:
-            error_msg = f"{label} is an unknown materialization details label."
+            msg = f"{label} is an unknown materialization details label."
             if strict:
-                raise ValueError(f"{error_msg} To silence this exception set strict_materialization_details=False")
+                raise ValueError(f"{msg} To silence this exception set strict_materialization_details=False")
             else:
-                logger.error(f"{error_msg} Using __any__ instead.")
+                logger.warning(f"{msg} Using __any__ instead.")
                 label = "__any__"
         return getattr(d[label], attribute)
 

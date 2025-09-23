@@ -617,18 +617,24 @@ class SQLTableStore(BaseTableStore):
     def check_materialization_details_supported(self, label: str | None) -> None:
         if label is None:
             return
-        error_msg = f"Materialization details are not supported for store {type(self).__name__}."
+        if self.materialization_details and label in self.materialization_details:
+            return
+        msg = f"{label} is an unknown materialization details label."
         if self.strict_materialization_details:
-            raise ValueError(f"{error_msg} To silence this exception set strict_materialization_details=False")
+            raise ValueError(f"{msg} To silence this exception set strict_materialization_details=False")
         else:
-            self.logger.error(f"{error_msg}")
+            self.logger.warning(msg)
 
     def _set_materialization_details(self, materialization_details: dict[str, dict[str | list[str]]] | None) -> None:
+        """This function causes an error or exception if materialization details are specified for a table
+        store that does not support them.
+
+        Any table store that supports materialization details should override this method."""
         if materialization_details is not None or self.default_materialization_details is not None:
-            error_msg = f"{type(self).__name__} does not support materialization details."
+            msg = f"{type(self).__name__} does not support materialization details."
             if self.strict_materialization_details:
-                raise TypeError(f"{error_msg} To suppress this exception, use strict_materialization_details=False")
-            self.logger.error(error_msg)
+                raise ValueError(f"{msg} To silence this exception, use strict_materialization_details=False")
+            self.logger.warning(msg)
 
     def get_unlogged(self, materialization_details_label: str | None) -> bool:
         _ = materialization_details_label
