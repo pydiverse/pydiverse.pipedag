@@ -303,9 +303,11 @@ def get_view_query(view: View, store: SQLTableStore):
         query = sa.select(*[base_from.c[col].label(name) for name, col in view.columns.items()]).select_from(base_from)
     else:
         query = sa.select(base_from)
-    if view.sort_by:
+    if view.sort_by and view.limit != 0:
         # for SQL, it is no problem to execute sort_by after columns because the source columns can still be referenced
         query = query.order_by(*[col.sql(base_from.c) for col in view.sort_by])
+        # attention: the view.limit != 0 is important for mssql dialect because it cannot order by subqueries
+        #   and we use subqueries for empty AUTO_VERSION pulls.
     if view.limit:
         query = query.limit(view.limit)
     return query
@@ -342,13 +344,15 @@ def get_view_query_pdt(view: View, store: SQLTableStore, name: str, stage_name: 
             c = c.nulls_last()
         return c
 
-    if view.sort_by is not None:
+    limit = min(limit, view.limit) if limit is not None and view.limit is not None else (view.limit or limit)
+    if view.sort_by is not None and limit != 0:
         tbl = tbl >> pdt.arrange(*[pdt_sort_col(tbl, col) for col in view.sort_by])
+        # atteintion: the view.limit != 0 is important for mssql dialect because it cannot order by subqueries
+        #   and we use subqueries for empty AUTO_VERSION pulls.
 
     if view.columns is not None:
         tbl = tbl >> pdt.rename({v: k for k, v in view.columns.items()}) >> pdt.select(*view.columns.keys())
 
-    limit = min(limit, view.limit) if limit is not None and view.limit is not None else (view.limit or limit)
     if limit is not None:
         tbl = tbl >> pdt.slice_head(limit)
 
@@ -1036,6 +1040,7 @@ class DataframeSqlTableHook:
                 else:
                     table.view.limit = limit
                 limit = None  # avoid additional subquery
+                # attention: it is important for mssql dialect that limit=0 is applied in the view
             query = get_view_query(table.view, store).alias("tbl")
         else:
             query = store.reflect_table(table_name, schema).alias("tbl")

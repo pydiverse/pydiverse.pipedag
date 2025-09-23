@@ -37,6 +37,7 @@ from pydiverse.pipedag.materialize.details import (
 )
 from pydiverse.pipedag.optional_dependency.ibis import ibis
 from pydiverse.pipedag.optional_dependency.sqlalchemy import URL, Connection, Engine
+from pydiverse.pipedag.util.sql import compile_sql
 
 
 @dataclass(frozen=True)
@@ -149,6 +150,32 @@ class MSSqlTableStore(SQLTableStore):
             or (table.indexes is not None and len(table.indexes) > 0)
             or self.get_create_columnstore_index(table)
         )
+
+    def get_limit_query(
+        self,
+        query: sa.sql.expression.Selectable | sa.sql.expression.TextClause,
+        rows: int,
+    ) -> sa.sql.expression.Select:
+        # unfortunately, mssql does not support ORDER BY in subqueries
+        if "ORDER BY" in str(query).upper():
+            # This is a hack, but we have to avoid the subquery for mssql.
+            # Alternative would be to remove the ORDER BY clause for row==0,
+            # but this is tricky with sqlalchemy.
+            query_str = compile_sql(query, self.engine).strip()
+            assert query_str.upper().startswith("SELECT ")
+            if query_str.upper().startswith("SELECT TOP "):
+                parts = query_str.split(" ")
+                try:
+                    limit = int(parts[2])
+                    rows = min(limit, rows)
+                except ValueError:
+                    self.logger.info("Failed to parse limit of mssql query", limit=parts[2], query=query_str)
+                query_str = " ".join(parts[:1] + parts[3:])
+            assert int(rows) == rows
+            query_str = f"TOP {rows} " + query_str[7:]
+            return sa.select(sa.text(query_str))
+        else:
+            return super().get_limit_query(query, rows)
 
     def get_forced_nullability_columns(
         self, table: Table, table_cols: Iterable[str], report_nullable_cols=False

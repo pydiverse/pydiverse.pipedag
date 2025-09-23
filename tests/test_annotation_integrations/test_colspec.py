@@ -16,7 +16,7 @@ from pydiverse.pipedag.context.context import CacheValidationMode, ConfigContext
 from pydiverse.pipedag.errors import HookCheckException
 from pydiverse.pipedag.optional_dependency.colspec import cs
 from pydiverse.pipedag.optional_dependency.dataframely import dy
-from pydiverse.pipedag.optional_dependency.transform import pdt
+from pydiverse.pipedag.optional_dependency.transform import C, pdt
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
 from tests.util import tasks_library
 
@@ -98,7 +98,7 @@ def data_with_filter_with_rule_violation() -> tuple[pdt.Table, pdt.Table]:
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(pdt.Table is None, reason="pydiverse.transform needs to be installed")
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 def test_dataclass():
     first, second = data_without_filter_without_rule_violation()
     c = SimpleCollection(first, second)
@@ -135,7 +135,7 @@ def exec_filter(c: cs.Collection):
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(pdt.Table is None, reason="pydiverse.transform needs to be installed")
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 def test_filter_without_filter_without_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
@@ -161,7 +161,7 @@ def test_filter_without_filter_without_rule_violation():
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(pdt.Table is None, reason="pydiverse.transform needs to be installed")
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 def test_filter_without_filter_with_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
@@ -184,7 +184,7 @@ def test_filter_without_filter_with_rule_violation():
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(pdt.Table is None, reason="pydiverse.transform needs to be installed")
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 def test_filter_with_filter_without_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
@@ -219,7 +219,7 @@ def test_filter_with_filter_without_rule_violation():
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(pdt.Table is None, reason="pydiverse.transform needs to be installed")
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 def test_filter_with_filter_with_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
