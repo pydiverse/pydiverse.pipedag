@@ -927,6 +927,8 @@ class PandasTableHook(TableHook[ParquetTableStore]):
         as_type: type,
         limit: int | None = None,
     ):
+        # view resolution in input table is implemented here using pyarrow
+
         path = store.get_table_path(table)
         import pyarrow.dataset as ds
 
@@ -935,6 +937,7 @@ class PandasTableHook(TableHook[ParquetTableStore]):
 
         if table.view:
             view = table.view
+            assert view.assert_normalized
             if isinstance(view.src, Iterable):
                 path = [store.get_table_path(tbl) for tbl in view.src]
                 pyarrow_path = [cls.get_pyarrow_path(p, store)[0] for p in path]

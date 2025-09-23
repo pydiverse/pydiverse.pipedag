@@ -1224,6 +1224,8 @@ class PandasTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         as_type: type[pd.DataFrame] | tuple | dict,
         limit: int | None = None,
     ) -> pd.DataFrame:
+        # The function _build_retrieve_query takes care of resolving views as input table.
+
         # Config
         if PandasTableHook.pd_version >= Version("2.0"):
             # Once arrow is mature enough, we might want to switch to
@@ -1526,6 +1528,8 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         as_type: type[pl.DataFrame],
         limit: int | None = None,
     ) -> pl.DataFrame:
+        # _execute_query and _build_retrieve_query take care of resolving views as input table.
+
         cfg = cls.cfg()
         df = cls._execute_query(store, table, stage_name, as_type, limit=limit)
         if not cfg.disable_retrieve_annotation_action:
@@ -1633,6 +1637,8 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         as_type: type[pl.DataFrame],
         limit: int | None = None,
     ) -> pl.LazyFrame:
+        # polars_hook will take care of resolving views as input table.
+
         polars_hook = store.get_r_table_hook(pl.DataFrame)
         result = polars_hook.retrieve(store, table, stage_name, as_type, limit)
 
@@ -1646,6 +1652,8 @@ class LazyPolarsTableHook(TableHook[SQLTableStore]):
         stage_name: str,
         as_type: type[pl.LazyFrame],
     ) -> pl.LazyFrame:
+        # polars_hook will take care of resolving views as input table.
+
         polars_hook = store.get_r_table_hook(pl.DataFrame)  # type: PolarsTableHook
         df = polars_hook.retrieve(store, table, stage_name, as_type, limit=0)
 
@@ -1723,6 +1731,7 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
             DeprecationWarning,
             stacklevel=2,
         )
+        # polars_hook will take care of resolving views as input table.
         polars_hook = store.get_r_table_hook(pl.DataFrame)
         df = polars_hook.retrieve(store, table, stage_name, as_type, limit)
         return tidypolars.from_polars(df)
@@ -1791,6 +1800,7 @@ class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
         as_type: type[T],
         limit: int | None = None,
     ) -> T:
+        # hooks responsible for pd.DataFrame and sa.Table take care of resolving views as input table.
         from pydiverse.transform.eager import PandasTableImpl
         from pydiverse.transform.lazy import SQLTableImpl
 
@@ -1888,6 +1898,8 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         as_type: type[T],
         limit: int | None = None,
     ) -> T:
+        # For input_type=SqlAlchemy, views are resolved by get_view_query_pdt. Hooks for
+        # pl.LazyFrame and pd.DataFrame already take care of resolving views as input table.
         if issubclass(as_type, Polars):
             import polars as pl
 
@@ -1936,6 +1948,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         stage_name: str,
         as_type: type[pdt.Table],
     ) -> pdt.Table:
+        # polars_hook will take care of resolving views as input table.
         polars_hook = store.get_r_table_hook(pl.LazyFrame)  # type: PolarsTableHook
         lf = polars_hook.retrieve_for_auto_versioning_lazy(store, table, stage_name, as_type)
         return pdt.Table(lf, name=table.name)
@@ -2078,6 +2091,8 @@ class IbisTableHook(TableHook[SQLTableStore]):
         limit: int | None = None,
     ) -> ibis.api.Table:
         assert limit is None, "IbisTableHook does not support limit in retrieve."
+        if table.view:
+            raise NotImplementedError("IbisTableHook does not support retrieving views, yet.")
         conn = cls.conn(store)
         table_name, schema = store.resolve_alias(table, stage_name)
         for retry_iteration in range(4):

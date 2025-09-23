@@ -74,7 +74,7 @@ class ParquetTableCache(BaseTableCache):
             "cache_key": table.cache_key,
         }
         metadata_path = self.get_table_path(table, ".meta.json")
-        metadata_path.write_text(json.dumps(metadata))
+        metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
     def _has_table(self, table: Table, as_type: type) -> bool:
         metadata_path = self.get_table_path(table, ".meta.json")
@@ -129,6 +129,12 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         as_type: type[pd.DataFrame],
         limit: int | None = None,
     ) -> pd.DataFrame:
+        # From the viewpoint of the parquet table cache, a view is no different from a table.
+        # It will cache the actual dataframe as parquet file in case a dataframe based
+        # task reads it. A view can never end up in the output cache.
+        # Attention: The cache is the only component which uses the name of the view. So problems
+        # of name collision might occur only when activating the local table cache.
+
         # Determine dtype backend for pandas >= 2.0
         # [this is similar to the PandasTableHook found in SQLTableStore]
 
@@ -268,6 +274,12 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
         as_type: type,
         limit: int | None = None,
     ):
+        # From the viewpoint of the parquet table cache, a view is no different from a table.
+        # It will materialize the actual dataframe as parquet file in case a dataframe based
+        # task reads it. A view can never end up in the output cache.
+        # Attention: The cache is the only component which uses the name of the view. So problems
+        # of name collision might occur only when activating the local table cache.
+
         from pydiverse.transform.eager import PandasTableImpl
 
         if as_type is PandasTableImpl:
@@ -339,6 +351,12 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
         as_type: type,
         limit: int | None = None,
     ):
+        # From the viewpoint of the parquet table cache, a view is no different from a table.
+        # It will materialize the actual dataframe as parquet file in case a dataframe based
+        # task reads it. A view can never end up in the output cache.
+        # Attention: The cache is the only component which uses the name of the view. So problems
+        # of name collision might occur only when activating the local table cache.
+
         from pydiverse.transform.extended import Polars
 
         if as_type is Polars:

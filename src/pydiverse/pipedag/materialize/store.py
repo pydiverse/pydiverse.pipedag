@@ -367,6 +367,8 @@ class BaseTableStore(TableHookResolver, Disposable):
         if self.local_table_cache:
             t = table.copy_without_obj()
             t.obj = obj
+            t.view = None  # from the viewpoint of the cache, a view retrieval is a table
+            # t.cache_key is stored together with the table to validate cache validity
             self.local_table_cache.store_input(t, task=None)
 
         return obj
@@ -547,6 +549,7 @@ class BaseTableCache(ABC, TableHookResolver, Disposable):
         if not self.should_use_stored_input_as_cache:
             return None
         if not self._has_table(table, as_type):
+            # _has_table already checks table.cache_key
             return None
         return self._retrieve_table_obj(table, as_type)
 
@@ -1090,8 +1093,8 @@ class PipeDAGStore(Disposable):
 
         def visitor(x):
             if isinstance(x, Table):
-                # Tables in external schemas should not get copied
-                if x.external_schema is None:
+                # Tables in external schemas and views should not get copied
+                if x.external_schema is None and x.view is None:
                     tables.append(x)
             elif isinstance(x, RawSql):
                 raw_sqls.append(x)
