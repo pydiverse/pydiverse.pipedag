@@ -7,7 +7,7 @@ of memory errors and alike.
 
 Performance wise, however, it is important to understand a bit what the database is doing under the hood.
 The main task they are solving in the 1-100 million row range is to avoid O(n^2) complexity when joining
-two tables since in theory, a join could combine very row of one table with every row of the other table
+two tables since in theory, a join could combine every row of one table with every row of the other table
 and only understanding the `ON` and `WHERE` conditions as well as indexes allows to prevent this quadratic
 explosion.
 
@@ -20,11 +20,22 @@ one resource of your database and thus also reducing the performance of other us
 
 **Stop using CTEs, subqueries, and views!**
 
-They may be a means of raw SQL code organization. And to some extent they work fine as intendent. And then comes
+They may be a means of raw SQL code organization. And to some extent they work fine as intended. And then comes
 the flap of a butterfly and a query suddenly incurs a slowdown of 10-1000x for no reason. Especially, in the
 1-100 million row range, this plays out most significant. A slowdown from a 5 min query to 3 hours is not uncommon.
 The good news: [programmatic SQL](/examples/best_practices_sql) can be used as an alternative means of SQL code
-organization where the finally assembled query does not contain any CTEs, subqueries, or views any more.
+organization where the finally assembled query does not contain any CTEs, subqueries, or views any more. Pipedag
+also supports returning a :class:`View` which is a way to abstract column selection and renaming between tasks.
+In the back, those views, however, are inlined into the final query of consuming tasks:
+
+```python
+import sqlalchemy as sa
+from pydiverse.pipedag import materialize, View
+
+@materialize(lazy=True, input_type=sa.Table)
+def task(tbl: sa.Alias):
+    return View(tbl, columns={"a": tbl.c.x, "b": tbl.c.y}, sort_by=tbl.c.x.desc(), limit=10)
+```
 
 Pydiverse.pipedag can also hide the existence of multiple table materializations within a function that looks like
 a task:
@@ -60,7 +71,7 @@ from pydiverse.pipedag import materialize
 @materialize(lazy=True, input_type=sa.Table)
 def table01(raw01: sa.Alias):
     raw01x_sql = sa.select([raw01.c.entity]).distinct()
-    raw01x = dag.Table(raw01x_sql, name="raw01x").materialize()
+    raw01x = dag.Table(raw01x_sql, name="raw01x").materialize()  # table is already written here
 
     sql = (
         sa.select([raw01.c.entity, sa.literal("Missing in raw01").label("reason")])

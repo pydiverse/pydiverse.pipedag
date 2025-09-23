@@ -179,4 +179,5 @@ When using `input_type` `pl.DataFrame/pl.LazyFrame/pd.DataFrame`, the parquet fi
 written directly and not via duckdb.
 
 Currently, there is only one file used per table. This might change in the future by using partitioning
-features of polars and duckdb.
+features of polars and duckdb. If you partition yourself, you can use a task that returns a :class:`View`
+in order to assemble multiple parquet files as one logical table for a consuming task.
