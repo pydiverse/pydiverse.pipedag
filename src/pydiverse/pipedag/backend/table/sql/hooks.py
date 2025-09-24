@@ -1140,8 +1140,8 @@ class PandasTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         if dtypes is not None:
             for col, dtype in dtypes.items():
                 # pandas hack for time64: convert via timestamp to avoid NA-only output
-                if dtype.startswith("time64"):
-                    df[col] = df[col].astype(dtype.replace("time64", "timestamp"))
+                if str(dtype).startswith("time64"):
+                    df[col] = df[col].astype(str(dtype).replace("time64", "timestamp"))
                 df[col] = df[col].astype(dtype)
         return df
 
