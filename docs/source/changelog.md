@@ -8,6 +8,8 @@
 - ExternalTableReference and View are automatically added to auto_table configuration
 - Expose optional dependency imports
 - Change some materialization detail error messages to warnings
+- Updated repr() and str() representations for some objects like Flow, ConfigContext, DagContext, ...
+- Fix: mssql pyarrow-adbc download to pandas/polars
 - Fix: S3 example and error messages
 
 ## 0.10.11 (2025-09-08)

@@ -469,7 +469,11 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                         table, schema, query, store, suffix, unlogged
                     )
                 except Exception as e:  # noqa
-                    store.logger.error(
+                    if ConfigContext.get()._swallow_exceptions:
+                        log = store.logger.info
+                    else:
+                        log = store.logger.error
+                    log(
                         "Failed to apply materialize annotation for table",
                         table=table.name,
                         exception=str(e),

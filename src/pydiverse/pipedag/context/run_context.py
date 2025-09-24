@@ -725,6 +725,9 @@ class RunContext(BaseContext):
     def should_store_table_in_cache(self, table: "Table"):
         return self._request("should_store_table_in_cache", table.stage.id, table.name)
 
+    def __str__(self):
+        return f"{self.__class__.__name__}(run_id={self.run_id}, flow={self.flow.name}, client={self.client})"
+
 
 @attrs.frozen
 class DematerializeRunContext(BaseAttrsContext):

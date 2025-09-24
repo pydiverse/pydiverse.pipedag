@@ -468,6 +468,13 @@ class Flow:
         """
         return self.get_subflow().visualize_pydot(result, visualization_tag)
 
+    def __repr__(self):
+        return (
+            f"{type(self).__name__}("
+            f"name={self.name}, stages={list(self.stages.keys())}, tasks={[t._name for t in self.tasks]}"
+            f")"
+        )
+
 
 class Subflow:
     def __init__(self, flow: Flow, tasks: list[Task], stages: list[Stage]):

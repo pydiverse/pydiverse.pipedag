@@ -874,7 +874,11 @@ class PipeDAGStore(Disposable):
             store_metadata,
         )
         if len(check_failures) > 0:
-            self.logger.error(
+            if ConfigContext.get()._swallow_exceptions:
+                log = self.logger.info
+            else:
+                log = self.logger.error
+            log(
                 f"{len(check_failures)} output validation checks failed",
                 failures=check_failures,
             )

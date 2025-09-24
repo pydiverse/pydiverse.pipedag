@@ -35,6 +35,16 @@ class BaseContext:
     _lock: Lock = Lock()
     _thread_state: dict[int, list[Token]] = {}
     _instance_state: dict[int, int] = {}
+    _base_context_logger = []  # enable late initialization of logger
+
+    def get_logger(self):
+        # Derived class DagContext is frozen and would not call any constructor of baseclasses.
+        # Initializing loggers at import time is an option, but has risks since existing loggers
+        # might not be correctly initialized. Logger initialization typically happens in __main__ or
+        # conftest.py.
+        if len(self._base_context_logger) == 0:
+            self._base_context_logger.append(structlog.get_logger(__name__ + "." + BaseContext.__name__))
+        return self._base_context_logger[0]
 
     def __enter__(self):
         with self._lock:
@@ -44,6 +54,14 @@ class BaseContext:
             _tokens = self._thread_state[_id]
             token = self._context_var.set(self)
             _tokens.append(token)
+            self.get_logger().debug(
+                f"Entering {type(self).__name__}",
+                id=id(self),
+                thread_id=threading.get_ident(),
+                key=_id,
+                depth=len(_tokens),
+                z=str(self)[:100],
+            )
             if id(self) not in self._instance_state:
                 self._instance_state[id(self)] = 0
             # count threads that entered this context object
@@ -53,7 +71,21 @@ class BaseContext:
     def __exit__(self, *_):
         with self._lock:
             _id = id(self) + (threading.get_ident() << 64)
-            _tokens = self._thread_state[_id]
+            _tokens = self._thread_state.get(_id)
+            self.get_logger().debug(
+                f"Exiting {type(self).__name__}",
+                id=id(self),
+                thread_id=threading.get_ident(),
+                key=_id,
+                depth=len(_tokens) if _tokens is not None else 0,
+                z=str(self)[:100],
+            )
+            if not _tokens:
+                raise RuntimeError(
+                    "Fatal error in context handling: "
+                    f"{type(self).__name__}, {_id} ({id(self)}, {threading.get_ident()}) "
+                    f"not in {self._thread_state}, str={str(self)}"
+                )
             self._context_var.reset(_tokens.pop())
             if len(_tokens) == 0:
                 del self._thread_state[_id]
@@ -88,9 +120,9 @@ class BaseAttrsContext(BaseContext):
 class DAGContext(BaseAttrsContext):
     """Context during DAG definition"""
 
-    flow: "Flow"
-    stage: "Stage"
+    stage: "Stage"  # put fine granular first for better __repr__
     group_node: "GroupNode"
+    flow: "Flow"
 
     _context_var = ContextVar("dag_context")
 
@@ -560,6 +592,9 @@ class ConfigContext(BaseAttrsContext):
                 raise ValueError(f"Expected integer for '{m}' within '{within}.{key}', found {type(value[m])}")
 
     _context_var = ContextVar("config_context")
+
+    def __str__(self) -> str:
+        return f"{self.instance_id}:{self.__repr__()}"
 
 
 class StageLockContext(BaseContext):

@@ -18,7 +18,7 @@ from pydiverse.pipedag.optional_dependency.colspec import cs
 from pydiverse.pipedag.optional_dependency.dataframely import dy
 from pydiverse.pipedag.optional_dependency.transform import C, pdt
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
-from tests.util import tasks_library
+from tests.util import swallowing_raises, tasks_library
 
 pytestmark = [
     pytest.mark.pdtransform,
@@ -755,7 +755,7 @@ def test_annotations_sql(with_filter: bool, with_violation: bool, validate_get_d
 
     if with_violation and validate_get_data:
         # Validation at end of get_anno_data task fails
-        with pytest.raises(
+        with swallowing_raises(
             HookCheckException,
             match="failed validation with MyFirstColSpec; Failure counts: {'b|min': 1, 'c|nullability': 1};"
             if with_filter
