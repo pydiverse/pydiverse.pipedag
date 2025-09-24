@@ -515,6 +515,9 @@ class DataframeMsSQLTableHook:
         # dtypes = {}  # TODO: allow user to provide custom dtypes
         # column_types = reflect_pyodbc_column_types(query, odbc_string)
 
+        if not isinstance(query, str):
+            query = compile_sql(query, engine)
+
         dfs = pl.read_database(
             query=query,
             connection=odbc_string,
@@ -585,7 +588,7 @@ class PandasTableHook(DataframeMsSQLTableHook, PandasTableHook):
             try:
                 pl_df = cls.download_table_arrow_odbc(query, store, dtypes=None)
                 df = pl_df.to_pandas()
-                df = cls._fix_dtypes(df, dtypes)
+                return cls._fix_dtypes(df, dtypes)
             except Exception as e:  # noqa
                 store.logger.warning("Failed to download table using arrow-odbc, falling back to sqlalchemy/pandas.")
 
