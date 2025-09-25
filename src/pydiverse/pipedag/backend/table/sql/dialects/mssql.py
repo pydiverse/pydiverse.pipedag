@@ -2,16 +2,16 @@
 # SPDX-License-Identifier: BSD-3-Clause
 import copy
 import dataclasses
-import importlib
 import itertools
 import re
-import types
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 import pandas as pd
+import polars as pl
+import pyarrow as pa
 import sqlalchemy as sa
 import sqlalchemy.dialects.mssql
 from pandas.core.dtypes.base import ExtensionDtype
@@ -35,13 +35,9 @@ from pydiverse.pipedag.materialize.details import (
     BaseMaterializationDetails,
     resolve_materialization_details_label,
 )
-
-try:
-    from sqlalchemy import URL, Connection, Engine
-except ImportError:
-    # For compatibility with sqlalchemy < 2.0
-    from sqlalchemy.engine import URL, Engine
-    from sqlalchemy.engine.base import Connection
+from pydiverse.pipedag.optional_dependency.ibis import ibis
+from pydiverse.pipedag.optional_dependency.sqlalchemy import URL, Connection, Engine
+from pydiverse.pipedag.util.sql import compile_sql
 
 
 @dataclass(frozen=True)
@@ -154,6 +150,32 @@ class MSSqlTableStore(SQLTableStore):
             or (table.indexes is not None and len(table.indexes) > 0)
             or self.get_create_columnstore_index(table)
         )
+
+    def get_limit_query(
+        self,
+        query: sa.sql.expression.Selectable | sa.sql.expression.TextClause,
+        rows: int,
+    ) -> sa.sql.expression.Select:
+        # unfortunately, mssql does not support ORDER BY in subqueries
+        if "ORDER BY" in str(query).upper():
+            # This is a hack, but we have to avoid the subquery for mssql.
+            # Alternative would be to remove the ORDER BY clause for row==0,
+            # but this is tricky with sqlalchemy.
+            query_str = compile_sql(query, self.engine).strip()
+            assert query_str.upper().startswith("SELECT ")
+            if query_str.upper().startswith("SELECT TOP "):
+                parts = query_str.split(" ")
+                try:
+                    limit = int(parts[2])
+                    rows = min(limit, rows)
+                except ValueError:
+                    self.logger.info("Failed to parse limit of mssql query", limit=parts[2], query=query_str)
+                query_str = " ".join(parts[:1] + parts[3:])
+            assert int(rows) == rows
+            query_str = f"TOP {rows} " + query_str[7:]
+            return sa.select(sa.text(query_str))
+        else:
+            return super().get_limit_query(query, rows)
 
     def get_forced_nullability_columns(
         self, table: Table, table_cols: Iterable[str], report_nullable_cols=False
@@ -369,15 +391,6 @@ class MSSqlTableStore(SQLTableStore):
         )
 
 
-try:
-    import polars as pl
-except ImportError:
-    pl = importlib.import_module("polars")
-    pl.DataType = None
-    pl.DataFrame = None
-    pl.LazyFrame = None
-
-
 class DataframeMsSQLTableHook:
     @classmethod
     def dialect_has_adbc_driver(cls):
@@ -502,6 +515,9 @@ class DataframeMsSQLTableHook:
         # dtypes = {}  # TODO: allow user to provide custom dtypes
         # column_types = reflect_pyodbc_column_types(query, odbc_string)
 
+        if not isinstance(query, str):
+            query = compile_sql(query, engine)
+
         dfs = pl.read_database(
             query=query,
             connection=odbc_string,
@@ -572,7 +588,7 @@ class PandasTableHook(DataframeMsSQLTableHook, PandasTableHook):
             try:
                 pl_df = cls.download_table_arrow_odbc(query, store, dtypes=None)
                 df = pl_df.to_pandas()
-                df = cls._fix_dtypes(df, dtypes)
+                return cls._fix_dtypes(df, dtypes)
             except Exception as e:  # noqa
                 store.logger.warning("Failed to download table using arrow-odbc, falling back to sqlalchemy/pandas.")
 
@@ -664,13 +680,7 @@ class PolarsTableHook(DataframeMsSQLTableHook, PolarsTableHook):
         super().upload_table(table, schema, dtypes, store, early)
 
 
-try:
-    import ibis
-except ImportError:
-    ibis = None
-
-
-@MSSqlTableStore.register_table(ibis)
+@MSSqlTableStore.register_table(ibis.api.Table)
 class IbisTableHook(IbisTableHook):
     @classmethod
     def _conn(cls, store: MSSqlTableStore):
@@ -682,13 +692,6 @@ class IbisTableHook(IbisTableHook):
             port=url.port,
             database=url.database,
         )
-
-
-try:
-    import pyarrow as pa
-except ImportError:
-    pa = types.ModuleType("pyarrow")
-    pa.Schema = None
 
 
 def map_pyarrow_schema_for_polars(schema: pa.Schema) -> pa.Schema:

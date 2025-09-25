@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 import functools
 import operator
-import types
 from dataclasses import dataclass
 
 import polars as pl
@@ -11,31 +10,15 @@ import sqlalchemy as sa
 import structlog
 from polars.testing import assert_frame_equal
 
+import pydiverse.common as pdc
 from pydiverse.pipedag import Flow, Stage, materialize, materialize_table
 from pydiverse.pipedag.context.context import CacheValidationMode, ConfigContext
 from pydiverse.pipedag.errors import HookCheckException
+from pydiverse.pipedag.optional_dependency.colspec import cs
+from pydiverse.pipedag.optional_dependency.dataframely import dy
+from pydiverse.pipedag.optional_dependency.transform import C, pdt
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
-
-try:
-    import pydiverse.colspec as cs
-    import pydiverse.common as pdc
-    import pydiverse.transform as pdt
-except ImportError:
-    cs = types.ModuleType("pydiverse.colspec")
-    fn = lambda *args, **kwargs: (lambda *args, **kwargs: None)  # noqa: E731
-    cs.__getattr__ = lambda name: object if name in ["ColSpec", "Collection"] else fn
-    pdt = types.ModuleType("pydiverse.colspec")
-    pdt.Table = None
-    pdt.verb = lambda fn: fn
-    pdt.SqlAlchemy = None
-    pdt.Polars = None
-    pdc = None
-
-try:
-    import dataframely as dy
-except ImportError:
-    dy = None
-
+from tests.util import swallowing_raises, tasks_library
 
 pytestmark = [
     pytest.mark.pdtransform,
@@ -115,7 +98,7 @@ def data_with_filter_with_rule_violation() -> tuple[pdt.Table, pdt.Table]:
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(pdt.Table is None, reason="pydiverse.transform needs to be installed")
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 def test_dataclass():
     first, second = data_without_filter_without_rule_violation()
     c = SimpleCollection(first, second)
@@ -152,7 +135,7 @@ def exec_filter(c: cs.Collection):
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(pdt.Table is None, reason="pydiverse.transform needs to be installed")
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 def test_filter_without_filter_without_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
@@ -178,7 +161,7 @@ def test_filter_without_filter_without_rule_violation():
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(pdt.Table is None, reason="pydiverse.transform needs to be installed")
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 def test_filter_without_filter_with_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
@@ -201,7 +184,7 @@ def test_filter_without_filter_with_rule_violation():
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(pdt.Table is None, reason="pydiverse.transform needs to be installed")
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 def test_filter_with_filter_without_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
@@ -236,7 +219,7 @@ def test_filter_with_filter_without_rule_violation():
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(pdt.Table is None, reason="pydiverse.transform needs to be installed")
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 def test_filter_with_filter_with_rule_violation():
     @materialize(input_type=pl.LazyFrame)
     def assertions(out, failure, failure_counts: dict[str, int]):
@@ -271,9 +254,10 @@ def test_filter_with_filter_with_rule_violation():
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(
-    dy is not None,
+    dy.Column is not None,
     reason="This test only works if dataframely is not installed since we test a fallback mechanism in polars hook",
 )
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
@@ -296,7 +280,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
     def consumer(first: MyFirstColSpec, second: MySecondColSpec):
         assert [(c.name, c.dtype()) for c in first] == [
             ("a", pdc.Int64()),
-            ("b", pdc.Int16() if validate_get_data or dy else pdc.Int64()),
+            ("b", pdc.Int16() if validate_get_data or dy.Column else pdc.Int64()),
             ("c", pdc.String()),
         ]
         assert [(c.name, c.dtype()) for c in second] == [
@@ -307,7 +291,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
         assert len(first >> pdt.export(pdt.Polars())) == 3
         assert len(second >> pdt.export(pdt.Polars())) in [3, 4, 5]
 
-        if not validate_get_data and dy is None:
+        if not validate_get_data and dy.Column is None:
             # colspec will not do casting without dataframely
             # In case of validate_get_data, the type should already be
             # smallint in the database.
@@ -322,7 +306,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
             with pytest.raises(cs.exc.RuleValidationError, match="2 rules failed validation"):
                 MySecondColSpec.validate(second)
         else:
-            if not validate_get_data and dy is None:
+            if not validate_get_data and dy.Column is None:
                 # colspec will not do casting without dataframely
                 # In case of validate_get_data, the type should already be
                 # smallint in the database.
@@ -334,7 +318,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
     def consumer2(first: MyFirstColSpec, second: MySecondColSpec):
         assert [(c.name, c.dtype()) for c in first] == [
             ("a", pdc.Int64()),
-            ("b", pdc.Int16() if validate_get_data or dy else pdc.Int64()),
+            ("b", pdc.Int16() if validate_get_data or dy.Column else pdc.Int64()),
             ("c", pdc.String()),
         ]
         assert [(c.name, c.dtype()) for c in second] == [
@@ -378,9 +362,10 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(
-    dy is not None,
+    dy.Column is not None,
     reason="This test only works if dataframely is not installed since we test a fallback mechanism in polars hook",
 )
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
@@ -403,7 +388,7 @@ def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, vali
     def consumer(first: MyFirstColSpec, second: MySecondColSpec):
         assert [(c.name, c.dtype()) for c in first] == [
             ("a", pdc.Int64()),
-            ("b", pdc.Int16() if validate_get_data or dy else pdc.Int64()),
+            ("b", pdc.Int16() if validate_get_data or dy.Column else pdc.Int64()),
             ("c", pdc.String()),
         ]
         assert [(c.name, c.dtype()) for c in second] == [
@@ -414,7 +399,7 @@ def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, vali
         assert len(first >> pdt.export(pdt.Polars())) == 3
         assert len(second >> pdt.export(pdt.Polars())) in [3, 4, 5]
 
-        if not validate_get_data and dy is None:
+        if not validate_get_data and dy.Column is None:
             # colspec will not do casting without dataframely
             # In case of validate_get_data, the type should already be
             # smallint in the database.
@@ -426,7 +411,7 @@ def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, vali
     def consumer2(first: MyFirstColSpec, second: MySecondColSpec):
         assert [(c.name, c.dtype()) for c in first] == [
             ("a", pdc.Int64()),
-            ("b", pdc.Int16() if validate_get_data or dy else pdc.Int64()),
+            ("b", pdc.Int16() if validate_get_data or dy.Column else pdc.Int64()),
             ("c", pdc.String()),
         ]
         assert [(c.name, c.dtype()) for c in second] == [
@@ -455,9 +440,10 @@ def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, vali
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(
-    dy is not None,
+    dy.Column is not None,
     reason="This test only works if dataframely is not installed since we test a fallback mechanism in polars hook",
 )
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
@@ -482,7 +468,9 @@ def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, val
             ("a", pdc.Int64()),
             (
                 "b",
-                pdc.Int16() if (validate_get_data and (not with_violation or with_filter)) or dy else pdc.Int64(),
+                pdc.Int16()
+                if (validate_get_data and (not with_violation or with_filter)) or dy.Column
+                else pdc.Int64(),
             ),
             ("c", pdc.String()),
         ]
@@ -494,7 +482,7 @@ def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, val
         assert len(first >> pdt.export(pdt.Polars())) == 3
         assert len(second >> pdt.export(pdt.Polars())) in [3, 4, 5]
 
-        if (not validate_get_data or (with_violation and not with_filter)) and dy is None:
+        if (not validate_get_data or (with_violation and not with_filter)) and dy.Column is None:
             # colspec will not do casting without dataframely
             # In case of validate_get_data, the type should already be
             # smallint in the database.
@@ -519,7 +507,9 @@ def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, val
             ("a", pdc.Int64()),
             (
                 "b",
-                pdc.Int16() if (validate_get_data and (not with_violation or with_filter)) or dy else pdc.Int64(),
+                pdc.Int16()
+                if (validate_get_data and (not with_violation or with_filter)) or dy.Column
+                else pdc.Int64(),
             ),
             ("c", pdc.String()),
         ]
@@ -550,10 +540,7 @@ def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, val
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
-@pytest.mark.skipif(
-    dy is not None,
-    reason="This test only works if dataframely is not installed since we test a fallback mechanism in polars hook",
-)
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
@@ -630,6 +617,9 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
         name = f"with{'out' if not with_filter else ''}_filter_with{'out' if not with_violation else ''}_rule_violation"
         with Stage("s01"):
             collection = get_anno_collection(name)
+            tasks_library.noop(collection.first)  # extract single schema of collection
+            tasks_library.noop(collection.second)
+            tasks_library.noop_lazy(collection.first)  # extract single schema of collection
             consumer_collection(collection)
         with Stage("s02"):
             consumer2_collection(collection)
@@ -647,9 +637,10 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(
-    dy is not None,
+    dy.Column is not None,
     reason="This test only works if dataframely is not installed since we test a fallback mechanism in polars hook",
 )
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 def test_type_mapping():
     @materialize(nout=2)
     def get_anno_data() -> tuple[MyFirstColSpec, MySecondColSpec]:
@@ -677,6 +668,7 @@ def standardize_dtype(dtype):
 
 
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
+@pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
@@ -763,7 +755,7 @@ def test_annotations_sql(with_filter: bool, with_violation: bool, validate_get_d
 
     if with_violation and validate_get_data:
         # Validation at end of get_anno_data task fails
-        with pytest.raises(
+        with swallowing_raises(
             HookCheckException,
             match="failed validation with MyFirstColSpec; Failure counts: {'b|min': 1, 'c|nullability': 1};"
             if with_filter

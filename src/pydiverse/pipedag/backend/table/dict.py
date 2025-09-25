@@ -1,7 +1,5 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
-import types
-import warnings
 
 import pandas as pd
 
@@ -12,6 +10,7 @@ from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import LazyTableMetadata, TaskMetadata
 from pydiverse.pipedag.materialize.store import BaseTableStore
 from pydiverse.pipedag.materialize.table_hook_base import CanMatResult, CanRetResult, TableHook
+from pydiverse.pipedag.optional_dependency.transform import C, pdt
 
 
 class DictTableStore(BaseTableStore):
@@ -89,10 +88,10 @@ class DictTableStore(BaseTableStore):
     def retrieve_task_metadata(self, task: MaterializingTask, input_hash: str, cache_fn_hash: str) -> TaskMetadata:
         cache_key = input_hash + str(cache_fn_hash)
         try:
-            return self.metadata[task.stage][cache_key]
+            return self.metadata[task._stage][cache_key]
         except KeyError:
             raise CacheError(
-                f"There is no metadata for task '{task.name}' with cache key '{task.input_hash}', yet"
+                f"There is no metadata for task '{task._name}' with cache key '{task.input_hash}', yet"
             ) from None
 
     def retrieve_all_task_metadata(
@@ -100,10 +99,10 @@ class DictTableStore(BaseTableStore):
     ) -> list[TaskMetadata]:
         task_metadata = []
         for m in (
-            *self.metadata[task.stage].values(),
-            *self.t_metadata[task.stage].values(),
+            *self.metadata[task._stage].values(),
+            *self.t_metadata[task._stage].values(),
         ):
-            if m.name == task.name and ((m.position_hash == task.position_hash) or ignore_position_hashes):
+            if m.name == task._name and ((m.position_hash == task._position_hash) or ignore_position_hashes):
                 task_metadata.append(m)
         return task_metadata
 
@@ -151,6 +150,8 @@ class PandasTableHook(TableHook[DictTableStore]):
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type, limit: int | None = None):
+        if table.view is not None:
+            raise NotImplementedError("View is not implemented for DictTableStore")
         df = store.store[stage_name][table.name]
         if limit:
             df = df[:limit]
@@ -163,19 +164,10 @@ class PandasTableHook(TableHook[DictTableStore]):
         return super().auto_table(obj)
 
 
-try:
-    import pydiverse.transform as pdt
-except ImportError as e:
-    warnings.warn(str(e), ImportWarning)
-    pdt = types.ModuleType("pydiverse.transform")
-    pdt.Table = None
-
-
-@DictTableStore.register_table(pdt)
+@DictTableStore.register_table(C)
 class PydiverseTransformTableHook(TableHook[DictTableStore]):
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanMatResult:
-        import pydiverse.transform as pdt
         from pydiverse.transform.extended import build_query
 
         if not isinstance(tbl, pdt.Table):
@@ -213,6 +205,8 @@ class PydiverseTransformTableHook(TableHook[DictTableStore]):
 
     @classmethod
     def retrieve(cls, store, table, stage_name, as_type, limit: int | None = None):
+        if table.view is not None:
+            raise NotImplementedError("View is not implemented for DictTableStore")
         df = PandasTableHook.retrieve(store, table, stage_name, pd.DataFrame, limit)
         from pydiverse.transform import Polars
 

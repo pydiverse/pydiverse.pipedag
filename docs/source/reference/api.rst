@@ -25,6 +25,8 @@ Public
 
 .. autoclass:: Table
 
+.. autoclass:: View
+
 .. autoclass:: RawSql
     :members:
     :special-members: __iter__, __getitem__, __contains__

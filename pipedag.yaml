@@ -154,6 +154,16 @@ instances:
     blob_store:
       blob_store_connection: no_blob
 
+  mssql_special_tests:
+    instance_id: pd_mssql_special_tests
+    table_store:
+      table_store_connection: mssql
+      args:
+        disable_pytsql: false
+        pytsql_isolate_top_level_statements: true
+    blob_store:
+      blob_store_connection: no_blob
+
   ibm_db2:
     instance_id: pd_ibm_db2
     stage_commit_technique: READ_VIEWS

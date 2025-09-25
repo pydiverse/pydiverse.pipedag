@@ -121,7 +121,7 @@ def test_external_table_inputs_rawsql():
         # Input of identity should be the output of make_external_table.
         result = f.run(
             inputs={
-                table.task: ExternalTableReference(
+                table._task: ExternalTableReference(
                     "external_table",
                     schema="external_schema",
                 )
@@ -176,7 +176,7 @@ def test_external_table_inputs_nout():
         # Input of identity should be the output of make_external_table.
         result = f.run(
             inputs={
-                table.task: ExternalTableReference(
+                table._task: ExternalTableReference(
                     "external_table",
                     schema="external_schema",
                 )

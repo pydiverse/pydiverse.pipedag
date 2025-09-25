@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
+from pydiverse.pipedag.optional_dependency.transform import C
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
@@ -13,11 +14,7 @@ from tests.util.tasks_library import assert_table_equal
 # unfortunately, pydiverse.transform currently does not support ibm_db2
 pytestmark = [pytest.mark.pdtransform, with_instances(tuple(set(DATABASE_INSTANCES) - {"ibm_db2"}))]
 
-try:
-    import pydiverse.transform as pdt
-
-    _ = pdt
-
+if C:
     try:
         from pydiverse.transform.core.verbs import mutate
         from pydiverse.transform.eager import PandasTableImpl
@@ -34,7 +31,7 @@ try:
             test_list = [SqlAlchemy, Polars, Pandas]
         except ImportError:
             raise NotImplementedError("pydiverse.transform 0.2.0 - 0.2.2 isn't supported") from None
-except ImportError:
+else:
     test_list = []
 
 

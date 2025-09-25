@@ -114,7 +114,8 @@ class TableHook(Generic[TableHookResolverT], ABC):
         """Retrieve a table from the store
 
         :param store: The store in which the table is stored
-        :param table: The table which should get retrieved
+        :param table: The table which should get retrieved.
+            If table.view is not None, the view source is retrieved or an exception raised.
         :param stage_name: The name of the stage from which te table should
             be retrieved
         :param as_type: The type as which the table is to be retrieved
@@ -316,7 +317,11 @@ class TableHookResolver:
                     f"Can't retrieve Table as type {type_}. This type is incompatible with store {self}."
                 )
 
-        raise TypeError(f"Can't retrieve Table as type {type_}. " + self.__hook_unmet_requirements_message())
+        if type_ is object:
+            raise TypeError("Invalid input_type 'object'. This is most likely a mistake with optional dependencies.")
+        raise TypeError(
+            f"Can't retrieve Table as type {type_} (see input_type). " + self.__hook_unmet_requirements_message()
+        )
 
     def get_hook_subclass(self: Self, type_: type[T]) -> type[T]:
         """Finds a table hook that is a subclass of the provided type"""
@@ -363,7 +368,7 @@ class TableHookResolver:
         # In case of deferred operations, inform run context that stage
         # isn't 100% cache valid anymore.
         if task is not None:
-            RunContext.get().set_stage_has_changed(task.stage)
+            RunContext.get().set_stage_has_changed(task._stage)
 
         # Materialize
         hook = self.get_m_table_hook(table)
@@ -385,6 +390,7 @@ class TableHookResolver:
         :raises TypeError: if the retrieved table can't be converted to
             the requested type.
         """
+        # table.view resolution is handled by all hook retrieve methods or raises an unsupported exception
 
         if as_type is None:
             raise TypeError("Missing 'as_type' argument. You must specify a type to be able to dematerialize a Table.")

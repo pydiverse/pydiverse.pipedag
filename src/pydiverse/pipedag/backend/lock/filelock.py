@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import os
-import warnings
 from pathlib import Path
 from typing import Any
 
@@ -10,13 +9,8 @@ from pydiverse.common.util import requires
 from pydiverse.pipedag import ConfigContext, Stage
 from pydiverse.pipedag.backend.lock.base import BaseLockManager, Lockable, LockState
 from pydiverse.pipedag.errors import LockError
+from pydiverse.pipedag.optional_dependency.filelock import fl
 from pydiverse.pipedag.util import normalize_name
-
-try:
-    import filelock as fl
-except ImportError as e:
-    warnings.warn(str(e), ImportWarning)
-    fl = None
 
 
 @requires(fl, ImportError("FileLockManager requires 'filelock' to be installed."))

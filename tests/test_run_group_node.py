@@ -55,7 +55,7 @@ def test_run_specific_task(ordering_barrier):
                 conn.execute(sa.text(f'LOCK TABLE "{table_name}" IN ACCESS EXCLUSIVE MODE'))
                 conn.execute(sa.text(f'INSERT INTO "{table_name}" VALUES (1)'))
                 n = conn.execute(sa.text(f'SELECT COUNT(*) FROM "{table_name}"')).fetchone()[0]
-        TaskContext.get().task.logger.info(f"Task result:{n}")
+        TaskContext.get().task._logger.info(f"Task result:{n}")
         return n
 
     # We need to assign unique names to these stages, because we can't reuse the
@@ -121,7 +121,7 @@ def fake_cache_status_deterministic_for_baseline_tests(result: Result):
             # chose stable pseudo-random
             return (
                 FinalTaskState.COMPLETED
-                if sum([ord(c) for c in stable_hash(task.id)]) % 2 == 0
+                if sum([ord(c) for c in stable_hash(task._id)]) % 2 == 0
                 else FinalTaskState.CACHE_VALID
             )
 

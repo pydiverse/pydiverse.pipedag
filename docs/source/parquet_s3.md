@@ -106,7 +106,7 @@ instances:
         print_materialize: true
         print_sql: true
 
-      metadata_store:
+      metadata_table_store:
         # Postgres database can be used to synchronize a pipeline instance between multiple team members even though
         # duckdb (basis for ParquetTableStore) does not support this. This also enables the use of the
         # DatabaseLockManager
@@ -125,6 +125,7 @@ instances:
     stage_commit_technique: READ_VIEWS
 
     lock_manager:
+      # the DatabaseLockManager uses the metadata_table_store for locking (here: the Postgres DB)
       class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
 
     blob_store:
@@ -178,4 +179,5 @@ When using `input_type` `pl.DataFrame/pl.LazyFrame/pd.DataFrame`, the parquet fi
 written directly and not via duckdb.
 
 Currently, there is only one file used per table. This might change in the future by using partitioning
-features of polars and duckdb.
+features of polars and duckdb. If you partition yourself, you can use a task that returns a :class:`View`
+in order to assemble multiple parquet files as one logical table for a consuming task.

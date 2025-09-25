@@ -111,9 +111,10 @@ supported_options = [
     "dask",
     "prefect",
     "s3",
+    "lock_tests",
 ]
 
-default_options = ["postgres", "duckdb", "polars"]
+default_options = ["postgres", "duckdb", "polars", "lock_tests"]
 
 sub_backends = dict(duckdb=["parquet_backend"], s3=["parquet_s3_backend"], ibm_db2=["parquet_s3_backend_db2"])
 

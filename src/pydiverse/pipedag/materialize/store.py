@@ -4,7 +4,7 @@
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 import structlog
 
@@ -12,7 +12,7 @@ from pydiverse.common.util import Disposable, deep_map
 from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import Blob, Schema, Stage, Table
 from pydiverse.pipedag._typing import Materializable, T
-from pydiverse.pipedag.container import RawSql, attach_annotation
+from pydiverse.pipedag.container import ExternalTableReference, RawSql, View, attach_annotation
 from pydiverse.pipedag.context import ConfigContext, RunContext, TaskContext
 from pydiverse.pipedag.context.run_context import StageState
 from pydiverse.pipedag.core.config import PipedagConfig
@@ -136,13 +136,14 @@ class BaseTableStore(TableHookResolver, Disposable):
         Used when `lazy = True` is set for a materializing task.
         """
         config_context = ConfigContext.get()
+        hook = None
         try:
             hook = self.get_m_table_hook(table)
             query_str = hook.lazy_query_str(self, table.obj)
         except TypeError:
             self.logger.warning(
                 f"The output table {table.name} given by a"
-                f" {repr(type(table.obj))} of the lazy task {task.name} does"
+                f" {repr(type(table.obj))} of the lazy task {task._name} does"
                 " not provide a query string. Lazy evaluation is not"
                 " possible. Assuming that the table is not cache valid."
             )
@@ -176,7 +177,13 @@ class BaseTableStore(TableHookResolver, Disposable):
                 cache_metadata=metadata,
             )
             RunContext.get().trace_hook.cache_init_transfer(task, table)
-            self.copy_lazy_table_to_transaction(metadata, table)
+            if table.external_schema is None and table.view is None:
+                # skip copying for external table references and views
+                self.copy_lazy_table_to_transaction(metadata, table)
+            elif table.view is not None:
+                assert hook is not None
+                # materialization of view needs to be called for converting view into JSON serializable form
+                hook.materialize(self, table, table.stage.current_name)
             self.logger.info(f"Lazy cache of table '{table.name}' found")
         except CacheError as e:
             # Either not found in cache, or copying failed
@@ -253,7 +260,7 @@ class BaseTableStore(TableHookResolver, Disposable):
             self.logger.warning("Cache miss for raw-SQL", cause=str(e))
 
             TaskContext.get().is_cache_valid = False
-            RunContext.get().set_stage_has_changed(task.stage)
+            RunContext.get().set_stage_has_changed(task._stage)
 
             if task_cache_info.assert_no_materialization:
                 raise AssertionError(
@@ -350,6 +357,7 @@ class BaseTableStore(TableHookResolver, Disposable):
             return super().retrieve_table_obj(table, as_type, for_auto_versioning)
 
         if self.local_table_cache:
+            # This works both for real tables and for views (the view output is stored as parquet)
             obj = self.local_table_cache.retrieve_table_obj(table, as_type)
             if obj is not None:
                 return obj
@@ -359,6 +367,8 @@ class BaseTableStore(TableHookResolver, Disposable):
         if self.local_table_cache:
             t = table.copy_without_obj()
             t.obj = obj
+            t.view = None  # from the viewpoint of the cache, a view retrieval is a table
+            # t.cache_key is stored together with the table to validate cache validity
             self.local_table_cache.store_input(t, task=None)
 
         return obj
@@ -539,6 +549,7 @@ class BaseTableCache(ABC, TableHookResolver, Disposable):
         if not self.should_use_stored_input_as_cache:
             return None
         if not self._has_table(table, as_type):
+            # _has_table already checks table.cache_key
             return None
         return self._retrieve_table_obj(table, as_type)
 
@@ -754,7 +765,7 @@ class PipeDAGStore(Disposable):
         kwargs: dict[str, Materializable],
         *,
         for_auto_versioning: bool = False,
-    ) -> tuple[tuple, dict]:
+    ) -> tuple[tuple[Any], dict[str, Any], dict[Any, Table]]:
         """Loads the inputs for a task from the storage backends
 
         Traverses the function arguments and replaces all `Table` and
@@ -769,22 +780,25 @@ class PipeDAGStore(Disposable):
         """
 
         ctx = RunContext.get()
+        input_table_mapping = {}
 
         def dematerialize_mapper(x):
             ret = self.dematerialize_item(
                 x,
-                as_type=task.input_type,
+                as_type=task._input_type,
                 ctx=ctx,
                 for_auto_versioning=for_auto_versioning,
             )
-            if task.add_input_source and isinstance(x, (Table, Blob, RawSql)):
+            if isinstance(x, Table):
+                input_table_mapping[id(ret)] = x, ret
+            if task._add_input_source and isinstance(x, (Table, Blob, RawSql)):
                 return ret, x
             return ret
 
         d_args = deep_map(args, dematerialize_mapper)
         d_kwargs = deep_map(kwargs, dematerialize_mapper)
 
-        return d_args, d_kwargs
+        return d_args, d_kwargs, input_table_mapping
 
     def materialize_task(
         self,
@@ -812,7 +826,7 @@ class PipeDAGStore(Disposable):
         :return: A copy of `value` with additional metadata
         """
 
-        stage = task.stage
+        stage = task._stage
         ctx = RunContext.get()
 
         if (state := ctx.get_stage_state(stage)) != StageState.READY:
@@ -829,12 +843,12 @@ class PipeDAGStore(Disposable):
             if not disable_task_finalization:
                 output_json = self.json_encode(value)
                 metadata = TaskMetadata(
-                    name=task.name,
-                    stage=task.stage.name,
-                    version=task.version,
+                    name=task._name,
+                    stage=task._stage.name,
+                    version=str(task._version),
                     timestamp=datetime.now(),
                     run_id=ctx.run_id,
-                    position_hash=task.position_hash,
+                    position_hash=task._position_hash,
                     input_hash=task_cache_info.input_hash,
                     cache_fn_hash=task_cache_info.cache_fn_hash,
                     output_json=output_json,
@@ -842,7 +856,7 @@ class PipeDAGStore(Disposable):
                 self.table_store.store_task_metadata(metadata, stage)
 
         def store_table(table: Table):
-            if task.lazy:
+            if task._lazy:
                 self.table_store.store_table_lazy(table, task, task_cache_info)
             else:
                 self.table_store.store_table(table, task)
@@ -860,7 +874,11 @@ class PipeDAGStore(Disposable):
             store_metadata,
         )
         if len(check_failures) > 0:
-            self.logger.error(
+            if ConfigContext.get()._swallow_exceptions:
+                log = self.logger.info
+            else:
+                log = self.logger.error
+            log(
                 f"{len(check_failures)} output validation checks failed",
                 failures=check_failures,
             )
@@ -875,6 +893,7 @@ class PipeDAGStore(Disposable):
         value: Materializable,
     ) -> tuple[Materializable, list[Table], list[RawSql], list[Blob]]:
         tables = []
+        view_src_tables: set[int] = set()
         raw_sqls = []
         blobs = []
 
@@ -884,7 +903,7 @@ class PipeDAGStore(Disposable):
         def preparation_mutator(x):
             # Automatically convert an object to a table / blob if its
             # type is inside either `config.auto_table` or `.auto_blob`.
-            if isinstance(x, config.auto_table):
+            if isinstance(x, config.auto_table) or isinstance(x, View | ExternalTableReference):
                 try:
                     hook = self.table_store.get_m_table_hook(Table(x))
                     x = hook.auto_table(x)
@@ -907,11 +926,11 @@ class PipeDAGStore(Disposable):
                 isinstance(x, (Table, RawSql, Blob))
                 and id(x) not in task_cache_info.imperative_materialization_state.table_ids
             ):
-                if not task.lazy:
+                if not task._lazy:
                     # task cache_key is output cache_key for eager tables
                     x.cache_key = task_cache_info.cache_key
 
-                x.stage = task.stage
+                x.stage = task._stage
 
                 # Update name:
                 # - If no name has been provided, generate on automatically
@@ -919,18 +938,27 @@ class PipeDAGStore(Disposable):
                 object_number = next(auto_suffix_counter)
                 auto_suffix = f"{task_cache_info.cache_key[0:6]}_{object_number:04d}"
 
-                x.name = mangle_table_name(x.name, task.name, auto_suffix)
+                x.name = mangle_table_name(x.name, task._name, auto_suffix)
 
                 if isinstance(x, Table):
                     if x.obj is None:
                         raise TypeError("Underlying table object can't be None")
                     tables.append(x)
+                    if x.view:
+                        # attention: the View object is a dataclass and traversed by deep_map.
+                        # Prepare later removal of view source tables from tables list:
+                        if isinstance(x.view.src, Iterable):
+                            for src in x.view.src:
+                                if isinstance(src, Table):
+                                    view_src_tables.add(id(src))
+                        elif isinstance(x.view.src, Table):
+                            view_src_tables.add(id(x.view.src))
                 elif isinstance(x, RawSql):
                     if x.sql is None:
                         raise TypeError("Underlying raw sql string can't be None")
                     raw_sqls.append(x)
                 elif isinstance(x, Blob):
-                    if task.lazy:
+                    if task._lazy:
                         raise NotImplementedError(
                             "Can't use Blobs with lazy tasks. Invalidation of the"
                             " downstream dependencies is not implemented."
@@ -942,8 +970,10 @@ class PipeDAGStore(Disposable):
             return x
 
         value = deep_map(value, preparation_mutator)
-        attach_annotation(task.fn_annotations.get("return"), value)
+        attach_annotation(task._fn_annotations.get("return"), value)
 
+        # remove view source tables from tables list
+        tables = [t for t in tables if id(t) not in view_src_tables]
         return value, tables, raw_sqls, blobs
 
     @staticmethod
@@ -960,7 +990,7 @@ class PipeDAGStore(Disposable):
 
         if tn_dup or bn_dup:
             raise DuplicateNameError(
-                f"Task '{task.name}' returned multiple tables and/or blobs"
+                f"Task '{task._name}' returned multiple tables and/or blobs"
                 " with the same name.\n"
                 f"Duplicate table names: {', '.join(tn_dup) if tn_dup else 'None'}\n"
                 f"Duplicate blob names: {', '.join(bn_dup) if bn_dup else 'None'}\n"
@@ -970,12 +1000,12 @@ class PipeDAGStore(Disposable):
 
         # Check names: No duplicates in stage
         ctx = RunContext.get()
-        success, tn_dup, bn_dup = ctx.add_names(task.stage, tables, blobs)
+        success, tn_dup, bn_dup = ctx.add_names(task._stage, tables, blobs)
 
         if not success:
             raise DuplicateNameError(
-                f"Task '{task.name}' returned tables and/or blobs"
-                f" whose name are not unique in the schema '{task.stage}'.\n"
+                f"Task '{task._name}' returned tables and/or blobs"
+                f" whose name are not unique in the schema '{task._stage}'.\n"
                 f"Duplicate table names: {', '.join(tn_dup) if tn_dup else 'None'}\n"
                 f"Duplicate blob names: {', '.join(bn_dup) if bn_dup else 'None'}\n"
                 "To enable automatic name mangling,"
@@ -993,7 +1023,7 @@ class PipeDAGStore(Disposable):
         store_blob: Callable[[Blob], None],
         store_metadata: Callable[[], None],
     ) -> list[tuple[Table, Exception]]:
-        stage = task.stage
+        stage = task._stage
         ctx = RunContext.get()
 
         stored_tables = []
@@ -1017,7 +1047,7 @@ class PipeDAGStore(Disposable):
                 ctx.validate_stage_lock(stage)
                 store_raw_sql(raw_sql)
 
-            ctx.validate_stage_lock(task.stage)
+            ctx.validate_stage_lock(task._stage)
             store_metadata()
 
         except Exception as e:
@@ -1050,8 +1080,8 @@ class PipeDAGStore(Disposable):
         :raises CacheError: if no matching task exists in the cache
         """
 
-        if task.stage.did_commit:
-            raise StageError(f"Stage ({task.stage}) already committed.")
+        if task._stage.did_commit:
+            raise StageError(f"Stage ({task._stage}) already committed.")
 
         metadata = self.table_store.retrieve_task_metadata(task, input_hash, cache_fn_hash)
         return self.json_decode(metadata.output_json), metadata
@@ -1079,8 +1109,8 @@ class PipeDAGStore(Disposable):
 
         def visitor(x):
             if isinstance(x, Table):
-                # Tables in external schemas should not get copied
-                if x.external_schema is None:
+                # Tables in external schemas and views should not get copied
+                if x.external_schema is None and x.view is None:
                     tables.append(x)
             elif isinstance(x, RawSql):
                 raw_sqls.append(x)
@@ -1103,7 +1133,7 @@ class PipeDAGStore(Disposable):
             self.table_store.copy_table_to_transaction,
             store_raw_sql,
             self.blob_store.copy_blob_to_transaction,
-            lambda: self.table_store.store_task_metadata(original_metadata, task.stage),
+            lambda: self.table_store.store_task_metadata(original_metadata, task._stage),
         )
 
     def retrieve_most_recent_task_output_from_cache(
@@ -1182,14 +1212,14 @@ def dematerialize_output_from_store(
     if isinstance(task, Task):
         root_task = task
     else:
-        root_task = task.task
+        root_task = task._task
 
     if as_type is None:
         assert isinstance(root_task, MaterializingTask)
-        as_type = root_task.input_type
+        as_type = root_task._input_type
 
     run_context = RunContext.get()
-    task_output = task.resolve_value(task_output)
+    task_output = task._resolve_value(task_output)
 
     with TaskContext(task):
         return deep_map(

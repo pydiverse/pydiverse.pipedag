@@ -4,6 +4,7 @@
 from pathlib import Path
 
 import pandas as pd
+import polars as pl
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.exc import ProgrammingError
@@ -18,6 +19,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     DropView,
 )
 from pydiverse.pipedag.container import ExternalTableReference, Schema, Table
+from pydiverse.pipedag.context.context import CacheValidationMode
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
@@ -29,7 +31,7 @@ pytestmark = [with_instances(DATABASE_INSTANCES)]
 
 @skip_instances("parquet_backend", "parquet_s3_backend", "parquet_s3_backend_db2")
 def test_smoke_table_reference():
-    @materialize(version="1.1")
+    @materialize(lazy=True)
     def in_table():
         table_store = ConfigContext.get().store.table_store
         schema = Schema("user_controlled_schema", prefix="", suffix="")
@@ -69,12 +71,6 @@ def test_smoke_table_reference():
 
     with filelock.FileLock(lock_path):
         assert f.run().successful
-
-
-try:
-    import polars as pl
-except ImportError:
-    pl = None
 
 
 @skip_instances("parquet_backend", "parquet_s3_backend", "parquet_s3_backend_db2")
@@ -168,6 +164,7 @@ def test_table_store():
             _ = m.assert_table_equal(external_view_polars, expected_external_view, check_dtype=False)
             _ = m.assert_table_equal(external_view_lazy_polars, expected_external_view, check_dtype=False)
 
+    assert f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID).successful
     assert f.run().successful
     assert f.run().successful
 

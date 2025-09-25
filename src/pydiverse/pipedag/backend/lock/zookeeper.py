@@ -2,23 +2,14 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import atexit
-import warnings
 from typing import Any
 
 from pydiverse.common.util import requires
 from pydiverse.pipedag import ConfigContext, Stage
 from pydiverse.pipedag.backend.lock.base import BaseLockManager, Lockable, LockState
 from pydiverse.pipedag.errors import DisposedError, LockError
+from pydiverse.pipedag.optional_dependency.zookeeper import KazooClient, KazooLock, KazooState, kazoo
 from pydiverse.pipedag.util import normalize_name
-
-try:
-    import kazoo
-    from kazoo.client import KazooClient, KazooState
-    from kazoo.recipe.lock import Lock as KazooLock
-except ImportError as e:
-    warnings.warn(str(e), ImportWarning)
-    kazoo = None
-    KazooClient = None
 
 
 @requires(kazoo, ImportError("ZooKeeperLockManager requires 'kazoo' to be installed."))
