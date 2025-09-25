@@ -317,7 +317,11 @@ class TableHookResolver:
                     f"Can't retrieve Table as type {type_}. This type is incompatible with store {self}."
                 )
 
-        raise TypeError(f"Can't retrieve Table as type {type_}. " + self.__hook_unmet_requirements_message())
+        if type_ is object:
+            raise TypeError("Invalid input_type 'object'. This is most likely a mistake with optional dependencies.")
+        raise TypeError(
+            f"Can't retrieve Table as type {type_} (see input_type). " + self.__hook_unmet_requirements_message()
+        )
 
     def get_hook_subclass(self: Self, type_: type[T]) -> type[T]:
         """Finds a table hook that is a subclass of the provided type"""

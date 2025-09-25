@@ -95,7 +95,13 @@ def json_default(o):
             "cache_key": o.cache_key,
         }
     if isinstance(o, View):
-        assert o.assert_normalized  # only normalized form can be serialized
+        # only normalized form can be serialized
+        assert o.assert_normalized, (
+            "View ended up in serialization without normalization. "
+            "Most likely, this is an internal bug in the code which calls materialization hooks for views. See: "
+            "PipeDAGStore.prepare_task_output_for_materialization which fills list of tables for materialize_task."
+            "Make sure you have pydiverse-common >= 0.3.15 because there was a change in deep_map for dataclasses."
+        )
         return {
             TYPE_KEY: Type.VIEW,
             "src": o.src,

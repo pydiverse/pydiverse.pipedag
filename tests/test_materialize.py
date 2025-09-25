@@ -172,6 +172,7 @@ def test_materialize_view(imperative):
         assert f.run().successful
 
 
+@pytest.mark.skipif(C is None, reason="Pydiverse.transform not available")
 @pytest.mark.parametrize("imperative", [False, True])
 def test_materialize_view_union(imperative):
     """The implementation of this special case is different in ParquetTableStore."""
