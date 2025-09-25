@@ -274,7 +274,7 @@ def get_view_query(view: View, store: SQLTableStore):
             SQLAlchemyTableHook.retrieve(store, src_tbl, src_tbl.stage.current_name, sa.Table) for src_tbl in view.src
         ]
         assert len(src_tables) > 0
-        cols = src_tables[0].c
+        cols = src_tables[0].c  # this might be oversimplified for categorical columns
         src_select = [sa.select(sa.text("*")).select_from(alias.original) for alias in src_tables]
         base_from = sa.union_all(*src_select).alias("sub")
 
@@ -409,13 +409,18 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
             tbl = table.obj
             while hasattr(tbl, "original"):
                 tbl = tbl.original
-            source_tables = [
-                dict(
-                    name=tbl.name,
-                    schema=tbl.schema,
-                    shared_lock_allowed=table.shared_lock_allowed,
-                )
-            ]
+            if hasattr(tbl, "name"):
+                source_tables = [
+                    dict(
+                        name=tbl.name,
+                        schema=tbl.schema,
+                        shared_lock_allowed=table.shared_lock_allowed,
+                    )
+                ]
+            else:
+                # This happens for views pointing to multiple parquet files (ParquetTableStore).
+                # But this doesn't need locking of source tables anyways.
+                source_tables = []
         else:
             try:
                 input_tables = TaskContext.get().input_tables
@@ -583,6 +588,11 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         ]
 
     @classmethod
+    def get_view_query(cls, view: View, store: SQLTableStore):
+        """ParquetTableStore implements special version for src-only views."""
+        return get_view_query(view, store)
+
+    @classmethod
     def retrieve(
         cls,
         store: SQLTableStore,
@@ -600,7 +610,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
             alias_name = table_name
 
         if table.view:
-            return get_view_query(table.view, store).alias(alias_name)
+            return cls.get_view_query(table.view, store).alias(alias_name)
         tbl = store.reflect_table(table_name, schema)
         return tbl.alias(alias_name)
 

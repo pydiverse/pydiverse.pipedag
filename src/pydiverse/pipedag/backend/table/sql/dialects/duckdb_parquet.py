@@ -23,7 +23,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
 )
 from pydiverse.pipedag.backend.table.sql.dialects.duckdb import DuckDBTableStore
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
-from pydiverse.pipedag.container import SortOrder
+from pydiverse.pipedag.container import SortOrder, View
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.materialize.store import BaseTableStore
 from pydiverse.pipedag.materialize.table_hook_base import (
@@ -1125,3 +1125,38 @@ class SQLAlchemyTableHook(sql_hooks.SQLAlchemyTableHook):
             ),
             CreateViewAsSelect(table_name, schema, store._read_parquet_query(file_path)),
         ]
+
+    @classmethod
+    def get_view_query(cls, view: View, store: ParquetTableStore):
+        """ParquetTableStore implements special version for src-only views."""
+        if view.columns is None and view.sort_by is None and view.limit is None:
+            if isinstance(view.src, Iterable):
+                try:
+                    from sqlalchemy.sql.base import ColumnCollection, ReadOnlyColumnCollection
+
+                    possible = True
+                except LookupError:
+                    possible = False
+
+                if possible:
+                    src_tables = list(view.src)
+                    files = [str(store.get_table_path(tbl)) for tbl in src_tables]
+                    assert len(src_tables) > 0
+                    tbl1 = SQLAlchemyTableHook.retrieve(
+                        store, src_tables[0], src_tables[0].stage.current_name, sa.Table
+                    )
+                    cols = tbl1.c  # this might be oversimplified for categorical columns
+                    file_refs = "['" + "','".join(files) + "']"
+                    base_from = sa.select(sa.text("*")).select_from(sa.text(f"read_parquet({file_refs})")).alias("sub")
+
+                    # reconstruct columns which were lost by select("*")
+                    def bind(c: sa.Column, expr):
+                        col = sa.Column(c.name, c.type)
+                        col.table = expr
+                        return col
+
+                    base_from.c = ReadOnlyColumnCollection(
+                        ColumnCollection([(c.name, bind(c, base_from)) for c in cols])
+                    )
+                    return base_from
+        return sql_hooks.get_view_query(view, store)

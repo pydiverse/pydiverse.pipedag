@@ -172,6 +172,40 @@ def test_materialize_view(imperative):
         assert f.run().successful
 
 
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_view_union(imperative):
+    """The implementation of this special case is different in ParquetTableStore."""
+    logger = structlog.getLogger(__name__ + ".test_materialize_view")
+
+    @materialize(input_type=sa.Table, lazy=True)
+    def create_view(tbl: Alias, tbl2: Alias):
+        return Table(View(src=[tbl, tbl2]))
+
+    @materialize(input_type=pdt.SqlAlchemy, lazy=True)
+    def create_view_pdt(tbl: pdt.Table, tbl2: pdt.Table):
+        return Table(View(src=[tbl, tbl2]))
+
+    _m = m if not imperative else m2
+    with Flow("flow") as f:
+        with Stage("stage"):
+            x = _m.simple_dataframe()
+            x2 = _m.noop(x)
+            y = create_view(x, x2)
+            z = create_view_pdt(x, x2)
+            yy_lazy = _m.noop_lazy(y)
+            zz_lazy = _m.noop_lazy(z)
+            yy = _m.noop(y)
+            zz = _m.noop(z)
+            _ = yy, zz, yy_lazy, zz_lazy
+
+    assert f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID).successful
+
+    for i in range(2):
+        logger.info(f"** Starting run: {i}")
+        # run three times to test some caching behavior (this is at least a smoke test for caching)
+        assert f.run().successful
+
+
 @pytest.mark.skipif(C is None, reason="Pydiverse.transform not available")
 @pytest.mark.parametrize("imperative", [False, True])
 def test_materialize_view_pdt(imperative):
