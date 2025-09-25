@@ -1,6 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
-
+import sys
 import threading
 import time
 from typing import Callable
@@ -95,7 +95,6 @@ def _test_lock_manager(create_lock_manager: Callable[[], BaseLockManager]):
     assert not t2.is_alive(), "Thread timed out"
 
 
-@pytest.mark.parallelize
 @pytest.mark.skipif(KazooClient is None, reason="requires kazoo")
 def test_zookeeper():
     from pydiverse.pipedag.backend.lock import ZooKeeperLockManager
@@ -115,7 +114,6 @@ def test_zookeeper():
         )
 
 
-@pytest.mark.parallelize
 def test_filelock():
     import tempfile
     from pathlib import Path
@@ -131,7 +129,11 @@ def test_filelock():
         _test_lock_manager(create_lock_manager)
 
 
-@pytest.mark.parallelize
+@pytest.mark.skipif(
+    sys.version_info >= (3, 13),
+    reason="We get deprecation warning in 3.13 for forking multithreaded process and "
+    "we see this test hanging in a way that cannot be caught by a timeout.",
+)
 def test_no_lock():
     from pydiverse.pipedag.backend.lock import NoLockManager
 
