@@ -1,12 +1,10 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-import warnings
 from typing import Any
 
 import structlog
 from packaging.specifiers import SpecifierSet
-from packaging.version import Version
 
 from pydiverse.common.util import requires
 from pydiverse.pipedag import ExternalTableReference, Table
@@ -16,16 +14,7 @@ from pydiverse.pipedag.core.result import Result
 from pydiverse.pipedag.engine.base import (
     OrchestrationEngine,
 )
-
-try:
-    import prefect
-
-    prefect_version = Version(prefect.__version__)
-except ImportError as e:
-    warnings.warn(str(e), ImportWarning)
-
-    prefect = None
-    prefect_version = Version("0")
+from pydiverse.pipedag.optional_dependency.prefect import prefect, prefect_version
 
 
 @requires(prefect, ImportError("Module 'prefect' not installed"))
@@ -68,14 +57,16 @@ class PrefectOneEngine(OrchestrationEngine):
         tasks: dict[Task, prefect.Task] = {}
 
         for t in f.get_tasks():
-            task = prefect.task(name=t.name)(t.run)
+            task = prefect.task(name=t._name)(t._do_run)
             tasks[t] = task
 
             # if desired input is passed in inputs use it,
             # otherwise try to get it from results
             task_inputs = {
-                **{in_id: tasks[in_t] for in_id, in_t in t.input_tasks.items() if in_t in tasks and in_t not in inputs},
-                **{in_id: Table(inputs[in_t]) for in_id, in_t in t.input_tasks.items() if in_t in inputs},
+                **{
+                    in_id: tasks[in_t] for in_id, in_t in t._input_tasks.items() if in_t in tasks and in_t not in inputs
+                },
+                **{in_id: Table(inputs[in_t]) for in_id, in_t in t._input_tasks.items() if in_t in inputs},
             }
 
             flow.add_task(task)
@@ -180,20 +171,20 @@ class PrefectTwoEngine(OrchestrationEngine):
             futures: dict[Task, prefect.futures.PrefectFuture] = {}
 
             for t in f.get_tasks():
-                task_kwargs = {"name": t.name}
+                task_kwargs = {"name": t._name}
                 if isinstance(t, MaterializingTask):
-                    task_kwargs["version"] = t.version
+                    task_kwargs["version"] = str(t._version)
 
-                task = prefect.task(**task_kwargs)(t.run)
+                task = prefect.task(**task_kwargs)(t._do_run)
 
                 parents = [futures[p] for p in f.get_parent_tasks(t)]
                 task_inputs = {
                     **{
                         in_id: futures[in_t]
-                        for in_id, in_t in t.input_tasks.items()
+                        for in_id, in_t in t._input_tasks.items()
                         if in_t in futures and in_t not in inputs
                     },
-                    **{in_id: Table(inputs[in_t]) for in_id, in_t in t.input_tasks.items() if in_t in inputs},
+                    **{in_id: Table(inputs[in_t]) for in_id, in_t in t._input_tasks.items() if in_t in inputs},
                 }
 
                 futures[t] = task.submit(

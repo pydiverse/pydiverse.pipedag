@@ -45,14 +45,7 @@ from sqlalchemy.sql.type_api import TypeEngine
 
 from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import Schema
-
-try:
-    from sqlalchemy import Connection, Engine
-except ImportError:
-    # For compatibility with sqlalchemy < 2.0
-    from sqlalchemy.engine import Engine
-    from sqlalchemy.engine.base import Connection
-
+from pydiverse.pipedag.optional_dependency.sqlalchemy import Connection, Engine
 
 # Postgres truncates identifiers at 63 characters
 # MSSQL does not allow identifiers longer than 128 characters
@@ -450,12 +443,14 @@ class LockTable(DDLElement):
 
 
 class LockSourceTable(DDLElement):
-    def __init__(self, name: str, schema: Schema):
+    def __init__(self, name: str, schema: Schema | str):
         """
         Lock Table in shared mode for reading.
         """
         self.name = name
+        assert schema is not None
         self.schema = schema.get() if isinstance(schema, Schema) else schema
+        assert isinstance(self.schema, str)
 
 
 @compiles(CreateSchema)
@@ -1286,6 +1281,7 @@ def visit_lock_source_table_postgres(lock_source_table: LockSourceTable, compile
     _ = kw
     preparer = compiler.preparer
     name = preparer.quote(lock_source_table.name)
+    assert lock_source_table.schema is not None
     schema = preparer.format_schema(lock_source_table.schema)
 
     return f"LOCK TABLE {schema}.{name} IN SHARE MODE"
@@ -1320,7 +1316,7 @@ try:
             f"THEN CAST({value} AS {target_type}) ELSE NULL END"
         )
 except ImportError:
-    # no TryCast implementation for SQLAlchemy < 1.0
+    # no TryCast implementation for SQLAlchemy < 2.0
     pass
 
 

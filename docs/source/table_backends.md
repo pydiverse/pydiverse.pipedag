@@ -22,8 +22,8 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 Which need to implement the following functions:
 
 ```python
-def can_materialize(cls, type_) -> CanResult:
-def can_retrieve(cls, type_) -> bool:
+def can_materialize(cls, type_) -> CanMatResult:
+def can_retrieve(cls, type_) -> CanRetResult:
 def materialize(cls, store: SQLTableStore, table: Table, stage_name):
 def retrieve(cls, store, table, stage_name, as_type: type, limit: int | None = None):
 def lazy_query_str(cls, store, obj) -> str:

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 from typing import Any
 
+import polars as pl
 import pytest
 from pandas.core.dtypes.base import ExtensionDtype
 
@@ -29,11 +30,6 @@ pytestmark = [
     pytest.mark.polars,
     with_instances(DATABASE_INSTANCES),
 ]
-
-try:
-    import polars as pl
-except ImportError:
-    pl = None
 
 
 def test_table_store():

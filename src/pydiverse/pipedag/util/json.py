@@ -18,6 +18,7 @@ from typing import get_args, get_origin
 
 from pydiverse.common.util.computation_tracing import fully_qualified_name
 from pydiverse.common.util.import_ import load_object
+from pydiverse.pipedag.container import View
 
 TYPE_KEY = "__pipedag_type__"
 
@@ -27,6 +28,7 @@ class Type(str, Enum):
     TABLE = "table"
     RAW_SQL = "raw_sql"
     BLOB = "blob"
+    VIEW = "view"
     STAGE = "stage"
     PIPEDAG_CONFIG = "pipedag_config"
     CONFIG_CONTEXT = "config_context"
@@ -55,8 +57,11 @@ def json_default(o):
 
     if isinstance(o, Table):
         kwargs = {}
+        # maintain cache in case new features are not used
         if o.assumed_dependencies is not None:
-            kwargs["assumed_dependencies"] = o.assumed_dependencies  # [json_default(t) for t in o.assumed_dependencies]
+            kwargs["assumed_dependencies"] = o.assumed_dependencies
+        if o.view is not None:
+            kwargs["view"] = o.view
         return {
             TYPE_KEY: Type.TABLE,
             "stage": o.stage.name if o.stage is not None else None,
@@ -88,6 +93,21 @@ def json_default(o):
             "stage": o.stage.name if o.stage is not None else None,
             "name": o.name,
             "cache_key": o.cache_key,
+        }
+    if isinstance(o, View):
+        # only normalized form can be serialized
+        assert o.assert_normalized, (
+            "View ended up in serialization without normalization. "
+            "Most likely, this is an internal bug in the code which calls materialization hooks for views. See: "
+            "PipeDAGStore.prepare_task_output_for_materialization which fills list of tables for materialize_task."
+            "Make sure you have pydiverse-common >= 0.3.15 because there was a change in deep_map for dataclasses."
+        )
+        return {
+            TYPE_KEY: Type.VIEW,
+            "src": o.src,
+            "sort_by": o.sort_by,
+            "columns": o.columns,
+            "limit": o.limit,
         }
     if isinstance(o, Stage):
         return {
@@ -143,7 +163,7 @@ def json_default(o):
         if isinstance(o, pdt.Table):
             raise TypeError(
                 "pydiverse.transform.Table is not supposed to be JSON serialized. "
-                "It should be a pipedag Table instead."
+                "It should be a pipedag Table instead. "
                 "Consider adding pydiverse.transform.Table to your auto_table setting "
                 "in the PipedagConfig."
             )
@@ -157,25 +177,34 @@ def json_default(o):
                 "args": o.__dict__,
             },
         }
-    try:
-        # provide better error message in case of pdt.Table
-        import polars as pl
+    if isinstance(o, Enum):
+        # can be constructed the same way as a data class
+        return {
+            TYPE_KEY: Type.DATA_CLASS,
+            "config_dict": {
+                "class": fully_qualified_name(o),
+                "args": dict(value=o.value),
+            },
+        }
 
-        if isinstance(o, pl.DataFrame | pl.LazyFrame):
-            raise TypeError(
-                "Polars Tables are not supposed to be JSON serialized. "
-                "It should be a pipedag Table instead."
-                "Consider adding polars.DataFrame and polars.LazyFrame to your "
-                "auto_table setting in the PipedagConfig."
-            )
-    except ImportError:
-        pass
+    # provide better error message in case of polars table
+    import polars as pl
+
+    if isinstance(o, pl.DataFrame | pl.LazyFrame):
+        raise TypeError(
+            "Polars Tables are not supposed to be JSON serialized. "
+            "It should be a pipedag Table instead. "
+            "Consider adding polars.DataFrame and polars.LazyFrame to your "
+            "auto_table setting in the PipedagConfig."
+        )
+
+    # provide better error message in case of pandas table
     import pandas as pd
 
     if isinstance(o, pd.DataFrame):
         raise TypeError(
             "Pandas Tables are not supposed to be JSON serialized. "
-            "It should be a pipedag Table instead."
+            "It should be a pipedag Table instead. "
             "Consider adding pandas.DataFrame to your "
             "auto_table setting in the PipedagConfig."
         )
@@ -214,6 +243,7 @@ def json_object_hook(d: dict):
         tbl.external_schema = d.get("external_schema")
         tbl.shared_lock_allowed = d.get("shared_lock_allowed", True)
         tbl.assumed_dependencies = d.get("assumed_dependencies")
+        tbl.view = d.get("view", None)
         return tbl
     if type_ == Type.RAW_SQL:
         raw_sql = RawSql(name=d["name"])
@@ -227,6 +257,9 @@ def json_object_hook(d: dict):
         blob.stage = get_stage(d["stage"])
         blob.cache_key = d["cache_key"]
         return blob
+    if type_ == Type.VIEW:
+        view = View(src=d["src"], sort_by=d["sort_by"], columns=d["columns"], limit=d["limit"], assert_normalized=True)
+        return view
     if type_ == Type.STAGE:
         return get_stage(d["name"])
     if type_ == Type.PIPEDAG_CONFIG:

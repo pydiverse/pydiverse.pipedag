@@ -140,7 +140,7 @@ jobs:
         postgres
         minio
         zoo
-      pytest-arguments: --s3 --ibis --pdtransform --no-duckdb --no-postgres
+      pytest-arguments: --s3 --ibis --pdtransform --no-duckdb --no-postgres --no-lock_tests
 
   colspec_test:
     name: ColSpec Tests
@@ -164,7 +164,7 @@ jobs:
         postgres
         zoo
         minio
-      pytest-arguments: --pdtransform
+      pytest-arguments: --pdtransform --no-lock_tests
 
   db2_test:
     name: DB2 Tests

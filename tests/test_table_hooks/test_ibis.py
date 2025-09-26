@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
+from pydiverse.pipedag.optional_dependency.ibis import ibis
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
@@ -13,15 +14,9 @@ from tests.util.tasks_library import assert_table_equal
 pytestmark = [pytest.mark.ibis, with_instances(DATABASE_INSTANCES)]
 
 
-try:
-    import ibis
-except ImportError:
-    ibis = None
-
-
 # connectorx and thus ibis have trouble with db2+ibm_db:// URLs and mssql
 @skip_instances("ibm_db2", "mssql")
-@pytest.mark.skipif(ibis is None, reason="ibis not installed")
+@pytest.mark.skipif(ibis.api.Table is None, reason="ibis not installed")
 def test_table_store():
     IbisTable = ibis.api.Table
 

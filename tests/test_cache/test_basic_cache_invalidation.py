@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
+import polars as pl
 import pytest
 import sqlalchemy as sa
 
@@ -17,16 +18,11 @@ from pydiverse.pipedag.util.sql import compile_sql
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import ALL_INSTANCES, skip_instances, with_instances
-from tests.util import select_as
+from tests.util import select_as, swallowing_raises
 from tests.util import tasks_library as m
 from tests.util import tasks_library_imperative as m2
 from tests.util.spy import spy_task
 from tests.util.tasks_library import get_task_logger
-
-try:
-    import polars as pl
-except ImportError:
-    pl = None
 
 # snowflake tests are too slow, possibly they could move to nightly tests
 pytestmark = [with_instances(tuple(set(ALL_INSTANCES) - {"snowflake"}))]
@@ -203,7 +199,7 @@ def test_change_task_version_literal(mocker):
             child = m.noop(out)
 
     # Initial Call
-    out._version = "VERSION 0"
+    out._internal_version = "VERSION 0"
     assert flow.run().successful
 
     # Second Call (Should be cached)
@@ -215,7 +211,7 @@ def test_change_task_version_literal(mocker):
 
     # Changing the version should invalidate the cache, but the child still
     # shouldn't get called because the parent task still returned the same value.
-    out._version = "VERSION 1"
+    out._internal_version = "VERSION 1"
     assert flow.run().successful
     out_spy.assert_called_once()
     child_spy.assert_not_called()
@@ -230,7 +226,7 @@ def test_change_task_version_table(mocker):
             child_lazy = m.noop_lazy(out)  # lazy=True task
 
     # Initial Call
-    out._version = "VERSION 0"
+    out._internal_version = "VERSION 0"
     assert flow.run().successful
 
     # Second Call (Should be cached)
@@ -246,7 +242,41 @@ def test_change_task_version_table(mocker):
 
     # Changing the version should invalidate the cache. This should also invalidate
     # the child task because it receives the table as input.
-    out._version = "VERSION 1"
+    out._internal_version = "VERSION 1"
+    assert flow.run().successful
+    out_spy.assert_called_once()
+    child_spy.assert_called_once()
+    child2_spy.assert_called_once()
+    child_lazy_spy.assert_called_once()
+
+
+def test_change_task_version_table_view(mocker):
+    with Flow() as flow:
+        with Stage("stage_1"):
+            out = m.simple_dataframe()
+            view = m.noop_view(out)
+            child = m.noop(view)
+            child2 = m.noop_sql(view)  # lazy=False task
+            child_lazy = m.noop_lazy(view)  # lazy=True task
+
+    # Initial Call
+    out._internal_version = "VERSION 0"
+    assert flow.run().successful
+
+    # Second Call (Should be cached)
+    out_spy = spy_task(mocker, out)
+    child_spy = spy_task(mocker, child)
+    child2_spy = spy_task(mocker, child2)
+    child_lazy_spy = spy_task(mocker, child_lazy)
+    assert flow.run().successful
+    out_spy.assert_not_called()
+    child_spy.assert_not_called()
+    child2_spy.assert_not_called()
+    child_lazy_spy.assert_called_once()
+
+    # Changing the version should invalidate the cache. This should also invalidate
+    # the child task because it receives the table as input.
+    out._internal_version = "VERSION 1"
     assert flow.run().successful
     out_spy.assert_called_once()
     child_spy.assert_called_once()
@@ -262,7 +292,7 @@ def test_change_task_version_blob(mocker):
             child = m.as_blob(out)
 
     # Initial Call
-    out._version = "VERSION 0"
+    out._internal_version = "VERSION 0"
     assert flow.run().successful
 
     # Second Call (Should be cached)
@@ -274,7 +304,7 @@ def test_change_task_version_blob(mocker):
 
     # Changing the version should invalidate the cache. This should also invalidate
     # the child task because it receives the blob as input.
-    out._version = "VERSION 1"
+    out._internal_version = "VERSION 1"
     assert flow.run().successful
     out_spy.assert_called_once()
     child_spy.assert_called_once()
@@ -643,7 +673,7 @@ def test_cache_validation_mode_assert(ignore_task_version, disable_cache_functio
         assert result.get(s2, as_type=pd.DataFrame)["x"].iloc[0] == return_value
 
     if disable_cache_function or ignore_task_version:
-        with pytest.raises(error):
+        with swallowing_raises(error):
             result = flow.run(**kwargs)
             assert result.successful
 
@@ -657,12 +687,12 @@ def test_cache_validation_mode_assert(ignore_task_version, disable_cache_functio
         assert result.successful
 
     return_value = 1
-    with pytest.raises(error):
+    with swallowing_raises(error):
         flow.run(**kwargs)
 
     return_value = 0
     flow, _, _ = get_flow(version="1.1")
-    with pytest.raises(error):
+    with swallowing_raises(error):
         flow.run(**kwargs)
 
 

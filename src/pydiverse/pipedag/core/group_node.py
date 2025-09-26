@@ -188,21 +188,21 @@ class BarrierTask(Task):
     def __init__(self, group_node: GroupNode, stage: "Stage", flow: "Flow", prefix=""):
         # Because the BarrierTask doesn't get added to the stage.tasks list,
         # we can't call the super initializer.
-        self.prefix = prefix
-        self.name = f"{prefix}Barrier '{stage.name}.{group_node.label}'"
-        self.nout = None
+        self._prefix = prefix
+        self._name = f"{prefix}Barrier '{stage.name}.{group_node.label}'"
+        self._nout = None
 
-        self.logger = structlog.get_logger(logger_name="Barrier", group_node=group_node, stage=stage)
+        self._logger = structlog.get_logger(logger_name="Barrier", group_node=group_node, stage=stage)
 
-        self._bound_args = inspect.signature(self.fn).bind()
-        self.flow = flow
-        self.stage = stage
+        self._bound_args = inspect.signature(self._fn).bind()
+        self._flow = flow
+        self._stage = stage
 
-        self.flow.add_task(self)
+        self._flow.add_task(self)
 
-        self.input_tasks = {}
-        self.upstream_stages = [stage]
+        self._input_tasks = {}
+        self._upstream_stages = [stage]
         self._visualize_hidden = True
 
-    def fn(self):
-        self.logger.info(f"{self.prefix}Ordering barrier passed")
+    def _fn(self):
+        self._logger.info(f"{self._prefix}Ordering barrier passed")

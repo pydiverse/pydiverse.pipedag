@@ -48,13 +48,7 @@ from pydiverse.pipedag.materialize.metadata import (
     TaskMetadata,
 )
 from pydiverse.pipedag.materialize.store import BaseTableStore
-
-try:
-    from sqlalchemy import Connection, Engine
-except ImportError:
-    # For compatibility with sqlalchemy < 2.0
-    from sqlalchemy.engine import Engine
-    from sqlalchemy.engine.base import Connection
+from pydiverse.pipedag.optional_dependency.sqlalchemy import Connection, Engine
 
 DISABLE_DIALECT_REGISTRATION = "__DISABLE_DIALECT_REGISTRATION"
 
@@ -1428,9 +1422,9 @@ class SQLTableStore(BaseTableStore):
                 result = (
                     meta_conn.execute(
                         self.tasks_table.select()
-                        .where(self.tasks_table.c.name == task.name)
-                        .where(self.tasks_table.c.stage == task.stage.name)
-                        .where(self.tasks_table.c.version == task.version)
+                        .where(self.tasks_table.c.name == task._name)
+                        .where(self.tasks_table.c.stage == task._stage.name)
+                        .where(self.tasks_table.c.version == str(task._version))
                         .where(self.tasks_table.c.input_hash == input_hash)
                         .where(
                             self.tasks_table.c.cache_fn_hash == cache_fn_hash
@@ -1451,7 +1445,7 @@ class SQLTableStore(BaseTableStore):
         return TaskMetadata(
             name=result.name,
             stage=result.stage,
-            version=result.version,
+            version=str(result.version),
             timestamp=result.timestamp,
             run_id=result.run_id,
             position_hash=result.position_hash,
@@ -1464,19 +1458,19 @@ class SQLTableStore(BaseTableStore):
         self, task: MaterializingTask, ignore_position_hashes: bool = False
     ) -> list[TaskMetadata]:
         match_condition = sa.and_(
-            self.tasks_table.c.name == task.name,
-            self.tasks_table.c.stage == task.stage.name,
+            self.tasks_table.c.name == task._name,
+            self.tasks_table.c.stage == task._stage.name,
         )
 
         if not ignore_position_hashes:
-            match_condition = match_condition & (self.tasks_table.c.position_hash == task.position_hash)
+            match_condition = match_condition & (self.tasks_table.c.position_hash == task._position_hash)
         with self.metadata_connect() as meta_conn:
             results = meta_conn.execute(self.tasks_table.select().where(match_condition)).mappings().all()
         return [
             TaskMetadata(
                 name=result.name,
                 stage=result.stage,
-                version=result.version,
+                version=str(result.version),
                 timestamp=result.timestamp,
                 run_id=result.run_id,
                 position_hash=result.position_hash,

@@ -31,19 +31,21 @@ class SequentialEngine(OrchestrationEngine):
         try:
             for task in flow.get_tasks():
                 try:
-                    if not (set(task.input_tasks) & failed_tasks):
+                    if not (set(task._input_tasks) & failed_tasks):
                         task_inputs = {
                             **{
                                 in_id: results[in_t]
-                                for in_id, in_t in task.input_tasks.items()
+                                for in_id, in_t in task._input_tasks.items()
                                 if in_t in results and in_t not in inputs
                             },
                             **{
-                                in_id: Table(inputs[in_t]) for in_id, in_t in task.input_tasks.items() if in_t in inputs
+                                in_id: Table(inputs[in_t])
+                                for in_id, in_t in task._input_tasks.items()
+                                if in_t in inputs
                             },
                         }
 
-                        results[task] = task.run(
+                        results[task] = task._do_run(
                             inputs=task_inputs,
                             run_context=run_context,
                             config_context=config_context,
