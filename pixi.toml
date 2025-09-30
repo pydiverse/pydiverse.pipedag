@@ -127,6 +127,7 @@ sphinx-copybutton = ">=0.5.2"
 [tasks]
 postinstall = "pip install --no-build-isolation --no-deps --disable-pip-version-check -e ."
 zip-examples = "sh -c 'set -ex; for d in example*; do if test -f $d/run_pipeline.py; then echo $d; cd $d; pixi install; cd -; rm -r $d/.pixi $d/__pycache__ || echo ignore; rm docs/source/examples/zip/$d.zip || echo $d.zip is new; zip -r docs/source/examples/zip/$d.zip $d/; fi; done'"
+install-all = "sh -c 'cd .pixi/envs/ && for i in */; do pixi install -e $(basename $i /); done && cd -'"
 
 [feature.docs.tasks]
 docs = "cd docs && make html "
