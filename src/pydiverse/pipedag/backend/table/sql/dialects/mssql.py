@@ -372,8 +372,10 @@ class MSSqlTableStore(SQLTableStore):
         table_name, schema = super().resolve_alias(table, stage_name)
         return PipedagMSSqlReflection.resolve_alias(self.engine, table_name, schema)
 
-    def _set_materialization_details(self, materialization_details: dict[str, dict[str | list[str]]] | None) -> None:
-        self.materialization_details = MSSqlMaterializationDetails.create_materialization_details_dict(
+    def _create_materialization_details(
+        self, materialization_details: dict[str, dict[str | list[str]]] | None
+    ) -> BaseMaterializationDetails:
+        return MSSqlMaterializationDetails.create_materialization_details_dict(
             materialization_details,
             self.strict_materialization_details,
             self.default_materialization_details,
