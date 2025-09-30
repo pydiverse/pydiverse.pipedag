@@ -318,6 +318,17 @@ class ConfigContext(BaseAttrsContext):
                 import_object(t)
                 return True
             except (ImportError, AttributeError):
+                if t == "pydiverse.transform.Table":
+                    try:
+                        import pydiverse.transform as pdt
+
+                        _ = pdt
+                    except ImportError:
+                        self.logger.warning(
+                            "Configuration option auto_table in PipedagConfig includes 'pydiverse.transform.Table', "
+                            "however, pydiverse.transform is not installed."
+                        )
+                        return False
                 self.logger.exception(
                     f"Configuration option auto_table in PipedagConfig included class which does not exist: {t}"
                 )
