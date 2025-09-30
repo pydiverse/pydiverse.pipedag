@@ -876,7 +876,7 @@ def insert_into_in_query(select_sql, schema, table):
 def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
     from_name = compiler.preparer.quote(create_alias.from_name)
     from_schema = compiler.preparer.format_schema(create_alias.from_schema.get())
-    query = sa.select("*").select_from(sa.text(f"{from_schema}.{from_name}"))
+    query = sa.select(sa.text("*")).select_from(sa.text(f"{from_schema}.{from_name}"))
     return compiler.process(CreateViewAsSelect(create_alias.to_name, create_alias.to_schema, query), **kw)
 
 
@@ -912,7 +912,7 @@ def visit_create_alias(create_alias: CreateAlias, compiler, **kw):
 def visit_copy_table(copy_table: CopyTable, compiler, **kw):
     from_name = compiler.preparer.quote(copy_table.from_name)
     from_schema = compiler.preparer.format_schema(copy_table.from_schema.get())
-    query = sa.select("*").select_from(sa.text(f"{from_schema}.{from_name}"))
+    query = sa.select(sa.text("*")).select_from(sa.text(f"{from_schema}.{from_name}"))
     create = CreateTableAsSelect(
         copy_table.to_name,
         copy_table.to_schema,

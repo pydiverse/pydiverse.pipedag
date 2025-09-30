@@ -405,7 +405,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     ):
         query = table.obj
         if isinstance(table.obj, (sa.Table, sa.sql.expression.Alias)):
-            query = sa.select("*").select_from(table.obj)
+            query = sa.select(sa.text("*")).select_from(table.obj)
             tbl = table.obj
             while hasattr(tbl, "original"):
                 tbl = tbl.original
@@ -617,7 +617,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @classmethod
     def lazy_query_str(cls, store, obj) -> str:
         if isinstance(obj, sa.sql.expression.FromClause):
-            query = sa.select("*").select_from(obj)
+            query = sa.select(sa.text("*")).select_from(obj)
         else:
             query = obj
         query_str = str(query.compile(store.engine, compile_kwargs={"literal_binds": True}))
@@ -1062,7 +1062,7 @@ class DataframeSqlTableHook:
         cols, dtypes = cls._adjust_cols_retrieve(store, cols, dtypes)
 
         if cols is None:
-            query = sa.select("*").select_from(query)
+            query = sa.select(sa.text("*")).select_from(query)
         else:
             query = sa.select(*cols.values()).select_from(query)
         if limit is not None:
