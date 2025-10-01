@@ -5,7 +5,7 @@ from pydiverse.pipedag.backend.table.base import CanResult
 We currently support two table backends:
 
 - [](#pydiverse.pipedag.backend.table.SQLTableStore)
-- [](#pydiverse.pipedag.backend.table.parquet.ParquetTableStore)
+- [](#pydiverse.pipedag.backend.table.ParquetTableStore)
 
 Support for in-memory storage based on [Apache Arrow](https://arrow.apache.org/) is planned.
 
@@ -76,7 +76,7 @@ decorator out-of-the-box:
 - `tidypolars.Tibble` (see [https://github.com/markfairbanks/tidypolars](https://github.com/markfairbanks/tidypolars);
   recommended with `lazy=True`)
 
-## [](#pydiverse.pipedag.backend.table.parquet.ParquetTableStore)
+## [](#pydiverse.pipedag.backend.table.ParquetTableStore)
 
 The ParquetTableStore is derived from the [SQLTableStore](#pydiverse.pipedag.backend.table.SQLTableStore)
 with flavor DuckDB. It can be used in much the same way. Just the performance for `input_type`

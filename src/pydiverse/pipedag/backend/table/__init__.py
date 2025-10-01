@@ -3,10 +3,12 @@
 
 from . import cache
 from .dict import DictTableStore
+from .parquet import ParquetTableStore
 from .sql import SQLTableStore
 
 __all__ = [
     "cache",
     "DictTableStore",
     "SQLTableStore",
+    "ParquetTableStore",
 ]
