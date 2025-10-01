@@ -12,7 +12,7 @@ jobs:
     outputs:
       should-run: ${{ steps.should-run.outputs.should-run }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: check if latest commit is within 24 hrs
         id: should-run

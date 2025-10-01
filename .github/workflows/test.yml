@@ -33,16 +33,16 @@ jobs:
     runs-on: ${{ inputs.os }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Pixi
-        uses: prefix-dev/setup-pixi@v0.8.14
+        uses: prefix-dev/setup-pixi@v0.9.1
         with:
           environments: ${{ inputs.environment }}
 
       - name: Start Docker Compose
         if: ${{ inputs.docker-services != '' }}
-        uses: isbang/compose-action@40041ff1b97dbf152cd2361138c2b03fa29139df
+        uses: isbang/compose-action@b716db5b717cb9b81e391fe638e5aceaa2299e43
         with:
           compose-file: docker-compose.yaml
           services: ${{ inputs.docker-services }}
