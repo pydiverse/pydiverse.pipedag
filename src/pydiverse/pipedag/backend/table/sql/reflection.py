@@ -8,15 +8,15 @@ class PipedagDB2Reflection:
     @staticmethod
     def get_alias_names(engine: Engine, schema: str) -> list[str]:
         """Returns all aliases in a schema"""
-        return PipedagDB2Reflection._get_tabname(engine, schema, "A")
+        return PipedagDB2Reflection._get_tabnames(engine, schema, "A")
 
     @staticmethod
     def get_nickname_names(engine: Engine, schema: str) -> list[str]:
         """Returns all nicknames in a schema"""
-        return PipedagDB2Reflection._get_tabname(engine, schema, "N")
+        return PipedagDB2Reflection._get_tabnames(engine, schema, "N")
 
     @staticmethod
-    def _get_tabname(engine: Engine, schema: str, _type: str):
+    def _get_tabnames(engine: Engine, schema: str, _type: str):
         schema = engine.dialect.denormalize_name(schema)
         query = f"""
         SELECT TABNAME
