@@ -600,10 +600,14 @@ def input_stage_versions(
                             other_dict[key] = cfg2.store.dematerialize_item(tbl2, input_type)
                         else:
                             other_dict[key] = (
-                                f"Table not found in other stage version: {PipedagJSONEncoder().encode(tbl2)}"
+                                f"Table/Blob not found in other stage version: {PipedagJSONEncoder().encode(tbl2)}"
                             )
                     except Exception as e:
-                        _task._logger.error(
+                        if cfg1._swallow_exceptions:
+                            log = _task._logger.info
+                        else:
+                            log = _task._logger.error
+                        log(
                             "Failed to dematerialize table from other stage version",
                             table=ref,
                             stage=tbl2.stage,

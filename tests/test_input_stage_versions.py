@@ -170,14 +170,15 @@ def test_input_versions_blob():
         return f
 
     with StageLockContext():
-        f = get_flow()
-        assert f.run().successful
-        run += 1
-        f = get_flow()
-        assert f.run().successful
-        run += 1
-        val = -5
-        f = get_flow()
+        with ConfigContext.get().evolve(swallow_exceptions=True):
+            f = get_flow()
+            assert f.run().successful
+            run += 1
+            f = get_flow()
+            assert f.run().successful
+            run += 1
+            val = -5
+            f = get_flow()
         with swallowing_raises(AssertionError, match=r"expected to fail on third call"):
             f.run()
 

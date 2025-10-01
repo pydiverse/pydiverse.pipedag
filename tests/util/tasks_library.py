@@ -397,8 +397,8 @@ def pd_dataframe(data: dict[str, list]):
 
 
 @materialize(version="1.0")
-def as_blob(x):
-    return Blob(x)
+def as_blob(x, name: str | None = None):
+    return Blob(x, name=name)
 
 
 @materialize(lazy=True)
@@ -412,11 +412,11 @@ class _SomeClass:
 
 
 @materialize(version="1.0")
-def object_blob(x: dict):
+def object_blob(x: dict, name: str | None = None):
     instance = _SomeClass()
     instance.__dict__.update(x)
 
-    return Blob(instance)
+    return Blob(instance, name=name)
 
 
 @materialize()

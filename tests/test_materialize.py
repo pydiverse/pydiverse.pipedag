@@ -340,7 +340,7 @@ def test_debug_materialize_table_twice(imperative):
             x = _m.simple_dataframe_debug_materialize_twice()
             _m.assert_table_equal(x, x)
 
-    with pytest.raises(RuntimeError, match="interactive debugging"):
+    with swallowing_raises(RuntimeError, match="interactive debugging"):
         assert f.run().successful
 
 
