@@ -1319,6 +1319,10 @@ class SQLTableStore(BaseTableStore):
         # New tables (AND other objects)
         new_objects = set(metadata.new_objects) - set(metadata.prev_objects)
         tables_in_schema = set(inspector.get_table_names(src_schema.get()))
+        if ConfigContext.get().stage_commit_technique == StageCommitTechnique.READ_VIEWS:
+            # This is just a guess. If the RAW SQL created views, then we need to follow
+            # the read view alias to the actual table location.
+            tables_in_schema |= set(inspector.get_view_names(src_schema.get()))
         objects_in_schema = self._get_all_objects_in_schema(src_schema)
 
         self.check_materialization_details_supported(target_stage.materialization_details)

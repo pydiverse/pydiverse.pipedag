@@ -859,7 +859,7 @@ def test_nullable_raises(nullable, non_nullable, error):
         with Stage("stage_1"):
             lazy_task_1()
 
-    with pytest.raises(error):
+    with swallowing_raises(error):
         f.run()
 
 
