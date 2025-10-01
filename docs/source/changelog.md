@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.11.0 (2025-09-dd)
+## 0.11.0 (2025-10-01)
 - Support View as task output to allow multi-parquet fusion in ParquetTableStore or basic column selection/renaming
   outside consumer task.
 - Support dataclass lazy field access at wiring time when a task returns a dataclass
