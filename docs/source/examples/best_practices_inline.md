@@ -25,8 +25,8 @@ the flap of a butterfly and a query suddenly incurs a slowdown of 10-1000x for n
 1-100 million row range, this plays out most significant. A slowdown from a 5 min query to 3 hours is not uncommon.
 The good news: [programmatic SQL](/examples/best_practices_sql) can be used as an alternative means of SQL code
 organization where the finally assembled query does not contain any CTEs, subqueries, or views any more. Pipedag
-also supports returning a :py:class:`View` which is a way to abstract column selection and renaming between tasks.
-In the back, those views, however, are inlined into the final query of consuming tasks:
+also supports returning a {py:class}`~pydiverse.pipedag.View` which is a way to abstract column selection and renaming
+between tasks. In the back, those views, however, are inlined into the final query of consuming tasks:
 
 ```python
 import sqlalchemy as sa

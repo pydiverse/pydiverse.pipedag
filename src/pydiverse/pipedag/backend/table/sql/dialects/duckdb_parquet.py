@@ -48,8 +48,8 @@ class ParquetTableStore(DuckDBTableStore):
 
     .. rubric:: Supported Tables
 
-    The `SQLTableStore` can materialize (that is, store task output)
-    and dematerialize (that is, retrieve task input) the following Table types:
+    The ParquetTableStore can materialize (store task output)
+    and dematerialize (retrieve task input) the following Table types:
 
     .. list-table::
        :widths: 30, 30, 30
@@ -61,10 +61,8 @@ class ParquetTableStore(DuckDBTableStore):
          - Dematerialization
 
        * - SQLAlchemy
-         - | :py:class:`sa.sql.expression.Selectable
-                        <sqlalchemy.sql.expression.Selectable>`
-           | :py:class:`sa.sql.expression.TextClause
-                        <sqlalchemy.sql.expression.TextClause>`
+         - | :py:class:`sa.sql.expression.Selectable <sqlalchemy.sql.expression.Selectable>`
+           | :py:class:`sa.sql.expression.TextClause <sqlalchemy.sql.expression.TextClause>`
          - :py:class:`sa.Table <sqlalchemy.schema.Table>`
 
        * - Pandas
@@ -87,11 +85,15 @@ class ParquetTableStore(DuckDBTableStore):
 
        * - pydiverse.transform
          - ``pdt.Table``
-         - | ``pdt.eager.PandasTableImpl``
-           | ``pdt.lazy.SQLTableImpl``
+         - | ``pdt.Polars``
+           | ``pdt.SqlAlchemy``
 
        * - pydiverse.pipedag table reference
          - :py:class:`~.ExternalTableReference` (no materialization)
+         - Can be read with all dematerialization methods above
+
+       * - pydiverse.pipedag view
+         - :py:class:`~.View` (view with support for src union, column renaming, and sorting)
          - Can be read with all dematerialization methods above
 
     :param url:
@@ -119,22 +121,18 @@ class ParquetTableStore(DuckDBTableStore):
         before trying to open a connection to it.
 
     :param schema_prefix:
-        A prefix that gets placed in front of all schema names created by pipedag.
-
+        Prefix placed in front of all schema names created by pipedag.
     :param schema_suffix:
-        A suffix that gets placed behind of all schema names created by pipedag.
-
+        Suffix placed behind all schema names created by pipedag.
     :param avoid_drop_create_schema:
         If ``True``, no ``CREATE SCHEMA`` or ``DROP SCHEMA`` statements get issued.
         This is mostly relevant for databases that support automatic schema
         creation like IBM DB2.
 
     :param print_materialize:
-        If ``True``, all tables that get materialized get logged.
-
+        If ``True``, log every table materialization.
     :param print_sql:
-        If ``True``, all executed SQL statements get logged.
-
+        If ``True``, log every executed SQL statement.
     :param no_db_locking:
         Speed up database by telling it we will not rely on it's locking mechanisms.
         Currently not implemented.
@@ -149,8 +147,7 @@ class ParquetTableStore(DuckDBTableStore):
 
     :param materialization_details:
         A dictionary with each entry describing a tag for materialization details of
-        the table store. See subclasses of :py:class:`BaseMaterializationDetails
-         <pydiverse.pipedag.materialize.details.BaseMaterializationDetails>`
+        the table store. See subclasses of :py:class:`BaseMaterializationDetails`
         for details.
     :param default_materialization_details:
         The materialization_details that will be used if materialization_details
@@ -170,8 +167,8 @@ class ParquetTableStore(DuckDBTableStore):
         with concurrent operations each working with one or more database connections.
     :param parquet_base_bath:
         This is an fsspec compatible path to either a directory or an S3 bucket key
-        prefix. Examples are '/tmp/pipedag/parquet/' or 's3://pipedag-test-bucket/table_store/'.
-        `instance_id` will automatically be appended to parquet_base_bath.
+        prefix. Examples are ``/tmp/pipedag/parquet/`` or ``s3://pipedag-test-bucket/table_store/``.
+        ``instance_id`` will automatically be appended to parquet_base_bath.
     :param s3_endpoint_url:
         When using a non-standard S3 endpoint (like minio), this can be used to specify the URL.
         Unfortunately, the AWS_ENDPOINT_URL environment variable is not automatically picked up by duckdb.

@@ -656,7 +656,7 @@ class ExternalTableReference:
 
     def __init__(self, name: str, schema: str, shared_lock_allowed: bool = False):
         """
-        :param name: The name of the table, view, or nickname/alias
+        :param name: The name of the table, view, or nickname
         :param schema: The external schema of the object. A multi-part schema
             is allowed with '.' separator as also supported by SQLAlchemy Table
             schema argument.
@@ -701,32 +701,34 @@ class SortCol:
 class View:
     """Produces a view on pipedag managed tables with caching support.
 
-    Unlike for Table, pipedag needs to understand view queries much better in order
+    Unlike for :class:`Table`, pipedag needs to understand view queries much better in order
     to be able to do proper cache invalidation with source tables changing their name
     despite staying cache valid. That is why this View object includes all information
     about how to create a view.
 
     Only supported by :py:class:`~.SQLTableStore` and :py:class:`~.ParquetTableStore`.
 
-    Example
-    -------
+    Examples
+    --------
     A view can combine a set of parquet files as one read_parquet operation::
 
-        import sqlalachemy as sa
+        import sqlalchemy as sa
+
         @materialize(input_type=sa.Table, lazy=True)
         def task(tbls: list[sa.Alias]):
             return Table(View(src=tbls), name="union")
 
-    It also works specifying views with other input_types that support lazy table references.
-    In this case, you need to make sure that the `src` parameter only references input tables
-    exactly as they come in as parameters to the task::
+    It also works specifying views with other ``input_type`` values that support lazy table
+    references. In this case, you need to make sure that the ``src`` parameter only references
+    input tables exactly as they come in as parameters to the task::
 
         import pydiverse.transform as pdt
+
         @materialize(input_type=pdt.SqlAlchemy, lazy=True)
         def task(tbls: list[pdt.Table]):
             return Table(View(src=tbls), name="union")
 
-    Furthermore, it can be used to load only a subset of a table and rename columns:
+    Furthermore, it can be used to load only a subset of a table and rename columns::
 
         @materialize(input_type=sa.Table)
         def task(tbl: sa.Alias):
@@ -734,28 +736,28 @@ class View:
             return Table(
                 View(
                     src=tbl,
-                    columns={f"c{col}":col for col in cols},
+                    columns={f"c{col}": col for col in cols},
                     sort_by=[tbl.c.id.desc().nulls_first(), "id2"],
                     limit=10,
                 ),
                 name="selection",
             )
 
-    Please note, that the columns and sort_by parameters can be provided either as
-    strings or as column objects of the respective input_type. This works at least
-    for input_types sa.Table and pdt.Sqlalchemy.
+    Please note that the ``columns`` and ``sort_by`` parameters can be provided either as
+    strings or as column objects of the respective ``input_type``. This works at least
+    for ``input_type`` values ``sa.Table`` and ``pdt.SqlAlchemy``.
 
     You can also specify sort order with an explicit class::
 
         from pydiverse.pipedag import SortCol, SortOrder
         sort_by = [SortCol("id", SortOrder.DESC, nulls_first=True)]
 
-    If you just like to filter columns without renaming, any iterable will do::
+    If you just want to filter columns without renaming, any iterable will do::
 
         @materialize(input_type=sa.Table)
         def task(tbl: sa.Alias):
             cols = [c.name for c in tbl.c if c.name.startswith("a")]
-            return Table(View(tbl, columns=cols, sort=tbl.c.id), name="selection")
+            return Table(View(tbl, columns=cols, sort_by=tbl.c.id), name="selection")
     """
 
     def __init__(
@@ -771,20 +773,17 @@ class View:
         :param src: The source table(s) or subquery to create the view from.
             Objects should be identical to tables that were given to the function as inputs.
             Consuming tasks will use the union of all those tables as input.
-        :param sort_by: Optional list of columns to sort the view by. They can be strings or column objects that
-            are understood by the table hook that would materialize the table if it wasn't a View.
-            Column names before renaming are used for sorting. SortCol objects may help configuring sort order.
-            For input_type `sa.Table` and `pdt.SqlAlchemy`, the sort order can be extracted from native column objects:
-            `tbl.c.colname.desc()` (`sa.Table`) or `tbl.colname.descending().nulls_first()` (`pdt.SqlAlchemy`).
+        :param sort_by: Optional list / iterable of columns to sort the view by. They can be strings or column objects
+            that are understood by the table hook that would materialize the table if it wasn't a :class:`View`.
+            Column names before renaming are used for sorting. :class:`SortCol` objects may help configuring sort order.
+            For ``input_type`` values ``sa.Table`` and ``pdt.SqlAlchemy``, the sort order can be extracted from native
+            column objects: ``tbl.c.colname.desc()`` (``sa.Table``) or
+            ``tbl.colname.descending().nulls_first()`` (``pdt.SqlAlchemy``).
         :param columns: The columns to include in the view. This can either be strings or column
-            objects that are understood by the table hook that would materialize the table if it wasn't a View.
-        :param limit:
-            Limit number of rows returned by the view.
-        :param assert_normalized:
-            In user code, this parameter can be ignored.
-            [Internally, a normalization takes place at some point to ensure the View can be passed between tasks
-            of different input_type. This option triggers assertion of construction in case normalization failed.
-            Normalization is input_type dependent and thus needs to be done by materialization hooks.]
+            objects that are understood by the table hook that would materialize the table if it wasn't a :class:`View`.
+        :param limit: Limit number of rows returned by the view.
+        :param assert_normalized: (Internal) Trigger assertion that normalization of the view representation succeeded.
+            Normalization is ``input_type`` dependent and thus needs to be done by materialization hooks.
         """
         self.src = src
         self.columns = columns

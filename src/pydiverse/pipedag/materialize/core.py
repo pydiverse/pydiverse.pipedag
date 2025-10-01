@@ -131,7 +131,7 @@ def materialize(
     :param ordering_barrier:
         If true, the task will be surrounded by a GroupNode(ordering_barrier=True).
         If a dictionary is provided, it is surrounded by a
-        GroupNode(**ordering_barrier). This allows passing style, style_tag, and label
+        ``GroupNode(**ordering_barrier)``. This allows passing style, style_tag, and label
         arguments.
     :param call_context:
         An optional context manager function that is opened before the task or its
@@ -346,7 +346,7 @@ def input_stage_versions(
     :param ordering_barrier:
         If true, the task will be surrounded by a GroupNode(ordering_barrier=True).
         If a dictionary is provided, it is surrounded by a
-        GroupNode(**ordering_barrier). This allows passing style, style_tag, and label
+        ``GroupNode(**ordering_barrier)``. This allows passing style, style_tag, and label
         arguments.
         Attention: In contrast to @materialize, the default value is True.
     :param call_context:
@@ -358,7 +358,7 @@ def input_stage_versions(
     :param lock_source_stages:
         If true, lock the other stage version when a ConfigContext object is passed to
         this task.
-    :param pass_args
+    :param pass_args:
         A list of named arguments that would be passed from the call to the task
         function. By default, no arguments are passed, and just tables are extracted.
 

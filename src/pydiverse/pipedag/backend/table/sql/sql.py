@@ -105,11 +105,15 @@ class SQLTableStore(BaseTableStore):
 
        * - pydiverse.transform
          - ``pdt.Table``
-         - | ``pdt.eager.PandasTableImpl``
-           | ``pdt.lazy.SQLTableImpl``
+         - | ``pdt.Polars``
+           | ``pdt.SqlAlchemy``
 
        * - pydiverse.pipedag table reference
          - :py:class:`~.ExternalTableReference` (no materialization)
+         - Can be read with all dematerialization methods above
+
+       * - pydiverse.pipedag view
+         - :py:class:`~.View` (view with support for src union, column renaming, and sorting)
          - Can be read with all dematerialization methods above
 
     :param url:
@@ -163,6 +167,7 @@ class SQLTableStore(BaseTableStore):
               table store does not support it.
             - a table references a ``materialization_details`` tag that is not defined
               in the config.
+
         If ``False``: Log an error instead of raising an exception
 
     :param materialization_details:
