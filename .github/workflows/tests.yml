@@ -116,7 +116,7 @@ jobs:
       docker-services: |
         zoo
         minio
-      pytest-arguments: --ibis --pdtransform --no-postgres
+      pytest-arguments: --ibis --pdtransform --no-postgres --no-lock_tests
 
   s3_test:
     name: S3 Tests

@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import itertools
+import multiprocessing as mp
 import os
 import signal
 import time
-from multiprocessing import Process, Queue
 from queue import Empty
 from threading import Thread
 
@@ -19,8 +19,9 @@ from .worker import start_worker
 class Session:
     def __init__(self, config: Config):
         self.config = config
-        self.msg_queue = Queue()
-        self.work_queue = Queue()
+        self.ctx = mp.get_context("spawn")  # or "forkserver"
+        self.msg_queue = self.ctx.Queue()
+        self.work_queue = self.ctx.Queue()
 
         self.workers = []
         self.worker_id_counter = itertools.count()
@@ -148,7 +149,7 @@ class Session:
 
         for _ in range(num_workers):
             worker_id = next(self.worker_id_counter)
-            worker = Process(
+            worker = self.ctx.Process(
                 target=start_worker,
                 name=f"pytest-worker-{worker_id:03}",
                 args=(
