@@ -23,7 +23,7 @@ instances:
     kroki_url: "https://kroki.io"
 
     table_store:
-      class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
+      class: "pydiverse.pipedag.backend.table.ParquetTableStore"
       args:
         # This is the main location where the ParquetTableStore will store tables.
         parquet_base_path: "s3://pipedag-test-bucket/table_store/"

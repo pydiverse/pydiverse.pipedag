@@ -105,11 +105,15 @@ class SQLTableStore(BaseTableStore):
 
        * - pydiverse.transform
          - ``pdt.Table``
-         - | ``pdt.eager.PandasTableImpl``
-           | ``pdt.lazy.SQLTableImpl``
+         - | ``pdt.Polars``
+           | ``pdt.SqlAlchemy``
 
        * - pydiverse.pipedag table reference
          - :py:class:`~.ExternalTableReference` (no materialization)
+         - Can be read with all dematerialization methods above
+
+       * - pydiverse.pipedag view
+         - :py:class:`~.View` (view with support for src union, column renaming, and sorting)
          - Can be read with all dematerialization methods above
 
     :param url:
@@ -163,6 +167,7 @@ class SQLTableStore(BaseTableStore):
               table store does not support it.
             - a table references a ``materialization_details`` tag that is not defined
               in the config.
+
         If ``False``: Log an error instead of raising an exception
 
     :param materialization_details:
@@ -1314,6 +1319,10 @@ class SQLTableStore(BaseTableStore):
         # New tables (AND other objects)
         new_objects = set(metadata.new_objects) - set(metadata.prev_objects)
         tables_in_schema = set(inspector.get_table_names(src_schema.get()))
+        if ConfigContext.get().stage_commit_technique == StageCommitTechnique.READ_VIEWS:
+            # This is just a guess. If the RAW SQL created views, then we need to follow
+            # the read view alias to the actual table location.
+            tables_in_schema |= set(inspector.get_view_names(src_schema.get()))
         objects_in_schema = self._get_all_objects_in_schema(src_schema)
 
         self.check_materialization_details_supported(target_stage.materialization_details)

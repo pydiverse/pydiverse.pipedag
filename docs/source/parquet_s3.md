@@ -91,7 +91,7 @@ instances:
     kroki_url: "https://kroki.io"
 
     table_store:
-      class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
+      class: "pydiverse.pipedag.backend.table.ParquetTableStore"
       args:
         # This is the main location where the ParquetTableStore will store tables.
         parquet_base_path: "s3://pipedag-test-bucket/table_store/"
@@ -140,7 +140,7 @@ instances:
 The most important change to relational database configurations is:
 ```yaml
     table_store:
-      class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
+      class: "pydiverse.pipedag.backend.table.ParquetTableStore"
 ```
 
 The ParquetTableStore is based on the SQLTableStore for duckdb, so you still need to give
@@ -157,7 +157,7 @@ However, configuring a non-AWS S3 endpoint URL (like MinIO) is done differently 
 Thus, ParquetTableStore offers additional parameters for configuring this and routes them to all those packages:
 ```yaml
     table_store:
-      class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
+      class: "pydiverse.pipedag.backend.table.ParquetTableStore"
       table_store_connection: parquet_duckdb
       args:
         parquet_base_path: "s3://pipedag-test-bucket/table_store/"

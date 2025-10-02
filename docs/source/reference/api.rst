@@ -70,6 +70,7 @@ Backend Classes
 Table Store
 -----------
 .. autoclass:: pydiverse.pipedag.backend.table.SQLTableStore
+.. autoclass:: pydiverse.pipedag.backend.table.ParquetTableStore
 
 SQLTableStore Dialects
 ~~~~~~~~~~~~~~~~~~~~~~

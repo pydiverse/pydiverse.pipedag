@@ -294,7 +294,7 @@ instances:
   parquet_backend:
     instance_id: parquet_backend
     table_store:
-      class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
+      class: "pydiverse.pipedag.backend.table.ParquetTableStore"
       table_store_connection: parquet_duckdb
       args:
         parquet_base_path: "/tmp/pipedag/parquet_store/"
@@ -307,7 +307,7 @@ instances:
   parquet_s3_backend:
     instance_id: parquet_s3_backend
     table_store:
-      class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
+      class: "pydiverse.pipedag.backend.table.ParquetTableStore"
       table_store_connection: parquet_duckdb
       metadata_table_store:
         class: "pydiverse.pipedag.backend.table.SQLTableStore"
@@ -323,7 +323,7 @@ instances:
   parquet_s3_backend_db2:
     instance_id: parquet_s3_backend_db2
     table_store:
-      class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
+      class: "pydiverse.pipedag.backend.table.ParquetTableStore"
       table_store_connection: parquet_duckdb
       metadata_table_store:
         class: "pydiverse.pipedag.backend.table.SQLTableStore"

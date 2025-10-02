@@ -339,7 +339,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
 
     if with_violation and validate_get_data:
         # Validation at end of get_anno_data task fails
-        with pytest.raises(
+        with swallowing_raises(
             HookCheckException,
             match="failed validation with MyFirstColSpec; Failure counts: {'b|min': 1, 'c|nullability': 1};"
             if with_filter
@@ -430,7 +430,7 @@ def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, vali
         with Stage("s02"):
             consumer2(first, second)
 
-    with ConfigContext.get().evolve(fail_fast=False):
+    with ConfigContext.get().evolve(fail_fast=False, swallow_exceptions=True):
         result = flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
     if with_violation:
         assert not result.successful

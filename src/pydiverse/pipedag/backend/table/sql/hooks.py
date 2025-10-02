@@ -1525,7 +1525,11 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
                 df = _polars_apply_materialize_annotation(df, table, store)
             ex = None
         except Exception as e:
-            store.logger.error(
+            if ConfigContext.get()._swallow_exceptions:
+                log = store.logger.info
+            else:
+                log = store.logger.error
+            log(
                 "Failed to apply materialize annotation for table",
                 table=table.name,
                 exception=str(e),
