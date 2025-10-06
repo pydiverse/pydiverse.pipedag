@@ -1,6 +1,6 @@
 [project]
 name = "pydiverse-pipedag"
-version = "0.11.0"
+version = "0.12.0"
 description = "A pipeline orchestration library executing tasks within one python session. It takes care of SQL table (de)materialization, caching and cache invalidation. Blob storage is supported as well for example for storing model files."
 authors = [
   { name = "QuantCo, Inc." },
@@ -30,7 +30,7 @@ classifiers = [
 ]
 
 dependencies = [
-  "pydiverse-common >=0.3.15,<0.4",
+  "pydiverse-common >=0.4.0,<0.4",
   "typing-extensions >=4.14.1,<5",
   "networkx >=3.4,<4",
   "attrs >=25.3.0,<26",
@@ -40,17 +40,17 @@ dependencies = [
   "packaging >=24.2,<26",
   "python-box >=7.3.2,<8",
   "pyyaml >=6.0.2,<7",
-  "cryptography >=45.0.5,<46",
+  "cryptography >=45.0.5,<47",
   "click >=8.1.8,<9",
   "pyparsing >=3.2.3,<4",
   "sqlalchemy >=1.4.54,<3",
   "pandas >=1.5.3,<3",
-  "pyarrow >=20.0.0,<21",
+  "pyarrow >=20.0.0,<22",
   "duckdb >=0.10.3,<2",             # py311pdsa1 requires < 1.3.0
   "duckdb-engine >=0.15.0,<0.18",
   "polars >=1.2.1,<2",              # py311pdsa1all requires < 1.30.0
   "fsspec >=2025.5.1,<2026",
-  "universal_pathlib >=0.2.6,<0.3",
+  "universal_pathlib >=0.2.6,<0.4",
 ]
 
 [tool.hatch.build.targets.wheel]
