@@ -21,7 +21,7 @@ pyparsing = ">=3.2.3,<4"
 sqlalchemy = ">=1.4.54,<3"
 pandas = ">=1.5.3,<3"
 pyarrow = ">=20.0.0,<22"
-duckdb = ">=0.10.3,<2"
+duckdb = ">=0.10.3,<1.4"
 duckdb-engine = ">=0.15.0,<0.18"
 polars = ">=1.2.1,<2"
 fsspec = ">=2025.5.1,<2026"
@@ -54,11 +54,11 @@ kazoo = ">=2.8.0"
 dask = ">=2022.1.0"
 
 [feature.prefect2.dependencies]
-prefect = ">=2.13.5,<3a0"
+prefect = ">=2.14.2,<3a0"
 pydantic = ">=1.10.9"
 
 [feature.prefect3.dependencies]
-prefect = ">=3.4.6,<4a0"
+prefect = ">=3.4.22,<4a0"
 
 [feature.snowflake.dependencies]
 snowflake-sqlalchemy = ">=1.6.1"
