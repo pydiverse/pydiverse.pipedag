@@ -59,7 +59,6 @@ pydantic = ">=1.10.9"
 
 [feature.prefect3.dependencies]
 prefect = ">=3.4.6,<4a0"
-whenever = ">=0.8.5,<1.0"
 
 [feature.snowflake.dependencies]
 snowflake-sqlalchemy = ">=1.6.1"
