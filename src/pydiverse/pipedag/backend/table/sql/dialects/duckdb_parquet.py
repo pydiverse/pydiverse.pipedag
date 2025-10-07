@@ -1050,9 +1050,10 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
                     "Storing polars tables with custom storage options is not supported for polars < 1.3.0. "
                     f"Current version is {pl.__version__}: {options}"
                 )
-            df.write_parquet(file_path, storage_options=options)
+            # at some point polars supported UPath, but 1.33.1 does not
+            df.write_parquet(str(file_path), storage_options=options)
         else:
-            df.write_parquet(file_path)
+            df.write_parquet(str(file_path))
         store.execute(CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path)))
         store.metadata_track_view(table.name, schema.get(), file_path.as_uri(), "parquet")
 
