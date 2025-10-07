@@ -5,7 +5,7 @@ platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"] # "linux-aarch64"
 
 [dependencies]
 python = ">=3.10.18,<3.14"
-pydiverse-common = ">=0.4.0,<0.5"
+pydiverse-common = ">=0.4.1,<0.5"
 typing-extensions = ">=4.14.1,<5"
 networkx = ">=3.4,<4"
 attrs = ">=25.3.0,<26"
