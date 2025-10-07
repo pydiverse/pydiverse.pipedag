@@ -13,7 +13,7 @@ from pydiverse.pipedag.backend.lock.zookeeper import KazooClient
 from pydiverse.pipedag.util.timing import timeout
 from tests.fixtures.instances import with_instances
 
-# Mark all tests in this module as lock tests (can be disabled with --no-lock-tests)
+# Mark all tests in this module as lock tests (can be disabled with --no-lock_tests)
 # Somehow ColSpec tests tend to fail test_no_lock and S3 tests failed test_zookeeper
 pytestmark = pytest.mark.lock_tests
 

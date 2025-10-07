@@ -28,6 +28,7 @@ from tests.util import tasks_library_imperative as m2
 @pytest.mark.parametrize(
     "write_local_table_cache", [True, False], ids=["write_local_table_cache", "no_write_local_table_cache"]
 )
+@pytest.mark.lock_tests  # this test seems to hang easily in ColSpec tests
 def test_get_output_from_store(mocker, imperative, write_local_table_cache):
     _m = m2 if imperative else m
     with Flow() as f:

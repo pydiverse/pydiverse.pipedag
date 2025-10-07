@@ -251,7 +251,8 @@ instances:
           base_path: "/tmp/pipedag/table_cache"
 
   local_table_cache_inout_numpy:
-    instance_id: local_table_cache_inout_numpy
+
+    : local_table_cache_inout_numpy
     table_store:
       hook_args:
         pandas:
