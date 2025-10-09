@@ -7,6 +7,7 @@ import duckdb
 import pandas as pd
 import polars as pl
 import sqlalchemy as sa
+from packaging.version import Version
 
 from pydiverse.common import Dtype
 from pydiverse.pipedag import Table
@@ -122,9 +123,12 @@ class PolarsTableHook(PolarsTableHook):
         # Connectorx doesn't support duckdb.
         # Instead, we load it like this:  DuckDB -> PyArrow -> Polars
         conn = engine.raw_connection()
-        pl_table = conn.sql(query).arrow()
+        if Version(duckdb.__version__) < Version("1"):
+            pl_table = conn.sql(query).arrow()
 
-        df = pl.from_arrow(pl_table)
+            df = pl.from_arrow(pl_table)
+        else:
+            df = conn.sql(query).pl()
         return df
 
 

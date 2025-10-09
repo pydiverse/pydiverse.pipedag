@@ -179,7 +179,7 @@ sqlalchemy = ">=2"
 [feature.duckdb0.dependencies]
 duckdb = "<1"
 [feature.duckdb1.dependencies]
-duckdb = ">=1.1"
+duckdb = ">=1.4.1"
 [feature.connectorx.dependencies]
 connectorx = ">=0.3.3"
 # keeping old code running requires more precise pinning
