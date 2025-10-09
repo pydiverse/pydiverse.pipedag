@@ -924,6 +924,7 @@ class SQLTableStore(BaseTableStore):
                             version=self.metadata_version,
                         )
                     )
+                return
             elif version != self.metadata_version:
                 # disable caching due to incompatible metadata table schemas
                 # (in future versions, consider automatic metadata schema upgrade)
@@ -933,6 +934,9 @@ class SQLTableStore(BaseTableStore):
                     version=version,
                     expected_version=self.metadata_version,
                 )
+            # in any case make sure all metadata tables exist (sync_views table is only needed for metadata_store)
+            with self.engine_connect() as conn, conn.begin():
+                self.sql_metadata.create_all(conn)
 
     def dispose(self):
         self.engine.dispose()
