@@ -38,7 +38,7 @@ jobs:
         run: pixi run -e release twine check dist/*
 
       - name: Check install
-        shell: pixi exec -s python==3.11 -s pip -- bash -e {0}
+        shell: pixi exec -s python==3.11.* -s pip -- bash -e {0}
         run: |
           pip install dist/*.whl
           python -c "from pydiverse.pipedag import *"
