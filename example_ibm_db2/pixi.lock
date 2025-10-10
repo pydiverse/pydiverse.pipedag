@@ -41,7 +41,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/connectorx-0.4.3-py313h304b507_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/cpython-3.13.7-py313hd8ed1ab_100.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cryptography-46.0.2-py313hafb0bba_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/dataframely-1.13.0-py310hc990d96_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/dataframely-1.14.0-py310hc990d96_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/dbus-1.16.2-h3c4dab8_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/docker-compose-2.39.2-h280c20c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/duckdb-1.3.2-hca7485f_0.conda
@@ -259,7 +259,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/connectorx-0.4.3-py313hd72d22d_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/cpython-3.13.7-py313hd8ed1ab_100.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/cryptography-46.0.2-py313h4d9e278_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/dataframely-1.13.0-py310h6cbcbae_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/dataframely-1.14.0-py310h6cbcbae_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/docker-compose-2.39.2-h925e9cb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/duckdb-1.3.2-hca7485f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/duckdb-engine-0.15.0-pyh885dcc9_0.conda
@@ -433,7 +433,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/connectorx-0.4.3-py313h309bce3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/cpython-3.13.7-py313hd8ed1ab_100.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/cryptography-46.0.2-py313h392ebe0_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/win-64/dataframely-1.13.0-py310hc5c0c7e_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/win-64/dataframely-1.14.0-py310hc5c0c7e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/docker-compose-2.39.2-h6a83c73_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/duckdb-1.3.2-hca7485f_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/duckdb-engine-0.15.0-pyh885dcc9_0.conda
@@ -1726,10 +1726,10 @@ packages:
   license_family: BSD
   size: 1489781
   timestamp: 1759320830765
-- conda: https://conda.anaconda.org/conda-forge/linux-64/dataframely-1.13.0-py310hc990d96_0.conda
+- conda: https://conda.anaconda.org/conda-forge/linux-64/dataframely-1.14.0-py310hc990d96_0.conda
   noarch: python
-  sha256: 0279e985bfc6e161d1ac286662951b32461e53939234b22a17a5687905d5cf32
-  md5: a7d037f7b7fdb6ed3e4b9e9bba021579
+  sha256: f441c3bb2e00fad3350bfc939f42c1d045678982aeb5b64cf705712df2bf36cf
+  md5: dffae3b29185ed200bf9678e6b7c04c7
   depends:
   - python
   - numpy
@@ -1744,12 +1744,12 @@ packages:
   - __glibc >=2.17
   license: BSD-3-Clause
   license_family: BSD
-  size: 466111
-  timestamp: 1758879514235
-- conda: https://conda.anaconda.org/conda-forge/osx-arm64/dataframely-1.13.0-py310h6cbcbae_0.conda
+  size: 466639
+  timestamp: 1760005400782
+- conda: https://conda.anaconda.org/conda-forge/osx-arm64/dataframely-1.14.0-py310h6cbcbae_0.conda
   noarch: python
-  sha256: 6fc80652e740d2d924dc6bf0a88dd0e9e433e7036051ddd52dd7c388ee9b2318
-  md5: f9cac628fe3a1968ee6dd3655bc46f08
+  sha256: fc7461f472f046e1830ae347c7573ccdd8ee8bc18bf03e097530c1ac4b8a0ebd
+  md5: 135b4aa5fd7b40f71952403825a4b79d
   depends:
   - python
   - numpy
@@ -1764,12 +1764,12 @@ packages:
   - __osx >=11.0
   license: BSD-3-Clause
   license_family: BSD
-  size: 431451
-  timestamp: 1758879625847
-- conda: https://conda.anaconda.org/conda-forge/win-64/dataframely-1.13.0-py310hc5c0c7e_0.conda
+  size: 431721
+  timestamp: 1760005540422
+- conda: https://conda.anaconda.org/conda-forge/win-64/dataframely-1.14.0-py310hc5c0c7e_0.conda
   noarch: python
-  sha256: e05276336d83cfaabf0a8255c0e99cf69aa6d08c5fd9ec4b4e2e0e9dd6c16723
-  md5: fe3e5521f8dec0399a31f6e3ab89e911
+  sha256: d10531af51b535d137e14389ef0d8e3f9aa64cee1fc7b25bbadf9e0e2b479df1
+  md5: a80909b6c6beacee8c8532790c52b42d
   depends:
   - python
   - numpy
@@ -1785,8 +1785,8 @@ packages:
   - sqlalchemy >=2
   license: BSD-3-Clause
   license_family: BSD
-  size: 376421
-  timestamp: 1758879524692
+  size: 376900
+  timestamp: 1760005414816
 - conda: https://conda.anaconda.org/conda-forge/linux-64/dbus-1.16.2-h3c4dab8_0.conda
   sha256: 3b988146a50e165f0fa4e839545c679af88e4782ec284cc7b6d07dd226d6a068
   md5: 679616eb5ad4e521c83da4650860aba7
@@ -3553,6 +3553,7 @@ packages:
   - libgomp 15.2.0 h767d61c_7
   - libgcc-ng ==15.2.0=*_7
   license: GPL-3.0-only WITH GCC-exception-3.1
+  license_family: GPL
   size: 822552
   timestamp: 1759968052178
 - conda: https://conda.anaconda.org/conda-forge/win-64/libgcc-15.2.0-h1383e82_7.conda
@@ -3566,6 +3567,7 @@ packages:
   - libgomp 15.2.0 h1383e82_7
   - libgcc-ng ==15.2.0=*_7
   license: GPL-3.0-only WITH GCC-exception-3.1
+  license_family: GPL
   size: 667897
   timestamp: 1759976063036
 - conda: https://conda.anaconda.org/conda-forge/linux-64/libgcc-ng-15.2.0-h69a702a_7.conda
@@ -3574,6 +3576,7 @@ packages:
   depends:
   - libgcc 15.2.0 h767d61c_7
   license: GPL-3.0-only WITH GCC-exception-3.1
+  license_family: GPL
   size: 29313
   timestamp: 1759968065504
 - conda: https://conda.anaconda.org/conda-forge/linux-64/libgd-2.3.3-h6f5c62b_11.conda
@@ -3646,6 +3649,7 @@ packages:
   constrains:
   - libgfortran-ng ==15.2.0=*_7
   license: GPL-3.0-only WITH GCC-exception-3.1
+  license_family: GPL
   size: 29275
   timestamp: 1759968110483
 - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libgfortran-15.2.0-hfcf01ff_1.conda
@@ -3666,6 +3670,7 @@ packages:
   constrains:
   - libgfortran 15.2.0
   license: GPL-3.0-only WITH GCC-exception-3.1
+  license_family: GPL
   size: 1572758
   timestamp: 1759968082504
 - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libgfortran5-15.2.0-h742603c_1.conda
@@ -3781,6 +3786,7 @@ packages:
   depends:
   - __glibc >=2.17,<3.0.a0
   license: GPL-3.0-only WITH GCC-exception-3.1
+  license_family: GPL
   size: 447919
   timestamp: 1759967942498
 - conda: https://conda.anaconda.org/conda-forge/win-64/libgomp-15.2.0-h1383e82_7.conda
@@ -3791,6 +3797,7 @@ packages:
   constrains:
   - msys2-conda-epoch <0.0a0
   license: GPL-3.0-only WITH GCC-exception-3.1
+  license_family: GPL
   size: 535898
   timestamp: 1759975963604
 - conda: https://conda.anaconda.org/conda-forge/linux-64/libgoogle-cloud-2.39.0-hdb79228_0.conda
@@ -4549,6 +4556,7 @@ packages:
   constrains:
   - libstdcxx-ng ==15.2.0=*_7
   license: GPL-3.0-only WITH GCC-exception-3.1
+  license_family: GPL
   size: 3898269
   timestamp: 1759968103436
 - conda: https://conda.anaconda.org/conda-forge/linux-64/libstdcxx-ng-15.2.0-h4852527_7.conda
@@ -4557,6 +4565,7 @@ packages:
   depends:
   - libstdcxx 15.2.0 h8f9b012_7
   license: GPL-3.0-only WITH GCC-exception-3.1
+  license_family: GPL
   size: 29343
   timestamp: 1759968157195
 - conda: https://conda.anaconda.org/conda-forge/linux-64/libthrift-0.22.0-h454ac66_1.conda
@@ -5527,6 +5536,7 @@ packages:
   - python >=3.10
   - python
   license: MIT
+  license_family: MIT
   size: 23625
   timestamp: 1759953252315
 - conda: https://conda.anaconda.org/conda-forge/noarch/polars-1.34.0-pyh6a1acc5_0.conda
@@ -5849,6 +5859,7 @@ packages:
   - s3fs >=2025.5.1,<2026
   - boto3 >=1.38.13,<2
   license: BSD-3-Clause
+  license_family: BSD
   size: 164675
   timestamp: 1759907046892
 - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-transform-0.6.0-pyhcf101f3_1.conda
@@ -5869,6 +5880,7 @@ packages:
   - psycopg2 >=2.9.3
   - pyodbc >=4.0.35
   license: BSD-3-Clause
+  license_family: BSD
   size: 84665
   timestamp: 1759907448751
 - conda: https://conda.anaconda.org/conda-forge/linux-64/pydot-4.0.1-py313h78bf25f_1.conda

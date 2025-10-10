@@ -165,6 +165,10 @@ class ParquetTableStore(DuckDBTableStore):
         The number of seconds to wait before giving up on getting a connection from
         the pool. This may be relevant in case the connection pool is saturated
         with concurrent operations each working with one or more database connections.
+    :param force_transaction_suffix:
+        This option is for use without proper pipedag flow. It disables lookup in stage
+        metadata table for determining correct transaction slot suffix.
+        (default: None)
     :param parquet_base_bath:
         This is an fsspec compatible path to either a directory or an S3 bucket key
         prefix. Examples are ``/tmp/pipedag/parquet/`` or ``s3://pipedag-test-bucket/table_store/``.
@@ -178,6 +182,9 @@ class ParquetTableStore(DuckDBTableStore):
     :param s3_url_style:
         Specify URL style when connecting to S3 endpoint. Minio for example requires s3_url_style='path'.
         (default: None)
+    :param allow_overwrite:
+        Allow overwriting tables with store_table.
+        (default: False)
     """
 
     _dialect_name = DISABLE_DIALECT_REGISTRATION
@@ -206,15 +213,18 @@ class ParquetTableStore(DuckDBTableStore):
         max_concurrent_copy_operations: int = 5,
         sqlalchemy_pool_size: int = 12,
         sqlalchemy_pool_timeout: int = 300,
+        force_transaction_suffix: str | None = None,
         s3_endpoint_url: str | None = None,
         s3_url_style: str | None = None,
         s3_region: str | None = None,
+        allow_overwrite: bool = False,
     ):
         # must be initialized before super().__init__() call because self._create_engine() is called there
         self.parquet_base_path = parquet_base_path
         self.s3_endpoint_url = s3_endpoint_url
         self.s3_url_style = s3_url_style
         self.s3_region = s3_region
+        self.allow_overwrite = allow_overwrite
         super().__init__(
             engine_url,
             create_database_if_not_exists=create_database_if_not_exists,
@@ -230,6 +240,7 @@ class ParquetTableStore(DuckDBTableStore):
             max_concurrent_copy_operations=max_concurrent_copy_operations,
             sqlalchemy_pool_size=sqlalchemy_pool_size,
             sqlalchemy_pool_timeout=sqlalchemy_pool_timeout,
+            force_transaction_suffix=force_transaction_suffix,
         )
 
         # Add parquet specific metadata table for user id.
@@ -737,7 +748,12 @@ class ParquetTableStore(DuckDBTableStore):
         return path
 
     def get_stage_path(self, stage: Stage) -> UPath:
-        store = ConfigContext.get().store.table_store
+        try:
+            cfg = ConfigContext.get()
+        except LookupError:
+            # schema-prefix/suffix not available if no ConfigContext active
+            return self.get_parquet_schema_path(Schema(stage.current_name))
+        store = cfg.store.table_store
         return self.get_parquet_schema_path(store.get_schema(stage.current_name))
 
     def get_table_path(
@@ -745,9 +761,15 @@ class ParquetTableStore(DuckDBTableStore):
         table: Table,
         file_extension: str = ".parquet",
     ) -> UPath:
-        store = ConfigContext.get().store.table_store
         schema_name = table.stage.current_name
-        return self.get_table_schema_path(table.name, store.get_schema(schema_name), file_extension)
+        try:
+            cfg = ConfigContext.get()
+            store = cfg.store.table_store
+            schema = store.get_schema(schema_name)
+        except LookupError:
+            # schema-prefix/suffix not available if no ConfigContext active
+            schema = Schema(schema_name)
+        return self.get_table_schema_path(table.name, schema, file_extension)
 
     def get_table_schema_path(self, table_name: str, schema: Schema, file_extension: str = ".parquet") -> UPath:
         # Parquet files might be stored in other transaction schema in case of cache
@@ -1056,6 +1078,8 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
             df.write_parquet(str(file_path), storage_options=options)
         else:
             df.write_parquet(str(file_path))
+        if store.allow_overwrite:
+            store.execute(DropView(table.name, schema, if_exists=True))
         store.execute(CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path)))
         store.metadata_track_view(table.name, schema.get(), file_path.as_uri(), "parquet")
 

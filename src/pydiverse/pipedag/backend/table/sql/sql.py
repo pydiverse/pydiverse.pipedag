@@ -211,6 +211,10 @@ class SQLTableStore(BaseTableStore):
         The number of seconds to wait before giving up on getting a connection from
         the pool. This may be relevant in case the connection pool is saturated
         with concurrent operations each working with one or more database connections.
+    :param force_transaction_suffix:
+        This option is for use without proper pipedag flow. It disables lookup in stage
+        metadata table for determining correct transaction slot suffix.
+        (default: None)
     """
 
     METADATA_SCHEMA = "pipedag_metadata"
@@ -252,6 +256,7 @@ class SQLTableStore(BaseTableStore):
         max_concurrent_copy_operations: int = 5,
         sqlalchemy_pool_size: int = 12,
         sqlalchemy_pool_timeout: int = 300,
+        force_transaction_suffix: str | None = None,
     ):
         super().__init__()
 
@@ -266,6 +271,7 @@ class SQLTableStore(BaseTableStore):
         self.max_concurrent_copy_operations = max_concurrent_copy_operations
         self.sqlalchemy_pool_size = sqlalchemy_pool_size
         self.squalchemy_pool_timeout = sqlalchemy_pool_timeout
+        self.force_transaction_suffix = force_transaction_suffix
 
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
         self.engine_url = sa.engine.make_url(engine_url)
@@ -944,7 +950,11 @@ class SQLTableStore(BaseTableStore):
         super().dispose()
 
     def init_stage(self, stage: Stage):
-        stage_commit_technique = ConfigContext.get().stage_commit_technique
+        try:
+            cfg = ConfigContext.get()
+            stage_commit_technique = cfg.stage_commit_technique
+        except LookupError:
+            stage_commit_technique = StageCommitTechnique.READ_VIEWS
         if stage_commit_technique == StageCommitTechnique.SCHEMA_SWAP:
             return self._init_stage_schema_swap(stage)
         if stage_commit_technique == StageCommitTechnique.READ_VIEWS:
@@ -1013,6 +1023,8 @@ class SQLTableStore(BaseTableStore):
 
     def _get_read_view_transaction_name(self, schema_name: str):
         """Returns transaction name where committed tables are stored."""
+        if self.force_transaction_suffix is not None:
+            return schema_name + self.force_transaction_suffix
         try:
             with self.metadata_connect() as meta_conn:
                 metadata_rows = (
@@ -1051,6 +1063,8 @@ class SQLTableStore(BaseTableStore):
         transaction_name = stage.transaction_name if override_transaction_name is None else override_transaction_name
         # undo transaction name assignment
         suffix = "__even" if transaction_name.endswith("__odd") else "__odd"
+        if self.force_transaction_suffix is not None:
+            suffix = self.force_transaction_suffix
         original_transaction_name = stage.name + suffix
         return original_transaction_name
 
