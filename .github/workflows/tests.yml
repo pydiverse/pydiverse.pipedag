@@ -86,6 +86,8 @@ jobs:
           - py313pdt
           - py311cspdt
           - py313cspdt
+          - py310ibis
+          - py312ibis
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
@@ -109,6 +111,8 @@ jobs:
           - py313pdt
           - py311cspdt
           - py313cspdt
+          - py310ibis
+          - py312ibis
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
@@ -132,6 +136,8 @@ jobs:
           - py313all
           - py311cspdt
           - py313cspdt
+          - py310ibis
+          - py312ibis
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
@@ -199,6 +205,8 @@ jobs:
           - py313mssqlpdt
           - py311mssqldy
           - py313mssqldy
+          - py310ibis
+          - py312ibis
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}

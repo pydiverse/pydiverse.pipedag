@@ -44,7 +44,7 @@ instances:
         # DatabaseLockManager
         class: "pydiverse.pipedag.backend.table.SQLTableStore"
         args:
-          url: "postgresql://sa:Pydiverse23@127.0.0.1:6543/{instance_id}"
+          url: "postgresql://sa:Pydiverse23@127.0.0.1:6543/{instance_id}_s3"
           create_database_if_not_exists: True
 
       hook_args:
