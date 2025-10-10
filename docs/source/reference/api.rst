@@ -97,7 +97,7 @@ IBM DB2
 
 .. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.IBMDB2TableStore
 .. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.ibm_db2.IBMDB2MaterializationDetails
-.. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.ibm_db2::IBMDB2CompressionTypes
+.. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.ibm_db2.IBMDB2CompressionTypes
     :members:
     :undoc-members:
 
