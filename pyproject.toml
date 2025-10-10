@@ -10,7 +10,7 @@ authors = [
 ]
 license = { file = "LICENSE" }
 readme = "docs/package/README.md"
-requires-python = ">=3.10.18, <3.14"
+requires-python = ">=3.10.18, <3.15"
 
 classifiers = [
   "Development Status :: 5 - Production/Stable",
@@ -24,6 +24,7 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Database",
   "Topic :: Scientific/Engineering",
   "Topic :: Software Development",

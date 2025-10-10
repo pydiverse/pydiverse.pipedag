@@ -82,10 +82,11 @@ jobs:
           - py311all
           - py312all
           - py313all
+          - py314all
           - py310pdt
-          - py313pdt
+          - py314pdt
           - py311cspdt
-          - py313cspdt
+          - py314cspdt
           - py310ibis
           - py312ibis
     uses: ./.github/workflows/test.yml
@@ -108,9 +109,9 @@ jobs:
           - py310all
           - py312all
           - py310pdt
-          - py313pdt
+          - py314pdt
           - py311cspdt
-          - py313cspdt
+          - py314cspdt
           - py310ibis
           - py312ibis
     uses: ./.github/workflows/test.yml
@@ -134,8 +135,9 @@ jobs:
           - py311all
           - py312all
           - py313all
+          - py314all
           - py311cspdt
-          - py313cspdt
+          - py314cspdt
           - py310ibis
           - py312ibis
     uses: ./.github/workflows/test.yml
@@ -157,11 +159,11 @@ jobs:
           - ubuntu-latest
         environment:
           - py311cs
-          - py313cs
+          - py314cs
           - py311csdy
-          - py313csdy
+          - py314csdy
           - py311dy
-          - py313dy
+          - py314dy
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
@@ -225,7 +227,7 @@ jobs:
           - ubuntu-latest
         environment:
           - py310dapre
-          - py313dapre
+          - py314dapre
           - py311all
 #          - py311pdsa1all  # prefect and pydantac tend to cause trouble for old versions
     uses: ./.github/workflows/test.yml
