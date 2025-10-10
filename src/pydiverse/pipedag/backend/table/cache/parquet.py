@@ -206,7 +206,7 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
 
         if isinstance(df, pl.LazyFrame):
             df = df.collect()
-        df.write_parquet(path)
+        df.write_parquet(str(path))
         # intentionally don't apply annotation checks because they might also be done
         # within polars table hook of actual table store
 
@@ -222,7 +222,7 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
     ) -> pl.DataFrame:
         _ = as_type
         path = store.get_table_path(table, ".parquet")
-        df = pl.read_parquet(path, n_rows=limit)
+        df = pl.read_parquet(str(path), n_rows=limit)
         if issubclass(as_type, pl.LazyFrame):
             return df.lazy()
         return df

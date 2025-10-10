@@ -855,14 +855,14 @@ class SQLTableStore(BaseTableStore):
         for index in indexes:
             if len(index["include_columns"]) > 0:
                 self.logger.warning(
-                    "Perfect index recreation in caching is not net implemented",
+                    "Perfect index recreation in caching is not implemented, yet",
                     table=dest_table,
                     schema=dest_schema.get(),
                     include_columns=index["include_columns"],
                 )
             if any(not isinstance(val, list) or len(val) > 0 for val in index["dialect_options"].values()):
                 self.logger.warning(
-                    "Perfect index recreation in caching is not net implemented",
+                    "Perfect index recreation in caching is not implemented, yet",
                     table=dest_table,
                     schema=dest_schema.get(),
                     dialect_options=index["dialect_options"],

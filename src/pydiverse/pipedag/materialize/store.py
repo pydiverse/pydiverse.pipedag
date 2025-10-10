@@ -188,7 +188,7 @@ class BaseTableStore(TableHookResolver, Disposable):
         except CacheError as e:
             # Either not found in cache, or copying failed
             # -> Store using default method
-            self.logger.warning("Cache miss", table=table.name, stage=table.stage.name, cause=str(e))
+            self.logger.info("Cache miss", table=table.name, stage=table.stage.name, cause=str(e))
             TaskContext.get().is_cache_valid = False
             RunContext.get().trace_hook.query_cache_status(
                 task, table, task_cache_info, query_hash, query_str, cache_valid=False
@@ -257,7 +257,7 @@ class BaseTableStore(TableHookResolver, Disposable):
         except CacheError as e:
             # Either not found in cache, or copying failed
             # -> Store using default method
-            self.logger.warning("Cache miss for raw-SQL", cause=str(e))
+            self.logger.info("Cache miss for raw-SQL", cause=str(e))
 
             TaskContext.get().is_cache_valid = False
             RunContext.get().set_stage_has_changed(task._stage)
@@ -562,13 +562,19 @@ class BaseTableCache(ABC, TableHookResolver, Disposable):
         except StoreIncompatibleException:
             # This is expected for example when ParquetTableCache is asked to retrieve a SQL reference
             return None
+        except CacheError as e:
+            self.logger.info(
+                "Cache miss in local table cache",
+                table=table,
+                cause=str(e),
+            )
         except Exception as e:
             self.logger.warning(
                 "Failed to retrieve table from local table cache",
                 table=table,
                 cause=str(e),
             )
-            return None
+        return None
 
     @abstractmethod
     def _has_table(self, table: Table, as_type: type) -> bool:

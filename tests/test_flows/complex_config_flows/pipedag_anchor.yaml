@@ -57,7 +57,7 @@ _technical_setups:
         #<<: *db_mssql
 
         create_database_if_not_exists: True
-        # print select statements before being encapsualted in materialize expressions and tables before writing to
+        # print select statements before being encapsulated in materialize expressions and tables before writing to
         # database
         print_materialize: true
         # print final sql statements

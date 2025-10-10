@@ -5,7 +5,7 @@ platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"] # "linux-aarch64"
 
 [dependencies]
 python = ">=3.10.18,<3.14"
-pydiverse-common = ">=0.3.15,<0.4"
+pydiverse-common = ">=0.4.1,<0.5"
 typing-extensions = ">=4.14.1,<5"
 networkx = ">=3.4,<4"
 attrs = ">=25.3.0,<26"
@@ -15,17 +15,17 @@ msgpack-python = ">=1.1.1,<2"
 packaging = ">=24.2,<26"
 python-box = ">=7.3.2,<8"
 pyyaml = ">=6.0.2,<7"
-cryptography = ">=45.0.5,<46"
+cryptography = ">=45.0.5,<47"
 click = ">=8.1.8,<9"
 pyparsing = ">=3.2.3,<4"
 sqlalchemy = ">=1.4.54,<3"
 pandas = ">=1.5.3,<3"
-pyarrow = ">=20.0.0,<21"
-duckdb = ">=0.10.3,<2"
+pyarrow = ">=20.0.0,<22"
+duckdb = ">=0.10.3,<1.4"
 duckdb-engine = ">=0.15.0,<0.18"
 polars = ">=1.2.1,<2"
 fsspec = ">=2025.5.1,<2026"
-universal_pathlib = ">=0.2.6,<0.3"
+universal_pathlib = ">=0.2.6,<0.4"
 
 
 [target.osx-arm64.dependencies]
@@ -54,12 +54,11 @@ kazoo = ">=2.8.0"
 dask = ">=2022.1.0"
 
 [feature.prefect2.dependencies]
-prefect = ">=2.13.5,<3a0"
+prefect = ">=2.14.2,<3a0"
 pydantic = ">=1.10.9"
 
 [feature.prefect3.dependencies]
-prefect = ">=3.4.6,<4a0"
-whenever = ">=0.8.5,<1.0"
+prefect = ">=3.4.22,<4a0"
 
 [feature.snowflake.dependencies]
 snowflake-sqlalchemy = ">=1.6.1"
@@ -85,13 +84,13 @@ pytsql = ">=1.4.0,<2"
 bcpandas = ">=2.6.3,<3"
 
 [feature.pdtransform-new.dependencies]
-pydiverse-transform = ">=0.5.6,<0.6"
+pydiverse-transform = ">=0.6.0,<0.7"
 
 [feature.pdtransform-old.dependencies]
 pydiverse-transform = "<0.2"
 
 [feature.colspec.dependencies]
-pydiverse-colspec = ">=0.2.8,<0.3"
+pydiverse-colspec = ">=0.3.0,<0.4"
 
 [feature.dataframely.dependencies]
 dataframely = ">=1.2.1,<2"
@@ -101,7 +100,8 @@ dataframely = ">=1.2.1,<2"
 platforms = ["linux-64", "osx-arm64", "win-64"]
 
 [feature.ibm-db.dependencies]
-ibm_db = ">=3.2.5, <3.2.7"  # somehoew there is a version conflict for 3.2.7 that fails empty queries
+#Current pixi install keeps ibm_db 3.2.6 which works.
+ibm_db = ">=3.2.5, <3.2.7"  # somehow there is a version conflict for 3.2.7 that fails empty queries
 ibm_db_sa = ">=0.3.8"
 
 # S3

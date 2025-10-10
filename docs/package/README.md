@@ -13,8 +13,26 @@ comment on existing issues to extend them to your needs or to add solution ideas
 ## Usage
 
 pydiverse.pipedag can either be installed via pypi with `pip install pydiverse-pipedag pydot` or via
-conda-forge with `conda install pydiverse-pipedag pydot -c conda-forge`. If you don't use duckdb for
-testing, you can obmit it here. However, it is needed to run the following example.
+conda-forge with `conda install pydiverse-pipedag pydot -c conda-forge`. Our recommendation would be
+to use [pixi](https://pixi.sh/latest/) which is also based on conda-forge:
+
+```bash
+mkdir my_project
+pixi init
+pixi add pydiverse-pipedag pydot
+```
+
+With pixi, you run python like this:
+
+```bash
+pixi run python -c 'import pydiverse.pipedag'
+```
+
+or this:
+
+```bash
+pixi run python my_script.py
+```
 
 ## Example
 

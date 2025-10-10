@@ -50,6 +50,7 @@ log_level = (
     if os.environ.get("DEBUG", "0") == "0"
     else logging.DEBUG
 )
+log_level = logging.ERROR
 setup_logging(log_level=log_level)
 
 

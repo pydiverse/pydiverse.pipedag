@@ -911,7 +911,9 @@ class PandasTableHook(TableHook[ParquetTableStore]):
             )
 
         df = table.obj
-        df.to_parquet(file_path, index=False, storage_options=store.get_storage_options("fsspec", file_path.protocol))
+        df.to_parquet(
+            str(file_path), index=False, storage_options=store.get_storage_options("fsspec", file_path.protocol)
+        )
         store.execute(CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path)))
         store.metadata_track_view(table.name, schema.get(), file_path.as_uri(), "parquet")
 
@@ -968,7 +970,7 @@ class PandasTableHook(TableHook[ParquetTableStore]):
             if limit is not None:
                 df = ds.dataset(pyarrow_path, filesystem=pyarrow_fs).scanner().head(limit).to_pandas()
             else:
-                df = pd.read_parquet(path, storage_options=store.get_storage_options("fsspec", path.protocol))
+                df = pd.read_parquet(str(path), storage_options=store.get_storage_options("fsspec", path.protocol))
         import pyarrow.parquet
 
         # attention: with categorical columns, it might be necessary to fuse dictionaries of all parquet files
@@ -1050,9 +1052,10 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
                     "Storing polars tables with custom storage options is not supported for polars < 1.3.0. "
                     f"Current version is {pl.__version__}: {options}"
                 )
-            df.write_parquet(file_path, storage_options=options)
+            # at some point polars supported UPath, but 1.33.1 does not
+            df.write_parquet(str(file_path), storage_options=options)
         else:
-            df.write_parquet(file_path)
+            df.write_parquet(str(file_path))
         store.execute(CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path)))
         store.metadata_track_view(table.name, schema.get(), file_path.as_uri(), "parquet")
 
@@ -1071,9 +1074,11 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
             if isinstance(view.src, Iterable):
                 file_paths = [store.get_table_path(tbl) for tbl in view.src]
                 protocol = file_paths[0].protocol
+                file_paths = [str(path) for path in file_paths]
             else:
                 file_paths = store.get_table_path(view.src)
                 protocol = file_paths.protocol
+                file_paths = str(file_paths)
             lf = pl.scan_parquet(
                 file_paths, n_rows=limit, storage_options=store.get_storage_options("polars", protocol)
             )
@@ -1090,7 +1095,7 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
         else:
             file_path = store.get_table_path(table)
             df = pl.read_parquet(
-                file_path, n_rows=limit, storage_options=store.get_storage_options("polars", file_path.protocol)
+                str(file_path), n_rows=limit, storage_options=store.get_storage_options("polars", file_path.protocol)
             )
             return df
 

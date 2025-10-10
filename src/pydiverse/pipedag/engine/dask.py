@@ -1,7 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-import sys
 
 import structlog
 
@@ -62,7 +61,7 @@ class DaskEngine(OrchestrationEngine):
                 _ = parent_futures
 
                 # TODO: Don't just assume a logger factory...
-                structlog_config["logger_factory"] = structlog.PrintLoggerFactory(sys.stderr)
+                structlog_config["logger_factory"] = structlog.stdlib.LoggerFactory()
                 structlog.configure(**structlog_config)
 
                 with structlog.contextvars.bound_contextvars(**structlog_context):

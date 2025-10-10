@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.12.0 (2025-10-07)
+- Support pydiverse.common 0.4.1, pydiverse.transform 0.6.0, pydiverse.colspec 0.3.0.
+- Structlog logger initialization changed to stdlib logger factory to support dynamic loglevel filter in tests.
+- Switch cache misses from warning to info log level.
+
 ## 0.11.0 (2025-10-01)
 - Support View as task output to allow multi-parquet fusion in ParquetTableStore or basic column selection/renaming
   outside consumer task.
