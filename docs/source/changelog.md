@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.12.1 (2025-10-DD)
+- Create all metadata tables even if some metadata tables already exist.
+  This fixes problems with conditional need for sync_views table.
+- Make table hooks work even without ConfigContext (see example_mssql/download_parquet_files.py)
+
 ## 0.12.0 (2025-10-07)
 - Support pydiverse.common 0.4.1, pydiverse.transform 0.6.0, pydiverse.colspec 0.3.0.
 - Structlog logger initialization changed to stdlib logger factory to support dynamic loglevel filter in tests.

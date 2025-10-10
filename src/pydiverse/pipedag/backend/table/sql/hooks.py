@@ -267,6 +267,15 @@ def _sql_apply_materialize_annotation(
     return invalid_rows, intermediate_tbls
 
 
+def _is_hide_errors():
+    try:
+        cfg = ConfigContext.get()
+    except LookupError:
+        return False
+    # some tests use `with cfg.evolve(_swallow_exceptions=True)`
+    return cfg._swallow_exceptions
+
+
 def get_view_query(view: View, store: SQLTableStore):
     assert view.assert_normalized  # otherwise, view.src might be iterable for various reasons
     if isinstance(view.src, Iterable):
@@ -369,7 +378,11 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @classmethod
     def cfg(cls) -> Config:
         ret = SQLAlchemyTableHook.Config()
-        if hook_args := ConfigContext.get().table_hook_args.get("sql", None):
+        try:
+            cfg = ConfigContext.get()
+        except LookupError:
+            return ret
+        if hook_args := cfg.table_hook_args.get("sql", None):
             for key, value in hook_args.items():
                 if hasattr(ret, key):
                     if type(getattr(ret, key)) is not type(value):
@@ -474,7 +487,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                         table, schema, query, store, suffix, unlogged
                     )
                 except Exception as e:  # noqa
-                    if ConfigContext.get()._swallow_exceptions:
+                    if _is_hide_errors():
                         log = store.logger.info
                     else:
                         log = store.logger.error
@@ -1328,7 +1341,11 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
     @classmethod
     def cfg(cls):
         ret = PolarsTableHook.Config()
-        if hook_args := ConfigContext.get().table_hook_args.get("polars", None):
+        try:
+            cfg = ConfigContext.get()
+        except LookupError:
+            return ret
+        if hook_args := cfg.table_hook_args.get("polars", None):
             for key, value in hook_args.items():
                 if hasattr(ret, key):
                     if type(getattr(ret, key)) is not type(value):
@@ -1525,7 +1542,7 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
                 df = _polars_apply_materialize_annotation(df, table, store)
             ex = None
         except Exception as e:
-            if ConfigContext.get()._swallow_exceptions:
+            if _is_hide_errors():
                 log = store.logger.info
             else:
                 log = store.logger.error
