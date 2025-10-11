@@ -1,6 +1,9 @@
 # Changelog
 
-## 0.12.1 (2025-10-DD)
+## 0.12.2 (2025-10-DD)
+- Support datetime.time and timedelta as task input and output (or anywhere where JSON serialization is needed).
+
+## 0.12.1 (2025-10-10)
 - Create all metadata tables even if some metadata tables already exist.
   This fixes problems with conditional need for sync_views table.
 - Make table hooks work even without ConfigContext (see example_mssql/download_parquet_files.py)
