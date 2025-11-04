@@ -286,4 +286,4 @@ jobs:
       docker-services: |
         postgres
         zoo
-      pytest-arguments: --ibis --pdtransform --snowflake --no-postgres --no-duckdb
+      pytest-arguments: -s --ibis --pdtransform --snowflake --no-postgres --no-duckdb
