@@ -278,6 +278,7 @@ jobs:
       SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
       SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
       SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+      LOG_TEST_NAME: 1
     with:
       os: ${{ matrix.os }}
       environment: ${{ matrix.environment }}
@@ -286,4 +287,4 @@ jobs:
       docker-services: |
         postgres
         zoo
-      pytest-arguments: -s --ibis --pdtransform --snowflake --no-postgres --no-duckdb
+      pytest-arguments: -v -s --ibis --pdtransform --snowflake --no-postgres --no-duckdb
