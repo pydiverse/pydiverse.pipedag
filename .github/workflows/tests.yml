@@ -264,13 +264,15 @@ jobs:
     needs: [smoke_test]
     # snowflake tests are currently not passing
     # TODO: investigate and fix
-    if: false
+    #if: false
     strategy:
       matrix:
         os:
           - ubuntu-latest
         environment:
-          - py311pdsa1all
+#          - py311pdsa1all
+          - py311all
+          - py313all
     uses: ./.github/workflows/test.yml
     secrets:
       SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
