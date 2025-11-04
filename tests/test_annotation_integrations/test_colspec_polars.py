@@ -512,7 +512,9 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
 
         if with_violation:
             with pytest.raises(cs.exc.MemberValidationError, match="2 members failed validation"):
-                coll.validate_polars(cast=True)
+                with structlog.testing.capture_logs() as logs:
+                    coll.validate_polars(cast=True)
+            assert logs == [{"exc_info": True, "event": "Dataframely validation failed", "log_level": "error"}]
         else:
             if with_filter:
                 # it is not really without violation

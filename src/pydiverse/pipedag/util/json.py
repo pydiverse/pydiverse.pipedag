@@ -44,6 +44,8 @@ class Type(str, Enum):
     PATHLIB_PATH = "pathlib:path"
     DT_DATE = "dt:date"
     DT_DATETIME = "dt:datetime"
+    DT_TIME = "dt:time"
+    DT_TIMEDELTA = "dt:timedelta"
 
     def __str__(self):
         return self.value
@@ -141,6 +143,19 @@ def json_default(o):
         return {
             TYPE_KEY: Type.DT_DATE,
             "date": o.isoformat(),
+        }
+    if isinstance(o, dt.time):
+        return {
+            TYPE_KEY: Type.DT_TIME,
+            "time": o.isoformat(),
+        }
+    if isinstance(o, dt.timedelta):
+        return {
+            TYPE_KEY: Type.DT_TIMEDELTA,
+            "days": o.days,
+            "seconds": o.seconds,
+            "microseconds": o.microseconds,
+            # docstring of timedelta says: Representation: (days, seconds, microseconds).
         }
     if get_origin(o) is not None:
         # must be GenericAlias
@@ -270,6 +285,10 @@ def json_object_hook(d: dict):
         return Path(d["path"])
     if type_ == Type.DT_DATE:
         return dt.date.fromisoformat(d["date"])
+    if type_ == Type.DT_TIME:
+        return dt.time.fromisoformat(d["time"])
+    if type_ == Type.DT_TIMEDELTA:
+        return dt.timedelta(d["days"], d["seconds"], d["microseconds"])
     if type_ == Type.DT_DATETIME:
         return dt.datetime.fromisoformat(d["datetime"])
     if type_ == Type.DATA_CLASS:
