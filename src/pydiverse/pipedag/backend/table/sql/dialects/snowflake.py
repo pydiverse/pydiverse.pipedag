@@ -61,7 +61,12 @@ class SnowflakeTableStore(SQLTableStore):
 class PolarsTableHook(hooks.PolarsTableHook):
     @classmethod
     def dialect_supports_connectorx(cls):
-        # ConnectorX (used by Polars read_database_uri) supports Snowflake.
+        # ConnectorX (used by Polars read_database_uri) does not support Snowflake.
+        return False
+
+    @classmethod
+    def dialect_wrong_polars_column_names(cls):
+        # for Snowflake, polars returns uppercase column names by default
         return True
 
 

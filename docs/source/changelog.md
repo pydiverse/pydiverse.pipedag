@@ -2,6 +2,7 @@
 
 ## 0.12.2 (2025-10-DD)
 - Support datetime.time and timedelta as task input and output (or anywhere where JSON serialization is needed).
+- Support Snowflake again
 
 ## 0.12.1 (2025-10-10)
 - Create all metadata tables even if some metadata tables already exist.

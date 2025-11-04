@@ -3,6 +3,7 @@
 
 import abc
 import copy
+import importlib
 import inspect
 import random
 import re
@@ -967,6 +968,11 @@ class DataframeSqlTableHook:
         return False
 
     @classmethod
+    def dialect_wrong_polars_column_names(cls):
+        # for Snowflake, polars returns uppercase column names by default
+        return False
+
+    @classmethod
     def download_table(
         cls,
         query: Any,
@@ -1416,8 +1422,7 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
                 )
             except Exception as e:  # noqa
                 store.logger.warning(
-                    "Failed writing table using ADBC, falling back to sqlalchemy: %s",
-                    table.name,
+                    f"Failed writing table using ADBC, falling back to sqlalchemy: {table.name}",
                 )
         df.write_database(
             f"{schema_name}.{table_name}",
@@ -1450,16 +1455,18 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
                 return cls._fix_dtypes(df, dtypes)
             except:  # noqa
                 msg = "Failed retrieving query using ADBC, falling back to Pandas: %s"
-                if store.engine.dialect.name == "postgresql":
-                    try:
-                        import adbc_driver_postgresql
-                    except ImportError:
-                        msg = (
-                            "Failed retrieving query using ADBC. Please install adbc-driver-postgresql. "
-                            "Falling back to Pandas: %s"
-                        )
-
-                store.logger.warning(msg, query)
+                drivers = ["postgresql", "snowflake"]  # extend as needed
+                for driver in drivers:
+                    if store.engine.dialect.name == driver:
+                        modname = f"adbc_driver_{driver}"
+                        try:
+                            importlib.import_module(modname)
+                        except ImportError:
+                            msg = (
+                                f"Failed retrieving query using ADBC. Please install adbc-driver-{driver}. "
+                                "Falling back to Pandas: %s"
+                            )
+                store.logger.warning(msg % query)
         elif cls.dialect_supports_connectorx():
             # This implementation requires connectorx which does not work for duckdb or ibm_db2.
             # Attention: In case this call fails, we simply fall-back to pandas hook.
@@ -1468,9 +1475,9 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
             except:  # noqa
                 msg = "Failed retrieving query using ConnectorX, falling back to Pandas: %s"
                 try:
-                    import adbc_driver_postgresql
+                    import connectorx
 
-                    _ = adbc_driver_postgresql
+                    _ = connectorx
                 except ImportError:
                     msg = (
                         "Failed retrieving query using ConnectorX. Please install connectorx. "
@@ -1479,8 +1486,14 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
                 store.logger.warning(msg, query)
 
         if not df:
-            # Polars internally falls back to pandas which results in data dependent types
+            # Polars internally falls back to pandas but does some magic around it
             df = pl.read_database(query, store.engine)
+            # fix capital default column names
+            if any(c.isupper() for c in df.columns) and cls.dialect_wrong_polars_column_names():
+                with store.engine.connect() as conn:
+                    rs = conn.execute(sa.text(query) if isinstance(query, str) else query)
+                df = df.rename({old: new for old, new in zip(df.columns, rs.keys())})
+
         return cls._fix_dtypes(df, dtypes)
 
     @classmethod

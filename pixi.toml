@@ -1,9 +1,11 @@
-[project]
+[workspace]
 name = "pydiverse-pidepag"
 channels = ["conda-forge"]
 platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"] # "linux-aarch64"
 
 [dependencies]
+#pip = "*"
+hatchling = "*"
 python = ">=3.10.18,<3.14"
 pydiverse-common = ">=0.4.1,<0.5"
 typing-extensions = ">=4.15.0,<5"
@@ -31,16 +33,14 @@ universal_pathlib = ">=0.3.2,<0.4"
 [target.osx-arm64.dependencies]
 libgfortran5 = ">=14" # Lower versions cause numpy import errors. See https://github.com/prefix-dev/pixi/issues/3479
 
-
-[host-dependencies]
-pip = "*"
-hatchling = "*"
-
 [feature.pydot.dependencies]
 pydot = ">=4.0.0,<5"
 
 [feature.postgres.dependencies]
 adbc-driver-postgresql = ">=1.6.0,<2"
+psycopg2 = ">=2.9.10"
+
+[feature.postgres-no-adbc.dependencies]
 psycopg2 = ">=2.9.10"
 
 [feature.filelock.dependencies]
@@ -60,7 +60,17 @@ pydantic = ">=1.10.9"
 [feature.prefect3.dependencies]
 prefect = ">=3.4.22,<4a0"
 
+[feature.snowflake]
+platforms = ["linux-64", "osx-arm64", "osx-64"]
+
 [feature.snowflake.dependencies]
+snowflake-sqlalchemy = ">=1.6.1"
+adbc-driver-snowflake = ">=1.8.0"
+
+[feature.snowflake-no-adbc]
+platforms = ["linux-64", "osx-arm64", "osx-64"]
+
+[feature.snowflake-no-adbc.dependencies]
 snowflake-sqlalchemy = ">=1.6.1"
 
 [feature.dev.dependencies]
@@ -206,6 +216,7 @@ py310all = ["py310", "dev", "zookeeper", "mssql", "pdtransform-new", "filelock",
 py311all = ["py311", "dev", "zookeeper", "mssql", "pdtransform-new", "colspec", "dataframely", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
 py312all = ["py312", "dev", "zookeeper", "mssql", "pdtransform-new", "colspec", "dataframely", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
 py313all = ["py313", "dev", "zookeeper", "mssql", "pdtransform-new", "colspec", "dataframely", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
+py313noadbc = ["py313", "dev", "zookeeper", "mssql", "pdtransform-new", "colspec", "dataframely", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake-no-adbc", "s3", "pydot", "postgres-no-adbc"]
 py310pdsa1all = ["py310", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx", "ibis", "mssql", "pdtransform-old", "filelock", "dask", "prefect2", "snowflake", "pydot", "postgres"]
 py311pdsa1all = ["py311", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx", "ibis", "mssql", "pdtransform-old", "filelock", "dask", "prefect2", "snowflake", "pydot", "postgres"]
 py310ibm = ["py310", "dev", "pd2", "sa2", "dask", "ibm-db", "mssql", "pdtransform-new", "s3", "pydot"]

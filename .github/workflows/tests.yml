@@ -86,6 +86,7 @@ jobs:
           - py313pdt
           - py311cspdt
           - py313cspdt
+          - py313noadbc
           - py310ibis
           - py312ibis
     uses: ./.github/workflows/test.yml
@@ -273,6 +274,7 @@ jobs:
 #          - py311pdsa1all
           - py311all
           - py313all
+          - py313noadbc
     uses: ./.github/workflows/test.yml
     secrets:
       SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
