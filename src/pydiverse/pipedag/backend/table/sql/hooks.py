@@ -1458,7 +1458,6 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         if cls.dialect_has_adbc_driver():
             try:
                 df = pl.read_database_uri(query, connection_uri, engine="adbc")
-                return cls._fix_dtypes(df, dtypes)
             except:  # noqa
                 msg = "Failed retrieving query using ADBC, falling back to Pandas: %s"
                 drivers = ["postgresql", "snowflake"]  # extend as needed
@@ -1473,7 +1472,7 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
                                 "Falling back to Pandas: %s"
                             )
                 store.logger.warning(msg % query)
-        elif cls.dialect_supports_connectorx():
+        if df is None and cls.dialect_supports_connectorx():
             # This implementation requires connectorx which does not work for duckdb or ibm_db2.
             # Attention: In case this call fails, we simply fall-back to pandas hook.
             try:
@@ -1491,14 +1490,15 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
                     )
                 store.logger.warning(msg, query)
 
-        if not df:
+        if df is None:
             # Polars internally falls back to pandas but does some magic around it
             df = pl.read_database(query, store.engine)
-            # fix capital default column names
-            if any(c.isupper() for c in df.columns) and cls.dialect_wrong_polars_column_names():
-                with store.engine.connect() as conn:
-                    rs = conn.execute(sa.text(query) if isinstance(query, str) else query)
-                df = df.rename({old: new for old, new in zip(df.columns, rs.keys())})
+
+        # fix capital default column names
+        if any(c.isupper() for c in df.columns) and cls.dialect_wrong_polars_column_names():
+            with store.engine.connect() as conn:
+                rs = conn.execute(sa.text(query) if isinstance(query, str) else query)
+            df = df.rename({old: new for old, new in zip(df.columns, rs.keys())})
 
         return cls._fix_dtypes(df, dtypes)
 
