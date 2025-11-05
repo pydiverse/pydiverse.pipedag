@@ -66,6 +66,7 @@ platforms = ["linux-64", "osx-arm64", "osx-64"]
 [feature.snowflake.dependencies]
 snowflake-sqlalchemy = ">=1.6.1"
 adbc-driver-snowflake = ">=1.8.0"
+polars = "<1.33.0"  # polars 1.33 uses STRING_VIEW which adbc-driver-snowflake 1.8.0 does not support
 
 [feature.snowflake-no-adbc]
 platforms = ["linux-64", "osx-arm64", "osx-64"]

@@ -4,6 +4,9 @@
 import time
 from typing import Literal
 
+import polars as pl
+import sqlalchemy as sa
+
 from pydiverse.pipedag.backend.table.sql import hooks
 from pydiverse.pipedag.backend.table.sql.hooks import (
     IbisTableHook,
@@ -68,6 +71,31 @@ class PolarsTableHook(hooks.PolarsTableHook):
     def dialect_wrong_polars_column_names(cls):
         # for Snowflake, polars returns uppercase column names by default
         return True
+
+    @classmethod
+    def adbc_write_database(
+        cls, df: pl.DataFrame, engine: sa.Engine, schema_name: str, table_name: str, if_table_exists="append"
+    ) -> int:
+        import adbc_driver_snowflake.dbapi as adbc
+
+        # polars does not really handle snowflake well (we use PAT token as SNOWFLAKE_PASSWORD)
+        conn = adbc.connect(
+            db_kwargs={
+                "adbc.snowflake.sql.account": engine.url.host,
+                "adbc.snowflake.sql.db": engine.url.database.split("/")[0],  # remove schema
+                "adbc.snowflake.sql.schema": schema_name,
+                "adbc.snowflake.sql.auth_type": "auth_pat",
+                "adbc.snowflake.sql.client_option.auth_token": engine.url.password,
+            }
+        )
+
+        # try using ADBC, first
+        return df.write_database(
+            table_name,  # schema see above
+            connection=conn,
+            if_table_exists=if_table_exists,
+            engine="adbc",
+        )
 
 
 @SnowflakeTableStore.register_table(ibis.api.Table)

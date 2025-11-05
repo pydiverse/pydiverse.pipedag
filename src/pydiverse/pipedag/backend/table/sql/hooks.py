@@ -1414,12 +1414,7 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         if cls.dialect_has_adbc_driver():
             try:
                 # try using ADBC, first
-                return df.write_database(
-                    f"{schema_name}.{table_name}",
-                    engine.url.render_as_string(hide_password=False),
-                    if_table_exists="append",
-                    engine="adbc",
-                )
+                return cls.adbc_write_database(df, engine, schema_name, table_name.upper())
             except Exception as e:  # noqa
                 store.logger.warning(
                     f"Failed writing table using ADBC, falling back to sqlalchemy: {table.name}",
@@ -1428,6 +1423,17 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
             f"{schema_name}.{table_name}",
             engine,
             if_table_exists="append",
+        )
+
+    @classmethod
+    def adbc_write_database(
+        cls, df: pl.DataFrame, engine: sa.Engine, schema_name: str, table_name: str, if_table_exists="append"
+    ) -> int:
+        return df.write_database(
+            f"{schema_name}.{table_name}",
+            engine.url.render_as_string(hide_password=False),
+            if_table_exists=if_table_exists,
+            engine="adbc",
         )
 
     @classmethod
