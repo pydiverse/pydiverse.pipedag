@@ -28,7 +28,7 @@ from tests.util.tasks_library import assert_table_equal
 
 pytestmark = [
     pytest.mark.polars,
-    with_instances(DATABASE_INSTANCES),
+    with_instances(tuple(list(DATABASE_INSTANCES) + ["snowflake"])),
 ]
 
 

@@ -11,8 +11,9 @@ import polars as pl
 import sqlalchemy as sa
 from sqlalchemy.sql.base import ColumnCollection, ReadOnlyColumnCollection
 
-from pydiverse.pipedag import Table
+from pydiverse.pipedag import Schema, Table
 from pydiverse.pipedag.backend.table.sql import hooks
+from pydiverse.pipedag.backend.table.sql.ddl import AddIndex
 from pydiverse.pipedag.backend.table.sql.hooks import (
     IbisTableHook,
 )
@@ -178,6 +179,18 @@ class SnowflakeTableStore(SQLTableStore):
                 self._adbc_open()
             # swallow the error so the while-loop continues
         # let all other exceptions propagate
+
+    def add_index(
+        self,
+        table_name: str,
+        schema: Schema,
+        index_columns: list[str],
+        name: str | None = None,
+    ):
+        self.logger.warning(
+            "Snowflake does not support creating indexes on snowflake tables",
+            query_not_executed=str(AddIndex(table_name, schema, index_columns, name)),
+        )
 
 
 @SnowflakeTableStore.register_table(snowflake)

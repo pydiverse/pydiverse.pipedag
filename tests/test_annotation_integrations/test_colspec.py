@@ -22,7 +22,7 @@ from tests.util import swallowing_raises, tasks_library
 
 pytestmark = [
     pytest.mark.pdtransform,
-    with_instances(DATABASE_INSTANCES),
+    with_instances(tuple(list(DATABASE_INSTANCES) + ["snowflake"])),
 ]
 
 # ------------------------------------------------------------------------------------ #

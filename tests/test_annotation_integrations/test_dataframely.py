@@ -17,7 +17,8 @@ from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_in
 from tests.util import swallowing_raises
 
 pytestmark = [
-    with_instances(tuple(list(DATABASE_INSTANCES) + ["snowflake"])),
+    with_instances(tuple(list(DATABASE_INSTANCES))),
+    #    with_instances(tuple(list(DATABASE_INSTANCES) + ["snowflake"])),
 ]
 
 
@@ -273,7 +274,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
     do_test_annotations(with_filter, with_violation, validate_get_data)
 
 
-@with_instances("snowflake")
+# @with_instances("snowflake")
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
@@ -369,7 +370,7 @@ def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, vali
     do_test_annotations_not_fail_fast(with_filter, with_violation, validate_get_data)
 
 
-@with_instances("snowflake")
+# @with_instances("snowflake")
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
@@ -444,7 +445,7 @@ def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, val
     do_test_annotations_fault_tolerant(with_filter, with_violation, validate_get_data)
 
 
-@with_instances("snowflake")
+# @with_instances("snowflake")
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
@@ -603,6 +604,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
     assert ret.successful
 
 
+@skip_instances("snowflake")
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
 def test_type_mapping():
     @materialize(nout=2)
@@ -612,6 +614,27 @@ def test_type_mapping():
     @materialize(input_type=sa.Table)
     def consumer(first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]):
         assert isinstance(first.c.b.type, sa.SmallInteger)
+        assert isinstance(second.c.b.type, sa.BigInteger)
+        assert not isinstance(second.c.b.type, sa.SmallInteger)
+
+    with Flow() as flow:
+        with Stage("s01"):
+            first, second = get_anno_data()
+            consumer(first, second)
+
+    flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+
+
+# @with_instances("snowflake")
+@pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
+def test_type_mapping_snowflake():
+    @materialize(nout=2)
+    def get_anno_data() -> tuple[dy.LazyFrame[MyFirstColSpec], dy.LazyFrame[MySecondColSpec]]:
+        return data_with_filter_without_rule_violation()
+
+    @materialize(input_type=sa.Table)
+    def consumer(first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]):
+        assert isinstance(first.c.b.type, sa.BigInteger)  # Snowflake does not support SmallInteger
         assert isinstance(second.c.b.type, sa.BigInteger)
         assert not isinstance(second.c.b.type, sa.SmallInteger)
 

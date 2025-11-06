@@ -36,7 +36,7 @@ from tests.util.spy import spy_task
 from tests.util.sql import get_config_with_table_store
 
 # disable duckdb for now, since they have a bug in version 0.9.2 that needs fixing
-pytestmark = [with_instances(tuple(set(DATABASE_INSTANCES) - {"duckdb"}))]
+pytestmark = [with_instances(tuple(set(DATABASE_INSTANCES) - {"duckdb"} | {"snowflake"}))]
 pd_version = Version(pd.__version__)
 
 

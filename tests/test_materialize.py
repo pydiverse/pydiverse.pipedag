@@ -85,6 +85,7 @@ def test_materialize_literals():
     assert f.run().successful
 
 
+@with_instances("snowflake")
 @pytest.mark.parametrize("imperative", [False, True])
 def test_materialize_table(imperative):
     _m = m if not imperative else m2
