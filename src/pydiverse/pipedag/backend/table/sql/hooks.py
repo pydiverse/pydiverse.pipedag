@@ -1075,8 +1075,21 @@ class DataframeSqlTableHook:
         else:
             query = store.reflect_table(table_name, schema).alias("tbl")
 
+        def fix(t):
+            if isinstance(t, sa.DECIMAL) and t.precision >= 19 and t.scale == 0:
+                return sa.BigInteger()
+            elif isinstance(t, sa.DECIMAL) and t.precision >= 10 and t.scale == 0:
+                return sa.Integer()
+            elif isinstance(t, sa.DECIMAL) and t.scale == 0:
+                return sa.SmallInteger()
+            elif str(t).startswith("TIMESTAMP"):
+                # we don't think TIMEZONE based timestamps make sense in data exploration
+                return sa.DateTime()
+            else:
+                return t
+
         cols = {col.name: col for col in query.columns}
-        dtypes = {name: Dtype.from_sql(col.type) for name, col in cols.items()}
+        dtypes = {name: Dtype.from_sql(fix(col.type)) for name, col in cols.items()}
 
         cols, dtypes = cls._adjust_cols_retrieve(store, cols, dtypes)
 

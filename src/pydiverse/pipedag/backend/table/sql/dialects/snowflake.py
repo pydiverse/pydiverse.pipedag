@@ -7,6 +7,7 @@ import time
 from contextlib import contextmanager
 from typing import Literal
 
+import pandas as pd
 import polars as pl
 import sqlalchemy as sa
 from sqlalchemy.sql.base import ColumnCollection, ReadOnlyColumnCollection
@@ -222,6 +223,41 @@ class SQLAlchemyTableHook(hooks.SQLAlchemyTableHook):
 
         tbl.c = ReadOnlyColumnCollection(ColumnCollection([(c.name, bind(fix(c), tbl)) for c in tbl.c]))
         return tbl
+
+
+@SnowflakeTableStore.register_table(snowflake)
+class PandasTableHook(hooks.PandasTableHook):
+    @classmethod
+    def upload_table(
+        cls,
+        table: Table[pd.DataFrame],
+        schema: str,
+        dtypes: dict[str, sa.types.TypeEngine],
+        store: SQLTableStore,
+        early: bool,
+    ):
+        df = table.obj
+        # snowflake driver cannot receive object column with datetime objects
+        obj_cols = df.dtypes[df.dtypes == object]  # noqa:E721
+        if len(obj_cols) > 0:
+            datetime_cols = []
+            datetime_ns_cols = []
+
+            def compatible(series: pd.Series, _type: str):
+                return (series[~series.isna()].astype(_type) == series[~series.isna()]).all()
+
+            for col in obj_cols.index:
+                # detect datetime columns
+                try:
+                    if compatible(df[col], "datetime64[us]"):
+                        datetime_cols.append(col)
+                    elif compatible(df[col], "datetime64[ns]"):
+                        datetime_ns_cols.append(col)
+                except ValueError:
+                    pass
+            df[datetime_cols] = df[datetime_cols].astype("datetime64[us]")
+            df[datetime_ns_cols] = df[datetime_ns_cols].astype("datetime64[ns]")
+        super().upload_table(table, schema, dtypes, store, early)
 
 
 @SnowflakeTableStore.register_table(snowflake)

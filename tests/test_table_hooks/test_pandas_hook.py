@@ -30,13 +30,13 @@ from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
 from pydiverse.pipedag.engine import dask
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
 from tests.util import swallowing_raises
 from tests.util.spy import spy_task
 from tests.util.sql import get_config_with_table_store
 
 # disable duckdb for now, since they have a bug in version 0.9.2 that needs fixing
-pytestmark = [with_instances(tuple(set(DATABASE_INSTANCES) - {"duckdb"} | {"snowflake"}))]
+pytestmark = [with_instances(tuple((set(DATABASE_INSTANCES) - {"duckdb"}) | {"snowflake"}))]
 pd_version = Version(pd.__version__)
 
 
@@ -192,6 +192,7 @@ class TestPandasTableHookNumpy:
 
         assert f.run().successful
 
+    @skip_instances("snowflake")  # ADBC screws up with datetimes outside 64 bit ns resolution range
     @pytest.mark.polars
     def test_datetime_polars(self):
         import polars as pl

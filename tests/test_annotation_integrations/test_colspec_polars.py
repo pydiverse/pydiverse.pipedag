@@ -17,8 +17,8 @@ from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_in
 from tests.util import swallowing_raises
 
 pytestmark = [
-    with_instances(tuple(list(DATABASE_INSTANCES))),
-    #    with_instances(tuple(list(DATABASE_INSTANCES) + ["snowflake"])),
+    # with_instances(tuple(list(DATABASE_INSTANCES))),
+    with_instances(tuple(list(DATABASE_INSTANCES) + ["snowflake"])),
 ]
 
 
@@ -271,7 +271,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
     do_test_annotations(with_filter, with_violation, validate_get_data)
 
 
-# @with_instances("snowflake")
+@with_instances("snowflake")
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
@@ -369,7 +369,7 @@ def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, vali
     do_test_annotations_not_fail_fast(with_filter, with_violation, validate_get_data)
 
 
-# @with_instances("snowflake")
+@with_instances("snowflake")
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
@@ -446,7 +446,7 @@ def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, val
     do_test_annotations_fault_tolerant(with_filter, with_violation, validate_get_data)
 
 
-# @with_instances("snowflake")
+@with_instances("snowflake")
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
@@ -530,6 +530,7 @@ def do_test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, 
         assert all("failed validation with My" in failure["exception"] for failure in failures)
 
 
+@skip_instances("snowflake")
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
@@ -635,7 +636,7 @@ def test_type_mapping():
     flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
 
 
-# @with_instances("snowflake")
+@with_instances("snowflake")
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 def test_type_mapping_snowflake():
