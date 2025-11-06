@@ -467,9 +467,13 @@ def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, val
         with Stage("s02"):
             consumer2(first, second)
 
+    # result = flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+    logger = structlog.get_logger(__name__ + ".test_annotations_fault_tolerant")
+    logger.info("Capturing logs...")
     with structlog.testing.capture_logs() as logs:
         with ConfigContext.get().evolve(table_hook_args=dict(polars=dict(fault_tolerant_annotation_action=True))):
             result = flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+    logger.info("Continue logging")
     assert result.successful
     failures = [c for c in logs if c["event"] == "Failed to apply materialize annotation for table"]
     if with_violation and validate_get_data:

@@ -284,8 +284,8 @@ jobs:
       os: ${{ matrix.os }}
       environment: ${{ matrix.environment }}
       workers: 1  # tests are often waiting on snowflake
-      timeout-minutes: 40
+      timeout-minutes: 120
       docker-services: |
         postgres
         zoo
-      pytest-arguments: -v -s --ibis --pdtransform --snowflake --no-postgres --no-duckdb
+      pytest-arguments: --ibis --pdtransform --snowflake --no-postgres --no-duckdb
