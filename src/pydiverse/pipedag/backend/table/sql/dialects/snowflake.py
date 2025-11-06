@@ -68,7 +68,7 @@ class SnowflakeTableStore(SQLTableStore):
         # The snowflake backend has transactionality problems with very quick
         # DROP/CREATE or RENAME activities for both schemas and tables
         # which happen in testing.
-        time.sleep(0)  # try with 0 again
+        time.sleep(0)  # trying with 0 again. This was 2s at some point
 
     def _init_database(self):
         create_database = self.engine_url.database.split("/")[0]

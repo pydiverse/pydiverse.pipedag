@@ -74,6 +74,7 @@ jobs:
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_DB_SUFFIX: ${{ inputs.environment }}
           PREFECT_API_URL: http://127.0.0.1:4200/api
           PREFECT_SERVER_ALLOW_EPHEMERAL_MODE: false
           ERROR_ONLY: 1
