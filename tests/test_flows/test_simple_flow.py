@@ -55,7 +55,7 @@ def get_flow():
     return flow
 
 
-@with_instances(DATABASE_INSTANCES, ORCHESTRATION_INSTANCES)
+@with_instances(DATABASE_INSTANCES, ORCHESTRATION_INSTANCES, ["snowflake"])
 def test_simple_flow():
     flow = get_flow()
     result = flow.run()

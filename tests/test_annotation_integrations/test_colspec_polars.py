@@ -17,7 +17,7 @@ from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_in
 from tests.util import swallowing_raises
 
 pytestmark = [
-    with_instances(DATABASE_INSTANCES),
+    with_instances(tuple(list(DATABASE_INSTANCES) + ["snowflake"])),
 ]
 
 
@@ -259,6 +259,7 @@ def test_filter_with_filter_with_rule_violation():
     flow.run()
 
 
+@skip_instances("snowflake")
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
@@ -266,6 +267,21 @@ def test_filter_with_filter_with_rule_violation():
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
 )
 def test_annotations(with_filter: bool, with_violation: bool, validate_get_data: bool):
+    do_test_annotations(with_filter, with_violation, validate_get_data)
+
+
+@with_instances("snowflake")
+@pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
+@pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
+@pytest.mark.parametrize(
+    "with_filter, with_violation, validate_get_data",
+    [(a, b, c) for a in [False] for b in [False, True] for c in [False]],
+)
+def test_annotations_snowflake(with_filter: bool, with_violation: bool, validate_get_data: bool):
+    do_test_annotations(with_filter, with_violation, validate_get_data)
+
+
+def do_test_annotations(with_filter: bool, with_violation: bool, validate_get_data: bool):
     if validate_get_data:
 
         @materialize(nout=2)
@@ -341,6 +357,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
         assert ret.successful
 
 
+@skip_instances("snowflake")
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
@@ -348,6 +365,21 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
 )
 def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, validate_get_data: bool):
+    do_test_annotations_not_fail_fast(with_filter, with_violation, validate_get_data)
+
+
+@with_instances("snowflake")
+@pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
+@pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
+@pytest.mark.parametrize(
+    "with_filter, with_violation, validate_get_data",
+    [(a, b, c) for a in [True] for b in [False, True] for c in [False]],
+)
+def test_annotations_not_fail_fast_snowflake(with_filter: bool, with_violation: bool, validate_get_data: bool):
+    do_test_annotations_not_fail_fast(with_filter, with_violation, validate_get_data)
+
+
+def do_test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, validate_get_data: bool):
     if validate_get_data:
 
         @materialize(nout=2)
@@ -402,6 +434,7 @@ def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, vali
         assert result.successful
 
 
+@skip_instances("snowflake")
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
@@ -409,6 +442,21 @@ def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, vali
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
 )
 def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, validate_get_data: bool):
+    do_test_annotations_fault_tolerant(with_filter, with_violation, validate_get_data)
+
+
+@with_instances("snowflake")
+@pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
+@pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
+@pytest.mark.parametrize(
+    "with_filter, with_violation, validate_get_data",
+    [(a, b, c) for a in [False] for b in [False, True] for c in [True]],
+)
+def test_annotations_fault_tolerant_snowflake(with_filter: bool, with_violation: bool, validate_get_data: bool):
+    do_test_annotations_fault_tolerant(with_filter, with_violation, validate_get_data)
+
+
+def do_test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, validate_get_data: bool):
     if validate_get_data:
 
         @materialize(nout=2)
