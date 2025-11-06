@@ -1414,7 +1414,7 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         if cls.dialect_has_adbc_driver():
             try:
                 # try using ADBC, first
-                return cls.adbc_write_database(df, engine, schema_name, table_name.upper())
+                return cls.adbc_write_database(df, store, schema_name, table_name)
             except Exception as e:  # noqa
                 store.logger.warning(
                     f"Failed writing table using ADBC, falling back to sqlalchemy: {table.name}",
@@ -1426,9 +1426,16 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         )
 
     @classmethod
+    def adbc_read_database(cls, query, store: SQLTableStore) -> pl.DataFrame:
+        connection_uri = store.engine_url.render_as_string(hide_password=False)
+        df = pl.read_database_uri(query, connection_uri, engine="adbc")
+        return df
+
+    @classmethod
     def adbc_write_database(
-        cls, df: pl.DataFrame, engine: sa.Engine, schema_name: str, table_name: str, if_table_exists="append"
+        cls, df: pl.DataFrame, store: SQLTableStore, schema_name: str, table_name: str, if_table_exists="append"
     ) -> int:
+        engine = store.engine
         return df.write_database(
             f"{schema_name}.{table_name}",
             engine.url.render_as_string(hide_password=False),
@@ -1457,7 +1464,7 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         df = None
         if cls.dialect_has_adbc_driver():
             try:
-                df = pl.read_database_uri(query, connection_uri, engine="adbc")
+                df = cls.adbc_read_database(query, store)
             except:  # noqa
                 msg = "Failed retrieving query using ADBC, falling back to Pandas: %s"
                 drivers = ["postgresql", "snowflake"]  # extend as needed

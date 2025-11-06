@@ -13,7 +13,7 @@ from pydiverse.pipedag.context.context import CacheValidationMode, ConfigContext
 from pydiverse.pipedag.errors import HookCheckException
 from pydiverse.pipedag.optional_dependency.colspec import cs
 from pydiverse.pipedag.optional_dependency.dataframely import dy
-from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
 from tests.util import swallowing_raises
 
 pytestmark = [
@@ -560,6 +560,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
     assert ret.successful
 
 
+@skip_instances("snowflake")
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
 def test_type_mapping():
@@ -570,6 +571,28 @@ def test_type_mapping():
     @materialize(input_type=sa.Table)
     def consumer(first: MyFirstColSpec, second: MySecondColSpec):
         assert isinstance(first.c.b.type, sa.SmallInteger)
+        assert isinstance(second.c.b.type, sa.BigInteger)
+        assert not isinstance(second.c.b.type, sa.SmallInteger)
+
+    with Flow() as flow:
+        with Stage("s01"):
+            first, second = get_anno_data()
+            consumer(first, second)
+
+    flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+
+
+@with_instances("snowflake")
+@pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
+@pytest.mark.skipif(dy.Column is None, reason="dataframely needs to be installed")
+def test_type_mapping_snowflake():
+    @materialize(nout=2)
+    def get_anno_data() -> tuple[MyFirstColSpec, MySecondColSpec]:
+        return data_with_filter_without_rule_violation()
+
+    @materialize(input_type=sa.Table)
+    def consumer(first: MyFirstColSpec, second: MySecondColSpec):
+        assert isinstance(first.c.b.type, sa.BigInteger)  # there is no SmallInteger in Snowflake
         assert isinstance(second.c.b.type, sa.BigInteger)
         assert not isinstance(second.c.b.type, sa.SmallInteger)
 

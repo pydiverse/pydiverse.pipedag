@@ -283,6 +283,7 @@ class SQLTableStore(BaseTableStore):
 
         self._init_database_before_engine()
         self.engine = self._create_engine()
+        self.keep_alive_db_connections = None  # only used by derived classes like Snowflake
 
         # Dict where hooks are allowed to store values that should get cached
         self.hook_cache = {}
