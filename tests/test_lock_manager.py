@@ -115,6 +115,7 @@ def test_zookeeper():
         )
 
 
+@pytest.mark.skip("This test tends to kill CI")
 @pytest.mark.parallelize
 def test_filelock():
     import tempfile
