@@ -33,10 +33,10 @@ jobs:
     runs-on: ${{ inputs.os }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
       - name: Setup Pixi
-        uses: prefix-dev/setup-pixi@v0.9.2
+        uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
         with:
           environments: ${{ inputs.environment }}
 
