@@ -96,6 +96,7 @@ def test_table_store():
     assert f.run().successful
 
 
+@skip_instances("snowflake")  # speedup tests 3min
 def test_auto_version_1(mocker):
     should_swap = True
     value_to_add = 1
