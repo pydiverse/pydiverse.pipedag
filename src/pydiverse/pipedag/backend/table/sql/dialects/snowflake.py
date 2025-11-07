@@ -10,7 +10,6 @@ from typing import Literal
 import pandas as pd
 import polars as pl
 import sqlalchemy as sa
-from sqlalchemy.sql.base import ColumnCollection, ReadOnlyColumnCollection
 
 from pydiverse.pipedag import Schema, Table
 from pydiverse.pipedag.backend.table.sql import hooks
@@ -221,7 +220,12 @@ class SQLAlchemyTableHook(hooks.SQLAlchemyTableHook):
                 return new_c
             return c
 
-        tbl.c = ReadOnlyColumnCollection(ColumnCollection([(c.name, bind(fix(c), tbl)) for c in tbl.c]))
+        try:
+            from sqlalchemy.sql.base import ColumnCollection, ReadOnlyColumnCollection
+
+            tbl.c = ReadOnlyColumnCollection(ColumnCollection([(c.name, bind(fix(c), tbl)) for c in tbl.c]))
+        except ImportError:
+            store.logger.info("Can't fix snowflake sqlalchemy types for sqlalchemy < 2", columns=list(tbl.c))
         return tbl
 
 
