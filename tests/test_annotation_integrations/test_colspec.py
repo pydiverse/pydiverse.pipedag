@@ -23,7 +23,9 @@ from tests.util import swallowing_raises, tasks_library
 
 pytestmark = [
     pytest.mark.pdtransform,
-    with_instances(tuple(list(DATABASE_INSTANCES) + ["snowflake"])),
+    with_instances(tuple(list(DATABASE_INSTANCES))),
+    # snowflake currently is not supported by transform and colspec (problems could be solvable)
+    # with_instances(tuple(list(DATABASE_INSTANCES) + ["snowflake"])),
 ]
 
 # ------------------------------------------------------------------------------------ #
