@@ -273,8 +273,8 @@ jobs:
         environment:
 #          - py311pdsa1all
           - py311all
-#          - py313all
-#          - py313noadbc
+          - py313all
+          - py313noadbc
     uses: ./.github/workflows/test.yml
     secrets:
       SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
