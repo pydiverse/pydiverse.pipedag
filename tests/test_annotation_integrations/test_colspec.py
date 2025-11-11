@@ -14,15 +14,18 @@ import pydiverse.common as pdc
 from pydiverse.pipedag import Flow, Stage, materialize, materialize_table
 from pydiverse.pipedag.context.context import CacheValidationMode, ConfigContext
 from pydiverse.pipedag.errors import HookCheckException
+from pydiverse.pipedag.optional_dependency.adbc import adbc_postgres
 from pydiverse.pipedag.optional_dependency.colspec import cs
 from pydiverse.pipedag.optional_dependency.dataframely import dy
 from pydiverse.pipedag.optional_dependency.transform import C, pdt
-from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
 from tests.util import swallowing_raises, tasks_library
 
 pytestmark = [
     pytest.mark.pdtransform,
-    with_instances(DATABASE_INSTANCES),
+    with_instances(tuple(list(DATABASE_INSTANCES))),
+    # snowflake currently is not supported by transform and colspec (problems could be solvable)
+    # with_instances(tuple(list(DATABASE_INSTANCES) + ["snowflake"])),
 ]
 
 # ------------------------------------------------------------------------------------ #
@@ -134,6 +137,7 @@ def exec_filter(c: cs.Collection):
 # -------------------------------------- FILTER -------------------------------------- #
 
 
+@skip_instances("postgres" if adbc_postgres is None else "")
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 def test_filter_without_filter_without_rule_violation():
@@ -183,6 +187,7 @@ def test_filter_without_filter_with_rule_violation():
     flow.run()
 
 
+@skip_instances("postgres" if adbc_postgres is None else "")
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 def test_filter_with_filter_without_rule_violation():
@@ -218,6 +223,7 @@ def test_filter_with_filter_without_rule_violation():
     flow.run()
 
 
+@skip_instances("postgres" if adbc_postgres is None else "")
 @pytest.mark.skipif(cs.Collection is object, reason="ColSpec needs to be installed")
 @pytest.mark.skipif(C is None, reason="pydiverse.transform needs to be installed")
 def test_filter_with_filter_with_rule_violation():

@@ -10,7 +10,7 @@ from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
 from tests.util import tasks_library as m
 from tests.util import tasks_library_imperative as m2
 
-pytestmark = [with_instances(DATABASE_INSTANCES)]
+pytestmark = [with_instances(tuple(list(DATABASE_INSTANCES) + ["snowflake"]))]
 
 
 @pytest.mark.parametrize(

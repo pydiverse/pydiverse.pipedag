@@ -28,7 +28,7 @@ from tests.util import select_as, swallowing_raises
 from tests.util import tasks_library as m
 from tests.util import tasks_library_imperative as m2
 
-pytestmark = [with_instances(ALL_INSTANCES, ORCHESTRATION_INSTANCES)]
+pytestmark = [with_instances(tuple(set(ALL_INSTANCES) - {"snowflake"}), ORCHESTRATION_INSTANCES)]
 
 
 def test_materialize_literals():
@@ -85,6 +85,7 @@ def test_materialize_literals():
     assert f.run().successful
 
 
+@with_instances("snowflake")
 @pytest.mark.parametrize("imperative", [False, True])
 def test_materialize_table(imperative):
     _m = m if not imperative else m2

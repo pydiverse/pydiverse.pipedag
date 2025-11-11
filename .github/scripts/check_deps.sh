@@ -5,7 +5,7 @@ set -euo pipefail
 contains_dependency_all=true
 
 while read -r package version; do
-    if [[ $package == "python" ]]; then
+    if [[ $package == "python" || $package == "hatchling" ]]; then
         continue
     fi
     export package="$(echo "${package}" | sed 's/msgpack-python/msgpack/')"

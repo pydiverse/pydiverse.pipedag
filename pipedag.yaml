@@ -29,7 +29,7 @@ table_store_connections:
 
   snowflake:
     args:
-      url: "snowflake://{$SNOWFLAKE_USER}:{$SNOWFLAKE_PASSWORD}@{$SNOWFLAKE_ACCOUNT}/pipedag/DBO?warehouse=pipedag&role=accountadmin"
+      url: "snowflake://{$SNOWFLAKE_USER}:{$SNOWFLAKE_PASSWORD}@{$SNOWFLAKE_ACCOUNT}/pipedag{$SNOWFLAKE_DB_SUFFIX}?warehouse=pipedag&role=accountadmin"
       schema_prefix: "{instance_id}_"
       create_database_if_not_exists: true
 

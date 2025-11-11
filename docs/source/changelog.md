@@ -2,6 +2,10 @@
 
 ## 0.12.2 (2025-10-DD)
 - Support datetime.time and timedelta as task input and output (or anywhere where JSON serialization is needed).
+- Added support for Snowflake Database
+  * Known Issue: ADBC download screws up datetimes with year outside 64 bit ns range. Years 1700..2200 are fine.
+    Workaround: clip date range in query and add a column that rescues the correct year.
+    (typically, year 0 and 9999 are the only special values outside the range 1700..2200 used in practice)
 
 ## 0.12.1 (2025-10-10)
 - Create all metadata tables even if some metadata tables already exist.

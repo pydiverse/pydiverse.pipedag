@@ -1,6 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
-
+from abc import ABC
 from multiprocessing import Queue
 
 import pytest
@@ -13,21 +13,21 @@ def start_worker(worker_id: int, work_queue: Queue, msg_queue: Queue, args: list
     config = Config.fromdictargs(option_dict, args)
     config.args = args
 
-    # # This code was needed in the past to enable debugging in workers.
-    # # Currently, it doesn't seem to be needed any more.
-    # from typing import TextIO
-    #
-    # class DontPrint(TextIO, ABC):
-    #     def write(*_):
-    #         pass
-    #
-    # # fix assert inspection code of pytest raised in threads
-    # # register dummy terminal reporter since it is needed by pytest even with
-    # # plugins:"no:terminal" option
-    # from _pytest.terminal import TerminalReporter
-    #
-    # terminal_reporter = TerminalReporter(config, DontPrint())
-    # config.pluginmanager.register(terminal_reporter, "terminalreporter")
+    # This code was needed in the past to enable debugging in workers.
+    # Currently, it doesn't seem to be needed any more.
+    from typing import TextIO
+
+    class DontPrint(TextIO, ABC):
+        def write(*_):
+            pass
+
+    # fix assert inspection code of pytest raised in threads
+    # register dummy terminal reporter since it is needed by pytest even with
+    # plugins:"no:terminal" option
+    from _pytest.terminal import TerminalReporter
+
+    terminal_reporter = TerminalReporter(config, DontPrint())
+    config.pluginmanager.register(terminal_reporter, "terminalreporter")
 
     # Remove workers option to prevent triggering main plugin
     config.option.workers = None

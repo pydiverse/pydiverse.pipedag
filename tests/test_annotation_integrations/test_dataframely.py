@@ -13,11 +13,12 @@ from pydiverse.pipedag import ConfigContext, Flow, Stage, materialize
 from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.errors import HookCheckException
 from pydiverse.pipedag.optional_dependency.dataframely import FrameType, dy
-from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
 from tests.util import swallowing_raises
 
 pytestmark = [
-    with_instances(DATABASE_INSTANCES),
+    # with_instances(tuple(list(DATABASE_INSTANCES))),
+    with_instances(tuple(list(DATABASE_INSTANCES) + ["snowflake"])),
 ]
 
 
@@ -263,12 +264,27 @@ def test_filter_with_filter_with_rule_violation():
     flow.run()
 
 
+@skip_instances("snowflake")
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
 )
 def test_annotations(with_filter: bool, with_violation: bool, validate_get_data: bool):
+    do_test_annotations(with_filter, with_violation, validate_get_data)
+
+
+@with_instances("snowflake")
+@pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
+@pytest.mark.parametrize(
+    "with_filter, with_violation, validate_get_data",
+    [(a, b, c) for a in [False] for b in [False, True] for c in [False]],
+)
+def test_annotations_snowflake(with_filter: bool, with_violation: bool, validate_get_data: bool):
+    do_test_annotations(with_filter, with_violation, validate_get_data)
+
+
+def do_test_annotations(with_filter: bool, with_violation: bool, validate_get_data: bool):
     if validate_get_data:
 
         @materialize(nout=2)
@@ -344,12 +360,27 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
         assert ret.successful
 
 
+@skip_instances("snowflake")
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
 )
 def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, validate_get_data: bool):
+    do_test_annotations_not_fail_fast(with_filter, with_violation, validate_get_data)
+
+
+@with_instances("snowflake")
+@pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
+@pytest.mark.parametrize(
+    "with_filter, with_violation, validate_get_data",
+    [(a, b, c) for a in [True] for b in [False, True] for c in [False]],
+)
+def test_annotations_not_fail_fast_snowflake(with_filter: bool, with_violation: bool, validate_get_data: bool):
+    do_test_annotations_not_fail_fast(with_filter, with_violation, validate_get_data)
+
+
+def do_test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, validate_get_data: bool):
     if validate_get_data:
 
         @materialize(nout=2)
@@ -404,12 +435,27 @@ def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, vali
         assert result.successful
 
 
+@skip_instances("snowflake")
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
 )
 def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, validate_get_data: bool):
+    do_test_annotations_fault_tolerant(with_filter, with_violation, validate_get_data)
+
+
+@with_instances("snowflake")
+@pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
+@pytest.mark.parametrize(
+    "with_filter, with_violation, validate_get_data",
+    [(a, b, c) for a in [False] for b in [False, True] for c in [True]],
+)
+def test_annotations_fault_tolerant_snowflake(with_filter: bool, with_violation: bool, validate_get_data: bool):
+    do_test_annotations_fault_tolerant(with_filter, with_violation, validate_get_data)
+
+
+def do_test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, validate_get_data: bool):
     if validate_get_data:
 
         @materialize(nout=2)
@@ -478,6 +524,7 @@ def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, val
         assert all("failed validation with My" in failure["exception"] for failure in failures)
 
 
+@skip_instances("snowflake")
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
@@ -558,6 +605,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
     assert ret.successful
 
 
+@skip_instances("snowflake")
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
 def test_type_mapping():
     @materialize(nout=2)
@@ -567,6 +615,27 @@ def test_type_mapping():
     @materialize(input_type=sa.Table)
     def consumer(first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]):
         assert isinstance(first.c.b.type, sa.SmallInteger)
+        assert isinstance(second.c.b.type, sa.BigInteger)
+        assert not isinstance(second.c.b.type, sa.SmallInteger)
+
+    with Flow() as flow:
+        with Stage("s01"):
+            first, second = get_anno_data()
+            consumer(first, second)
+
+    flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+
+
+@with_instances("snowflake")
+@pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
+def test_type_mapping_snowflake():
+    @materialize(nout=2)
+    def get_anno_data() -> tuple[dy.LazyFrame[MyFirstColSpec], dy.LazyFrame[MySecondColSpec]]:
+        return data_with_filter_without_rule_violation()
+
+    @materialize(input_type=sa.Table)
+    def consumer(first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]):
+        assert isinstance(first.c.b.type, sa.BigInteger)  # Snowflake does not support SmallInteger
         assert isinstance(second.c.b.type, sa.BigInteger)
         assert not isinstance(second.c.b.type, sa.SmallInteger)
 

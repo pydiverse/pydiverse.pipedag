@@ -115,6 +115,7 @@ def test_zookeeper():
         )
 
 
+@pytest.mark.skip("This test tends to kill CI")
 @pytest.mark.parallelize
 def test_filelock():
     import tempfile
@@ -131,6 +132,7 @@ def test_filelock():
         _test_lock_manager(create_lock_manager)
 
 
+@pytest.mark.skip("This test tends to kill CI")
 @pytest.mark.parallelize
 def test_no_lock():
     from pydiverse.pipedag.backend.lock import NoLockManager

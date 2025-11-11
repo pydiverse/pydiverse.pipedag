@@ -28,7 +28,7 @@ from tests.fixtures.instances import (
 from tests.util import swallowing_raises
 from tests.util import tasks_library as m
 
-pytestmark = [with_instances(ALL_INSTANCES, ORCHESTRATION_INSTANCES)]
+pytestmark = [with_instances(tuple(set(ALL_INSTANCES) - {"snowflake"}), ORCHESTRATION_INSTANCES)]
 
 
 def test_input_versions_literals():
