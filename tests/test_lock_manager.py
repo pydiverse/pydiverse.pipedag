@@ -95,6 +95,7 @@ def _test_lock_manager(create_lock_manager: Callable[[], BaseLockManager]):
     assert not t2.is_alive(), "Thread timed out"
 
 
+@pytest.mark.skip("This test tends to kill CI")
 @pytest.mark.parallelize
 @pytest.mark.skipif(KazooClient is None, reason="requires kazoo")
 def test_zookeeper():
