@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.12.3 (2025-11-12)
+- Allow multiple runs with FileLockManager and filelock >= 3.11 installed
+
 ## 0.12.2 (2025-11-12)
 - Support datetime.time and timedelta as task input and output (or anywhere where JSON serialization is needed).
 - Added support for Snowflake Database

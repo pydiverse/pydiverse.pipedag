@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import os
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +36,7 @@ class FileLockManager(BaseLockManager):
         return cls(base_path)
 
     def __init__(self, base_path: str | Path):
-        super().__init__()
+        super().__init__(logger_kwargs=dict(thread=threading.get_ident()))
         self.base_path = Path(base_path).absolute()
         self.locks: dict[Lockable, fl.BaseFileLock] = {}
 
@@ -48,7 +49,7 @@ class FileLockManager(BaseLockManager):
     def acquire(self, lockable: Lockable):
         if lockable not in self.locks:
             lock_path = self.lock_path(lockable)
-            self.locks[lockable] = fl.FileLock(lock_path)
+            self.locks[lockable] = fl.FileLock(lock_path, thread_local=False)
 
         lock = self.locks[lockable]
         if not lock.is_locked:

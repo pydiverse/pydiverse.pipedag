@@ -44,7 +44,7 @@ psycopg2 = ">=2.9.10"
 psycopg2 = ">=2.9.10"
 
 [feature.filelock.dependencies]
-filelock = ">=3.7.1"
+filelock = ">=3.20.0"
 
 [feature.zookeeper.dependencies]
 kazoo = ">=2.8.0"
