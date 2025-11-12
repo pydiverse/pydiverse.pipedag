@@ -27,14 +27,21 @@ def lazy_task_2(input1: sa.Alias, input2: sa.Alias):
     return Table(query, name="task_2_out", primary_key=["a"])
 
 
+def ref(tbl: sa.Alias):
+    # For case sensitive (mixed capital/lowercase) names, quoting is necessary.
+    # But it is recommended to avoid using this with Snowflake since the default is uppercase.
+    return f"{tbl.original.schema}.{tbl.original.name}"
+
+
 @materialize(lazy=True, input_type=sa.Table)
 def lazy_task_3(input1: sa.Alias):
-    return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.original.name}")
+    # With ref() it is recommended to use table alias in the query since the actual table name might change
+    return sa.text(f"SELECT input1.* FROM {ref(input1)} as input1")
 
 
 @materialize(lazy=True, input_type=sa.Table)
 def lazy_task_4(input1: sa.Alias):
-    return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.original.name}")
+    return sa.text(f"SELECT * FROM {ref(input1)}")
 
 
 @materialize(nout=2, version="1.0.0")
@@ -88,13 +95,12 @@ def main():
 if __name__ == "__main__":
     setup_logging()  # you can setup the logging and/or structlog libraries as you wish
 
-    # Run docker-compose in separate shell to launch postgres container:
-    # ```shell
-    # pixi run docker-compose up
-    # ```
-
     # Run this pipeline with (might take a bit longer on first run in pixi environment):
     # ```shell
+    # export SNOWFLAKE_ACCOUNT=<use your snowflake instance>;
+    # export SNOWFLAKE_PASSWORD=<use secret token>;
+    # export SNOWFLAKE_USER=<username>;
+    # export SNOWFLAKE_DB_SUFFIX=_adhoc;  # chose unique suffix to avoid collisions
     # pixi run python run_pipeline_small.py
     # ```
 
