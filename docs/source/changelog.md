@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.12.2 (2025-10-DD)
+## 0.12.2 (2025-11-12)
 - Support datetime.time and timedelta as task input and output (or anywhere where JSON serialization is needed).
 - Added support for Snowflake Database
   * Known Issue: ADBC download screws up datetimes with year outside 64 bit ns range. Years 1700..2200 are fine.
