@@ -8,7 +8,7 @@ version = "0.1.0"
 [tasks]
 
 [dependencies]
-pydiverse-pipedag = ">=0.12.2,<0.13"
+pydiverse-pipedag = ">=0.12.3,<0.13"
 pydot = ">=4.0.1,<5"
 # dependencies for snowflake access
 snowflake-sqlalchemy = ">=1.6.1"
