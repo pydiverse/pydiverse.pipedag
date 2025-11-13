@@ -1,6 +1,7 @@
 # Simple pipeline
 
-This [example](../examples.md) shows a simple pipeline with a few tasks and stages. It is the same example as used
+This [example](../examples.md) (see also [example.zip](zip/example.zip)) shows a simple pipeline
+with a few tasks and stages. It is the same example as used
 in [Database Testing](../database_testing.md) but with a DuckDB connection that does not require `docker-compose` or
 `pipedag.yaml`.
 

@@ -8,7 +8,7 @@ pipeline with one instance ID and all branches as well as interactive developmen
 ID (could also be other user in a per-user instance). In this case, it might be interesting to always compare the
 current development state against the most recent main branch run.
 
-Here is an example how this might look like:
+Here is an example (see also [example.zip](zip/example.zip)) how this might look like:
 
 ```python
 import logging
