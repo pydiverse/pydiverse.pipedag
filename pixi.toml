@@ -6,7 +6,7 @@ platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"] # "linux-aarch64"
 [dependencies]
 #pip = "*"
 hatchling = "*"
-python = ">=3.10.18,<3.14"
+python = ">=3.10.18,<3.15.0a0"
 pydiverse-common = ">=0.4.1,<0.5"
 typing-extensions = ">=4.15.0,<5"
 networkx = ">=3.4,<4"
@@ -97,6 +97,11 @@ arrow-odbc = ">=8.1.1,<9"
 pyodbc = ">=5.2.0,<6"
 pytsql = ">=1.4.0,<2"
 bcpandas = ">=2.6.3,<3"
+python = "<3.14"  # odbc packages are not compatible, yet
+
+[feature.mssql-no-odbc.dependencies]
+pytsql = ">=1.4.0,<2"
+bcpandas = ">=2.6.3,<3"
 
 [feature.pdtransform-new.dependencies]
 pydiverse-transform = ">=0.6.0,<0.7"
@@ -183,6 +188,8 @@ python = "3.11.*"
 python = "3.12.*"
 [feature.py313.dependencies]
 python = "3.13.*"
+[feature.py314.dependencies]
+python = "3.14.*"
 [feature.pd1.dependencies]
 pandas = ">=1.5.0, <2"
 [feature.pd2.dependencies]
@@ -211,12 +218,14 @@ py310 = ["py310", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1", "postgres
 py311 = ["py311", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1", "postgres"]
 py312 = ["py312", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1", "postgres"]
 py313 = ["py313", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1", "postgres"]
+py314 = ["py314", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1", "postgres"]
 py310pdsa1 = ["py310", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx", "duckdb0", "pydot", "postgres"]
 py311pdsa1 = ["py311", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx", "duckdb0", "pydot", "postgres"]
 py310all = ["py310", "dev", "zookeeper", "mssql", "pdtransform-new", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
 py311all = ["py311", "dev", "zookeeper", "mssql", "pdtransform-new", "colspec", "dataframely", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
 py312all = ["py312", "dev", "zookeeper", "mssql", "pdtransform-new", "colspec", "dataframely", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
 py313all = ["py313", "dev", "zookeeper", "mssql", "pdtransform-new", "colspec", "dataframely", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
+py314all = ["py314", "dev", "zookeeper", "mssql-no-odbc", "pdtransform-new", "colspec", "dataframely", "filelock", "dask", "pd2", "sa2", "snowflake", "s3", "pydot", "postgres"]
 py313noadbc = ["py313", "dev", "zookeeper", "mssql", "pdtransform-new", "colspec", "dataframely", "filelock", "dask", "prefect3", "pd2", "sa2", "snowflake-no-adbc", "s3", "pydot", "postgres-no-adbc"]
 py310pdsa1all = ["py310", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx", "ibis", "mssql", "pdtransform-old", "filelock", "dask", "prefect2", "snowflake", "pydot", "postgres"]
 py311pdsa1all = ["py311", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx", "ibis", "mssql", "pdtransform-old", "filelock", "dask", "prefect2", "snowflake", "pydot", "postgres"]
