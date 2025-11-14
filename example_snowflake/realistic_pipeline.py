@@ -23,6 +23,7 @@ def trim_all_str(tbl):
 
 def pk(x: sa.Alias):
     # does not reliably work with views used as long as stage is still 100% cache valid
+    # (will be fixed by https://github.com/pydiverse/pydiverse.pipedag/issues/298)
     # return x.primary_key[0]
     # workaround:
     return x.c.pk
@@ -36,7 +37,10 @@ def pk_match(x: sa.Alias, y: sa.Alias):
 
 
 def pk_names(x: sa.Alias) -> list[str]:
-    return [c.name for c in x.primary_key]
+    # unfortunately this doesn't reliably work due to https://github.com/pydiverse/pydiverse.pipedag/issues/298
+    # return [c.name for c in x.primary_key]
+    # workaround:
+    return ["pk"]
 
 
 def select(*args, **kwargs):
