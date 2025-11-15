@@ -5,9 +5,7 @@ import sys
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from enum import Enum
-from typing import Any, Generic
-
-from typing_extensions import Self
+from typing import Any, Generic, Self
 
 from pydiverse.common.util import requires
 from pydiverse.common.util.computation_tracing import ComputationTracer

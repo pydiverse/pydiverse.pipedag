@@ -1101,11 +1101,11 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     alter_columns = ",".join(
         [
             f"ALTER COLUMN {compiler.preparer.quote(col)} SET DATA TYPE {compiler.type_compiler.process(_type)}"
-            for col, _type, nullable in zip(change.column_names, change.column_types, change.nullable)
+            for col, _type, nullable in zip(change.column_names, change.column_types, change.nullable, strict=True)
         ]
         + [
             f"ALTER COLUMN {compiler.preparer.quote(col)} {'SET' if not nullable else 'DROP'} NOT NULL"
-            for col, nullable in zip(change.column_names, change.nullable)
+            for col, nullable in zip(change.column_names, change.nullable, strict=True)
             if nullable is not None
         ]
     )
@@ -1120,11 +1120,11 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
     alter_columns = ",".join(
         [
             f"COLUMN {compiler.preparer.quote(col)} SET DATA TYPE {compiler.type_compiler.process(_type)}"
-            for col, _type, nullable in zip(change.column_names, change.column_types, change.nullable)
+            for col, _type, nullable in zip(change.column_names, change.column_types, change.nullable, strict=True)
         ]
         + [
             f"COLUMN {compiler.preparer.quote(col)} {'SET' if not nullable else 'DROP'} NOT NULL"
-            for col, nullable in zip(change.column_names, change.nullable)
+            for col, nullable in zip(change.column_names, change.nullable, strict=True)
             if nullable is not None
         ]
     )
@@ -1137,10 +1137,10 @@ def visit_change_column_types_duckdb(change: ChangeColumnTypes, compiler, **kw):
     schema = compiler.preparer.format_schema(change.schema.get())
     alter_columns = [
         f"ALTER COLUMN {compiler.preparer.quote(col)} SET DATA TYPE {compiler.type_compiler.process(_type)}"
-        for col, _type, nullable in zip(change.column_names, change.column_types, change.nullable)
+        for col, _type, nullable in zip(change.column_names, change.column_types, change.nullable, strict=True)
     ] + [
         f"ALTER COLUMN {compiler.preparer.quote(col)} {'SET' if not nullable else 'DROP'} NOT NULL"
-        for col, nullable in zip(change.column_names, change.nullable)
+        for col, nullable in zip(change.column_names, change.nullable, strict=True)
         if nullable is not None
     ]
     statements = [f"ALTER TABLE {schema}.{table} {statement}" for statement in alter_columns]
@@ -1167,7 +1167,7 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
         f" {compiler.preparer.quote(col)} "
         f"{compiler.type_compiler.process(modify_type(_type))}"
         f"{'' if nullable is None else ' NULL' if nullable else ' NOT NULL'}"
-        for col, _type, nullable in zip(change.column_names, change.column_types, change.nullable)
+        for col, _type, nullable in zip(change.column_names, change.column_types, change.nullable, strict=True)
     ]
     return join_ddl_statements(statements, compiler, **kw)
 
@@ -1190,12 +1190,12 @@ def visit_change_column_types(change: ChangeColumnTypes, compiler, **kw):
         f"ALTER TABLE {schema}.{table} ALTER COLUMN"
         f" {compiler.preparer.quote(col)} SET DATA TYPE"
         f" {compiler.type_compiler.process(modify_type(_type))}"
-        for col, _type, nullable in zip(change.column_names, change.column_types, change.nullable)
+        for col, _type, nullable in zip(change.column_names, change.column_types, change.nullable, strict=True)
     ] + [
         f"ALTER TABLE {schema}.{table} ALTER COLUMN"
         f" {compiler.preparer.quote(col)}"
         f" {'SET' if not nullable else 'DROP'} NOT NULL"
-        for col, nullable in zip(change.column_names, change.nullable)
+        for col, nullable in zip(change.column_names, change.nullable, strict=True)
         if nullable is not None
     ]
     statements.append(f"call sysproc.admin_cmd('REORG TABLE {schema}.{table}')")
@@ -1210,7 +1210,7 @@ def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
     alter_columns = ",".join(
         [
             f"ALTER COLUMN {compiler.preparer.quote(col)} {'SET' if not nullable else 'DROP'} NOT NULL"
-            for col, nullable in zip(change.column_names, change.nullable)
+            for col, nullable in zip(change.column_names, change.nullable, strict=True)
         ]
     )
     return f"ALTER TABLE {schema}.{table} {alter_columns}"
@@ -1224,7 +1224,7 @@ def visit_change_column_nullable(change: ChangeColumnNullable, compiler, **kw):
     alter_columns = ",".join(
         [
             f"COLUMN {compiler.preparer.quote(col)} {'SET' if not nullable else 'DROP'} NOT NULL"
-            for col, nullable in zip(change.column_names, change.nullable)
+            for col, nullable in zip(change.column_names, change.nullable, strict=True)
         ]
     )
     return f"ALTER TABLE {schema}.{table} ALTER {alter_columns}"
@@ -1327,7 +1327,7 @@ def _get_nullable_change_statements(change, compiler):
         f"ALTER TABLE {schema}.{table} ALTER COLUMN"
         f" {compiler.preparer.quote(col)}"
         f" {'SET' if not nullable else 'DROP'} NOT NULL"
-        for col, nullable in zip(change.column_names, change.nullable)
+        for col, nullable in zip(change.column_names, change.nullable, strict=True)
     ]
     return statements
 

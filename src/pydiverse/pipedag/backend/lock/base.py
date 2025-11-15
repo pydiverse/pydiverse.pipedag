@@ -3,9 +3,10 @@
 
 import threading
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from contextlib import contextmanager
 from enum import Enum
-from typing import Callable, Union
+from typing import Union
 
 import structlog
 

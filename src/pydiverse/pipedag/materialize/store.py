@@ -3,8 +3,9 @@
 
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterable
 from datetime import datetime
-from typing import Any, Callable, Iterable
+from typing import Any
 
 import structlog
 

@@ -867,7 +867,7 @@ def attach_annotation(annotation: type, arg):
             and isinstance(arg, typing.Sized)
             and len(anno_args) == len(arg)
         ):
-            for value, anno in zip(arg, anno_args):
+            for value, anno in zip(arg, anno_args, strict=True):
                 attach_annotation(anno, value)
     if isinstance(arg, (Table, Blob, RawSql)):
         arg.annotation = annotation

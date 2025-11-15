@@ -879,7 +879,7 @@ def test_cache_validation_mode(ignore_task_version, disable_cache_function, mode
         if mode == CacheValidationMode.IGNORE_FRESH_INPUT and not ignore_task_version:
             assert all(
                 result.get(c, as_type=pd.DataFrame)["x"].iloc[0] == res
-                for c, res in zip(cpy, [cache_value, cache_value, cache_value, 0])
+                for c, res in zip(cpy, [cache_value, cache_value, cache_value, 0], strict=True)
             )
         else:
             assert all(result.get(c, as_type=pd.DataFrame)["x"].iloc[0] == cache_value for c in cpy)

@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import inspect
-from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable, Iterable
+from typing import TYPE_CHECKING, Any
 
 import structlog
 

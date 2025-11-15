@@ -252,7 +252,7 @@ class MSSqlTableStore(SQLTableStore):
                 sql_types = self.reflect_sql_types(index_columns_list, table.name, schema)
                 index_str_max_columns = [
                     col
-                    for _type, col in zip(sql_types, index_columns_list)
+                    for _type, col in zip(sql_types, index_columns_list, strict=True)
                     if isinstance(_type, sa.String) and _type.length is None
                 ]
                 if len(index_str_max_columns) > 0:

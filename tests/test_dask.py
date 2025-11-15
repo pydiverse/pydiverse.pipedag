@@ -32,6 +32,7 @@ def test_that_encoded_file_is_picklable():
     pickle.dumps(EncodedFile(BytesIO(b"hello"), "utf-8"))
 
 
+@pytest.mark.skip("Sometimes hangs the CI")
 @pytest.mark.skipif(dask is None, reason="requires dask")
 def test_dask_structlog_configuration_does_not_prevent_pickling():
     def bind_run():

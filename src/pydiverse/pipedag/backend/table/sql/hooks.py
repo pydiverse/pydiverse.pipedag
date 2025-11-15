@@ -333,7 +333,7 @@ def get_view_query_pdt(view: View, store: SQLTableStore, name: str, stage_name: 
         # assert len(src_tables) > 0
         # tbls = [
         #     pdt.Table(alias.original.name, SqlAlchemy(store.engine, schema=alias.original.schema), name=src_tbl.name)
-        #     for alias, src_tbl in zip(src_tables, view.src)
+        #     for alias, src_tbl in zip(src_tables, view.src, strict=True)
         # ]
         # base_from = pdt.union_all(*tbls)
     hook = store.get_r_table_hook(sa.Table)
@@ -1518,7 +1518,7 @@ class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
         if any(c.isupper() for c in df.columns) and cls.dialect_wrong_polars_column_names():
             with store.engine.connect() as conn:
                 rs = conn.execute(sa.text(query) if isinstance(query, str) else query)
-            df = df.rename({old: new for old, new in zip(df.columns, rs.keys())})
+            df = df.rename({old: new for old, new in zip(df.columns, rs.keys(), strict=True)})
 
         return cls._fix_dtypes(df, dtypes)
 
