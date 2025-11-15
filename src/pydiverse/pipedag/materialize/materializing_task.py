@@ -6,9 +6,9 @@ import functools
 import inspect
 import typing
 import uuid
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 import sqlalchemy as sa
 

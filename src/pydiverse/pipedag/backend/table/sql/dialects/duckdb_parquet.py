@@ -4,7 +4,8 @@
 import os
 import shutil
 import uuid
-from typing import Any, Iterable, Literal
+from collections.abc import Iterable
+from typing import Any, Literal
 
 import duckdb
 import fsspec
@@ -1000,7 +1001,7 @@ class PandasTableHook(TableHook[ParquetTableStore]):
         df = df.astype(
             {
                 col: "datetime64[s]"
-                for col, type_, dtype in zip(schema.names, schema.types, df.dtypes)
+                for col, type_, dtype in zip(schema.names, schema.types, df.dtypes, strict=True)
                 if type_ == "date32" and dtype == object  # noqa: E721
             }
         )

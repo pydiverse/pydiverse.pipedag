@@ -65,7 +65,7 @@ ignore = ["B028"]
 extend-exclude = ["docs/*"]
 ignore-init-module-imports = true
 fix = true
-target-version = "py312"
+target-version = "py311"
 # 88 leads to worse comments
 line-length = 120
 
