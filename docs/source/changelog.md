@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.12.4 (2025-11-17)
+- Support python 3.14
+- Support pyarrow 22
+- Fixed pandas retrieval of view that renames columns
+
 ## 0.12.3 (2025-11-12)
 - Allow multiple runs with FileLockManager and filelock >= 3.11 installed
 
