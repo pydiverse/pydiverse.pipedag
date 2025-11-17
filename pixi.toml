@@ -93,7 +93,7 @@ duckdb = "<1.4"
 # ../.pixi/envs/py313all/lib/python3.13/site-packages/ibis/backends/duckdb/__init__.py:52: AttributeError
 
 [feature.mssql.dependencies]
-arrow-odbc = ">=8.1.1,<9"
+arrow-odbc = ">=8.1.1,<10"
 pyodbc = ">=5.2.0,<6"
 pytsql = ">=1.4.0,<2"
 bcpandas = ">=2.6.3,<3"
