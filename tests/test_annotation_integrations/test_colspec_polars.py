@@ -8,7 +8,6 @@ import sqlalchemy as sa
 import structlog
 from polars.testing import assert_frame_equal
 
-from pydiverse.colspec.exc import ValidationError
 from pydiverse.pipedag import Flow, Stage, materialize
 from pydiverse.pipedag.context.context import CacheValidationMode, ConfigContext
 from pydiverse.pipedag.errors import HookCheckException
@@ -605,7 +604,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
             consumer2_collection(collection)
 
     if with_violation:
-        with pytest.raises(ValidationError):
+        with pytest.raises(cs.exc.ValidationError):
             flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
     else:
         ret = flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
