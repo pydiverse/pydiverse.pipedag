@@ -4,6 +4,7 @@
 - Support python 3.14, dropped support for python 3.10
 - Support pyarrow 22
 - Fixed pandas retrieval of view that renames columns
+- Fixed mssql automatic max-string-length adjustment for varchar(max) in index
 
 ## 0.12.3 (2025-11-12)
 - Allow multiple runs with FileLockManager and filelock >= 3.11 installed
