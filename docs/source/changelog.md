@@ -2,7 +2,8 @@
 
 ## 0.12.4 (2025-11-17)
 - Support python 3.14, dropped support for python 3.10
-- Support pyarrow 22
+- Support pyarrow 22, arrow-odbc 9
+- Support dataframely >= 2.1 / colspec >= 0.3.1
 - Fixed pandas retrieval of view that renames columns
 - Fixed mssql automatic max-string-length adjustment for varchar(max) in index
 
