@@ -54,7 +54,7 @@ class MyCollection(cs.Collection):
     def equal_primary_keys(self):
         return functools.reduce(
             operator.and_,
-            (self.first[key] == self.second[key] for key in self.common_primary_keys()),
+            (self.first[key] == self.second[key] for key in self.common_primary_key()),
         )
 
     @cs.filter()

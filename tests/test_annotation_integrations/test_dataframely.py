@@ -46,11 +46,11 @@ class MyCollection(dy.Collection):
 
     @dy.filter()
     def equal_primary_keys(self) -> pl.LazyFrame:
-        return self.first.join(self.second, on=self.common_primary_keys())
+        return self.first.join(self.second, on=self.common_primary_key())
 
     @dy.filter()
     def first_b_greater_second_b(self) -> pl.LazyFrame:
-        return self.first.join(self.second, on=self.common_primary_keys(), how="full", coalesce=True).filter(
+        return self.first.join(self.second, on=self.common_primary_key(), how="full", coalesce=True).filter(
             (pl.col("b") > pl.col("b_right")).fill_null(True)
         )
 
