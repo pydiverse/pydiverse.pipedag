@@ -8,6 +8,7 @@ import sqlalchemy as sa
 import structlog
 from polars.testing import assert_frame_equal
 
+from pydiverse.colspec.exc import ValidationError
 from pydiverse.pipedag import Flow, Stage, materialize
 from pydiverse.pipedag.context.context import CacheValidationMode, ConfigContext
 from pydiverse.pipedag.errors import HookCheckException
@@ -308,9 +309,9 @@ def do_test_annotations(with_filter: bool, with_violation: bool, validate_get_da
         assert len(second.collect()) in [3, 4, 5]
 
         if not validate_get_data and with_violation:
-            with pytest.raises(cs.exc.RuleValidationError, match="1 rules failed validation"):
+            with pytest.raises(cs.exc.ValidationError, match="1 rules failed validation"):
                 MyFirstColSpec.validate_polars(first)
-            with pytest.raises(cs.exc.RuleValidationError, match="2 rules failed validation"):
+            with pytest.raises(cs.exc.ValidationError, match="2 rules failed validation"):
                 MySecondColSpec.validate_polars(second)
         else:
             assert MyFirstColSpec.is_valid_polars(first)
@@ -492,12 +493,12 @@ def do_test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, 
         if with_violation:
             if with_filter:
                 MyFirstColSpec.validate_polars(first)
-                with pytest.raises(cs.exc.RuleValidationError, match="3 rules failed validation"):
+                with pytest.raises(cs.exc.ValidationError, match="3 rules failed validation"):
                     MySecondColSpec.validate_polars(second, cast=True)
             else:
-                with pytest.raises(cs.exc.RuleValidationError, match="1 rules failed validation"):
+                with pytest.raises(cs.exc.ValidationError, match="1 rules failed validation"):
                     MyFirstColSpec.validate_polars(first)
-                with pytest.raises(cs.exc.RuleValidationError, match="2 rules failed validation"):
+                with pytest.raises(cs.exc.ValidationError, match="2 rules failed validation"):
                     MySecondColSpec.validate_polars(second)
         else:
             assert MyFirstColSpec.is_valid_polars(first)
@@ -603,15 +604,12 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
         with Stage("s02"):
             consumer2_collection(collection)
 
-    # # collections are currently not passed on as annotations to individual tables
-    # # thus no cast is happening
-    # if with_violation:
-    #     from dataframely.exc import RuleValidationError
-    #     with pytest.raises(RuleValidationError):
-    #         flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
-    # else:
-    ret = flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
-    assert ret.successful
+    if with_violation:
+        with pytest.raises(ValidationError):
+            flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+    else:
+        ret = flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+        assert ret.successful
 
 
 @skip_instances("snowflake")

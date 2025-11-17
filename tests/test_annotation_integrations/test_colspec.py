@@ -307,9 +307,9 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
                 # this case does not occur for polars versions since they abort in cast
                 MyFirstColSpec.validate(first)
             else:
-                with pytest.raises(cs.exc.RuleValidationError, match="1 rules failed validation"):
+                with pytest.raises(cs.exc.ValidationError, match="1 rules failed validation"):
                     MyFirstColSpec.validate(first)
-            with pytest.raises(cs.exc.RuleValidationError, match="2 rules failed validation"):
+            with pytest.raises(cs.exc.ValidationError, match="2 rules failed validation"):
                 MySecondColSpec.validate(second)
         else:
             if not validate_get_data and dy.Column is None:
@@ -496,12 +496,12 @@ def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, val
         if with_violation:
             if with_filter:
                 MyFirstColSpec.validate(first)
-                with pytest.raises(cs.exc.RuleValidationError, match="2 rules failed validation"):
+                with pytest.raises(cs.exc.ValidationError, match="2 rules failed validation"):
                     MySecondColSpec.validate(second, cast=True)
             else:
-                with pytest.raises(cs.exc.RuleValidationError, match="1 rules failed validation"):
+                with pytest.raises(cs.exc.ValidationError, match="1 rules failed validation"):
                     MyFirstColSpec.validate(first)
-                with pytest.raises(cs.exc.RuleValidationError, match="2 rules failed validation"):
+                with pytest.raises(cs.exc.ValidationError, match="2 rules failed validation"):
                     MySecondColSpec.validate(second)
         else:
             assert MyFirstColSpec.is_valid(first)
@@ -725,9 +725,9 @@ def test_annotations_sql(with_filter: bool, with_violation: bool, validate_get_d
                 # this case does not occur for polars versions since they abort in cast
                 MyFirstColSpec.validate(first)
             else:
-                with pytest.raises(cs.exc.RuleValidationError, match="1 rules failed validation"):
+                with pytest.raises(cs.exc.ValidationError, match="1 rules failed validation"):
                     MyFirstColSpec.validate(first)
-            with pytest.raises(cs.exc.RuleValidationError, match="2 rules failed validation"):
+            with pytest.raises(cs.exc.ValidationError, match="2 rules failed validation"):
                 MySecondColSpec.validate(second)
         else:
             assert MyFirstColSpec.is_valid(first >> pdt.collect(pdt.Polars()))

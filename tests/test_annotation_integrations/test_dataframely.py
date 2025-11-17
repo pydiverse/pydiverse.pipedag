@@ -310,9 +310,9 @@ def do_test_annotations(with_filter: bool, with_violation: bool, validate_get_da
         assert len(second.collect()) in [3, 4, 5]
 
         if not validate_get_data and with_violation:
-            with pytest.raises(dy.exc.RuleValidationError, match="1 rules failed validation"):
+            with pytest.raises(dy.exc.ValidationError, match="1 rules failed validation"):
                 MyFirstColSpec.validate(first)
-            with pytest.raises(dy.exc.RuleValidationError, match="2 rules failed validation"):
+            with pytest.raises(dy.exc.ValidationError, match="2 rules failed validation"):
                 MySecondColSpec.validate(second)
         else:
             assert MyFirstColSpec.is_valid(first)
@@ -490,12 +490,12 @@ def do_test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, 
         if with_violation:
             if with_filter:
                 MyFirstColSpec.validate(first)
-                with pytest.raises(dy.exc.RuleValidationError, match="3 rules failed validation"):
+                with pytest.raises(dy.exc.ValidationError, match="3 rules failed validation"):
                     MySecondColSpec.validate(second, cast=True)
             else:
-                with pytest.raises(dy.exc.RuleValidationError, match="1 rules failed validation"):
+                with pytest.raises(dy.exc.ValidationError, match="1 rules failed validation"):
                     MyFirstColSpec.validate(first)
-                with pytest.raises(dy.exc.RuleValidationError, match="2 rules failed validation"):
+                with pytest.raises(dy.exc.ValidationError, match="2 rules failed validation"):
                     MySecondColSpec.validate(second)
         else:
             assert MyFirstColSpec.is_valid(first)
@@ -558,7 +558,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
         assert len(coll.second.collect()) in [3, 4, 5]
 
         if with_violation:
-            with pytest.raises(dy.exc.MemberValidationError, match="2 members failed validation"):
+            with pytest.raises(dy.exc.ValidationError, match="2 members failed validation"):
                 coll.validate(coll.__dict__, cast=True)
         else:
             if with_filter:
