@@ -1,7 +1,7 @@
 # Changelog
 
 ## 0.12.4 (2025-11-17)
-- Support python 3.14
+- Support python 3.14, dropped support for python 3.10
 - Support pyarrow 22
 - Fixed pandas retrieval of view that renames columns
 
