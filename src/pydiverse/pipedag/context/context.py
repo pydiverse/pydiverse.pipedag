@@ -345,47 +345,48 @@ class ConfigContext(BaseAttrsContext):
         from pydiverse.pipedag.materialize.store import PipeDAGStore
 
         # Load objects referenced in config
-        try:
-            table_store_config = self._config_dict["table_store"]
-            # Attention: See SQLTableStore.__new__ for how this call may instantiate
-            # a subclass of table_store_config["class"] depending on engine URL.
-            # For testing, we also allow setting table_store_config["class"] to an
-            # actual class. In case you want to create a table store that does not
-            # replace the default derived class for a specific dialect, set
-            # `_dialect_name = DISABLE_DIALECT_REGISTRATION`.
-            table_store = load_object(table_store_config)
-            table_store.set_instance_id(self.instance_id)
-            metadata_table_store_config = self._config_dict["table_store"].get("metadata_table_store", None)
-            if metadata_table_store_config:
-                if not hasattr(table_store, "set_metadata_store"):
-                    self.logger.error(
-                        "table_store has configured metadata_store but does not support it: it will be ignored"
+        with self:
+            try:
+                table_store_config = self._config_dict["table_store"]
+                # Attention: See SQLTableStore.__new__ for how this call may instantiate
+                # a subclass of table_store_config["class"] depending on engine URL.
+                # For testing, we also allow setting table_store_config["class"] to an
+                # actual class. In case you want to create a table store that does not
+                # replace the default derived class for a specific dialect, set
+                # `_dialect_name = DISABLE_DIALECT_REGISTRATION`.
+                table_store = load_object(table_store_config)
+                table_store.set_instance_id(self.instance_id)
+                metadata_table_store_config = self._config_dict["table_store"].get("metadata_table_store", None)
+                if metadata_table_store_config:
+                    if not hasattr(table_store, "set_metadata_store"):
+                        self.logger.error(
+                            "table_store has configured metadata_store but does not support it: it will be ignored"
+                        )
+                    else:
+                        metadata_table_store = load_object(metadata_table_store_config)
+                        table_store.set_metadata_store(metadata_table_store)
+            except Exception as e:
+                raise RuntimeError("Failed loading table_store") from e
+
+            try:
+                blob_store = load_object(self._config_dict["blob_store"])
+            except Exception as e:
+                raise RuntimeError("Failed loading blob_store") from e
+
+            try:
+                local_table_cache = None
+                local_table_cache_config = table_store_config.get("local_table_cache", None)
+                if local_table_cache_config is not None:
+                    local_table_cache = load_object(
+                        local_table_cache_config,
+                        move_keys_into_args=(
+                            "store_input",
+                            "store_output",
+                            "use_stored_input_as_cache",
+                        ),
                     )
-                else:
-                    metadata_table_store = load_object(metadata_table_store_config)
-                    table_store.set_metadata_store(metadata_table_store)
-        except Exception as e:
-            raise RuntimeError("Failed loading table_store") from e
-
-        try:
-            blob_store = load_object(self._config_dict["blob_store"])
-        except Exception as e:
-            raise RuntimeError("Failed loading blob_store") from e
-
-        try:
-            local_table_cache = None
-            local_table_cache_config = table_store_config.get("local_table_cache", None)
-            if local_table_cache_config is not None:
-                local_table_cache = load_object(
-                    local_table_cache_config,
-                    move_keys_into_args=(
-                        "store_input",
-                        "store_output",
-                        "use_stored_input_as_cache",
-                    ),
-                )
-        except Exception as e:
-            raise RuntimeError("Failed loading local_table_cache") from e
+            except Exception as e:
+                raise RuntimeError("Failed loading local_table_cache") from e
 
         return PipeDAGStore(
             table=table_store,

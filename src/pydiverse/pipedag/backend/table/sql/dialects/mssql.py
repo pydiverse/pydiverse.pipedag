@@ -252,9 +252,10 @@ class MSSqlTableStore(SQLTableStore):
                 sql_types = self.reflect_sql_types(index_columns_list, table.name, schema)
                 index_str_max_columns = [
                     col
-                    for _type, col in zip(sql_types, index_columns_list)
+                    for _type, col in zip(sql_types, index_columns_list, strict=True)
                     if isinstance(_type, sa.String) and _type.length is None
                 ]
+                sql_types = [_type for _type in sql_types if isinstance(_type, sa.String) and _type.length is None]
                 if len(index_str_max_columns) > 0:
                     # impose some varchar(max) limit to allow use in primary key / index
                     self.execute(

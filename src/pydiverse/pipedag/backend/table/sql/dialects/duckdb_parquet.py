@@ -4,7 +4,8 @@
 import os
 import shutil
 import uuid
-from typing import Any, Iterable, Literal
+from collections.abc import Iterable
+from typing import Any, Literal
 
 import duckdb
 import fsspec
@@ -988,23 +989,27 @@ class PandasTableHook(TableHook[ParquetTableStore]):
             else:
                 ads = ads.to_table()  # whole table (needed for to_pandas below)
             df = ads.to_pandas()
+            schema_names, schema_types = cls.get_pyarrow_schema(first_pyarrow_path, pyarrow_fs)
+            if view.columns:
+                # apply column transformation to pyarrow schema
+                schema_in = {k: v for k, v in zip(schema_names, schema_types, strict=True)}
+                schema_out = {k: schema_in[v] for k, v in view.columns.items()}
+                schema_names = schema_out.keys()
+                schema_types = schema_out.values()
         else:
             if limit is not None:
                 df = ds.dataset(pyarrow_path, filesystem=pyarrow_fs).scanner().head(limit).to_pandas()
             else:
                 df = pd.read_parquet(str(path), storage_options=store.get_storage_options("fsspec", path.protocol))
-        import pyarrow.parquet
-
-        # attention: with categorical columns, it might be necessary to fuse dictionaries of all parquet files
-        schema = pyarrow.parquet.read_schema(first_pyarrow_path, filesystem=pyarrow_fs)
+            schema_names, schema_types = cls.get_pyarrow_schema(first_pyarrow_path, pyarrow_fs)
         df = df.astype(
             {
                 col: "datetime64[s]"
-                for col, type_, dtype in zip(schema.names, schema.types, df.dtypes)
+                for col, type_, dtype in zip(schema_names, schema_types, df.dtypes, strict=True)
                 if type_ == "date32" and dtype == object  # noqa: E721
             }
         )
-        if isinstance(as_type, tuple) and len(as_type) == 2 and len(schema.names) > 0:
+        if isinstance(as_type, tuple) and len(as_type) == 2 and len(schema_names) > 0:
             if as_type[1] == "arrow" and not all(
                 hasattr(dtype, "storage") and dtype.storage == "pyarrow" for dtype in df.dtypes
             ):
@@ -1028,6 +1033,15 @@ class PandasTableHook(TableHook[ParquetTableStore]):
         if table.name is not None:
             df.attrs["name"] = table.name
         return df
+
+    @classmethod
+    def get_pyarrow_schema(cls, path: str, pyarrow_fs: fsspec.AbstractFileSystem) -> tuple[Any, Any]:
+        import pyarrow.parquet
+
+        # attention: with categorical columns, it might be necessary to fuse dictionaries of all parquet files
+        schema = pyarrow.parquet.read_schema(path, filesystem=pyarrow_fs)
+        schema_names, schema_types = schema.names, schema.types
+        return schema_names, schema_types
 
     @staticmethod
     def get_pyarrow_path(path: UPath, store: ParquetTableStore) -> tuple[str, fsspec.AbstractFileSystem]:

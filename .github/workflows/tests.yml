@@ -42,7 +42,7 @@ jobs:
 #        os:
 #          - ubuntu-latest
 #        environment:
-#          - py310mssqlpdt
+#          - py311mssqlpdt
 #    uses: ./.github/workflows/test.yml
 #    with:
 #      os: ${{ matrix.os }}
@@ -60,7 +60,7 @@ jobs:
         os:
           - ubuntu-latest
         environment:
-          - py312
+          - py314
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
@@ -78,17 +78,16 @@ jobs:
         os:
           - ubuntu-latest
         environment:
-          - py310all
           - py311all
           - py312all
           - py313all
-          - py310pdt
+          - py314all
           - py313pdt
           - py311cspdt
-          - py313cspdt
+          - py314cspdt
           - py313noadbc
-          - py310ibis
-          - py312ibis
+          - py311ibis
+          - py313ibis
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
@@ -106,14 +105,14 @@ jobs:
         os:
           - ubuntu-latest
         environment:
-          - py310all
-          - py312all
-          - py310pdt
+          - py311all
+          - py313all
+          - py311pdt
           - py313pdt
           - py311cspdt
-          - py313cspdt
-          - py310ibis
-          - py312ibis
+          - py314cspdt
+          - py311ibis
+          - py313ibis
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
@@ -131,14 +130,14 @@ jobs:
         os:
           - ubuntu-latest
         environment:
-          - py310all
           - py311all
           - py312all
           - py313all
+          - py314all
           - py311cspdt
-          - py313cspdt
-          - py310ibis
-          - py312ibis
+          - py314cspdt
+          - py311ibis
+          - py313ibis
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
@@ -181,8 +180,8 @@ jobs:
         os:
           - ubuntu-latest
         environment:
-          - py310ibm
           - py312ibm
+          - py313ibm
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
@@ -200,14 +199,14 @@ jobs:
         os:
           - ubuntu-latest
         environment:
-          - py310all
           - py311all
-          - py310mssqlpdt
+          - py313all
+          - py311mssqlpdt
           - py313mssqlpdt
           - py311mssqldy
           - py313mssqldy
-          - py310ibis
-          - py312ibis
+          - py311ibis
+          - py313ibis
     uses: ./.github/workflows/test.yml
     with:
       os: ${{ matrix.os }}
@@ -225,7 +224,7 @@ jobs:
         os:
           - ubuntu-latest
         environment:
-          - py310dapre
+          - py311dapre
           - py313dapre
           - py311all
 #          - py311pdsa1all  # prefect and pydantac tend to cause trouble for old versions
@@ -241,14 +240,13 @@ jobs:
       pytest-arguments: --dask --prefect -m "dask or prefect"
 
   pandas1_sqlalchemy1_test:
-    name: Pandas 1.x and SQLAlchemy 1.x Tests
+    name: Pandas 1.x and SQLAlchemy 1.x Tests (Deprecated)
     needs: [smoke_test]
     strategy:
       matrix:
         os:
           - ubuntu-latest
         environment:
-          - py310pdsa1all
           - py311pdsa1all
     uses: ./.github/workflows/test.yml
     with:
@@ -273,8 +271,8 @@ jobs:
         environment:
 #          - py311pdsa1all
           - py311all
-#          - py313all
-#          - py313noadbc
+          - py313all
+          - py313noadbc
     uses: ./.github/workflows/test.yml
     secrets:
       SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}

@@ -1,7 +1,7 @@
 # Copyright (c) QuantCo and pydiverse contributors 2024-2025
 # SPDX-License-Identifier: BSD-3-Clause
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping
 
 import polars as pl
 import pytest
@@ -46,11 +46,11 @@ class MyCollection(dy.Collection):
 
     @dy.filter()
     def equal_primary_keys(self) -> pl.LazyFrame:
-        return self.first.join(self.second, on=self.common_primary_keys())
+        return self.first.join(self.second, on=self.common_primary_key())
 
     @dy.filter()
     def first_b_greater_second_b(self) -> pl.LazyFrame:
-        return self.first.join(self.second, on=self.common_primary_keys(), how="full", coalesce=True).filter(
+        return self.first.join(self.second, on=self.common_primary_key(), how="full", coalesce=True).filter(
             (pl.col("b") > pl.col("b_right")).fill_null(True)
         )
 
@@ -310,9 +310,9 @@ def do_test_annotations(with_filter: bool, with_violation: bool, validate_get_da
         assert len(second.collect()) in [3, 4, 5]
 
         if not validate_get_data and with_violation:
-            with pytest.raises(dy.exc.RuleValidationError, match="1 rules failed validation"):
+            with pytest.raises(dy.exc.ValidationError, match="1 rules failed validation"):
                 MyFirstColSpec.validate(first)
-            with pytest.raises(dy.exc.RuleValidationError, match="2 rules failed validation"):
+            with pytest.raises(dy.exc.ValidationError, match="2 rules failed validation"):
                 MySecondColSpec.validate(second)
         else:
             assert MyFirstColSpec.is_valid(first)
@@ -490,12 +490,12 @@ def do_test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, 
         if with_violation:
             if with_filter:
                 MyFirstColSpec.validate(first)
-                with pytest.raises(dy.exc.RuleValidationError, match="3 rules failed validation"):
+                with pytest.raises(dy.exc.ValidationError, match="3 rules failed validation"):
                     MySecondColSpec.validate(second, cast=True)
             else:
-                with pytest.raises(dy.exc.RuleValidationError, match="1 rules failed validation"):
+                with pytest.raises(dy.exc.ValidationError, match="1 rules failed validation"):
                     MyFirstColSpec.validate(first)
-                with pytest.raises(dy.exc.RuleValidationError, match="2 rules failed validation"):
+                with pytest.raises(dy.exc.ValidationError, match="2 rules failed validation"):
                     MySecondColSpec.validate(second)
         else:
             assert MyFirstColSpec.is_valid(first)
@@ -558,7 +558,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
         assert len(coll.second.collect()) in [3, 4, 5]
 
         if with_violation:
-            with pytest.raises(dy.exc.MemberValidationError, match="2 members failed validation"):
+            with pytest.raises(dy.exc.ValidationError, match="2 members failed validation"):
                 coll.validate(coll.__dict__, cast=True)
         else:
             if with_filter:

@@ -122,8 +122,9 @@ class Result:
         else:
             task_output = self.task_values[task._task]
 
-        with self.config_context, DematerializeRunContext(
-            self.flow, allow_write_local_table_cache=write_local_table_cache
+        with (
+            self.config_context,
+            DematerializeRunContext(self.flow, allow_write_local_table_cache=write_local_table_cache),
         ):
             store = self.config_context.store
             return dematerialize_output_from_store(store, task, task_output, as_type)

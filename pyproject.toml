@@ -1,6 +1,6 @@
 [project]
 name = "pydiverse-pipedag"
-version = "0.12.3"
+version = "0.12.4"
 description = "A pipeline orchestration library executing tasks within one python session. It takes care of SQL table (de)materialization, caching and cache invalidation. Blob storage is supported as well for example for storing model files."
 authors = [
   { name = "QuantCo, Inc." },
@@ -10,7 +10,7 @@ authors = [
 ]
 license = { file = "LICENSE" }
 readme = "docs/package/README.md"
-requires-python = ">=3.10.18, <3.14"
+requires-python = ">=3.11.14, <3.15.0a0"
 
 classifiers = [
   "Development Status :: 5 - Production/Stable",
@@ -19,11 +19,10 @@ classifiers = [
   "License :: OSI Approved :: BSD License",
   "Programming Language :: SQL",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.9",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Database",
   "Topic :: Scientific/Engineering",
   "Topic :: Software Development",
@@ -45,7 +44,7 @@ dependencies = [
   "pyparsing >=3.2.5,<4",
   "sqlalchemy >=1.4.54,<3",
   "pandas >=1.5.3,<3",
-  "pyarrow >=20.0.0,<22",
+  "pyarrow >=20.0.0,<23",
   "duckdb >=0.10.3,<2",             # py311pdsa1 requires < 1.3.0
   "duckdb-engine >=0.15.0,<0.16",
   "polars >=1.2.1,<2",              # py311pdsa1all requires < 1.30.0
@@ -65,7 +64,7 @@ ignore = ["B028"]
 extend-exclude = ["docs/*"]
 ignore-init-module-imports = true
 fix = true
-target-version = "py38"
+target-version = "py311"
 # 88 leads to worse comments
 line-length = 120
 
