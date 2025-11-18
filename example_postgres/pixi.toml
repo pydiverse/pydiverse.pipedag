@@ -16,9 +16,9 @@ adbc-driver-postgresql = ">=1.7.0,<2"
 # optional dependency for using pydiverse-transform (pdt.Table)
 pydiverse-transform = ">=0.6.0,<0.7"
 # optional dependency for dataframely schema classes
-dataframely = ">=1.2.1,<2"
+dataframely = ">=2.1.0,<3"
 # optional dependency for colspec classes (same as dataframely but with SQL support)
-pydiverse-colspec = ">=0.3.0,<0.4"
+pydiverse-colspec = ">=0.3.1,<0.4"
 # independent library used in realistic_pipeline.py
 xgboost = ">=3.0.2,<4"
 # this could be installed in separate environment simply for running docker-compose
