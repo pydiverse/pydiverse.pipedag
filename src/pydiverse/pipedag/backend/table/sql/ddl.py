@@ -118,6 +118,7 @@ class CreateTableAsSelect(DDLElement):
         *,
         unlogged: bool = False,
         suffix: str = "",
+        quote_schema: bool = True,
     ):
         self.name = name
         self.schema = schema
@@ -127,6 +128,8 @@ class CreateTableAsSelect(DDLElement):
         self.unlogged = unlogged
         # Suffix to be appended to the statement, e.g. from materialization details
         self.suffix = suffix
+        # whether schema should be quoted
+        self.quote_schema = quote_schema
 
 
 class CreateEmptyTableAsSelect(DDLElement):
@@ -233,11 +236,12 @@ class RenameTable(DDLElement):
 
 
 class DropTable(DDLElement):
-    def __init__(self, name, schema: Schema | str, if_exists=False, cascade=False):
+    def __init__(self, name, schema: Schema | str, if_exists=False, cascade=False, quote_schema=True):
         self.name = name
         self.schema = schema
         self.if_exists = if_exists
         self.cascade = cascade  # True: remove dependent views in postgres
+        self.quote_schema = quote_schema
 
 
 class DropView(DDLElement):
@@ -707,6 +711,15 @@ def visit_create_database(create: CreateDatabase, compiler, **kw):
     return " ".join(text)
 
 
+@compiles(CreateDatabase, "mssql")
+def visit_create_database_mssql(create: CreateDatabase, compiler, **kw):
+    if create.if_not_exists:
+        # remove if_not_exists because MSSQL does not support it
+        create = copy.deepcopy(create)
+        create.if_not_exists = False
+    return visit_create_database(create, compiler, **kw)
+
+
 @compiles(DropDatabase)
 def visit_drop_database(drop: DropDatabase, compiler, **kw):
     _ = kw
@@ -721,9 +734,14 @@ def visit_drop_database(drop: DropDatabase, compiler, **kw):
     raise NotImplementedError(f"Disable for now for safety reasons (not yet needed): {ret}")
 
 
-def _visit_fill_obj_as_select(create, compiler, _type, kw, *, cmd="CREATE ", sep=" AS", prefix="", suffix=""):
+def _visit_fill_obj_as_select(
+    create, compiler, _type, kw, *, cmd="CREATE ", sep=" AS", prefix="", suffix="", quote_schema=True
+):
     name = compiler.preparer.quote(create.name)
-    schema = compiler.preparer.format_schema(create.schema.get())
+    if quote_schema:
+        schema = compiler.preparer.format_schema(create.schema.get())
+    else:
+        schema = create.schema.get()
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(create.query, **kw)
     return f"{cmd}{_type} {schema}.{name}{sep}\n{prefix}{select}{suffix}"
@@ -755,21 +773,24 @@ def visit_insert_into_select_ibm_db2_load(insert: InsertIntoSelect, compiler, **
 
 @compiles(CreateTableAsSelect)
 def visit_create_table_as_select(create: CreateTableAsSelect, compiler, **kw):
-    return _visit_fill_obj_as_select(create, compiler, "TABLE", kw)
+    return _visit_fill_obj_as_select(create, compiler, "TABLE", kw, quote_schema=create.quote_schema)
 
 
 @compiles(CreateTableAsSelect, "postgresql")
 def visit_create_table_as_select_postgresql(create: CreateTableAsSelect, compiler, **kw):
     if create.unlogged:
-        return _visit_fill_obj_as_select(create, compiler, "UNLOGGED TABLE", kw)
+        return _visit_fill_obj_as_select(create, compiler, "UNLOGGED TABLE", kw, quote_schema=create.quote_schema)
     else:
-        return _visit_fill_obj_as_select(create, compiler, "TABLE", kw)
+        return _visit_fill_obj_as_select(create, compiler, "TABLE", kw, quote_schema=create.quote_schema)
 
 
 @compiles(CreateTableAsSelect, "mssql")
 def visit_create_table_as_select_mssql(create: CreateTableAsSelect, compiler, **kw):
     name = compiler.preparer.quote(create.name)
-    schema = compiler.preparer.format_schema(create.schema.get())
+    if create.unlogged:
+        schema = compiler.preparer.format_schema(create.schema.get())
+    else:
+        schema = create.schema.get()
 
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(create.query, **kw)
@@ -963,37 +984,37 @@ def visit_rename_table(rename_table: RenameTable, compiler, **kw):
 
 @compiles(DropTable)
 def visit_drop_table(drop: DropTable, compiler, **kw):
-    return _visit_drop_anything(drop, "TABLE", compiler, **kw)
+    return _visit_drop_anything(drop, "TABLE", compiler, kw, quote_schema=drop.quote_schema)
 
 
 @compiles(DropTable, "mssql")
 def visit_drop_table(drop: DropTable, compiler, **kw):
     drop.cascade = False  # not supported by dialect
-    return _visit_drop_anything(drop, "TABLE", compiler, **kw)
+    return _visit_drop_anything(drop, "TABLE", compiler, kw, quote_schema=drop.quote_schema)
 
 
 @compiles(DropTable, "ibm_db_sa")
 def visit_drop_table(drop: DropTable, compiler, **kw):
     drop.cascade = False  # not supported by dialect
-    return _visit_drop_anything(drop, "TABLE", compiler, **kw)
+    return _visit_drop_anything(drop, "TABLE", compiler, kw, quote_schema=drop.quote_schema)
 
 
 @compiles(DropView)
 def visit_drop_view(drop: DropView, compiler, **kw):
-    return _visit_drop_anything(drop, "VIEW", compiler, **kw)
+    return _visit_drop_anything(drop, "VIEW", compiler, kw)
 
 
 @compiles(DropAlias)
 def visit_drop_alias(drop: DropAlias, compiler, **kw):
     # Not all dialects support a table ALIAS as a first class object.
     # For those that don't we just use views.
-    return _visit_drop_anything(drop, "VIEW", compiler, **kw)
+    return _visit_drop_anything(drop, "VIEW", compiler, kw)
 
 
 @compiles(DropAlias, "mssql")
 def visit_drop_alias_mssql(drop: DropAlias, compiler, **kw):
     # What is called ALIAS for dialect ibm_db_sa is called SYNONYM for mssql
-    return _visit_drop_anything(drop, "SYNONYM", compiler, **kw)
+    return _visit_drop_anything(drop, "SYNONYM", compiler, kw)
 
 
 @compiles(DropAlias, "ibm_db_sa")
@@ -1005,34 +1026,38 @@ def visit_drop_alias_ibm_db_sa(drop: DropAlias, compiler, **kw):
         if drop.name not in PipedagDB2Reflection.get_alias_names(drop.engine, schema=schema_str):
             return ""
         drop = DropAlias(drop.name, drop.schema, if_exists=False)
-    return _visit_drop_anything(drop, "ALIAS", compiler, **kw)
+    return _visit_drop_anything(drop, "ALIAS", compiler, kw)
 
 
 @compiles(DropNickname, "ibm_db_sa")
 def visit_drop_nickname_ibm_db_sa(drop: DropAlias, compiler, **kw):
-    return _visit_drop_anything(drop, "NICKNAME", compiler, **kw)
+    return _visit_drop_anything(drop, "NICKNAME", compiler, kw)
 
 
 @compiles(DropProcedure)
 def visit_drop_table(drop: DropProcedure, compiler, **kw):
-    return _visit_drop_anything(drop, "PROCEDURE", compiler, **kw)
+    return _visit_drop_anything(drop, "PROCEDURE", compiler, kw)
 
 
 @compiles(DropFunction)
 def visit_drop_table(drop: DropFunction, compiler, **kw):
-    return _visit_drop_anything(drop, "FUNCTION", compiler, **kw)
+    return _visit_drop_anything(drop, "FUNCTION", compiler, kw)
 
 
 def _visit_drop_anything(
     drop: DropTable | DropView | DropProcedure | DropFunction | DropAlias,
     _type,
     compiler,
-    **kw,
+    kw,
+    quote_schema=True,
 ):
     _ = kw
     table = compiler.preparer.quote(drop.name)
     schema_str = drop.schema.get() if isinstance(drop.schema, Schema) else drop.schema
-    schema = compiler.preparer.format_schema(schema_str)
+    if quote_schema:
+        schema = compiler.preparer.format_schema(schema_str)
+    else:
+        schema = schema_str
     text = [f"DROP {_type}"]
     if drop.if_exists:
         text.append("IF EXISTS")
