@@ -105,6 +105,7 @@ class UnboundMaterializingTask(UnboundTask):
         add_input_source: bool = False,
         ordering_barrier: bool | dict[str, Any] = False,
         call_context: Callable[[], Any] | None = None,
+        allow_fresh_input: bool = False,
     ):
         super().__init__(
             MaterializationWrapper(fn),
@@ -122,6 +123,7 @@ class UnboundMaterializingTask(UnboundTask):
         self.group_node_tag = group_node_tag
         self.add_input_source = add_input_source
         self.call_context = call_context
+        self.allow_fresh_input = allow_fresh_input
 
         if isinstance(ordering_barrier, bool):
             group_node_args = {"ordering_barrier": ordering_barrier}
@@ -256,6 +258,7 @@ class MaterializingTask(Task):
         self._add_input_source = unbound_task.add_input_source
         self._internal_version = unbound_task.version
         self._cache = unbound_task.cache
+        self._allow_fresh_input = unbound_task.allow_fresh_input
         self._lazy = unbound_task.lazy
         self._fn_annotations = typing.get_type_hints(unbound_task.fn)
 
@@ -617,7 +620,7 @@ class MaterializationWrapper:
                     return cached_output
 
             if not task._lazy:
-                if assert_no_fresh_input and task._cache is not None:
+                if assert_no_fresh_input and task._cache and not task._allow_fresh_input is not None:
                     raise AssertionError(
                         "cache_validation.mode=ASSERT_NO_FRESH_INPUT is a "
                         "protection mechanism to prevent execution of "

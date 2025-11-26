@@ -252,6 +252,7 @@ class EconomicRepresentation(cs.Collection):
     aa: AaColSpec
     bb: BbColSpec
     cc: CcColSpec | None
+    extra: cs.ColSpec | None
 
 
 @materialize(input_type=sa.Table, lazy=True)
@@ -270,6 +271,23 @@ def cc(c: sa.Alias) -> Table:
     return Table(select(pk=c.c.pk, x=c.c.x, yz=2 * c.c.y * c.c.z, xz=c.c.x * c.c.z), "cc", primary_key=pk_names(c))
 
 
+def extra_input_hash(rel_path: str):
+    path = os.path.join(os.environ.get("DATA_DIR_PREFIX", ""), rel_path)
+    with open(path, "rb") as f:
+        data = f.read()
+    import hashlib
+
+    return hashlib.md5(data).hexdigest()
+
+
+@materialize(input_type=sa.Table, cache=extra_input_hash, lazy=True, allow_fresh_input=True)
+def load_extra_input(rel_path: str):
+    # pretend we want to load an extra CSV file which should be updated even in the stable instances
+    path = os.path.join(os.environ.get("DATA_DIR_PREFIX", ""), rel_path)
+    tbl = pd.read_csv(path)
+    return Table(tbl, "extra_input", primary_key="pk").materialize()
+
+
 def transform(src_tbls: dict[str, Task | TaskGetItem]) -> EconomicRepresentation:
     # Even though EconomicRepresentation is a @dataclass, it might be more convenient
     # to build it table by table instead of calling the constructor. Both is possible though.
@@ -280,6 +298,9 @@ def transform(src_tbls: dict[str, Task | TaskGetItem]) -> EconomicRepresentation
     economic.aa = aa(src_tbls["a"], src_tbls["b"])
     economic.bb = bb(src_tbls["b"])
     economic.cc = cc(src_tbls["c"])
+
+    file = os.path.join("data", "pipedag_example_data", "c.csv.gz")
+    economic.extra = load_extra_input(file)
 
     economic.finalize()
     return economic
