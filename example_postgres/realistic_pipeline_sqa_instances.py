@@ -120,10 +120,15 @@ def _new_input_hash(tbls: list[Table]):
         return tuple({tbl.name: tbl_hash(tbl.obj, conn) for tbl in tbls}.items())
 
 
-def _has_copy_source_fresh_input(stage: Stage, attrs: dict[str, Any], pipedag_config: PipedagConfig):
-    source = attrs["copy_source"]
-    per_user = attrs["copy_per_user"]
-    source_cfg = pipedag_config.get(instance=source, per_user=per_user)
+def _has_copy_source_fresh_input(
+    tbls: dict[str, sa.Alias],
+    other_tbls: dict[str, sa.Alias],
+    source_cfg: ConfigContext,
+    *,
+    attrs: dict[str, Any],
+    stage: Stage,
+):
+    _ = tbls, other_tbls, attrs
     with source_cfg:
         _hash = source_cfg.store.table_store.get_stage_hash(stage)
     return _hash
@@ -149,7 +154,11 @@ def _copy_filtered_inputs(
     _ = tbls
     # Oversimplistic way of filtering (just limiting number of rows).
     filter_cnt = attrs["copy_filter_cnt"]
-    ret = {name.lower(): Table(sa.select(tbl).limit(filter_cnt), name) for name, tbl in source_tbls.items()}
+    ret = {
+        name.lower(): Table(sa.select(tbl).limit(filter_cnt), name)
+        for name, tbl in source_tbls.items()
+        if not name.startswith("_")
+    }
     return [ret[name] for name in sorted(ret.keys())]
 
 
@@ -184,27 +193,32 @@ def get_input_data(
     elif attrs["copy_filtered_input"]:
         # copy filtered input tables from another pipeline instance
         other_cfg = pipedag_config.get(attrs["copy_source"], attrs["copy_per_user"])
-        raw_tbls = _copy_filtered_inputs(other_cfg, stage=stage, attrs=attrs).values()
+        raw_tbls = _copy_filtered_inputs(other_cfg, stage=stage, attrs=attrs)
     elif attrs["keep_input_stable"]:
-        if update_stable_data:
-            # simply copy all input tables from external schema
-            @materialize(lazy=True, input_type=sa.Table, cache=_new_input_hash, name="get_input_data")
-            def do_get_input_data(tbls: list[sa.Alias]):
-                # copy the tables from external table references
-                return [Table(tbl, name=tbl.name) for tbl in tbls]
+        if not update_stable_data:
+            # Determine table_references from cached output of do_get_input_data.
+            # This is necessary to be completely independent of tables in external schema.
+            tbl = Table(name="_input_table_list")
+            tbl.stage = stage
+            df = cfg.store.table_store.retrieve_table_obj(tbl, as_type=pl.DataFrame)
+            table_references = [
+                ExternalTableReference(table["name"], schema=table["schema"]) for table in df.to_dicts()
+            ]
 
-            raw_tbls = do_get_input_data([Table(ref) for ref in table_references])
-        else:
-            # reference tables from current cache valid stage directly
-            # (this only works if no consumer is in the same stage)
-            def stage_table(name: str) -> Table:
-                tbl = Table(name=name)  # TODO: obj=CacheReference()
-                tbl.stage = stage  # this messes with internal representation but should work
-                return tbl
+        # simply copy all input tables from external schema
+        @materialize(lazy=True, input_type=sa.Table, cache=_new_input_hash, name="get_input_data")
+        def do_get_input_data(tbls: list[sa.Alias]):
+            # This task is designed to stay cache valid as long as update_stable_data=False
+            if update_stable_data:
+                # Write tables names to special table. Alternative would be to JSON serialize table_references.
+                df = pl.DataFrame(dict(name=[tbl.name for tbl in tbls], schema=external_schema))
+                tbl = Table(df, name="_input_table_list")
+                tbl.stage = stage
+                cfg.store.table_store.store_table(tbl, task=None)
+            # copy the tables from external table references
+            return [Table(tbl, name=tbl.name) for tbl in tbls]
 
-            schema = cfg.store.table_store.get_schema(stage.name).get()
-            table_references = get_external_references(cfg, schema)
-            raw_tbls = [stage_table(ref.name) for ref in table_references]
+        raw_tbls = do_get_input_data([Table(ref) for ref in table_references])
     else:
         # this is the most simple full_fresh case: simply reference source tables form external schema
         raw_tbls = [Table(ref) for ref in table_references]
@@ -412,7 +426,7 @@ def run_pipeline(instance_id: str, external_schema: str | None = None, *, update
     cfg = pipedag_config.get(instance_id)
     # the stable "full" pipeline should not get fresh input unless explicitly requested
     mode = (
-        CacheValidationMode.FORCE_CACHE_INVALID
+        CacheValidationMode.NORMAL
         if not cfg.attrs["keep_input_stable"] or update_stable_data
         else CacheValidationMode.ASSERT_NO_FRESH_INPUT
     )

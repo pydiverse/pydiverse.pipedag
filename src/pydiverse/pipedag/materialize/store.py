@@ -512,7 +512,7 @@ class BaseTableCache(ABC, TableHookResolver, Disposable):
     def clear_cache(self, stage: Stage):
         """Delete the cache for a specific stage"""
 
-    def store_table(self, table: Table, task: MaterializingTask):
+    def store_table(self, table: Table, task: MaterializingTask | None):
         if self.should_store_output:
             return self._store_table(table, task)
 
