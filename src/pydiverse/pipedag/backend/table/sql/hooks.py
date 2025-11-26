@@ -281,7 +281,10 @@ def get_view_query(view: View, store: SQLTableStore):
     assert view.assert_normalized  # otherwise, view.src might be iterable for various reasons
     if isinstance(view.src, Iterable):
         src_tables = [
-            SQLAlchemyTableHook.retrieve(store, src_tbl, src_tbl.stage.current_name, sa.Table) for src_tbl in view.src
+            SQLAlchemyTableHook.retrieve(
+                store, src_tbl, src_tbl.stage.current_name if src_tbl.stage is not None else None, sa.Table
+            )
+            for src_tbl in view.src
         ]
         assert len(src_tables) > 0
         cols = src_tables[0].c  # this might be oversimplified for categorical columns
@@ -302,7 +305,8 @@ def get_view_query(view: View, store: SQLTableStore):
             # support sqlalchemy < 2.0 and generally fall back to uglier query but more reliable code
             base_from = sa.union_all(*[sa.select(t) for t in src_tables]).alias("sub")
     else:
-        base_from = SQLAlchemyTableHook.retrieve(store, view.src, view.src.stage.current_name, sa.Table)
+        stage_name = view.src.stage.current_name if view.src.stage is not None else None
+        base_from = SQLAlchemyTableHook.retrieve(store, view.src, stage_name, sa.Table)
         if not view.sort_by and not view.columns and not view.limit:
             # avoid returning subquery
             return base_from
@@ -467,6 +471,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
                     shared_lock_allowed=tbl.shared_lock_allowed,
                 )
                 for tbl in input_tables
+                if get_stage(tbl) is not None
             ]
 
         schema = store.get_schema(stage_name)
