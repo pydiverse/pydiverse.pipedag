@@ -141,6 +141,7 @@ class CreateEmptyTableAsSelect(DDLElement):
         *,
         unlogged: bool = False,
         suffix: str = "",
+        quote_schema: bool = True,
     ):
         self.name = name
         self.schema = schema
@@ -150,6 +151,8 @@ class CreateEmptyTableAsSelect(DDLElement):
         self.unlogged = unlogged
         # Suffix to be appended to the statement, e.g. from materialization details
         self.suffix = suffix
+        # whether schema should be quoted
+        self.quote_schema = quote_schema
 
 
 class CreateTableWithSuffix(DDLElement):
@@ -818,7 +821,9 @@ def visit_create_empty_table_as_select(create: CreateEmptyTableAsSelect, compile
 @compiles(CreateEmptyTableAsSelect, "ibm_db_sa")
 def visit_create_empty_table_as_select_ibm_db_sa(create: CreateEmptyTableAsSelect, compiler, **kw):
     suffix = ") DEFINITION ONLY " + create.suffix
-    return _visit_fill_obj_as_select(create, compiler, "TABLE", kw, prefix="(", suffix=suffix)
+    return _visit_fill_obj_as_select(
+        create, compiler, "TABLE", kw, prefix="(", suffix=suffix, quote_schema=create.quote_schema
+    )
 
 
 @compiles(CreateTableWithSuffix, "ibm_db_sa")
