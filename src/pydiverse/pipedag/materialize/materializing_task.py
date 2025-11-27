@@ -620,7 +620,7 @@ class MaterializationWrapper:
                     return cached_output
 
             if not task._lazy:
-                if assert_no_fresh_input and task._cache and not task._allow_fresh_input is not None:
+                if assert_no_fresh_input and task._cache is not None and not task._allow_fresh_input:
                     raise AssertionError(
                         "cache_validation.mode=ASSERT_NO_FRESH_INPUT is a "
                         "protection mechanism to prevent execution of "
