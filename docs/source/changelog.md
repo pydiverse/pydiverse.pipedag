@@ -2,6 +2,8 @@
 
 ## 0.12.5 (2025-11-26)
 - Workaround snowflake sqlalchemy dialect to enable ExternalTableReference to other database
+- Flag in CreateTable and DropTable DDL statements allows not quoting schema (needed for multi-part schema)
+- Support side-channel fresh input in stable pipeline instance (mode=ASSERT_NO_FRESH_INPUT)
 
 ## 0.12.4 (2025-11-17)
 - Support python 3.14, dropped support for python 3.10
