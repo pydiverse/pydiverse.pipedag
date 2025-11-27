@@ -192,6 +192,55 @@ class SnowflakeTableStore(SQLTableStore):
             query_not_executed=str(AddIndex(table_name, schema, index_columns, name)),
         )
 
+    def reflect_table(self, table_name: str, schema: str | Schema) -> sa.Table:
+        if isinstance(schema, Schema):
+            schema = schema.get()
+        if schema.count(".") == 1:
+            # sqlalchemy snowflake driver does not support schema="database.schema"
+            database, schema_part = schema.split(".")
+            with self.engine.connect() as conn:
+                conn.execute(sa.text(f"USE DATABASE {database}"))
+                tbl = sa.Table(
+                    table_name,
+                    sa.MetaData(),
+                    schema=schema_part,
+                    autoload_with=conn,
+                )
+                tbl.schema = schema  # restore full schema name
+                conn.execute(sa.text(f"USE DATABASE {self.engine.url.database}"))
+        else:
+            tbl = sa.Table(
+                table_name,
+                sa.MetaData(),
+                schema=schema,
+                autoload_with=self.engine,
+            )
+        return tbl
+
+    def has_table_or_view(self, name: str, schema: Schema | str):
+        if isinstance(schema, Schema):
+            schema = schema.get()
+        if schema.count(".") == 1:
+            # sqlalchemy snowflake driver does not support schema="database.schema"
+            database, schema_part = schema.split(".")
+            with self.engine.connect() as conn:
+                conn.execute(sa.text(f"USE DATABASE {database}"))
+                has_table = self._has_table_or_view(conn, name, schema_part)
+                conn.execute(sa.text(f"USE DATABASE {self.engine.url.database}"))
+        else:
+            has_table = self._has_table_or_view(self.engine, name, schema)
+        return has_table
+
+    @staticmethod
+    def _has_table_or_view(conn, name: str, schema: str) -> bool:
+        inspector = sa.inspect(conn)
+        has_table = inspector.has_table(name, schema=schema)
+        # workaround for sqlalchemy backends that fail to find views with has_table
+        # in particular DuckDB https://github.com/duckdb/duckdb/issues/10322
+        if not has_table:
+            has_table = name in inspector.get_view_names(schema=schema)
+        return has_table
+
 
 @SnowflakeTableStore.register_table(snowflake)
 class SQLAlchemyTableHook(hooks.SQLAlchemyTableHook):

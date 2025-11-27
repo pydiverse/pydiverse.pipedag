@@ -194,7 +194,7 @@ class BaseTableStore(TableHookResolver, Disposable):
             RunContext.get().trace_hook.query_cache_status(
                 task, table, task_cache_info, query_hash, query_str, cache_valid=False
             )
-            if task_cache_info.assert_no_materialization:
+            if task_cache_info.assert_no_materialization and not task._allow_fresh_input:
                 raise AssertionError(
                     "cache_validation.mode=ASSERT_NO_FRESH_INPUT is a "
                     "protection mechanism to prevent execution of "
@@ -263,7 +263,7 @@ class BaseTableStore(TableHookResolver, Disposable):
             TaskContext.get().is_cache_valid = False
             RunContext.get().set_stage_has_changed(task._stage)
 
-            if task_cache_info.assert_no_materialization:
+            if task_cache_info.assert_no_materialization and not task._allow_fresh_input:
                 raise AssertionError(
                     "cache_validation.mode=ASSERT_NO_FRESH_INPUT is a "
                     "protection mechanism to prevent execution of "
@@ -512,7 +512,7 @@ class BaseTableCache(ABC, TableHookResolver, Disposable):
     def clear_cache(self, stage: Stage):
         """Delete the cache for a specific stage"""
 
-    def store_table(self, table: Table, task: MaterializingTask):
+    def store_table(self, table: Table, task: MaterializingTask | None):
         if self.should_store_output:
             return self._store_table(table, task)
 

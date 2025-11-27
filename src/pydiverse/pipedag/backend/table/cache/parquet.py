@@ -77,6 +77,9 @@ class ParquetTableCache(BaseTableCache):
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
     def _has_table(self, table: Table, as_type: type) -> bool:
+        if table.stage is None:
+            # metadata_path does not exist for external table references without stage
+            return False
         metadata_path = self.get_table_path(table, ".meta.json")
         if not metadata_path.exists():
             return False
