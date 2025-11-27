@@ -530,7 +530,7 @@ if __name__ == "__main__":
 
     # Run this pipeline with (might take a bit longer on first run in pixi environment):
     # ```shell
-    # pixi run python realistic_pipeline_sqa.py
+    # pixi run python realistic_pipeline_sqa_instances.py
     # ```
 
     main()
