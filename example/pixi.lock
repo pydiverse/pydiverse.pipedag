@@ -40,7 +40,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/cpython-3.14.0-py314hd8ed1ab_102.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cryptography-46.0.3-py314hb613cbf_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/dbus-1.16.2-h3c4dab8_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/duckdb-1.4.2-h332efcf_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/duckdb-engine-0.15.0-pyh885dcc9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/epoxy-1.5.10-hb03c661_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/font-ttf-dejavu-sans-mono-2.37-hab24e00_0.tar.bz2
@@ -163,7 +162,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-core-22.0.0-py314h52d6ec5_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.4.2-pyhcf101f3_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-pipedag-0.12.4-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-pipedag-0.12.5-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pydot-4.0.1-py314hdafbbf9_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pynng-0.8.1-py314ha160325_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyparsing-3.2.5-pyhcf101f3_0.conda
@@ -250,7 +249,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/cpython-3.14.0-py314hd8ed1ab_102.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/cryptography-46.0.3-py314h606d956_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/dbus-1.16.2-heda779d_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/duckdb-1.4.2-h332efcf_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/duckdb-engine-0.15.0-pyh885dcc9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/epoxy-1.5.10-he30d5cf_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/font-ttf-dejavu-sans-mono-2.37-hab24e00_0.tar.bz2
@@ -373,7 +371,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pyarrow-core-22.0.0-py314h74722e0_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.4.2-pyhcf101f3_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-pipedag-0.12.4-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-pipedag-0.12.5-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pydot-4.0.1-py314h28a4750_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-aarch64/pynng-0.8.1-py314h02b5315_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyparsing-3.2.5-pyhcf101f3_0.conda
@@ -457,7 +455,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/click-8.3.1-pyh707e725_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/cpython-3.13.9-py313hd8ed1ab_101.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/cryptography-46.0.3-py313h0218d6d_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/duckdb-1.4.2-h332efcf_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/duckdb-engine-0.15.0-pyh885dcc9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/epoxy-1.5.10-h8616949_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/font-ttf-dejavu-sans-mono-2.37-hab24e00_0.tar.bz2
@@ -563,7 +560,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pyarrow-core-22.0.0-py313hff57800_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.4.2-pyhcf101f3_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-pipedag-0.12.4-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-pipedag-0.12.5-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pydot-4.0.1-py313habf4b1d_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pynng-0.8.1-py313h253db18_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyparsing-3.2.5-pyhcf101f3_0.conda
@@ -627,7 +624,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/click-8.3.1-pyh707e725_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/cpython-3.14.0-py314hd8ed1ab_102.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/cryptography-46.0.3-py314h7e8dc1c_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/duckdb-1.4.2-h332efcf_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/duckdb-engine-0.15.0-pyh885dcc9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/epoxy-1.5.10-hc919400_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/font-ttf-dejavu-sans-mono-2.37-hab24e00_0.tar.bz2
@@ -733,7 +729,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyarrow-core-22.0.0-py314hf20a12a_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.4.2-pyhcf101f3_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-pipedag-0.12.4-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-pipedag-0.12.5-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pydot-4.0.1-py314h4dc9dd8_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pynng-0.8.1-py314he8615de_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyparsing-3.2.5-pyhcf101f3_0.conda
@@ -791,7 +787,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/colorama-0.4.6-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/cpython-3.14.0-py314hd8ed1ab_102.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/cryptography-46.0.3-py314hb42d478_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/duckdb-1.4.2-h332efcf_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/duckdb-engine-0.15.0-pyh885dcc9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/font-ttf-dejavu-sans-mono-2.37-hab24e00_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/font-ttf-inconsolata-3.000-h77eed37_0.tar.bz2
@@ -882,7 +877,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/pyarrow-core-22.0.0-py314hb5be3fa_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pycparser-2.22-pyh29332c3_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.4.2-pyhcf101f3_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-pipedag-0.12.4-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-pipedag-0.12.5-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pydot-4.0.1-py314h86ab7b2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/pynng-0.8.1-py314h13fbf68_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyparsing-3.2.5-pyhcf101f3_0.conda
@@ -2711,15 +2706,6 @@ packages:
   license_family: GPL
   size: 469781
   timestamp: 1747855172617
-- conda: https://conda.anaconda.org/conda-forge/noarch/duckdb-1.4.2-h332efcf_0.conda
-  sha256: 2cc2cdf4a5a0ac975ed2f42b9a9f9cc5ee62213eb7eee11aabdde04127239d7c
-  md5: 4fff74996eacd532d60e2c544660a507
-  depends:
-  - python-duckdb >=1.4.2,<1.4.3.0a0
-  license: MIT
-  license_family: MIT
-  size: 7530
-  timestamp: 1763377721341
 - conda: https://conda.anaconda.org/conda-forge/noarch/duckdb-engine-0.15.0-pyh885dcc9_0.conda
   sha256: 0df237eb43ecdf575c0cf395985a6be98a45105491bd13a2bf260318d819e803
   md5: b457b14f925a50d9c96c396333011e7e
@@ -9167,9 +9153,9 @@ packages:
   license_family: BSD
   size: 25377
   timestamp: 1760098839225
-- conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-pipedag-0.12.4-pyhcf101f3_0.conda
-  sha256: c6516a1b7207dc77d912b001d2a85b744e240b2e5b2a25bd606b287d00f1b375
-  md5: 6bdc21db4ca34735f03a33a75d51c3fe
+- conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-pipedag-0.12.5-pyhcf101f3_0.conda
+  sha256: fa9580fb4f901f3b5ad4da6e961c1feeda409d686be7a9a9119c6b6324aa8299
+  md5: 6d4684d9e82720765b1978d4b15fa82b
   depends:
   - python >=3.11
   - pydiverse-common >=0.4.1,<0.5
@@ -9187,10 +9173,9 @@ packages:
   - pyparsing >=3.2.5,<4
   - sqlalchemy >=1.4.54,<3
   - pandas >=1.5.3,<3
-  - pyarrow >=19.0.0,<23
-  - duckdb >=0.10.3,<2
+  - pyarrow >=20.0.0,<23
   - python-duckdb >=0.10.3,<2
-  - duckdb-engine >=0.15.0,<0.18
+  - duckdb-engine >=0.15.0,<0.16
   - polars >=1.2.1,<2
   - fsspec >=2025.9.0,<2026
   - universal-pathlib <0.4,>=0.3.2
@@ -9220,9 +9205,8 @@ packages:
   - s3fs >=2025.5.1,<2026
   - boto3 >=1.38.13,<2
   license: BSD-3-Clause
-  license_family: BSD
-  size: 168529
-  timestamp: 1763415494450
+  size: 169049
+  timestamp: 1764243165792
 - conda: https://conda.anaconda.org/conda-forge/linux-64/pydot-4.0.1-py314hdafbbf9_1.conda
   sha256: dcffd9c20205ca40c873f207363d53dbdf5ab3a038ab016a2d73748e034dd0b4
   md5: 0c474c3eb348a4d0d60c1fe54da0952b
