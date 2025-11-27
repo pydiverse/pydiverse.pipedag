@@ -103,10 +103,12 @@ class InsertIntoSelect(DDLElement):
         name: str,
         schema: Schema,
         query: Select | TextClause | sa.Text,
+        quote_schema: bool = True,
     ):
         self.name = name
         self.schema = schema
         self.query = query
+        self.quote_schema = quote_schema
 
 
 class CreateTableAsSelect(DDLElement):
@@ -752,18 +754,25 @@ def _visit_fill_obj_as_select(
 
 @compiles(InsertIntoSelect)
 def visit_insert_into_select(insert: InsertIntoSelect, compiler, **kw):
-    return _visit_fill_obj_as_select(insert, compiler, "", kw, cmd="INSERT INTO", sep="")
+    return _visit_fill_obj_as_select(
+        insert, compiler, "", kw, cmd="INSERT INTO", sep="", quote_schema=insert.quote_schema
+    )
 
 
 @compiles(InsertIntoSelect, "mssql")
 def visit_insert_into_select_mssql(insert: InsertIntoSelect, compiler, **kw):
-    return _visit_fill_obj_as_select(insert, compiler, "", kw, cmd="INSERT INTO", sep=" WITH(TABLOCKX)")
+    return _visit_fill_obj_as_select(
+        insert, compiler, "", kw, cmd="INSERT INTO", sep=" WITH(TABLOCKX)", quote_schema=insert.quote_schema
+    )
 
 
 @compiles(InsertIntoSelect, "ibm_db_sa")
 def visit_insert_into_select_ibm_db2_load(insert: InsertIntoSelect, compiler, **kw):
     name = compiler.preparer.quote(insert.name)
-    schema = compiler.preparer.format_schema(insert.schema.get())
+    if insert.quote_schema:
+        schema = compiler.preparer.format_schema(insert.schema.get())
+    else:
+        schema = insert.schema.get()
     kw["literal_binds"] = True
     select = compiler.sql_compiler.process(insert.query, **kw)
     # using LOAD is much faster than an actual INSERT INTO for DB2
