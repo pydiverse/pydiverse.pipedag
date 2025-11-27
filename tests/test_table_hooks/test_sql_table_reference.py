@@ -77,6 +77,8 @@ def test_smoke_table_reference():
 
 @with_instances("snowflake", "mssql")
 def test_smoke_table_reference_other_database():
+    logger = structlog.get_logger(__name__ + ".test_smoke_table_reference_other_database")
+
     @materialize(lazy=True)
     def in_table():
         table_store = ConfigContext.get().store.table_store
@@ -90,11 +92,16 @@ def test_smoke_table_reference_other_database():
                 table_store.execute(CreateDatabase(database, if_not_exists=True), conn=conn)
         except ProgrammingError as e:
             # mssql does not support if_not_exists for CreateDatabase
-            logger = structlog.get_logger(__name__ + ".test_smoke_table_reference_other_database")
             logger.info("This exception is expected in case the database already exists", exception=str(e))
         engine_url = table_store.engine.url
         table_store.execute([f"USE {database}", CreateSchema(schema, if_not_exists=True), f"USE {engine_url.database}"])
-        table_store.execute(DropTable(table_name, schema, if_exists=True, cascade=True))  # just to be sure
+        try:
+            table_store.execute(DropTable(table_name, schema, if_exists=True, cascade=True))  # just to be sure
+        except ProgrammingError as e:
+            logger.info(
+                "This exception is expected since the schema typically does not exist on the default database",
+                exception=str(e),
+            )
         table_store.execute(DropTable(table_name, db_schema, if_exists=True, cascade=True, quote_schema=False))
         query = sql_table_expr({"col": [0, 1, 2, 3]})
         table_store.execute(
