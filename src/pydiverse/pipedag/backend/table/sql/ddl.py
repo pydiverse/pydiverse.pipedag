@@ -799,7 +799,7 @@ def visit_create_table_as_select_postgresql(create: CreateTableAsSelect, compile
 @compiles(CreateTableAsSelect, "mssql")
 def visit_create_table_as_select_mssql(create: CreateTableAsSelect, compiler, **kw):
     name = compiler.preparer.quote(create.name)
-    if create.unlogged:
+    if create.quote_schema:
         schema = compiler.preparer.format_schema(create.schema.get())
     else:
         schema = create.schema.get()
