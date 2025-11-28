@@ -24,6 +24,7 @@ from tests.util import tasks_library_imperative as m2
     "local_table_cache_inout",
     "local_table_cache_inout_numpy",
 )
+@pytest.mark.lock_tests  # this test seems to hang easily in ColSpec tests
 @pytest.mark.parametrize("imperative", [False, True], ids=["imperative", "not_imperative"])
 @pytest.mark.parametrize(
     "write_local_table_cache", [True, False], ids=["write_local_table_cache", "no_write_local_table_cache"]

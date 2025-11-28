@@ -40,7 +40,7 @@ from pydiverse.pipedag.context.context import (
 )
 from pydiverse.pipedag.context.run_context import DeferredTableStoreOp
 from pydiverse.pipedag.errors import CacheError
-from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
+from pydiverse.pipedag.materialize.details import BaseMaterializationDetails, resolve_materialization_details_label
 from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import (
     LazyTableMetadata,
@@ -48,13 +48,7 @@ from pydiverse.pipedag.materialize.metadata import (
     TaskMetadata,
 )
 from pydiverse.pipedag.materialize.store import BaseTableStore
-
-try:
-    from sqlalchemy import Connection, Engine
-except ImportError:
-    # For compatibility with sqlalchemy < 2.0
-    from sqlalchemy.engine import Engine
-    from sqlalchemy.engine.base import Connection
+from pydiverse.pipedag.optional_dependency.sqlalchemy import Connection, Engine
 
 DISABLE_DIALECT_REGISTRATION = "__DISABLE_DIALECT_REGISTRATION"
 
@@ -111,11 +105,15 @@ class SQLTableStore(BaseTableStore):
 
        * - pydiverse.transform
          - ``pdt.Table``
-         - | ``pdt.eager.PandasTableImpl``
-           | ``pdt.lazy.SQLTableImpl``
+         - | ``pdt.Polars``
+           | ``pdt.SqlAlchemy``
 
        * - pydiverse.pipedag table reference
          - :py:class:`~.ExternalTableReference` (no materialization)
+         - Can be read with all dematerialization methods above
+
+       * - pydiverse.pipedag view
+         - :py:class:`~.View` (view with support for src union, column renaming, and sorting)
          - Can be read with all dematerialization methods above
 
     :param url:
@@ -169,6 +167,7 @@ class SQLTableStore(BaseTableStore):
               table store does not support it.
             - a table references a ``materialization_details`` tag that is not defined
               in the config.
+
         If ``False``: Log an error instead of raising an exception
 
     :param materialization_details:
@@ -212,6 +211,10 @@ class SQLTableStore(BaseTableStore):
         The number of seconds to wait before giving up on getting a connection from
         the pool. This may be relevant in case the connection pool is saturated
         with concurrent operations each working with one or more database connections.
+    :param force_transaction_suffix:
+        This option is for use without proper pipedag flow. It disables lookup in stage
+        metadata table for determining correct transaction slot suffix.
+        (default: None)
     """
 
     METADATA_SCHEMA = "pipedag_metadata"
@@ -253,6 +256,7 @@ class SQLTableStore(BaseTableStore):
         max_concurrent_copy_operations: int = 5,
         sqlalchemy_pool_size: int = 12,
         sqlalchemy_pool_timeout: int = 300,
+        force_transaction_suffix: str | None = None,
     ):
         super().__init__()
 
@@ -267,6 +271,7 @@ class SQLTableStore(BaseTableStore):
         self.max_concurrent_copy_operations = max_concurrent_copy_operations
         self.sqlalchemy_pool_size = sqlalchemy_pool_size
         self.squalchemy_pool_timeout = sqlalchemy_pool_timeout
+        self.force_transaction_suffix = force_transaction_suffix
 
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
         self.engine_url = sa.engine.make_url(engine_url)
@@ -278,6 +283,7 @@ class SQLTableStore(BaseTableStore):
 
         self._init_database_before_engine()
         self.engine = self._create_engine()
+        self.keep_alive_db_connections = None  # only used by derived classes like Snowflake
 
         # Dict where hooks are allowed to store values that should get cached
         self.hook_cache = {}
@@ -350,7 +356,7 @@ class SQLTableStore(BaseTableStore):
 
         self.default_materialization_details = default_materialization_details
 
-        self._set_materialization_details(materialization_details)
+        self.materialization_details = self._create_materialization_details(materialization_details)
 
         self.logger.info(
             "Initialized SQL Table Store",
@@ -617,18 +623,27 @@ class SQLTableStore(BaseTableStore):
     def check_materialization_details_supported(self, label: str | None) -> None:
         if label is None:
             return
-        error_msg = f"Materialization details are not supported for store {type(self).__name__}."
+        if self.materialization_details and label in self.materialization_details:
+            return
+        msg = f"{label} is an unknown materialization details label."
         if self.strict_materialization_details:
-            raise ValueError(f"{error_msg} To silence this exception set strict_materialization_details=False")
+            raise ValueError(f"{msg} To silence this exception set strict_materialization_details=False")
         else:
-            self.logger.error(f"{error_msg}")
+            self.logger.warning(msg)
 
-    def _set_materialization_details(self, materialization_details: dict[str, dict[str | list[str]]] | None) -> None:
+    def _create_materialization_details(
+        self, materialization_details: dict[str, dict[str | list[str]]] | None
+    ) -> BaseMaterializationDetails | None:
+        """This function causes an error or exception if materialization details are specified for a table
+        store that does not support them.
+
+        Any table store that supports materialization details should override this method."""
         if materialization_details is not None or self.default_materialization_details is not None:
-            error_msg = f"{type(self).__name__} does not support materialization details."
+            msg = f"{type(self).__name__} does not support materialization details."
             if self.strict_materialization_details:
-                raise TypeError(f"{error_msg} To suppress this exception, use strict_materialization_details=False")
-            self.logger.error(error_msg)
+                raise ValueError(f"{msg} To silence this exception, use strict_materialization_details=False")
+            self.logger.warning(msg)
+        return None  # no materialization details object
 
     def get_unlogged(self, materialization_details_label: str | None) -> bool:
         _ = materialization_details_label
@@ -847,14 +862,14 @@ class SQLTableStore(BaseTableStore):
         for index in indexes:
             if len(index["include_columns"]) > 0:
                 self.logger.warning(
-                    "Perfect index recreation in caching is not net implemented",
+                    "Perfect index recreation in caching is not implemented, yet",
                     table=dest_table,
                     schema=dest_schema.get(),
                     include_columns=index["include_columns"],
                 )
             if any(not isinstance(val, list) or len(val) > 0 for val in index["dialect_options"].values()):
                 self.logger.warning(
-                    "Perfect index recreation in caching is not net implemented",
+                    "Perfect index recreation in caching is not implemented, yet",
                     table=dest_table,
                     schema=dest_schema.get(),
                     dialect_options=index["dialect_options"],
@@ -916,6 +931,7 @@ class SQLTableStore(BaseTableStore):
                             version=self.metadata_version,
                         )
                     )
+                return
             elif version != self.metadata_version:
                 # disable caching due to incompatible metadata table schemas
                 # (in future versions, consider automatic metadata schema upgrade)
@@ -925,6 +941,9 @@ class SQLTableStore(BaseTableStore):
                     version=version,
                     expected_version=self.metadata_version,
                 )
+            # in any case make sure all metadata tables exist (sync_views table is only needed for metadata_store)
+            with self.engine_connect() as conn, conn.begin():
+                self.sql_metadata.create_all(conn)
 
     def dispose(self):
         self.engine.dispose()
@@ -932,7 +951,11 @@ class SQLTableStore(BaseTableStore):
         super().dispose()
 
     def init_stage(self, stage: Stage):
-        stage_commit_technique = ConfigContext.get().stage_commit_technique
+        try:
+            cfg = ConfigContext.get()
+            stage_commit_technique = cfg.stage_commit_technique
+        except LookupError:
+            stage_commit_technique = StageCommitTechnique.READ_VIEWS
         if stage_commit_technique == StageCommitTechnique.SCHEMA_SWAP:
             return self._init_stage_schema_swap(stage)
         if stage_commit_technique == StageCommitTechnique.READ_VIEWS:
@@ -1001,6 +1024,8 @@ class SQLTableStore(BaseTableStore):
 
     def _get_read_view_transaction_name(self, schema_name: str):
         """Returns transaction name where committed tables are stored."""
+        if self.force_transaction_suffix is not None:
+            return schema_name + self.force_transaction_suffix
         try:
             with self.metadata_connect() as meta_conn:
                 metadata_rows = (
@@ -1039,6 +1064,8 @@ class SQLTableStore(BaseTableStore):
         transaction_name = stage.transaction_name if override_transaction_name is None else override_transaction_name
         # undo transaction name assignment
         suffix = "__even" if transaction_name.endswith("__odd") else "__odd"
+        if self.force_transaction_suffix is not None:
+            suffix = self.force_transaction_suffix
         original_transaction_name = stage.name + suffix
         return original_transaction_name
 
@@ -1311,6 +1338,10 @@ class SQLTableStore(BaseTableStore):
         # New tables (AND other objects)
         new_objects = set(metadata.new_objects) - set(metadata.prev_objects)
         tables_in_schema = set(inspector.get_table_names(src_schema.get()))
+        if ConfigContext.get().stage_commit_technique == StageCommitTechnique.READ_VIEWS:
+            # This is just a guess. If the RAW SQL created views, then we need to follow
+            # the read view alias to the actual table location.
+            tables_in_schema |= set(inspector.get_view_names(src_schema.get()))
         objects_in_schema = self._get_all_objects_in_schema(src_schema)
 
         self.check_materialization_details_supported(target_stage.materialization_details)
@@ -1422,9 +1453,9 @@ class SQLTableStore(BaseTableStore):
                 result = (
                     meta_conn.execute(
                         self.tasks_table.select()
-                        .where(self.tasks_table.c.name == task.name)
-                        .where(self.tasks_table.c.stage == task.stage.name)
-                        .where(self.tasks_table.c.version == task.version)
+                        .where(self.tasks_table.c.name == task._name)
+                        .where(self.tasks_table.c.stage == task._stage.name)
+                        .where(self.tasks_table.c.version == str(task._version))
                         .where(self.tasks_table.c.input_hash == input_hash)
                         .where(
                             self.tasks_table.c.cache_fn_hash == cache_fn_hash
@@ -1445,7 +1476,7 @@ class SQLTableStore(BaseTableStore):
         return TaskMetadata(
             name=result.name,
             stage=result.stage,
-            version=result.version,
+            version=str(result.version),
             timestamp=result.timestamp,
             run_id=result.run_id,
             position_hash=result.position_hash,
@@ -1458,19 +1489,19 @@ class SQLTableStore(BaseTableStore):
         self, task: MaterializingTask, ignore_position_hashes: bool = False
     ) -> list[TaskMetadata]:
         match_condition = sa.and_(
-            self.tasks_table.c.name == task.name,
-            self.tasks_table.c.stage == task.stage.name,
+            self.tasks_table.c.name == task._name,
+            self.tasks_table.c.stage == task._stage.name,
         )
 
         if not ignore_position_hashes:
-            match_condition = match_condition & (self.tasks_table.c.position_hash == task.position_hash)
+            match_condition = match_condition & (self.tasks_table.c.position_hash == task._position_hash)
         with self.metadata_connect() as meta_conn:
             results = meta_conn.execute(self.tasks_table.select().where(match_condition)).mappings().all()
         return [
             TaskMetadata(
                 name=result.name,
                 stage=result.stage,
-                version=result.version,
+                version=str(result.version),
                 timestamp=result.timestamp,
                 run_id=result.run_id,
                 position_hash=result.position_hash,

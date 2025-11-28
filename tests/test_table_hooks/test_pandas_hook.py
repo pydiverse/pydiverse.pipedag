@@ -30,12 +30,13 @@ from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
 from pydiverse.pipedag.engine import dask
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
+from tests.util import swallowing_raises
 from tests.util.spy import spy_task
 from tests.util.sql import get_config_with_table_store
 
 # disable duckdb for now, since they have a bug in version 0.9.2 that needs fixing
-pytestmark = [with_instances(tuple(set(DATABASE_INSTANCES) - {"duckdb"}))]
+pytestmark = [with_instances(tuple((set(DATABASE_INSTANCES) - {"duckdb"}) | {"snowflake"}))]
 pd_version = Version(pd.__version__)
 
 
@@ -191,6 +192,7 @@ class TestPandasTableHookNumpy:
 
         assert f.run().successful
 
+    @skip_instances("snowflake")  # ADBC screws up with datetimes outside 64 bit ns resolution range
     @pytest.mark.polars
     def test_datetime_polars(self):
         import polars as pl
@@ -257,7 +259,7 @@ class TestPandasTableHookArrow:
                 "int32": pd.array(Values.INT32, dtype="int32[pyarrow]"),
                 "int64": pd.array(Values.INT64, dtype="int64[pyarrow]"),
                 "float32": pd.array(Values.FLOAT32, dtype="float[pyarrow]"),
-                "float64": pd.array(Values.FLOAT32, dtype="double[pyarrow]"),
+                "float64": pd.array(Values.FLOAT64, dtype="double[pyarrow]"),
                 "str": pd.array(Values.STR, dtype=pd.ArrowDtype(pa.string())),
                 "boolean": pd.array(Values.BOOLEAN, dtype="bool[pyarrow]"),
                 "date": pd.array(Values.DATE, dtype=pd.ArrowDtype(pa.date32())),
@@ -273,7 +275,7 @@ class TestPandasTableHookArrow:
         @materialize(input_type=(pd.DataFrame, "arrow"))
         def assert_expected(in_df):
             if ConfigContext.get().store.table_store.engine.dialect.name == "mssql":
-                # these are unavoidable differences when using bcp for writing tables
+                # # these are unavoidable differences when using bcp for writing tables
                 df["str"] = df["str"].replace("", pd.NA)
                 df["str"] = (
                     df["str"]
@@ -344,7 +346,7 @@ def test_pandas_table_hook_postgres_null_string():
         with Stage("stage_0"):
             t = m.pd_dataframe(data)
 
-    with ConfigContext.get().evolve(swallow_exceptions=True), StageLockContext():
+    with swallowing_raises(AssertionError, match=r"\[left\]:  \[-5\]\n\[right\]: \[12\]"), StageLockContext():
         result = f.run()
         df = result.get(t, as_type=pd.DataFrame)
 

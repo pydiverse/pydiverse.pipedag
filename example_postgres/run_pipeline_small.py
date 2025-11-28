@@ -95,7 +95,7 @@ if __name__ == "__main__":
 
     # Run this pipeline with (might take a bit longer on first run in pixi environment):
     # ```shell
-    # pixi run python run_pipeline_smalls.py
+    # pixi run python run_pipeline_small.py
     # ```
 
     main()

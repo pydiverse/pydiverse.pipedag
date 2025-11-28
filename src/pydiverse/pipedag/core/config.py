@@ -214,7 +214,7 @@ class PipedagConfig:
         strict_instance_lookup = self.config_dict.get("strict_instance_lookup", True)
         if strict_instance_lookup and instance is not None:
             found_instance = False
-            for path, d in zip(search_paths, dicts):
+            for path, d in zip(search_paths, dicts, strict=True):
                 found_instance |= "instances" in path and instance in path and d is not None
 
             if not found_instance:

@@ -1,12 +1,13 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
-import importlib
-import warnings
 from pathlib import Path
 from typing import Any
 
+import duckdb
 import pandas as pd
+import polars as pl
 import sqlalchemy as sa
+from packaging.version import Version
 
 from pydiverse.common import Dtype
 from pydiverse.pipedag import Table
@@ -18,12 +19,7 @@ from pydiverse.pipedag.backend.table.sql.hooks import (
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.container import Schema
 from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
-
-try:
-    import duckdb
-except ImportError as e:
-    warnings.warn(str(e), ImportWarning)
-    duckdb = None
+from pydiverse.pipedag.optional_dependency.ibis import ibis
 
 
 class DuckDBTableStore(SQLTableStore):
@@ -105,17 +101,7 @@ class PandasTableHook(PandasTableHook):
         )
 
 
-try:
-    import polars as pl
-except ImportError as e:
-    warnings.warn(str(e), ImportWarning)
-    pl = importlib.import_module("polars")
-    pl.DataType = None
-    pl.DataFrame = None
-    pl.LazyFrame = None
-
-
-@DuckDBTableStore.register_table(pl.DataFrame, duckdb)
+@DuckDBTableStore.register_table(pl, duckdb)
 class PolarsTableHook(PolarsTableHook):
     @classmethod
     def dialect_supports_connectorx(cls):
@@ -137,19 +123,16 @@ class PolarsTableHook(PolarsTableHook):
         # Connectorx doesn't support duckdb.
         # Instead, we load it like this:  DuckDB -> PyArrow -> Polars
         conn = engine.raw_connection()
-        pl_table = conn.sql(query).arrow()
+        if Version(duckdb.__version__) < Version("1"):
+            pl_table = conn.sql(query).arrow()
 
-        df = pl.from_arrow(pl_table)
+            df = pl.from_arrow(pl_table)
+        else:
+            df = conn.sql(query).pl()
         return df
 
 
-try:
-    import ibis
-except ImportError:
-    ibis = None
-
-
-@DuckDBTableStore.register_table(ibis)
+@DuckDBTableStore.register_table(ibis.api.Table)
 class IbisTableHook(IbisTableHook):
     @classmethod
     def _conn(cls, store: DuckDBTableStore):

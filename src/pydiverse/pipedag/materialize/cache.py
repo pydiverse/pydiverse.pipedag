@@ -68,8 +68,8 @@ def task_cache_key(task: "MaterializingTask", input_hash: str, cache_fn_hash: st
 
     return stable_hash(
         "TASK",
-        task.name,
-        task.version,
+        task._name,
+        task._version,
         input_hash,
         cache_fn_hash,
     )

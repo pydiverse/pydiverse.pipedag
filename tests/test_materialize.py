@@ -8,11 +8,14 @@ import pytest
 import sqlalchemy as sa
 import structlog
 
-from pydiverse.pipedag import ConfigContext, Flow, Stage, Table, materialize
+from pydiverse.pipedag import AUTO_VERSION, ConfigContext, Flow, Stage, Table, materialize
+from pydiverse.pipedag.container import SortCol, SortOrder, View
 from pydiverse.pipedag.context import FinalTaskState, RunContext, StageLockContext
 from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.context.trace_hook import PrintTraceHook
 from pydiverse.pipedag.core.config import PipedagConfig
+from pydiverse.pipedag.optional_dependency.sqlalchemy import Alias
+from pydiverse.pipedag.optional_dependency.transform import C, pdt
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import (
@@ -25,7 +28,7 @@ from tests.util import select_as, swallowing_raises
 from tests.util import tasks_library as m
 from tests.util import tasks_library_imperative as m2
 
-pytestmark = [with_instances(ALL_INSTANCES, ORCHESTRATION_INSTANCES)]
+pytestmark = [with_instances(tuple(set(ALL_INSTANCES) - {"snowflake"}), ORCHESTRATION_INSTANCES)]
 
 
 def test_materialize_literals():
@@ -82,6 +85,7 @@ def test_materialize_literals():
     assert f.run().successful
 
 
+@with_instances("snowflake")
 @pytest.mark.parametrize("imperative", [False, True])
 def test_materialize_table(imperative):
     _m = m if not imperative else m2
@@ -91,6 +95,187 @@ def test_materialize_table(imperative):
             _m.assert_table_equal(x, x)
 
     assert f.run().successful
+
+
+@materialize(input_type=sa.Table, lazy=True)
+def create_view1(tbl: Alias):
+    return Table(View(src=tbl, sort_by=tbl.c.col2, columns=tbl.c.col1.label("c1"), limit=2))
+
+
+@materialize(input_type=sa.Table, lazy=True)
+def create_view2(tbl: Alias, tbl2: Alias):
+    return Table(View(src=[tbl, tbl2], sort_by=[tbl.c.col2.desc(), tbl.c.col1], columns=[tbl.c.col1], limit=2))
+
+
+@materialize(input_type=sa.Table, lazy=True)
+def create_view_view1(tbl: Alias):
+    return Table(View(src=tbl, columns=tbl.c.c1))
+
+
+@materialize(input_type=sa.Table, lazy=True)
+def create_view_view2(tbl: Alias):
+    return Table(View(src=tbl, sort_by=SortCol(tbl.c.col1, SortOrder.DESC), limit=3))
+
+
+@materialize(input_type=pdt.SqlAlchemy, lazy=True)
+def create_view_pdt1(tbl: pdt.Table):
+    return Table(View(src=tbl, sort_by=tbl.col2, columns=dict(c1=tbl.col1), limit=2))
+
+
+@materialize(input_type=pdt.SqlAlchemy, lazy=True)
+def create_view_pdt2(tbl: pdt.Table, tbl2: pdt.Table):
+    return Table(View(src=[tbl, tbl2], sort_by=[tbl.col2.descending(), tbl2.col1], columns=[C.col1], limit=2))
+
+
+@materialize(input_type=pdt.SqlAlchemy, lazy=True)
+def create_view_pdt2b(tbl: pdt.Table, tbl2: pdt.Table):
+    # currently, multi-source views are not supported by consuming tasks with input_type=pdt.Sqlalchemy
+    return Table(View(src=tbl, sort_by=[tbl.col2.descending(), tbl2.col1], columns=[C.col1], limit=2))
+
+
+@materialize(input_type=pdt.SqlAlchemy, lazy=True)
+def create_view_view_pdt1(tbl: pdt.Table):
+    return Table(View(src=tbl, columns=tbl.c1))
+
+
+@materialize(input_type=pdt.SqlAlchemy, lazy=True)
+def create_view_view_pdt2(tbl: pdt.Table):
+    return Table(View(src=tbl, sort_by=[tbl.col1], limit=3))
+
+
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_view(imperative):
+    logger = structlog.getLogger(__name__ + ".test_materialize_view")
+    _m = m if not imperative else m2
+    with Flow("flow") as f:
+        with Stage("stage"):
+            x = _m.simple_dataframe()
+            x2 = _m.noop(x)
+            y = create_view1(x)
+            z = create_view2(x, x2)
+            k = create_view_view1(y)
+            n = create_view_view2(z)
+            yy = _m.noop(y)
+            zz = _m.noop(z)
+            kk = _m.noop(k)
+            nn = _m.noop(n)
+            yy_lazy = _m.noop_lazy(y)
+            zz_lazy = _m.noop_lazy(z)
+            kk_lazy = _m.noop_lazy(k)
+            nn_lazy = _m.noop_lazy(n)
+            _ = yy, zz, kk, nn, yy_lazy, zz_lazy, kk_lazy, nn_lazy
+
+    assert f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID).successful
+
+    for i in range(2):
+        logger.info(f"** Starting run: {i}")
+        # run three times to test some caching behavior (this is at least a smoke test for caching)
+        assert f.run().successful
+
+
+@pytest.mark.skipif(C is None, reason="Pydiverse.transform not available")
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_view_union(imperative):
+    """The implementation of this special case is different in ParquetTableStore."""
+    logger = structlog.getLogger(__name__ + ".test_materialize_view")
+
+    @materialize(input_type=sa.Table, lazy=True)
+    def create_view(tbl: Alias, tbl2: Alias):
+        return Table(View(src=[tbl, tbl2]))
+
+    @materialize(input_type=pdt.SqlAlchemy, lazy=True)
+    def create_view_pdt(tbl: pdt.Table, tbl2: pdt.Table):
+        return Table(View(src=[tbl, tbl2]))
+
+    _m = m if not imperative else m2
+    with Flow("flow") as f:
+        with Stage("stage"):
+            x = _m.simple_dataframe()
+            x2 = _m.noop(x)
+            y = create_view(x, x2)
+            z = create_view_pdt(x, x2)
+            yy_lazy = _m.noop_lazy(y)
+            zz_lazy = _m.noop_lazy(z)
+            yy = _m.noop(y)
+            zz = _m.noop(z)
+            _ = yy, zz, yy_lazy, zz_lazy
+
+    assert f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID).successful
+
+    for i in range(2):
+        logger.info(f"** Starting run: {i}")
+        # run three times to test some caching behavior (this is at least a smoke test for caching)
+        assert f.run().successful
+
+
+@pytest.mark.skipif(C is None, reason="Pydiverse.transform not available")
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_view_pdt(imperative):
+    @materialize(input_type=pdt.SqlAlchemy, lazy=True)
+    def noop_lazy_pdt(tbl: pdt.Table, name: str | None = None):
+        if name is None:
+            return tbl
+        return tbl >> pdt.alias(name)
+
+    @materialize(input_type=pdt.Polars, version=AUTO_VERSION)
+    def noop_pdt(tbl: pdt.Table, name: str | None = None):
+        if name is None:
+            return tbl
+        return tbl >> pdt.alias(name)
+
+    logger = structlog.getLogger(__name__ + ".test_materialize_view_pdt")
+    _m = m if not imperative else m2
+    with Flow("flow") as f:
+        with Stage("stage"):
+            x = _m.simple_dataframe()
+            x2 = _m.noop(x)
+            a = create_view1(x)
+            y = create_view_pdt1(x)
+            z = create_view_pdt2(x, x2)
+            zb = create_view_pdt2b(x, x2)  # workaround
+            k = create_view_view_pdt1(y)
+            la = create_view_view_pdt1(a)
+            n = create_view_view_pdt2(zb)
+            yy = _m.noop(y)
+            zz = _m.noop(z)
+            kk = _m.noop(k)
+            nn = _m.noop(n)
+            pdt_aa = noop_pdt(a, name="aa")
+            pdt_yy = noop_pdt(y, name="yy")
+            pdt_zz = noop_pdt(z, name="zz")
+            pdt_kk = noop_pdt(k, name="kk")
+            pdt_nn = noop_pdt(n, name="nn")
+            yy_lazy = _m.noop_lazy(y)
+            zz_lazy = _m.noop_lazy(z)
+            pdt_aa_lazy = noop_lazy_pdt(a, name="laa")
+            pdt_yy_lazy = noop_lazy_pdt(y, name="lyy")
+            pdt_zz_lazy = noop_lazy_pdt(zb, name="lzz")
+            pdt_kk_lazy = noop_lazy_pdt(k, name="lkk")
+            pdt_nn_lazy = noop_lazy_pdt(n, name="lnn")
+            _ = (
+                la,
+                yy,
+                zz,
+                kk,
+                nn,
+                pdt_aa,
+                pdt_yy,
+                pdt_zz,
+                pdt_kk,
+                pdt_nn,
+                yy_lazy,
+                zz_lazy,
+                pdt_aa_lazy,
+                pdt_yy_lazy,
+                pdt_zz_lazy,
+                pdt_kk_lazy,
+                pdt_nn_lazy,
+            )
+
+    for i in range(3):
+        logger.info(f"** Starting run: {i}")
+        # run three times to test some caching behavior (this is at least a smoke test for caching)
+        assert f.run().successful
 
 
 @pytest.mark.parametrize("imperative", [False, True])
@@ -104,6 +289,8 @@ def test_materialize_table_subtask(imperative):
             _m.assert_table_equal(x, y)
             _m.assert_table_equal(x, z)
 
+    assert f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID).successful
+    assert f.run().successful
     assert f.run().successful
 
 
@@ -114,7 +301,7 @@ def test_materialize_table_subtask_fail_input_type(imperative):
         with Stage("stage"):
             x = _m.simple_dataframe_subtask()
             _ = _m.noop_subtask_fail_input_type(x)
-    with pytest.raises(RuntimeError, match="does not match parent task input type"):
+    with swallowing_raises(RuntimeError, match="does not match parent task input type"):
         try:
             f.run()
         except BrokenProcessPool as e:
@@ -154,7 +341,7 @@ def test_debug_materialize_table_twice(imperative):
             x = _m.simple_dataframe_debug_materialize_twice()
             _m.assert_table_equal(x, x)
 
-    with pytest.raises(RuntimeError, match="interactive debugging"):
+    with swallowing_raises(RuntimeError, match="interactive debugging"):
         assert f.run().successful
 
 
@@ -176,15 +363,15 @@ def test_imperative_minimal_example():
 
     print("Run 1:")
     for task in f.tasks:
-        print(f"{task.name}: {result1.task_states.get(task)}")
+        print(f"{task._name}: {result1.task_states.get(task)}")
 
     print("Run 2:")
     for task in f.tasks:
-        print(f"{task.name}: {result2.task_states.get(task)}")
+        print(f"{task._name}: {result2.task_states.get(task)}")
 
     # Expectation: In Run 2 all tasks should be cached
     for task in f.tasks:
-        if not task.name.startswith("Commit"):
+        if not task._name.startswith("Commit"):
             assert result2.task_states.get(task) == FinalTaskState.CACHE_VALID
 
 
@@ -673,7 +860,7 @@ def test_nullable_raises(nullable, non_nullable, error):
         with Stage("stage_1"):
             lazy_task_1()
 
-    with pytest.raises(error):
+    with swallowing_raises(error):
         f.run()
 
 

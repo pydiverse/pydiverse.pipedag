@@ -40,7 +40,8 @@ def lazy_task_4(input1: sa.Alias):
     return Table(sa.text(query), name="enriched_aggregation").materialize()
 ```
 
-Here is a complete example using imperative materialization everywhere. For a task returning a single table,
+Here is a complete example (see also [example_imperative.zip](zip/example_imperative.zip))
+using imperative materialization everywhere. For a task returning a single table,
 `return Table(...)` or `return Table(...).materialize()` are identical. In case a task writes multiple tables,
 imperative materialization needs to assume that every previously materialized table is a dependency to subsequent
 materialized tables for automatic cache invalidation.

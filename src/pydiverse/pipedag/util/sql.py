@@ -4,6 +4,7 @@
 from pydiverse.pipedag import ConfigContext
 
 
-def compile_sql(query):
-    engine = ConfigContext.get().store.table_store.engine
+def compile_sql(query, engine=None):
+    if engine is None:
+        engine = ConfigContext.get().store.table_store.engine
     return str(query.compile(engine, compile_kwargs={"literal_binds": True}))

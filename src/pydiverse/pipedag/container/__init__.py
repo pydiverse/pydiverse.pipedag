@@ -4,7 +4,9 @@
 import copy
 import inspect
 import typing
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from enum import Enum
 from functools import total_ordering
 from typing import TYPE_CHECKING, Any, Generic, overload
 
@@ -15,6 +17,7 @@ from attr import frozen
 from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.context import ConfigContext, TaskContext
 from pydiverse.pipedag.errors import DuplicateNameError
+from pydiverse.pipedag.optional_dependency.transform import C, pdt
 from pydiverse.pipedag.util import normalize_name
 
 if TYPE_CHECKING:
@@ -107,6 +110,7 @@ class Table(Generic[T]):
         self.stage: Stage | None = None
         self.external_schema: str | None = None
         self.shared_lock_allowed: bool = True
+        self.view: View | None = None
 
         # arguments
         self.obj = obj
@@ -156,6 +160,11 @@ class Table(Generic[T]):
                 )
             self.name = self.obj.name
             self.shared_lock_allowed = self.obj.shared_lock_allowed
+
+        # View needs to be materialized and dematerialized within Table because it is
+        # executed during retrieval of consuming task inputs
+        if isinstance(self.obj, View):
+            self.view = self.obj
 
         # cache_key will be overridden shortly before handing over to downstream tasks
         # that use it to compute their input_hash for cache_invalidation due to input
@@ -223,7 +232,7 @@ class Table(Generic[T]):
                     "when task is regularly executed by pipedag orchestration."
                 )
             config_context = ConfigContext.get()
-            task_schema = config_context.store.table_store.get_schema(task_context.task.stage.transaction_name)
+            task_schema = config_context.store.table_store.get_schema(task_context.task._stage.transaction_name)
             if schema is not None and schema != task_schema:
                 raise ValueError(
                     "schema must be identical to Task Stage transaction schema "
@@ -240,14 +249,14 @@ class Table(Generic[T]):
             except (RuntimeError, DuplicateNameError):
                 # fall back to debug materialization when Table.materialize() is
                 # called twice for the same table
-                task_context.task.logger.info(
+                task_context.task._logger.info(
                     "Falling back to debug materialization due to duplicate materializtion of this table"
                 )
 
                 def return_type_mutator(return_as_type):
                     if return_as_type is None:
                         task: MaterializingTask = task_context.task  # type: ignore
-                        return_as_type = task.input_type
+                        return_as_type = task._input_type
                         if return_as_type is None or not config_context.store.table_store.get_r_table_hook(
                             return_as_type
                         ).retrieve_as_reference(return_as_type):
@@ -332,7 +341,20 @@ class Table(Generic[T]):
         return state
 
     def __lt__(self, other):
+        if self.external_schema is not None or other.external_schema is not None:
+            if self.external_schema is None and other.external_schema is not None:
+                return True
+            if self.external_schema is not None and other.external_schema is None:
+                return False
+            if self.external_schema < other.external_schema:
+                return True
+            if self.external_schema > other.external_schema:
+                return False
         if self.stage is not None or other.stage is not None:
+            if self.stage is None and other.stage is not None:
+                return True
+            if self.stage is not None and other.stage is None:
+                return False
             if self.stage < other.stage:
                 return True
             if self.stage > other.stage:
@@ -342,10 +364,22 @@ class Table(Generic[T]):
     def __eq__(self, other: "Table"):
         if not isinstance(other, Table):
             return False
-        return self.name == other.name and (self.stage == other.stage or (self.stage is None and other.stage is None))
+        return (
+            self.name == other.name
+            and (self.stage == other.stage or (self.stage is None and other.stage is None))
+            and (
+                self.external_schema == other.external_schema
+                or (self.external_schema is None and other.external_schema is None)
+            )
+        )
 
     def __hash__(self):
-        return hash(self.name) if self.stage is None else hash((self.name, self.stage))
+        a = [self.name]
+        if self.stage is not None:
+            a.append(self.stage)
+        if self.external_schema is not None:
+            a.append(self.external_schema)
+        return hash(tuple(a))
 
 
 class RawSql:
@@ -622,7 +656,7 @@ class ExternalTableReference:
 
     def __init__(self, name: str, schema: str, shared_lock_allowed: bool = False):
         """
-        :param name: The name of the table, view, or nickname/alias
+        :param name: The name of the table, view, or nickname
         :param schema: The external schema of the object. A multi-part schema
             is allowed with '.' separator as also supported by SQLAlchemy Table
             schema argument.
@@ -637,7 +671,172 @@ class ExternalTableReference:
         self.shared_lock_allowed = shared_lock_allowed
 
     def __repr__(self):
-        return f"<ExternalTableReference: {hex(id(self))} (schema: {self.schema})>"
+        return (
+            f"<ExternalTableReference: '{self.name}' (schema: {self.schema}, lock_allowed={self.shared_lock_allowed})>"
+        )
+
+
+class SortOrder(Enum):
+    ASC = 0
+    DESC = 1
+
+
+@dataclass
+class SortCol:
+    col: str
+    order: SortOrder = SortOrder.ASC
+    nulls_first: bool | None = None  # whether nulls should be ordered first
+
+    def sql(self, sqlalchemy_collection):
+        ret = sqlalchemy_collection[self.col]
+        ret = ret.desc() if self.order == SortOrder.DESC else ret.asc()
+        if self.nulls_first:
+            ret = ret.nulls_first()
+        elif self.nulls_first == False:  # noqa: E712 (Don't match None)
+            ret = ret.nulls_last()
+        return ret
+
+
+@dataclass
+class View:
+    """Produces a view on pipedag managed tables with caching support.
+
+    Unlike for :class:`Table`, pipedag needs to understand view queries much better in order
+    to be able to do proper cache invalidation with source tables changing their name
+    despite staying cache valid. That is why this View object includes all information
+    about how to create a view.
+
+    Only supported by :py:class:`~.SQLTableStore` and :py:class:`~.ParquetTableStore`.
+
+    Examples
+    --------
+    A view can combine a set of parquet files as one read_parquet operation::
+
+        import sqlalchemy as sa
+
+        @materialize(input_type=sa.Table, lazy=True)
+        def task(tbls: list[sa.Alias]):
+            return Table(View(src=tbls), name="union")
+
+    It also works specifying views with other ``input_type`` values that support lazy table
+    references. In this case, you need to make sure that the ``src`` parameter only references
+    input tables exactly as they come in as parameters to the task::
+
+        import pydiverse.transform as pdt
+
+        @materialize(input_type=pdt.SqlAlchemy, lazy=True)
+        def task(tbls: list[pdt.Table]):
+            return Table(View(src=tbls), name="union")
+
+    Furthermore, it can be used to load only a subset of a table and rename columns::
+
+        @materialize(input_type=sa.Table)
+        def task(tbl: sa.Alias):
+            cols = [c.name for c in tbl.c if c.name.startswith("a")]
+            return Table(
+                View(
+                    src=tbl,
+                    columns={f"c{col}": col for col in cols},
+                    sort_by=[tbl.c.id.desc().nulls_first(), "id2"],
+                    limit=10,
+                ),
+                name="selection",
+            )
+
+    Please note that the ``columns`` and ``sort_by`` parameters can be provided either as
+    strings or as column objects of the respective ``input_type``. This works at least
+    for ``input_type`` values ``sa.Table`` and ``pdt.SqlAlchemy``.
+
+    You can also specify sort order with an explicit class::
+
+        from pydiverse.pipedag import SortCol, SortOrder
+        sort_by = [SortCol("id", SortOrder.DESC, nulls_first=True)]
+
+    If you just want to filter columns without renaming, any iterable will do::
+
+        @materialize(input_type=sa.Table)
+        def task(tbl: sa.Alias):
+            cols = [c.name for c in tbl.c if c.name.startswith("a")]
+            return Table(View(tbl, columns=cols, sort_by=tbl.c.id), name="selection")
+    """
+
+    def __init__(
+        self,
+        src: Any | Iterable[Any],
+        *,
+        sort_by: str | Any | Iterable[str] | Iterable[SortCol] | Iterable[Any] | None = None,
+        columns: Iterable[str] | Iterable[Any] | Mapping[str, str] | Mapping[str, Any] | str | Any | None = None,
+        limit: int | None = None,
+        assert_normalized: bool = False,
+    ):
+        """
+        :param src: The source table(s) or subquery to create the view from.
+            Objects should be identical to tables that were given to the function as inputs.
+            Consuming tasks will use the union of all those tables as input.
+        :param sort_by: Optional list / iterable of columns to sort the view by. They can be strings or column objects
+            that are understood by the table hook that would materialize the table if it wasn't a :class:`View`.
+            Column names before renaming are used for sorting. :class:`SortCol` objects may help configuring sort order.
+            For ``input_type`` values ``sa.Table`` and ``pdt.SqlAlchemy``, the sort order can be extracted from native
+            column objects: ``tbl.c.colname.desc()`` (``sa.Table``) or
+            ``tbl.colname.descending().nulls_first()`` (``pdt.SqlAlchemy``).
+        :param columns: The columns to include in the view. This can either be strings or column
+            objects that are understood by the table hook that would materialize the table if it wasn't a :class:`View`.
+        :param limit: Limit number of rows returned by the view.
+        :param assert_normalized: (Internal) Trigger assertion that normalization of the view representation succeeded.
+            Normalization is ``input_type`` dependent and thus needs to be done by materialization hooks.
+        """
+        self.src = src
+        self.columns = columns
+        self.sort_by = sort_by
+        self.limit = limit
+        self.assert_normalized = assert_normalized
+        assert limit is None or (isinstance(limit, int) and limit >= 0)
+        if isinstance(columns, Mapping):
+            assert all(not isinstance(key, SortCol) for key in columns.keys())
+            assert all(not isinstance(value, SortCol) for value in columns.values())
+        elif isinstance(columns, Iterable):
+            assert all(not isinstance(col, SortCol) for col in columns)
+        else:
+            assert not isinstance(columns, SortCol)
+        if assert_normalized:
+            if isinstance(src, Iterable):
+                assert all(isinstance(tbl, Table) for tbl in src)
+                # nested Views are fused
+                assert all(tbl.view is None for tbl in src)
+            else:
+                assert isinstance(src, Table)
+                assert src.view is None  # nested Views must be fused
+            if isinstance(columns, Mapping):
+                assert all(isinstance(c, str) for c in columns.keys())
+                assert all(isinstance(c, str) for c in columns.values())
+            elif isinstance(columns, Iterable) and not isinstance(columns, str):
+                assert all(isinstance(c, str) for c in columns)
+            else:
+                assert isinstance(columns, str | None)
+            if isinstance(sort_by, Iterable) and not isinstance(sort_by, str):
+                assert all(isinstance(c, SortCol) for c in sort_by)
+                assert all(isinstance(c.col, str) for c in sort_by)
+            elif isinstance(sort_by, SortCol):
+                assert isinstance(sort_by.col, str)
+            else:
+                assert sort_by is None
+
+    def clone_assert_normalized(self):
+        return View(self.src, columns=self.columns, sort_by=self.sort_by, limit=self.limit, assert_normalized=True)
+
+    def __repr__(self):
+        # attention: don't put id(self) in here because it is used as lazy query string
+        ret = f"<View: {repr(self.src)}"  # str(src) returns empty string for sqlalchemy aliases
+        params = []
+        if self.columns is not None:
+            params.append(f"columns: {repr(self.columns)}")
+        if self.sort_by is not None:
+            params.append(f"sort_by: {repr(self.sort_by)}")
+        if self.limit is not None:
+            params.append(f"limit: {self.limit}")
+        if len(params) > 0:
+            ret += f" ({', '.join(params)})"
+        return ret + ">"
 
 
 def attach_annotation(annotation: type, arg):
@@ -668,14 +867,13 @@ def attach_annotation(annotation: type, arg):
             and isinstance(arg, typing.Sized)
             and len(anno_args) == len(arg)
         ):
-            for value, anno in zip(arg, anno_args):
+            for value, anno in zip(arg, anno_args, strict=True):
                 attach_annotation(anno, value)
     if isinstance(arg, (Table, Blob, RawSql)):
         arg.annotation = annotation
 
 
-try:
-    import pydiverse.transform as pdt
+if C:
 
     @overload
     def materialize_table(name: str | None = None, table_prefix: str | None = None): ...
@@ -690,7 +888,7 @@ try:
         if tbl >> pdt.build_query():
             return Table(tbl, name=name).materialize(return_as_type=pdt.SqlAlchemy)
         return tbl >> pdt.alias()
-except ImportError:
+else:
     # If pydiverse.transform is not available, we cannot use the materialize_table verb
     def materialize_table(tbl: Any, table_prefix: str | None = None):
         raise ImportError(

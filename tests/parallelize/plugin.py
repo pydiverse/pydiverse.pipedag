@@ -3,7 +3,7 @@
 
 import pytest
 
-from .sesson import Session
+from .session import Session
 from .util import parse_config
 
 

@@ -29,7 +29,7 @@ table_store_connections:
 
   snowflake:
     args:
-      url: "snowflake://{$SNOWFLAKE_USER}:{$SNOWFLAKE_PASSWORD}@{$SNOWFLAKE_ACCOUNT}/pipedag/DBO?warehouse=pipedag&role=accountadmin"
+      url: "snowflake://{$SNOWFLAKE_USER}:{$SNOWFLAKE_PASSWORD}@{$SNOWFLAKE_ACCOUNT}/pipedag{$SNOWFLAKE_DB_SUFFIX}?warehouse=pipedag&role=accountadmin"
       schema_prefix: "{instance_id}_"
       create_database_if_not_exists: true
 
@@ -146,6 +146,16 @@ instances:
 
   mssql_pytsql:
     instance_id: pd_mssql_pytsql
+    table_store:
+      table_store_connection: mssql
+      args:
+        disable_pytsql: false
+        pytsql_isolate_top_level_statements: true
+    blob_store:
+      blob_store_connection: no_blob
+
+  mssql_special_tests:
+    instance_id: pd_mssql_special_tests
     table_store:
       table_store_connection: mssql
       args:
@@ -284,7 +294,7 @@ instances:
   parquet_backend:
     instance_id: parquet_backend
     table_store:
-      class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
+      class: "pydiverse.pipedag.backend.table.ParquetTableStore"
       table_store_connection: parquet_duckdb
       args:
         parquet_base_path: "/tmp/pipedag/parquet_store/"
@@ -297,7 +307,7 @@ instances:
   parquet_s3_backend:
     instance_id: parquet_s3_backend
     table_store:
-      class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
+      class: "pydiverse.pipedag.backend.table.ParquetTableStore"
       table_store_connection: parquet_duckdb
       metadata_table_store:
         class: "pydiverse.pipedag.backend.table.SQLTableStore"
@@ -313,7 +323,7 @@ instances:
   parquet_s3_backend_db2:
     instance_id: parquet_s3_backend_db2
     table_store:
-      class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
+      class: "pydiverse.pipedag.backend.table.ParquetTableStore"
       table_store_connection: parquet_duckdb
       metadata_table_store:
         class: "pydiverse.pipedag.backend.table.SQLTableStore"

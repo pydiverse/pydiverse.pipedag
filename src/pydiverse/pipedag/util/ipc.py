@@ -57,6 +57,9 @@ class IPCClient:
         )
         self.socket = self._connect()
 
+    def __repr__(self):
+        return f"{type(self).__name__}(addr={self.addr})>"
+
 
 class IPCServer(threading.Thread):
     """Server for inter process communication

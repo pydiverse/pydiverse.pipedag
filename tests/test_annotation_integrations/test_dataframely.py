@@ -1,8 +1,7 @@
 # Copyright (c) QuantCo and pydiverse contributors 2024-2025
 # SPDX-License-Identifier: BSD-3-Clause
-import types
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Generic, Mapping, TypeVar
 
 import polars as pl
 import pytest
@@ -13,60 +12,13 @@ from polars.testing import assert_frame_equal
 from pydiverse.pipedag import ConfigContext, Flow, Stage, materialize
 from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.errors import HookCheckException
-from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
-
-try:
-    import dataframely as dy
-    from dataframely._polars import FrameType
-except ImportError:
-    T = TypeVar("T")
-
-    class DyDataFrame(Generic[T]):
-        pass
-
-    class DyDummyClass:
-        def __init__(self, *args, **kwargs):
-            pass
-
-    FrameType = None
-    dy = types.ModuleType("dataframely")
-    dy.DataFrame = DyDataFrame
-    dy.LazyFrame = DyDataFrame
-    dy.FailureInfo = None
-    dy.Column = None
-    dy.Collection = object
-    dy.Schema = object
-    dy.filter = lambda: lambda fn: fn  # noqa
-    dy.rule = lambda: lambda fn: fn  # noqa
-    for _type in [
-        "Int8",
-        "Int16",
-        "Int32",
-        "Int64",
-        "UInt8",
-        "UInt16",
-        "UInt32",
-        "UInt64",
-        "Float32",
-        "Float64",
-        "Bool",
-        "String",
-        "Decimal",
-        "Enum",
-        "Struct",
-        "List",
-        "Date",
-        "Datetime",
-        "Time",
-        "Duration",
-        "Float",
-        "Integer",
-    ]:
-        setattr(dy, _type, DyDummyClass)
-
+from pydiverse.pipedag.optional_dependency.dataframely import FrameType, dy
+from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
+from tests.util import swallowing_raises
 
 pytestmark = [
-    with_instances(DATABASE_INSTANCES),
+    # with_instances(tuple(list(DATABASE_INSTANCES))),
+    with_instances(tuple(list(DATABASE_INSTANCES) + ["snowflake"])),
 ]
 
 
@@ -94,11 +46,11 @@ class MyCollection(dy.Collection):
 
     @dy.filter()
     def equal_primary_keys(self) -> pl.LazyFrame:
-        return self.first.join(self.second, on=self.common_primary_keys())
+        return self.first.join(self.second, on=self.common_primary_key())
 
     @dy.filter()
     def first_b_greater_second_b(self) -> pl.LazyFrame:
-        return self.first.join(self.second, on=self.common_primary_keys(), how="full", coalesce=True).filter(
+        return self.first.join(self.second, on=self.common_primary_key(), how="full", coalesce=True).filter(
             (pl.col("b") > pl.col("b_right")).fill_null(True)
         )
 
@@ -312,12 +264,27 @@ def test_filter_with_filter_with_rule_violation():
     flow.run()
 
 
+@skip_instances("snowflake")
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
 )
 def test_annotations(with_filter: bool, with_violation: bool, validate_get_data: bool):
+    do_test_annotations(with_filter, with_violation, validate_get_data)
+
+
+@with_instances("snowflake")
+@pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
+@pytest.mark.parametrize(
+    "with_filter, with_violation, validate_get_data",
+    [(a, b, c) for a in [False] for b in [False, True] for c in [False]],
+)
+def test_annotations_snowflake(with_filter: bool, with_violation: bool, validate_get_data: bool):
+    do_test_annotations(with_filter, with_violation, validate_get_data)
+
+
+def do_test_annotations(with_filter: bool, with_violation: bool, validate_get_data: bool):
     if validate_get_data:
 
         @materialize(nout=2)
@@ -343,9 +310,9 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
         assert len(second.collect()) in [3, 4, 5]
 
         if not validate_get_data and with_violation:
-            with pytest.raises(dy.exc.RuleValidationError, match="1 rules failed validation"):
+            with pytest.raises(dy.exc.ValidationError, match="1 rules failed validation"):
                 MyFirstColSpec.validate(first)
-            with pytest.raises(dy.exc.RuleValidationError, match="2 rules failed validation"):
+            with pytest.raises(dy.exc.ValidationError, match="2 rules failed validation"):
                 MySecondColSpec.validate(second)
         else:
             assert MyFirstColSpec.is_valid(first)
@@ -372,7 +339,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
 
     if with_violation and validate_get_data:
         # Validation at end of get_anno_data task fails
-        with pytest.raises(
+        with swallowing_raises(
             HookCheckException,
             match="failed validation with MyFirstColSpec; Failure counts: "
             "{'b|min': 1, 'c|nullability': 1, 'c|dtype': 1};"
@@ -383,7 +350,7 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
     elif with_violation and not validate_get_data and with_filter:
         # Due to the enum failure the dematerialization hook for consumer
         # task fails with ValueError (triggers RuntimeError in Flow)
-        with pytest.raises(
+        with swallowing_raises(
             RuntimeError,
             match="Failed to retrieve table '<Table 'get_anno_data",
         ):
@@ -393,12 +360,27 @@ def test_annotations(with_filter: bool, with_violation: bool, validate_get_data:
         assert ret.successful
 
 
+@skip_instances("snowflake")
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
 )
 def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, validate_get_data: bool):
+    do_test_annotations_not_fail_fast(with_filter, with_violation, validate_get_data)
+
+
+@with_instances("snowflake")
+@pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
+@pytest.mark.parametrize(
+    "with_filter, with_violation, validate_get_data",
+    [(a, b, c) for a in [True] for b in [False, True] for c in [False]],
+)
+def test_annotations_not_fail_fast_snowflake(with_filter: bool, with_violation: bool, validate_get_data: bool):
+    do_test_annotations_not_fail_fast(with_filter, with_violation, validate_get_data)
+
+
+def do_test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, validate_get_data: bool):
     if validate_get_data:
 
         @materialize(nout=2)
@@ -445,7 +427,7 @@ def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, vali
         with Stage("s02"):
             consumer2(first, second)
 
-    with ConfigContext.get().evolve(fail_fast=False):
+    with ConfigContext.get().evolve(fail_fast=False, swallow_exceptions=True):
         result = flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
     if with_violation:
         assert not result.successful
@@ -453,12 +435,27 @@ def test_annotations_not_fail_fast(with_filter: bool, with_violation: bool, vali
         assert result.successful
 
 
+@skip_instances("snowflake")
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
     [(a, b, c) for a in [False, True] for b in [False, True] for c in [False, True]],
 )
 def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, validate_get_data: bool):
+    do_test_annotations_fault_tolerant(with_filter, with_violation, validate_get_data)
+
+
+@with_instances("snowflake")
+@pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
+@pytest.mark.parametrize(
+    "with_filter, with_violation, validate_get_data",
+    [(a, b, c) for a in [False] for b in [False, True] for c in [True]],
+)
+def test_annotations_fault_tolerant_snowflake(with_filter: bool, with_violation: bool, validate_get_data: bool):
+    do_test_annotations_fault_tolerant(with_filter, with_violation, validate_get_data)
+
+
+def do_test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, validate_get_data: bool):
     if validate_get_data:
 
         @materialize(nout=2)
@@ -493,12 +490,12 @@ def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, val
         if with_violation:
             if with_filter:
                 MyFirstColSpec.validate(first)
-                with pytest.raises(dy.exc.RuleValidationError, match="3 rules failed validation"):
+                with pytest.raises(dy.exc.ValidationError, match="3 rules failed validation"):
                     MySecondColSpec.validate(second, cast=True)
             else:
-                with pytest.raises(dy.exc.RuleValidationError, match="1 rules failed validation"):
+                with pytest.raises(dy.exc.ValidationError, match="1 rules failed validation"):
                     MyFirstColSpec.validate(first)
-                with pytest.raises(dy.exc.RuleValidationError, match="2 rules failed validation"):
+                with pytest.raises(dy.exc.ValidationError, match="2 rules failed validation"):
                     MySecondColSpec.validate(second)
         else:
             assert MyFirstColSpec.is_valid(first)
@@ -527,6 +524,7 @@ def test_annotations_fault_tolerant(with_filter: bool, with_violation: bool, val
         assert all("failed validation with My" in failure["exception"] for failure in failures)
 
 
+@skip_instances("snowflake")
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
 @pytest.mark.parametrize(
     "with_filter, with_violation, validate_get_data",
@@ -560,7 +558,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
         assert len(coll.second.collect()) in [3, 4, 5]
 
         if with_violation:
-            with pytest.raises(dy.exc.MemberValidationError, match="2 members failed validation"):
+            with pytest.raises(dy.exc.ValidationError, match="2 members failed validation"):
                 coll.validate(coll.__dict__, cast=True)
         else:
             if with_filter:
@@ -607,6 +605,7 @@ def test_collections(with_filter: bool, with_violation: bool, validate_get_data:
     assert ret.successful
 
 
+@skip_instances("snowflake")
 @pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
 def test_type_mapping():
     @materialize(nout=2)
@@ -616,6 +615,27 @@ def test_type_mapping():
     @materialize(input_type=sa.Table)
     def consumer(first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]):
         assert isinstance(first.c.b.type, sa.SmallInteger)
+        assert isinstance(second.c.b.type, sa.BigInteger)
+        assert not isinstance(second.c.b.type, sa.SmallInteger)
+
+    with Flow() as flow:
+        with Stage("s01"):
+            first, second = get_anno_data()
+            consumer(first, second)
+
+    flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+
+
+@with_instances("snowflake")
+@pytest.mark.skipif(dy.Collection is object, reason="dataframely needs to be installed")
+def test_type_mapping_snowflake():
+    @materialize(nout=2)
+    def get_anno_data() -> tuple[dy.LazyFrame[MyFirstColSpec], dy.LazyFrame[MySecondColSpec]]:
+        return data_with_filter_without_rule_violation()
+
+    @materialize(input_type=sa.Table)
+    def consumer(first: dy.LazyFrame[MyFirstColSpec], second: dy.LazyFrame[MySecondColSpec]):
+        assert isinstance(first.c.b.type, sa.BigInteger)  # Snowflake does not support SmallInteger
         assert isinstance(second.c.b.type, sa.BigInteger)
         assert not isinstance(second.c.b.type, sa.SmallInteger)
 

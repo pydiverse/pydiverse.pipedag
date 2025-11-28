@@ -2,19 +2,15 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
+import polars as pl
 import sqlalchemy as sa
 from sqlalchemy import inspect
 
-from pydiverse.pipedag import Blob, RawSql, Table, materialize
+from pydiverse.pipedag import Blob, RawSql, Table, View, materialize
 from pydiverse.pipedag.backend.table.sql.ddl import MAX_LENGTH_PK
 from pydiverse.pipedag.context import TaskContext
 from pydiverse.pipedag.debug import materialize_table
 from tests.util import select_as
-
-try:
-    import polars as pl
-except ImportError:
-    pl = None
 
 
 @materialize(input_type=pd.DataFrame, version="1.0")
@@ -43,6 +39,11 @@ def noop_sql(x):
 @materialize(input_type=sa.Table, lazy=True)
 def noop_lazy(x):
     return x
+
+
+@materialize(input_type=sa.Table, lazy=True)
+def noop_view(x):
+    return View(x)
 
 
 @materialize(input_type=pl.DataFrame if pl else "<polars task without polars>")
@@ -230,24 +231,24 @@ def simple_dataframe_debug_materialize_twice():
 def complex_imperative_materialize(in_: Table):
     @materialize(lazy=True, input_type=sa.Table)
     def _temp_res1(in_: sa.Table):
-        query = sa.select("*").select_from(in_)
+        query = sa.select(sa.text("*")).select_from(in_)
         return Table(query)
 
     @materialize(lazy=True, input_type=sa.Table)
     def _temp_res2(in_: sa.Table):
-        query1 = sa.select("*").select_from(in_)
+        query1 = sa.select(sa.text("*")).select_from(in_)
         t1 = Table(query1).materialize()
 
-        query2 = sa.select("*").select_from(t1)
+        query2 = sa.select(sa.text("*")).select_from(t1)
         t2 = Table(query2).materialize()
 
-        query3 = sa.select("*").select_from(t2)
+        query3 = sa.select(sa.text("*")).select_from(t2)
         return Table(query3)
 
     @materialize(lazy=True, input_type=sa.Table)
     def _temp_res3(_temp_res1: sa.Table, _temp_res2: sa.Table):
         _ = _temp_res2
-        query = sa.select("*").select_from(_temp_res1)
+        query = sa.select(sa.text("*")).select_from(_temp_res1)
         return Table(query)
 
     temp_res1 = _temp_res1(in_)
@@ -396,8 +397,8 @@ def pd_dataframe(data: dict[str, list]):
 
 
 @materialize(version="1.0")
-def as_blob(x):
-    return Blob(x)
+def as_blob(x, name: str | None = None):
+    return Blob(x, name=name)
 
 
 @materialize(lazy=True)
@@ -411,11 +412,11 @@ class _SomeClass:
 
 
 @materialize(version="1.0")
-def object_blob(x: dict):
+def object_blob(x: dict, name: str | None = None):
     instance = _SomeClass()
     instance.__dict__.update(x)
 
-    return Blob(instance)
+    return Blob(instance, name=name)
 
 
 @materialize()
@@ -426,7 +427,7 @@ def exception(x, r: bool):
 
 
 def get_task_logger():
-    return TaskContext.get().task.logger
+    return TaskContext.get().task._logger
 
 
 @materialize(input_type=sa.Table)

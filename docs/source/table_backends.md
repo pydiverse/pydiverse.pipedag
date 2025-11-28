@@ -5,7 +5,7 @@ from pydiverse.pipedag.backend.table.base import CanResult
 We currently support two table backends:
 
 - [](#pydiverse.pipedag.backend.table.SQLTableStore)
-- [](#pydiverse.pipedag.backend.table.parquet.ParquetTableStore)
+- [](#pydiverse.pipedag.backend.table.ParquetTableStore)
 
 Support for in-memory storage based on [Apache Arrow](https://arrow.apache.org/) is planned.
 
@@ -22,8 +22,8 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
 Which need to implement the following functions:
 
 ```python
-def can_materialize(cls, type_) -> CanResult:
-def can_retrieve(cls, type_) -> bool:
+def can_materialize(cls, type_) -> CanMatResult:
+def can_retrieve(cls, type_) -> CanRetResult:
 def materialize(cls, store: SQLTableStore, table: Table, stage_name):
 def retrieve(cls, store, table, stage_name, as_type: type, limit: int | None = None):
 def lazy_query_str(cls, store, obj) -> str:
@@ -40,7 +40,7 @@ The SQLTableStore currently supports the following SQL databases/dialects:
 
 Example connection strings:
 - Postgres: `postgresql://user:password@localhost:5432/{instance_id}`
-- Snowflake: `snowflake://{$SNOWFLAKE_USER}:{$SNOWFLAKE_PASSWORD}@{$SNOWFLAKE_ACCOUNT}/database_name/DBO?warehouse=warehouse_name&role=access_role`
+- Snowflake: `snowflake://{$SNOWFLAKE_USER}:{$SNOWFLAKE_PASSWORD}@{$SNOWFLAKE_ACCOUNT}/database_name?warehouse=warehouse_name&role=access_role`
 - Microsoft SQL Server: `mssql+pyodbc://user:password@127.0.0.1:1433/{instance_id}?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no`
 - IBM DB2: `db2+ibm_db://db2inst1:password@localhost:50000/testdb`, `schema_prefix: "{instance_id}_"`
 - DuckDB: `duckdb:////tmp/pipedag/{instance_id}/db.duckdb`
@@ -76,7 +76,7 @@ decorator out-of-the-box:
 - `tidypolars.Tibble` (see [https://github.com/markfairbanks/tidypolars](https://github.com/markfairbanks/tidypolars);
   recommended with `lazy=True`)
 
-## [](#pydiverse.pipedag.backend.table.parquet.ParquetTableStore)
+## [](#pydiverse.pipedag.backend.table.ParquetTableStore)
 
 The ParquetTableStore is derived from the [SQLTableStore](#pydiverse.pipedag.backend.table.SQLTableStore)
 with flavor DuckDB. It can be used in much the same way. Just the performance for `input_type`
@@ -117,6 +117,7 @@ A specific example to get started with one database technology can also be found
 - [MSSQL example](examples/zip/example_mssql.zip)
 - [IBM DB2 example](examples/zip/example_ibm_db2.zip)
 - [Parquet S3 example](examples/zip/example_parquet_s3.zip)
+- [Snowflake example](examples/zip/example_snowflake.zip)
 
 The Parquet S3 example uses minio container as S3 compatible storage and is described
 [here](parquet_s3.md) in more detail.

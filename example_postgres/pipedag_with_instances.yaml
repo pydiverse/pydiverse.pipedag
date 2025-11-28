@@ -1,0 +1,125 @@
+name: some_analytics
+
+table_store_connections:
+  postgres:
+    args:
+      # Postgres: this can be used after running `docker-compose up`
+      url: "postgresql://{$POSTGRES_USERNAME}:{$POSTGRES_PASSWORD}@127.0.0.1:6543/some_analytics"
+      schema_prefix: "{instance_id}_"
+      create_database_if_not_exists: True
+
+
+technical_setups:
+  default:
+    network_interface: "127.0.0.1"
+    auto_table:
+      - "pandas.DataFrame"
+      - "polars.DataFrame"
+      - "polars.LazyFrame"
+      - "sqlalchemy.sql.expression.TextClause"
+      - "sqlalchemy.sql.expression.Selectable"
+      - "pydiverse.transform.Table"
+
+    fail_fast: true
+    # Attention: For disable_kroki: false, stage and task names might be sent to the kroki_url.
+    #   You can self-host kroki if you like:
+    #   https://docs.kroki.io/kroki/setup/install/
+    #   You need to install optional dependency 'pydot' for any visualization
+    #   URL to appear.
+    disable_kroki: true
+    kroki_url: "https://kroki.io"
+
+    table_store:
+      class: "pydiverse.pipedag.backend.table.SQLTableStore"
+      args:
+        print_materialize: true
+        print_sql: true
+
+      hook_args:
+        sql:
+          cleanup_annotation_action_on_success: false
+          cleanup_annotation_action_intermediate_state: false
+
+      local_table_cache:
+        store_input: true
+        store_output: true
+        use_stored_input_as_cache: true
+        class: "pydiverse.pipedag.backend.table.cache.ParquetTableCache"
+        args:
+          base_path: "/tmp/pipedag/table_cache"
+
+    blob_store:
+      class: "pydiverse.pipedag.backend.blob.FileBlobStore"
+      args:
+        base_path: "/tmp/pipedag/blobs"
+
+    lock_manager:
+      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
+
+    orchestration:
+      class: "pydiverse.pipedag.engine.SequentialEngine"
+
+instances:
+  __any__:
+    instance_id: default  # different instance_id means different schemas and different caching data
+    technical_setup: default
+    table_store:
+      # Postgres: this can be used after running `docker-compose up`
+      table_store_connection: postgres
+
+    # The following Attributes are handed over to the flow implementation (pipedag does not care)
+    attrs:
+      keep_input_stable: false    # this is relevant for full instance
+      allow_fresh_input: true     # this is relevant for full instance
+      src_filtered_input: false   # source filtering is relevant testing sampling or new input formats
+#      src_filter_cnt: 0
+      copy_filtered_input: false
+#      copy_source: full
+#      copy_per_user: false
+#      copy_filter_cnt: 0  # this is just dummy input filtering where we sample n rows
+
+  full_fresh:
+    # Full dataset is using default database connection and schemas.
+    # It is recommended to work with stable data that is copied from fresh data in intervals.
+    instance_id: full_fresh
+
+  mini_fresh:
+    instance_id: mini_fresh
+    attrs:
+      src_filtered_input: true
+      src_filter_cnt: 2  # this is just dummy input where we sample 2 rows
+
+  full:
+    # Full dataset is using default database connection and schemas.
+    # It is recommended to work with stable data that is copied from fresh data in intervals.
+    instance_id: full
+    attrs:
+      # Ensure that input layer data does not change unless allow_fresh_input=true.
+      keep_input_stable: true
+      # this must be false to prevent accidental update of stable data
+      allow_fresh_input: false
+      # If full_fresh copies its input stage as opposed to linking (e.g. with ExternalTableReference),
+      # consider copying the input tables from full_fresh when allow_fresh_input=true
+      # copy_filtered_input: true
+      # copy_source: full_fresh
+
+  midi:
+    # Sampled version of stable data in instance 'full'.
+    # Midi in practice should already give significant code coverage in pipeline.
+    instance_id: midi
+    attrs:
+      # copy filtered input from full instance
+      copy_filtered_input: true
+      copy_source: full
+      copy_per_user: false
+      copy_filter_cnt: 5  # this is just dummy input where we sample 2 rows
+
+  mini:
+    # Sampled version of stable data in instance 'full'.
+    # Mini in practice should be as small as possible to get the pipeline running.
+    instance_id: mini
+    attrs:
+      copy_filtered_input: true
+      copy_source: full
+      copy_per_user: false
+      copy_filter_cnt: 2  # this is just dummy input where we sample 1 row

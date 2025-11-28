@@ -35,6 +35,16 @@ class BaseContext:
     _lock: Lock = Lock()
     _thread_state: dict[int, list[Token]] = {}
     _instance_state: dict[int, int] = {}
+    _base_context_logger = []  # enable late initialization of logger
+
+    def get_logger(self):
+        # Derived class DagContext is frozen and would not call any constructor of baseclasses.
+        # Initializing loggers at import time is an option, but has risks since existing loggers
+        # might not be correctly initialized. Logger initialization typically happens in __main__ or
+        # conftest.py.
+        if len(self._base_context_logger) == 0:
+            self._base_context_logger.append(structlog.get_logger(__name__ + "." + BaseContext.__name__))
+        return self._base_context_logger[0]
 
     def __enter__(self):
         with self._lock:
@@ -44,6 +54,14 @@ class BaseContext:
             _tokens = self._thread_state[_id]
             token = self._context_var.set(self)
             _tokens.append(token)
+            self.get_logger().debug(
+                f"Entering {type(self).__name__}",
+                id=id(self),
+                thread_id=threading.get_ident(),
+                key=_id,
+                depth=len(_tokens),
+                z=str(self)[:100],
+            )
             if id(self) not in self._instance_state:
                 self._instance_state[id(self)] = 0
             # count threads that entered this context object
@@ -53,7 +71,21 @@ class BaseContext:
     def __exit__(self, *_):
         with self._lock:
             _id = id(self) + (threading.get_ident() << 64)
-            _tokens = self._thread_state[_id]
+            _tokens = self._thread_state.get(_id)
+            self.get_logger().debug(
+                f"Exiting {type(self).__name__}",
+                id=id(self),
+                thread_id=threading.get_ident(),
+                key=_id,
+                depth=len(_tokens) if _tokens is not None else 0,
+                z=str(self)[:100],
+            )
+            if not _tokens:
+                raise RuntimeError(
+                    "Fatal error in context handling: "
+                    f"{type(self).__name__}, {_id} ({id(self)}, {threading.get_ident()}) "
+                    f"not in {self._thread_state}, str={str(self)}"
+                )
             self._context_var.reset(_tokens.pop())
             if len(_tokens) == 0:
                 del self._thread_state[_id]
@@ -88,9 +120,9 @@ class BaseAttrsContext(BaseContext):
 class DAGContext(BaseAttrsContext):
     """Context during DAG definition"""
 
-    flow: "Flow"
-    stage: "Stage"
+    stage: "Stage"  # put fine granular first for better __repr__
     group_node: "GroupNode"
+    flow: "Flow"
 
     _context_var = ContextVar("dag_context")
 
@@ -104,11 +136,14 @@ class TaskContext(BaseContext):
     """
 
     task: "Task"
-    input_tables: list["Table"] = None
+    input_tables: list["Table"] | None = None
     is_cache_valid: bool | None = None
     name_disambiguator: NameDisambiguator = field(factory=NameDisambiguator)
     override_version: str | None = None
     imperative_materialize_callback = None
+
+    input_table_mapping: dict[int, tuple["Table", Any]] | None = None
+    """Mapping IDs of dematerialized objects to both dag.Table and dematerialized object itself."""
 
     _context_var = ContextVar("task_context")
 
@@ -267,8 +302,8 @@ class ConfigContext(BaseAttrsContext):
     table_hook_args: Box
 
     # INTERNAL FLAGS - ONLY FOR PIPEDAG USE
-    # When set to True, exceptions raised in a flow don't get logged
     _swallow_exceptions: bool = False
+    """When set to True, exceptions raised in a flow don't get logged as error message"""
     _is_evolved: bool = False  # if True, _config_dict might be out of date
 
     @cached_property
@@ -283,6 +318,17 @@ class ConfigContext(BaseAttrsContext):
                 import_object(t)
                 return True
             except (ImportError, AttributeError):
+                if t == "pydiverse.transform.Table":
+                    try:
+                        import pydiverse.transform as pdt
+
+                        _ = pdt
+                    except ImportError:
+                        self.logger.warning(
+                            "Configuration option auto_table in PipedagConfig includes 'pydiverse.transform.Table', "
+                            "however, pydiverse.transform is not installed."
+                        )
+                        return False
                 self.logger.exception(
                     f"Configuration option auto_table in PipedagConfig included class which does not exist: {t}"
                 )
@@ -299,47 +345,48 @@ class ConfigContext(BaseAttrsContext):
         from pydiverse.pipedag.materialize.store import PipeDAGStore
 
         # Load objects referenced in config
-        try:
-            table_store_config = self._config_dict["table_store"]
-            # Attention: See SQLTableStore.__new__ for how this call may instantiate
-            # a subclass of table_store_config["class"] depending on engine URL.
-            # For testing, we also allow setting table_store_config["class"] to an
-            # actual class. In case you want to create a table store that does not
-            # replace the default derived class for a specific dialect, set
-            # `_dialect_name = DISABLE_DIALECT_REGISTRATION`.
-            table_store = load_object(table_store_config)
-            table_store.set_instance_id(self.instance_id)
-            metadata_table_store_config = self._config_dict["table_store"].get("metadata_table_store", None)
-            if metadata_table_store_config:
-                if not hasattr(table_store, "set_metadata_store"):
-                    self.logger.error(
-                        "table_store has configured metadata_store but does not support it: it will be ignored"
+        with self:
+            try:
+                table_store_config = self._config_dict["table_store"]
+                # Attention: See SQLTableStore.__new__ for how this call may instantiate
+                # a subclass of table_store_config["class"] depending on engine URL.
+                # For testing, we also allow setting table_store_config["class"] to an
+                # actual class. In case you want to create a table store that does not
+                # replace the default derived class for a specific dialect, set
+                # `_dialect_name = DISABLE_DIALECT_REGISTRATION`.
+                table_store = load_object(table_store_config)
+                table_store.set_instance_id(self.instance_id)
+                metadata_table_store_config = self._config_dict["table_store"].get("metadata_table_store", None)
+                if metadata_table_store_config:
+                    if not hasattr(table_store, "set_metadata_store"):
+                        self.logger.error(
+                            "table_store has configured metadata_store but does not support it: it will be ignored"
+                        )
+                    else:
+                        metadata_table_store = load_object(metadata_table_store_config)
+                        table_store.set_metadata_store(metadata_table_store)
+            except Exception as e:
+                raise RuntimeError("Failed loading table_store") from e
+
+            try:
+                blob_store = load_object(self._config_dict["blob_store"])
+            except Exception as e:
+                raise RuntimeError("Failed loading blob_store") from e
+
+            try:
+                local_table_cache = None
+                local_table_cache_config = table_store_config.get("local_table_cache", None)
+                if local_table_cache_config is not None:
+                    local_table_cache = load_object(
+                        local_table_cache_config,
+                        move_keys_into_args=(
+                            "store_input",
+                            "store_output",
+                            "use_stored_input_as_cache",
+                        ),
                     )
-                else:
-                    metadata_table_store = load_object(metadata_table_store_config)
-                    table_store.set_metadata_store(metadata_table_store)
-        except Exception as e:
-            raise RuntimeError("Failed loading table_store") from e
-
-        try:
-            blob_store = load_object(self._config_dict["blob_store"])
-        except Exception as e:
-            raise RuntimeError("Failed loading blob_store") from e
-
-        try:
-            local_table_cache = None
-            local_table_cache_config = table_store_config.get("local_table_cache", None)
-            if local_table_cache_config is not None:
-                local_table_cache = load_object(
-                    local_table_cache_config,
-                    move_keys_into_args=(
-                        "store_input",
-                        "store_output",
-                        "use_stored_input_as_cache",
-                    ),
-                )
-        except Exception as e:
-            raise RuntimeError("Failed loading local_table_cache") from e
+            except Exception as e:
+                raise RuntimeError("Failed loading local_table_cache") from e
 
         return PipeDAGStore(
             table=table_store,
@@ -557,6 +604,9 @@ class ConfigContext(BaseAttrsContext):
                 raise ValueError(f"Expected integer for '{m}' within '{within}.{key}', found {type(value[m])}")
 
     _context_var = ContextVar("config_context")
+
+    def __str__(self) -> str:
+        return f"{self.instance_id}:{self.__repr__()}"
 
 
 class StageLockContext(BaseContext):

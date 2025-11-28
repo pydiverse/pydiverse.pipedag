@@ -37,28 +37,28 @@ def validate_dependencies(flow: Flow):
         assert task in expl_g
 
         parents = {edge[0] for edge in g.in_edges(task)}
-        assert set(task.input_tasks.values()) == parents
+        assert set(task._input_tasks.values()) == parents
 
     # Check inputs computed before task
     for task in tasks:
-        for input_task in task.input_tasks.values():
+        for input_task in task._input_tasks.values():
             assert nx.shortest_path(expl_g, input_task, task)
 
     # Check each task in stage happens before commit
     for task in tasks:
-        assert nx.shortest_path(expl_g, task, task.stage.commit_task)
+        assert nx.shortest_path(expl_g, task, task._stage.commit_task)
 
     # Check commit task dependencies
     for child in tasks:
         for parent, _ in g.in_edges(child):  # type: Task
-            if child.stage == parent.stage:
+            if child._stage == parent._stage:
                 continue
 
-            if child.stage.is_inner(parent.stage):
+            if child._stage.is_inner(parent._stage):
                 continue
 
-            assert nx.shortest_path(expl_g, parent, parent.stage.commit_task)
-            assert nx.shortest_path(expl_g, parent.stage.commit_task, child)
+            assert nx.shortest_path(expl_g, parent, parent._stage.commit_task)
+            assert nx.shortest_path(expl_g, parent._stage.commit_task, child)
 
     # Ensure that nested stages get committed before their parents
     for stage in stages:
@@ -84,7 +84,7 @@ class TestDAGConstruction:
         assert s.tasks == [t0]
         assert s.outer_stage is None
 
-        assert t0.upstream_stages == []
+        assert t0._upstream_stages == []
 
         validate_dependencies(f)
 
@@ -100,8 +100,8 @@ class TestDAGConstruction:
         assert s.tasks == [t0, t1]
         assert s.outer_stage is None
 
-        assert t0.upstream_stages == []
-        assert t1.upstream_stages == []
+        assert t0._upstream_stages == []
+        assert t1._upstream_stages == []
 
         validate_dependencies(f)
 
@@ -117,8 +117,8 @@ class TestDAGConstruction:
         assert s.tasks == [t0, t1]
         assert s.outer_stage is None
 
-        assert t0.upstream_stages == []
-        assert t1.upstream_stages == [s]
+        assert t0._upstream_stages == []
+        assert t1._upstream_stages == [s]
 
         validate_dependencies(f)
 
@@ -142,11 +142,11 @@ class TestDAGConstruction:
         assert s1.tasks == [t10, t11, t12]
         assert s1.outer_stage is None
 
-        assert t00.upstream_stages == []
-        assert t01.upstream_stages == [s0]
-        assert t10.upstream_stages == [s0]
-        assert t11.upstream_stages == [s1, s0]
-        assert t12.upstream_stages == [s0]
+        assert t00._upstream_stages == []
+        assert t01._upstream_stages == [s0]
+        assert t10._upstream_stages == [s0]
+        assert t11._upstream_stages == [s1, s0]
+        assert t12._upstream_stages == [s0]
 
         validate_dependencies(f)
 
@@ -197,14 +197,14 @@ class TestDAGConstruction:
         assert s3.tasks == [t30, t31]
         assert s3.outer_stage is None
 
-        assert t00.upstream_stages == []
-        assert t01.upstream_stages == [s0]
-        assert t10.upstream_stages == [s0]
-        assert t11.upstream_stages == [s1, s0]
-        assert t12.upstream_stages == [s0]
-        assert t20.upstream_stages == [s1]
-        assert t30.upstream_stages == [s1, s2]
-        assert t31.upstream_stages == [s0, s1, s2, s3]
+        assert t00._upstream_stages == []
+        assert t01._upstream_stages == [s0]
+        assert t10._upstream_stages == [s0]
+        assert t11._upstream_stages == [s1, s0]
+        assert t12._upstream_stages == [s0]
+        assert t20._upstream_stages == [s1]
+        assert t30._upstream_stages == [s1, s2]
+        assert t31._upstream_stages == [s0, s1, s2, s3]
 
         validate_dependencies(f)
 
@@ -228,7 +228,7 @@ class TestDAGConstruction:
 
         assert [stage.id for stage in [s0, s1, s2, s3]] == [0, 1, 2, 3]
         assert [
-            task.id
+            task._id
             for task in [
                 t00,
                 t01,
@@ -370,11 +370,11 @@ class TestPositionHash:
             with Stage("stage_1"):
                 z2 = t("0")(0)  # Different stage
 
-        assert x.position_hash == y.position_hash
+        assert x._position_hash == y._position_hash
 
-        assert x.position_hash != z0.position_hash
-        assert x.position_hash != z1.position_hash
-        assert x.position_hash != z2.position_hash
+        assert x._position_hash != z0._position_hash
+        assert x._position_hash != z1._position_hash
+        assert x._position_hash != z2._position_hash
 
     def test_multiple_tasks(self):
         with Flow():
@@ -398,16 +398,16 @@ class TestPositionHash:
                 z2_0 = t_kw("2")(A=1, b=2, c=[x1, y1])  # Different kwarg name
                 z2_1 = t_kw("2")(a=1, b=2, c=[z1_0, z1_1])  # Inputs different pos hash
 
-        assert x0.position_hash == y0.position_hash
-        assert x0.position_hash != z0_0.position_hash
+        assert x0._position_hash == y0._position_hash
+        assert x0._position_hash != z0_0._position_hash
 
-        assert x1.position_hash == y1.position_hash
-        assert x1.position_hash != z1_0.position_hash
-        assert x1.position_hash != z1_1.position_hash
+        assert x1._position_hash == y1._position_hash
+        assert x1._position_hash != z1_0._position_hash
+        assert x1._position_hash != z1_1._position_hash
 
-        assert x2.position_hash == y2.position_hash
-        assert x2.position_hash != z2_0.position_hash
-        assert x2.position_hash != z2_1.position_hash
+        assert x2._position_hash == y2._position_hash
+        assert x2._position_hash != z2_0._position_hash
+        assert x2._position_hash != z2_1._position_hash
 
     def test_get_item(self):
         with Flow():
@@ -425,16 +425,16 @@ class TestPositionHash:
                 y1 = t("0")(inputs[0])
                 z1 = t("0")(inputs[1])
 
-        assert x0.position_hash == y0.position_hash
-        assert x0.position_hash != z0.position_hash
+        assert x0._position_hash == y0._position_hash
+        assert x0._position_hash != z0._position_hash
 
-        assert x1.position_hash == y1.position_hash
-        assert x1.position_hash != z1.position_hash
+        assert x1._position_hash == y1._position_hash
+        assert x1._position_hash != z1._position_hash
 
-        assert inputs["1"].position_hash != inputs[1].position_hash
-        assert inputs[1].position_hash != inputs[1.0].position_hash
-        assert inputs[1][1].position_hash != inputs[1][0].position_hash
-        assert inputs[1][1].position_hash != inputs[0][1].position_hash
+        assert inputs["1"]._position_hash != inputs[1]._position_hash
+        assert inputs[1]._position_hash != inputs[1.0]._position_hash
+        assert inputs[1][1]._position_hash != inputs[1][0]._position_hash
+        assert inputs[1][1]._position_hash != inputs[0][1]._position_hash
 
 
 class TestFlow:
@@ -465,25 +465,25 @@ class TestStage:
                 t11 = t("11")(t00_1)
                 t00_s1 = t("00")(0)
 
-        assert s0.get_task(t00_0.name, 0) == s0[t00_0.name, 0] == t00_0
-        assert s0.get_task(t00_1.name, 1) == s0[t00_0.name, 1] == t00_1
+        assert s0.get_task(t00_0._name, 0) == s0[t00_0._name, 0] == t00_0
+        assert s0.get_task(t00_1._name, 1) == s0[t00_0._name, 1] == t00_1
 
-        assert s1.get_task(t10.name) == s1[t10.name] == t10
-        assert s1.get_task(t10.name, 0) == s1[t10.name, 0] == t10
-        assert s1.get_task(t11.name) == t11
-        assert s1.get_task(t11.name, 0) == t11
-        assert s1.get_task(t00_s1.name) == t00_s1
-        assert s1.get_task(t00_s1.name, 0) == t00_s1
+        assert s1.get_task(t10._name) == s1[t10._name] == t10
+        assert s1.get_task(t10._name, 0) == s1[t10._name, 0] == t10
+        assert s1.get_task(t11._name) == t11
+        assert s1.get_task(t11._name, 0) == t11
+        assert s1.get_task(t00_s1._name) == t00_s1
+        assert s1.get_task(t00_s1._name, 0) == t00_s1
 
         with pytest.raises(LookupError):
             # Task doesn't exist
             s0.get_task("foo")
         with pytest.raises(ValueError):
             # Missing index
-            s0.get_task(t00_0.name)
+            s0.get_task(t00_0._name)
         with pytest.raises(IndexError):
             # Out of bounds
-            s0.get_task(t00_0.name, 2)
+            s0.get_task(t00_0._name, 2)
 
 
 def test_task_nout():
@@ -510,11 +510,11 @@ def test_task_getitem():
         with Stage("stage"):
             task = t("task")()
 
-    assert task.resolve_value((1, 2)) == (1, 2)
-    assert task[0].resolve_value((1, 2)) == 1
-    assert task[1].resolve_value((1, 2)) == 2
-    assert task[1][0].resolve_value(((1, 2), (3, 4))) == 3
-    assert task["x"][1:3].resolve_value({"x": [1, 2, 3, 4]}) == [2, 3]
+    assert task._resolve_value((1, 2)) == (1, 2)
+    assert task[0]._resolve_value((1, 2)) == 1
+    assert task[1]._resolve_value((1, 2)) == 2
+    assert task[1][0]._resolve_value(((1, 2), (3, 4))) == 3
+    assert task["x"][1:3]._resolve_value({"x": [1, 2, 3, 4]}) == [2, 3]
 
 
 def test_task_outside_flow():

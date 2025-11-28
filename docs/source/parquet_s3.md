@@ -91,7 +91,7 @@ instances:
     kroki_url: "https://kroki.io"
 
     table_store:
-      class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
+      class: "pydiverse.pipedag.backend.table.ParquetTableStore"
       args:
         # This is the main location where the ParquetTableStore will store tables.
         parquet_base_path: "s3://pipedag-test-bucket/table_store/"
@@ -106,7 +106,7 @@ instances:
         print_materialize: true
         print_sql: true
 
-      metadata_store:
+      metadata_table_store:
         # Postgres database can be used to synchronize a pipeline instance between multiple team members even though
         # duckdb (basis for ParquetTableStore) does not support this. This also enables the use of the
         # DatabaseLockManager
@@ -125,6 +125,7 @@ instances:
     stage_commit_technique: READ_VIEWS
 
     lock_manager:
+      # the DatabaseLockManager uses the metadata_table_store for locking (here: the Postgres DB)
       class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
 
     blob_store:
@@ -139,7 +140,7 @@ instances:
 The most important change to relational database configurations is:
 ```yaml
     table_store:
-      class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
+      class: "pydiverse.pipedag.backend.table.ParquetTableStore"
 ```
 
 The ParquetTableStore is based on the SQLTableStore for duckdb, so you still need to give
@@ -156,7 +157,7 @@ However, configuring a non-AWS S3 endpoint URL (like MinIO) is done differently 
 Thus, ParquetTableStore offers additional parameters for configuring this and routes them to all those packages:
 ```yaml
     table_store:
-      class: "pydiverse.pipedag.backend.table.parquet.ParquetTableStore"
+      class: "pydiverse.pipedag.backend.table.ParquetTableStore"
       table_store_connection: parquet_duckdb
       args:
         parquet_base_path: "s3://pipedag-test-bucket/table_store/"
@@ -178,4 +179,5 @@ When using `input_type` `pl.DataFrame/pl.LazyFrame/pd.DataFrame`, the parquet fi
 written directly and not via duckdb.
 
 Currently, there is only one file used per table. This might change in the future by using partitioning
-features of polars and duckdb.
+features of polars and duckdb. If you partition yourself, you can use a task that returns a :class:`View`
+in order to assemble multiple parquet files as one logical table for a consuming task.

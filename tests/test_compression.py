@@ -11,6 +11,7 @@ from pydiverse.pipedag.backend.table.sql.dialects.ibm_db2 import (
 from pydiverse.pipedag.backend.table.sql.dialects.mssql import (
     MSSqlTableStore,
 )
+from pydiverse.pipedag.context.context import CacheValidationMode
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import (
@@ -18,6 +19,7 @@ from tests.fixtures.instances import (
     skip_instances,
     with_instances,
 )
+from tests.util import swallowing_raises
 from tests.util import tasks_library as m
 
 pytestmark = [with_instances(DATABASE_INSTANCES)]
@@ -57,12 +59,17 @@ def test_compression(task, stage_materialization_details):
 
             m.assert_table_equal(x, x)
 
-    for _ in range(3):
-        if not isinstance(store, (MSSqlTableStore, IBMDB2TableStore)) and task != m.simple_dataframe_uncompressed:
-            with pytest.raises(
+    for i in range(3):
+        # The materialization details of this test are only supported for IBM DB2.
+        # All mssql instances are configured strict_materialization_details=False and thus also don't throw.
+        if not isinstance(store, (MSSqlTableStore, IBMDB2TableStore)) and stage_materialization_details is not None:
+            with swallowing_raises(
                 ValueError,
                 match="To silence this exception set strict_materialization_details=False",
             ):
-                assert f.run().successful
+                mode = CacheValidationMode.FORCE_CACHE_INVALID if i == 0 else CacheValidationMode.NORMAL
+                assert f.run(cache_validation_mode=mode).successful
         else:
-            assert f.run().successful
+            mode = CacheValidationMode.FORCE_CACHE_INVALID if i == 0 else CacheValidationMode.NORMAL
+            with ConfigContext.get().evolve(swallow_exceptions=True):
+                assert f.run(cache_validation_mode=mode).successful

@@ -50,6 +50,7 @@ DATABASE_INSTANCES = (
     "parquet_backend",
     "parquet_s3_backend",
     "parquet_s3_backend_db2",
+    # "snowflake",  # too slow for all tests
 )
 
 ORCHESTRATION_INSTANCES = (

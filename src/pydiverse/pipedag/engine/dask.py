@@ -1,8 +1,6 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-import sys
-import warnings
 
 import structlog
 
@@ -13,12 +11,7 @@ from pydiverse.pipedag.core import Result, Subflow, Task
 from pydiverse.pipedag.engine.base import (
     OrchestrationEngine,
 )
-
-try:
-    import dask
-except ImportError as e:
-    warnings.warn(str(e), ImportWarning)
-    dask = None
+from pydiverse.pipedag.optional_dependency.dask import dask
 
 
 @requires(dask, ImportError("DaskEngine requires 'dask' to be installed."))
@@ -68,23 +61,23 @@ class DaskEngine(OrchestrationEngine):
                 _ = parent_futures
 
                 # TODO: Don't just assume a logger factory...
-                structlog_config["logger_factory"] = structlog.PrintLoggerFactory(sys.stderr)
+                structlog_config["logger_factory"] = structlog.stdlib.LoggerFactory()
                 structlog.configure(**structlog_config)
 
                 with structlog.contextvars.bound_contextvars(**structlog_context):
-                    return t.run(**kwargs)
+                    return t._do_run(**kwargs)
 
-            run.__name__ = t.name
+            run.__name__ = t._name
             return dask.delayed(run, pure=False)
 
         for task in flow.get_tasks():
             task_inputs = {
                 **{
                     in_id: results[in_t]
-                    for in_id, in_t in task.input_tasks.items()
+                    for in_id, in_t in task._input_tasks.items()
                     if in_t in results and in_t not in inputs
                 },
-                **{in_id: Table(inputs[in_t]) for in_id, in_t in task.input_tasks.items() if in_t in inputs},
+                **{in_id: Table(inputs[in_t]) for in_id, in_t in task._input_tasks.items() if in_t in inputs},
             }
 
             results[task] = bind_run(task)(

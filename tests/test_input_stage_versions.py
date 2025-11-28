@@ -16,6 +16,8 @@ from pydiverse.pipedag import (
     materialize,
 )
 from pydiverse.pipedag.context import StageLockContext
+from pydiverse.pipedag.context.context import CacheValidationMode
+from pydiverse.pipedag.optional_dependency.sqlalchemy import Alias
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import (
@@ -26,13 +28,7 @@ from tests.fixtures.instances import (
 from tests.util import swallowing_raises
 from tests.util import tasks_library as m
 
-try:
-    from sqlalchemy import Alias
-except ImportError:
-    # For compatibility with sqlalchemy < 2.0
-    from sqlalchemy.sql import alias as Alias
-
-pytestmark = [with_instances(ALL_INSTANCES, ORCHESTRATION_INSTANCES)]
+pytestmark = [with_instances(tuple(set(ALL_INSTANCES) - {"snowflake"}), ORCHESTRATION_INSTANCES)]
 
 
 def test_input_versions_literals():
@@ -174,14 +170,15 @@ def test_input_versions_blob():
         return f
 
     with StageLockContext():
-        f = get_flow()
-        assert f.run().successful
-        run += 1
-        f = get_flow()
-        assert f.run().successful
-        run += 1
-        val = -5
-        f = get_flow()
+        with ConfigContext.get().evolve(swallow_exceptions=True):
+            f = get_flow()
+            assert f.run().successful
+            run += 1
+            f = get_flow()
+            assert f.run().successful
+            run += 1
+            val = -5
+            f = get_flow()
         with swallowing_raises(AssertionError, match=r"expected to fail on third call"):
             f.run()
 
@@ -240,11 +237,21 @@ def test_input_versions_other_instance_table(per_user):
                 _ = m.noop(res)
         return f
 
+    def run_other_flow():
+        with Flow("other_flow") as f:
+            with Stage("stage"):
+                x = pd_dataframe({"a": [-5, 12], "c": [1, 2]})
+                _ = x
+        assert f.run().successful
+
     cfg = ConfigContext.get()
-    cfg2 = PipedagConfig.default.get("mssql_pytsql", per_user=per_user)
+    cfg2 = PipedagConfig.default.get("mssql_special_tests", per_user=per_user)
+
+    with cfg2:
+        run_other_flow()
 
     with StageLockContext():
-        f = get_flow(cfg2)
+        f = get_flow(other_cfg=cfg2)
         assert cfg.store.table_store.engine.url != cfg2.store.table_store.engine.url
         assert f.run(config=cfg).successful
         assert (
@@ -269,8 +276,9 @@ def test_input_versions_other_instance_table(per_user):
         run += 1
         val = -5
         f = get_flow(cfg)
-        with swallowing_raises(AssertionError, match=r"\[left\]:  \[-5\]\n\[right\]: \[12\]"):
-            f.run(config=cfg2)
+        with cfg2:
+            with swallowing_raises(AssertionError, match=r"\[left\]:  \[-5\]\n\[right\]: \[12\]"):
+                f.run()
         assert (
             pd.read_sql_table(
                 "x",
@@ -279,6 +287,72 @@ def test_input_versions_other_instance_table(per_user):
             ).iloc[0, 0]
             == val
         )
+
+
+@with_instances("mssql")  # mssql can do cross-database queries
+@pytest.mark.parametrize("per_user", [True, False])
+def test_input_versions_other_instance_table2(per_user):
+    val = 12
+
+    @input_stage_versions(input_type=sa.Table, lazy=True, lock_source_stages=False)
+    def join_across_stage_versions(
+        tbls: dict[str, Alias],
+        other_tbls: dict[str, Alias],
+        other_cfg: ConfigContext,
+    ):
+        # make a cross-database query to combine tables of both instances
+        other_database = other_cfg.store.table_store.engine.url.database
+        assert ConfigContext.get().store.table_store.engine.url.database != other_database
+        other_tbls["x"].original.schema = f"{other_database}.{other_tbls['x'].original.schema}"
+        return Table(
+            sa.select(tbls["x"].outerjoin(other_tbls["x"], tbls["x"].c.a == other_tbls["x"].c.a)),
+            name="res",
+        )
+
+    @materialize(version="1.1")
+    def pd_dataframe(data: dict[str, list]):
+        return Table(pd.DataFrame(data), name="x")
+
+    def get_flow(other_cfg: ConfigContext):
+        with Flow("flow") as f:
+            with Stage("stage"):
+                x = pd_dataframe({"a": [val], "b": [24]})
+                _ = x  # this is implicitly read by join_across_stage_versions
+                res = join_across_stage_versions(other_cfg)
+                _ = m.noop(res)
+        return f
+
+    def run_other_flow():
+        with Flow("other_flow") as f:
+            with Stage("stage"):
+                x = pd_dataframe({"a": [-5, 12], "c": [1, 2]})
+                _ = x
+        assert f.run().successful
+
+    cfg = ConfigContext.get()
+    cfg2 = PipedagConfig.default.get("mssql_special_tests", per_user=per_user)
+
+    with cfg2:
+        run_other_flow()
+
+    with StageLockContext():
+        f = get_flow(other_cfg=cfg2)
+        assert cfg.store.table_store.engine.url != cfg2.store.table_store.engine.url
+        result = f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+        assert result.successful
+        assert result.get(f["stage"]["pd_dataframe"], as_type=pd.DataFrame).iloc[0, 0] == val
+        assert result.get(f["stage"]["noop"], as_type=pd.DataFrame)["c"].iloc[0] == 2
+        f = get_flow(other_cfg=cfg2)
+        result = f.run()
+        assert result.successful
+        assert result.get(f["stage"]["pd_dataframe"], as_type=pd.DataFrame).iloc[0, 0] == val
+        assert result.get(f["stage"]["noop"], as_type=pd.DataFrame)["c"].iloc[0] == 2
+        val = -5
+        f = get_flow(other_cfg=cfg2)
+        result = f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+        assert result.successful
+        assert result.get(f["stage"]["pd_dataframe"], as_type=pd.DataFrame).iloc[0, 0] == val
+        assert result.get(f["stage"]["noop"], as_type=pd.DataFrame)["c"].iloc[0] == 1
 
 
 @with_instances("postgres")

@@ -3,10 +3,10 @@
 import json
 import os
 import shutil
-import types
 from typing import Any
 
 import pandas as pd
+import polars as pl
 import sqlalchemy as sa
 from packaging.version import Version
 from upath import UPath
@@ -16,6 +16,7 @@ from pydiverse.pipedag import ConfigContext, Stage, Table
 from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.store import BaseTableCache
 from pydiverse.pipedag.materialize.table_hook_base import CanMatResult, CanRetResult, TableHook
+from pydiverse.pipedag.optional_dependency.transform import pdt, pdt_new, pdt_old
 from pydiverse.pipedag.util import normalize_name
 from pydiverse.pipedag.util.path import is_file_uri
 
@@ -73,9 +74,12 @@ class ParquetTableCache(BaseTableCache):
             "cache_key": table.cache_key,
         }
         metadata_path = self.get_table_path(table, ".meta.json")
-        metadata_path.write_text(json.dumps(metadata))
+        metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
     def _has_table(self, table: Table, as_type: type) -> bool:
+        if table.stage is None:
+            # metadata_path does not exist for external table references without stage
+            return False
         metadata_path = self.get_table_path(table, ".meta.json")
         if not metadata_path.exists():
             return False
@@ -128,6 +132,12 @@ class PandasTableHook(TableHook[ParquetTableCache]):
         as_type: type[pd.DataFrame],
         limit: int | None = None,
     ) -> pd.DataFrame:
+        # From the viewpoint of the parquet table cache, a view is no different from a table.
+        # It will cache the actual dataframe as parquet file in case a dataframe based
+        # task reads it. A view can never end up in the output cache.
+        # Attention: The cache is the only component which uses the name of the view. So problems
+        # of name collision might occur only when activating the local table cache.
+
         # Determine dtype backend for pandas >= 2.0
         # [this is similar to the PandasTableHook found in SQLTableStore]
 
@@ -174,12 +184,6 @@ class PandasTableHook(TableHook[ParquetTableCache]):
             return pd.read_parquet(path, **pandas_kwargs)
 
 
-try:
-    import polars as pl
-except ImportError:
-    pl = None
-
-
 @ParquetTableCache.register_table(pl)
 class PolarsTableHook(sql_hooks.PolarsTableHook):
     @classmethod
@@ -205,7 +209,7 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
 
         if isinstance(df, pl.LazyFrame):
             df = df.collect()
-        df.write_parquet(path)
+        df.write_parquet(str(path))
         # intentionally don't apply annotation checks because they might also be done
         # within polars table hook of actual table store
 
@@ -221,40 +225,10 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
     ) -> pl.DataFrame:
         _ = as_type
         path = store.get_table_path(table, ".parquet")
-        df = pl.read_parquet(path, n_rows=limit)
+        df = pl.read_parquet(str(path), n_rows=limit)
         if issubclass(as_type, pl.LazyFrame):
             return df.lazy()
         return df
-
-
-try:
-    import pydiverse.transform as pdt
-
-    try:
-        from pydiverse.transform.eager import PandasTableImpl
-
-        _ = PandasTableImpl
-
-        pdt_old = pdt
-        pdt_new = None
-    except ImportError:
-        try:
-            # detect if 0.2 or >0.2 is active
-            # this import would only work in <=0.2
-            from pydiverse.transform.extended import Polars
-
-            # ensures a "used" state for the import, preventing black from deleting it
-            _ = Polars
-
-            pdt_old = None
-            pdt_new = pdt
-        except ImportError:
-            raise NotImplementedError("pydiverse.transform 0.2.0 - 0.2.2 isn't supported") from None
-except ImportError:
-    pdt = types.ModuleType("pydiverse.transform")
-    pdt.Table = None
-    pdt_old = None
-    pdt_new = None
 
 
 @ParquetTableCache.register_table(pdt_old)
@@ -303,6 +277,12 @@ class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
         as_type: type,
         limit: int | None = None,
     ):
+        # From the viewpoint of the parquet table cache, a view is no different from a table.
+        # It will materialize the actual dataframe as parquet file in case a dataframe based
+        # task reads it. A view can never end up in the output cache.
+        # Attention: The cache is the only component which uses the name of the view. So problems
+        # of name collision might occur only when activating the local table cache.
+
         from pydiverse.transform.eager import PandasTableImpl
 
         if as_type is PandasTableImpl:
@@ -374,6 +354,12 @@ class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
         as_type: type,
         limit: int | None = None,
     ):
+        # From the viewpoint of the parquet table cache, a view is no different from a table.
+        # It will materialize the actual dataframe as parquet file in case a dataframe based
+        # task reads it. A view can never end up in the output cache.
+        # Attention: The cache is the only component which uses the name of the view. So problems
+        # of name collision might occur only when activating the local table cache.
+
         from pydiverse.transform.extended import Polars
 
         if as_type is Polars:

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 from typing import Any
 
+import polars as pl
 import pytest
 from pandas.core.dtypes.base import ExtensionDtype
 
@@ -27,13 +28,8 @@ from tests.util.tasks_library import assert_table_equal
 
 pytestmark = [
     pytest.mark.polars,
-    with_instances(DATABASE_INSTANCES),
+    with_instances(tuple(list(DATABASE_INSTANCES) + ["snowflake"])),
 ]
-
-try:
-    import polars as pl
-except ImportError:
-    pl = None
 
 
 def test_table_store():
@@ -100,6 +96,7 @@ def test_table_store():
     assert f.run().successful
 
 
+@skip_instances("snowflake")  # speedup tests 3min
 def test_auto_version_1(mocker):
     should_swap = True
     value_to_add = 1

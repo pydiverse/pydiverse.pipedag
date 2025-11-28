@@ -4,8 +4,13 @@
 import os
 import shutil
 import uuid
+from collections.abc import Iterable
 from typing import Any, Literal
 
+import duckdb
+import fsspec
+import pandas as pd
+import polars as pl
 import sqlalchemy as sa
 from upath import UPath
 
@@ -19,6 +24,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
 )
 from pydiverse.pipedag.backend.table.sql.dialects.duckdb import DuckDBTableStore
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
+from pydiverse.pipedag.container import SortOrder, View
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.materialize.store import BaseTableStore
 from pydiverse.pipedag.materialize.table_hook_base import (
@@ -27,27 +33,8 @@ from pydiverse.pipedag.materialize.table_hook_base import (
     CanRetResult,
     TableHook,
 )
+from pydiverse.pipedag.optional_dependency.sqlalchemy import Select, SqlText, TextClause
 from pydiverse.pipedag.util.path import is_file_uri
-
-try:
-    import pandas as pd
-except ImportError:
-    pd = None
-
-try:
-    import duckdb
-except ImportError:
-    duckdb = None
-
-try:
-    from sqlalchemy import Select, TextClause
-    from sqlalchemy import Text as SqlText
-except ImportError:
-    # For compatibility with sqlalchemy < 2.0
-    from sqlalchemy.sql.expression import TextClause
-    from sqlalchemy.sql.selectable import Select
-
-    SqlText = TextClause  # this is what sa.text() returns
 
 
 class ParquetTableStore(DuckDBTableStore):
@@ -62,8 +49,8 @@ class ParquetTableStore(DuckDBTableStore):
 
     .. rubric:: Supported Tables
 
-    The `SQLTableStore` can materialize (that is, store task output)
-    and dematerialize (that is, retrieve task input) the following Table types:
+    The ParquetTableStore can materialize (store task output)
+    and dematerialize (retrieve task input) the following Table types:
 
     .. list-table::
        :widths: 30, 30, 30
@@ -75,10 +62,8 @@ class ParquetTableStore(DuckDBTableStore):
          - Dematerialization
 
        * - SQLAlchemy
-         - | :py:class:`sa.sql.expression.Selectable
-                        <sqlalchemy.sql.expression.Selectable>`
-           | :py:class:`sa.sql.expression.TextClause
-                        <sqlalchemy.sql.expression.TextClause>`
+         - | :py:class:`sa.sql.expression.Selectable <sqlalchemy.sql.expression.Selectable>`
+           | :py:class:`sa.sql.expression.TextClause <sqlalchemy.sql.expression.TextClause>`
          - :py:class:`sa.Table <sqlalchemy.schema.Table>`
 
        * - Pandas
@@ -101,11 +86,15 @@ class ParquetTableStore(DuckDBTableStore):
 
        * - pydiverse.transform
          - ``pdt.Table``
-         - | ``pdt.eager.PandasTableImpl``
-           | ``pdt.lazy.SQLTableImpl``
+         - | ``pdt.Polars``
+           | ``pdt.SqlAlchemy``
 
        * - pydiverse.pipedag table reference
          - :py:class:`~.ExternalTableReference` (no materialization)
+         - Can be read with all dematerialization methods above
+
+       * - pydiverse.pipedag view
+         - :py:class:`~.View` (view with support for src union, column renaming, and sorting)
          - Can be read with all dematerialization methods above
 
     :param url:
@@ -133,22 +122,18 @@ class ParquetTableStore(DuckDBTableStore):
         before trying to open a connection to it.
 
     :param schema_prefix:
-        A prefix that gets placed in front of all schema names created by pipedag.
-
+        Prefix placed in front of all schema names created by pipedag.
     :param schema_suffix:
-        A suffix that gets placed behind of all schema names created by pipedag.
-
+        Suffix placed behind all schema names created by pipedag.
     :param avoid_drop_create_schema:
         If ``True``, no ``CREATE SCHEMA`` or ``DROP SCHEMA`` statements get issued.
         This is mostly relevant for databases that support automatic schema
         creation like IBM DB2.
 
     :param print_materialize:
-        If ``True``, all tables that get materialized get logged.
-
+        If ``True``, log every table materialization.
     :param print_sql:
-        If ``True``, all executed SQL statements get logged.
-
+        If ``True``, log every executed SQL statement.
     :param no_db_locking:
         Speed up database by telling it we will not rely on it's locking mechanisms.
         Currently not implemented.
@@ -163,8 +148,7 @@ class ParquetTableStore(DuckDBTableStore):
 
     :param materialization_details:
         A dictionary with each entry describing a tag for materialization details of
-        the table store. See subclasses of :py:class:`BaseMaterializationDetails
-         <pydiverse.pipedag.materialize.details.BaseMaterializationDetails>`
+        the table store. See subclasses of :py:class:`BaseMaterializationDetails`
         for details.
     :param default_materialization_details:
         The materialization_details that will be used if materialization_details
@@ -182,10 +166,14 @@ class ParquetTableStore(DuckDBTableStore):
         The number of seconds to wait before giving up on getting a connection from
         the pool. This may be relevant in case the connection pool is saturated
         with concurrent operations each working with one or more database connections.
+    :param force_transaction_suffix:
+        This option is for use without proper pipedag flow. It disables lookup in stage
+        metadata table for determining correct transaction slot suffix.
+        (default: None)
     :param parquet_base_bath:
         This is an fsspec compatible path to either a directory or an S3 bucket key
-        prefix. Examples are '/tmp/pipedag/parquet/' or 's3://pipedag-test-bucket/table_store/'.
-        `instance_id` will automatically be appended to parquet_base_bath.
+        prefix. Examples are ``/tmp/pipedag/parquet/`` or ``s3://pipedag-test-bucket/table_store/``.
+        ``instance_id`` will automatically be appended to parquet_base_bath.
     :param s3_endpoint_url:
         When using a non-standard S3 endpoint (like minio), this can be used to specify the URL.
         Unfortunately, the AWS_ENDPOINT_URL environment variable is not automatically picked up by duckdb.
@@ -195,6 +183,9 @@ class ParquetTableStore(DuckDBTableStore):
     :param s3_url_style:
         Specify URL style when connecting to S3 endpoint. Minio for example requires s3_url_style='path'.
         (default: None)
+    :param allow_overwrite:
+        Allow overwriting tables with store_table.
+        (default: False)
     """
 
     _dialect_name = DISABLE_DIALECT_REGISTRATION
@@ -223,15 +214,18 @@ class ParquetTableStore(DuckDBTableStore):
         max_concurrent_copy_operations: int = 5,
         sqlalchemy_pool_size: int = 12,
         sqlalchemy_pool_timeout: int = 300,
+        force_transaction_suffix: str | None = None,
         s3_endpoint_url: str | None = None,
         s3_url_style: str | None = None,
         s3_region: str | None = None,
+        allow_overwrite: bool = False,
     ):
         # must be initialized before super().__init__() call because self._create_engine() is called there
         self.parquet_base_path = parquet_base_path
         self.s3_endpoint_url = s3_endpoint_url
         self.s3_url_style = s3_url_style
         self.s3_region = s3_region
+        self.allow_overwrite = allow_overwrite
         super().__init__(
             engine_url,
             create_database_if_not_exists=create_database_if_not_exists,
@@ -247,6 +241,7 @@ class ParquetTableStore(DuckDBTableStore):
             max_concurrent_copy_operations=max_concurrent_copy_operations,
             sqlalchemy_pool_size=sqlalchemy_pool_size,
             sqlalchemy_pool_timeout=sqlalchemy_pool_timeout,
+            force_transaction_suffix=force_transaction_suffix,
         )
 
         # Add parquet specific metadata table for user id.
@@ -344,14 +339,10 @@ class ParquetTableStore(DuckDBTableStore):
                 return con.execute(statement)
 
         with engine.connect() as con:
-            # Enable HTTPFS extension
-            execute(con, "INSTALL httpfs;")
-            execute(con, "LOAD httpfs;")
-
             if self.parquet_base_path.protocol == "s3":
                 # Unfortunately it is hard to configure S3 URL endpoint consistently for fsspec, duckdb, and polars.
-                # Thus, we take it as parameter to ParquetTableStore and pass it to duckdb and fsspec. Fsspec in turn
-                # is passed on to polars. This is only needed for non-standard S3 endpoints like minio.
+                # Thus, we take it as parameter to ParquetTableStore and pass it to fsspec. Fsspec in turn
+                # is passed on to duckdb and polars. This is only needed for non-standard S3 endpoints like minio.
                 from fsspec.config import conf  # fsspec’s global config
 
                 if "s3" not in conf and self.s3_endpoint_url is not None:
@@ -375,33 +366,13 @@ class ParquetTableStore(DuckDBTableStore):
                         # MinIO needs path-style
                         conf["s3"]["config_kwargs"]["s3"] = dict(addressing_style=self.s3_url_style)
 
-                s3_details = ""
-                if self.s3_endpoint_url is not None:
-                    from urllib3.util import parse_url
-
-                    url = parse_url(self.s3_endpoint_url)
-                    if url.scheme not in ["https", "http"] or len(self.s3_endpoint_url) < 7:
-                        raise AttributeError("s3_endpoint_url must start with http:// or https://")
-                    s3_details += f", ENDPOINT '{self.s3_endpoint_url[len(url.scheme) + 3 :]}'"
-                    s3_details += f", USE_SSL {'TRUE' if url.scheme == 'https' else 'FALSE'}"
-                if self.s3_url_style is not None:
-                    s3_details += f", URL_STYLE '{self.s3_url_style}'"
-                if self.s3_region is not None:
-                    s3_details += f", REGION '{self.s3_region}'"
-                execute(
-                    con,
-                    f"""
-                    CREATE OR REPLACE SECRET secret (
-                        TYPE s3,
-                        PROVIDER credential_chain,
-                        CHAIN 'env;config'
-                        {s3_details}
-                    );
-                """,
-                )
-
             if sa.__version__ >= "2.0.0":
                 con.commit()
+
+        # This is needed for gcsfs. For s3fs, it would also be possible to
+        # go with httpfs (https://duckdb.org/docs/stable/core_extensions/httpfs/s3api.html).
+        fs = fsspec.filesystem(self.parquet_base_path.protocol)
+        engine.raw_connection().register_filesystem(fs)
 
         return engine
 
@@ -778,18 +749,28 @@ class ParquetTableStore(DuckDBTableStore):
         return path
 
     def get_stage_path(self, stage: Stage) -> UPath:
-        store = ConfigContext.get().store.table_store
+        try:
+            cfg = ConfigContext.get()
+        except LookupError:
+            # schema-prefix/suffix not available if no ConfigContext active
+            return self.get_parquet_schema_path(Schema(stage.current_name))
+        store = cfg.store.table_store
         return self.get_parquet_schema_path(store.get_schema(stage.current_name))
 
     def get_table_path(
         self,
         table: Table,
         file_extension: str = ".parquet",
-        lookup_schema: bool = False,
     ) -> UPath:
-        store = ConfigContext.get().store.table_store
         schema_name = table.stage.current_name
-        return self.get_table_schema_path(table.name, store.get_schema(schema_name), file_extension)
+        try:
+            cfg = ConfigContext.get()
+            store = cfg.store.table_store
+            schema = store.get_schema(schema_name)
+        except LookupError:
+            # schema-prefix/suffix not available if no ConfigContext active
+            schema = Schema(schema_name)
+        return self.get_table_schema_path(table.name, schema, file_extension)
 
     def get_table_schema_path(self, table_name: str, schema: Schema, file_extension: str = ".parquet") -> UPath:
         # Parquet files might be stored in other transaction schema in case of cache
@@ -953,7 +934,9 @@ class PandasTableHook(TableHook[ParquetTableStore]):
             )
 
         df = table.obj
-        df.to_parquet(file_path, index=False, storage_options=store.get_storage_options("fsspec", file_path.protocol))
+        df.to_parquet(
+            str(file_path), index=False, storage_options=store.get_storage_options("fsspec", file_path.protocol)
+        )
         store.execute(CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path)))
         store.metadata_track_view(table.name, schema.get(), file_path.as_uri(), "parquet")
 
@@ -966,37 +949,67 @@ class PandasTableHook(TableHook[ParquetTableStore]):
         as_type: type,
         limit: int | None = None,
     ):
-        path = store.get_table_path(table, lookup_schema=True)
+        # view resolution in input table is implemented here using pyarrow
+
+        path = store.get_table_path(table)
         import pyarrow.dataset as ds
-        import pyarrow.fs
 
-        if path.protocol == "s3" and (store.s3_endpoint_url or store.s3_region):
-            # Setting endpoint URL is different for fsspec, pyarrow, duckdb, polars, and pandas.
-            # ParquetTableStore allows setting endpoint_url in pipedag.yaml and copies it to fsspec and duckdb.
-            # Here, we copy it from fsspec to pyarrow.
-            pyarrow_path = path.path
-            # unfortunately, force_virtual_addressing=store.s3_url_style=="path" does not work for
-            # pyarrow.parquet.read_schema(pyarrow_path, filesystem=pyarrow_fs)
-            pyarrow_fs = pyarrow.fs.S3FileSystem(endpoint_override=store.s3_endpoint_url, region=store.s3_region)
+        pyarrow_path, pyarrow_fs = cls.get_pyarrow_path(path, store)
+        first_pyarrow_path = pyarrow_path
+
+        if table.view:
+            view = table.view
+            assert view.assert_normalized
+            if isinstance(view.src, Iterable):
+                path = [store.get_table_path(tbl) for tbl in view.src]
+                pyarrow_path = [cls.get_pyarrow_path(p, store)[0] for p in path]
+                first_pyarrow_path = pyarrow_path[0]
+            else:
+                path = store.get_table_path(view.src)
+                pyarrow_path, _ = cls.get_pyarrow_path(path, store)
+                first_pyarrow_path = pyarrow_path
+
+            ads = ds.dataset(pyarrow_path, filesystem=pyarrow_fs)
+            if view.sort_by is not None:
+                # Unfortunately this loads the full table with all columns in memory.
+                # Calling PolarsTableHook might be more efficient if a dataset is large and many
+                # columns are dropped in view.columns.
+                sort_cols = view.sort_by if isinstance(view.sort_by, Iterable) else [view.sort_by]
+                ads = ads.sort_by(
+                    [
+                        (sort_col.col, "descending" if sort_col.order == SortOrder.DESC else "ascending")
+                        for sort_col in sort_cols
+                    ]
+                )
+            import pyarrow.compute as pc
+
+            ads = ads.scanner(columns={k: pc.field(v) for k, v in view.columns.items()} if view.columns else None)
+            if view.limit is not None:
+                ads = ads.head(view.limit)
+            else:
+                ads = ads.to_table()  # whole table (needed for to_pandas below)
+            df = ads.to_pandas()
+            schema_names, schema_types = cls.get_pyarrow_schema(first_pyarrow_path, pyarrow_fs)
+            if view.columns:
+                # apply column transformation to pyarrow schema
+                schema_in = {k: v for k, v in zip(schema_names, schema_types, strict=True)}
+                schema_out = {k: schema_in[v] for k, v in view.columns.items()}
+                schema_names = schema_out.keys()
+                schema_types = schema_out.values()
         else:
-            pyarrow_path = path
-            pyarrow_fs = None
-
-        if limit is not None:
-            df = ds.dataset(pyarrow_path, filesystem=pyarrow_fs).scanner().head(limit).to_pandas()
-        else:
-            df = pd.read_parquet(path, storage_options=store.get_storage_options("fsspec", path.protocol))
-        import pyarrow.parquet
-
-        schema = pyarrow.parquet.read_schema(pyarrow_path, filesystem=pyarrow_fs)
+            if limit is not None:
+                df = ds.dataset(pyarrow_path, filesystem=pyarrow_fs).scanner().head(limit).to_pandas()
+            else:
+                df = pd.read_parquet(str(path), storage_options=store.get_storage_options("fsspec", path.protocol))
+            schema_names, schema_types = cls.get_pyarrow_schema(first_pyarrow_path, pyarrow_fs)
         df = df.astype(
             {
                 col: "datetime64[s]"
-                for col, type_, dtype in zip(schema.names, schema.types, df.dtypes)
+                for col, type_, dtype in zip(schema_names, schema_types, df.dtypes, strict=True)
                 if type_ == "date32" and dtype == object  # noqa: E721
             }
         )
-        if isinstance(as_type, tuple) and len(as_type) == 2 and len(schema.names) > 0:
+        if isinstance(as_type, tuple) and len(as_type) == 2 and len(schema_names) > 0:
             if as_type[1] == "arrow" and not all(
                 hasattr(dtype, "storage") and dtype.storage == "pyarrow" for dtype in df.dtypes
             ):
@@ -1022,18 +1035,38 @@ class PandasTableHook(TableHook[ParquetTableStore]):
         return df
 
     @classmethod
+    def get_pyarrow_schema(cls, path: str, pyarrow_fs: fsspec.AbstractFileSystem) -> tuple[Any, Any]:
+        import pyarrow.parquet
+
+        # attention: with categorical columns, it might be necessary to fuse dictionaries of all parquet files
+        schema = pyarrow.parquet.read_schema(path, filesystem=pyarrow_fs)
+        schema_names, schema_types = schema.names, schema.types
+        return schema_names, schema_types
+
+    @staticmethod
+    def get_pyarrow_path(path: UPath, store: ParquetTableStore) -> tuple[str, fsspec.AbstractFileSystem]:
+        if path.protocol == "s3" and (store.s3_endpoint_url or store.s3_region):
+            # Setting endpoint URL is different for fsspec, pyarrow, duckdb, polars, and pandas.
+            # ParquetTableStore allows setting endpoint_url in pipedag.yaml and copies it to fsspec and duckdb.
+            # Here, we copy it from fsspec to pyarrow.
+            pyarrow_path = path.path
+            # unfortunately, force_virtual_addressing=store.s3_url_style=="path" does not work for
+            # pyarrow.parquet.read_schema(pyarrow_path, filesystem=pyarrow_fs)
+            import pyarrow.fs
+
+            pyarrow_fs = pyarrow.fs.S3FileSystem(endpoint_override=store.s3_endpoint_url, region=store.s3_region)
+        else:
+            pyarrow_path = path
+            pyarrow_fs = None
+        return pyarrow_path, pyarrow_fs
+
+    @classmethod
     def auto_table(cls, obj: pd.DataFrame):
         return sql_hooks.PandasTableHook.auto_table(obj)
 
     @classmethod
     def get_computation_tracer(cls):
         return sql_hooks.PandasTableHook.ComputationTracer()
-
-
-try:
-    import polars as pl
-except ImportError:
-    pl = None
 
 
 @ParquetTableStore.register_table(pl, duckdb)
@@ -1055,9 +1088,12 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
                     "Storing polars tables with custom storage options is not supported for polars < 1.3.0. "
                     f"Current version is {pl.__version__}: {options}"
                 )
-            df.write_parquet(file_path, storage_options=options)
+            # at some point polars supported UPath, but 1.33.1 does not
+            df.write_parquet(str(file_path), storage_options=options)
         else:
-            df.write_parquet(file_path)
+            df.write_parquet(str(file_path))
+        if store.allow_overwrite:
+            store.execute(DropView(table.name, schema, if_exists=True))
         store.execute(CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path)))
         store.metadata_track_view(table.name, schema.get(), file_path.as_uri(), "parquet")
 
@@ -1071,11 +1107,35 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
         limit: int | None = None,
     ) -> pl.DataFrame:
         _ = as_type
-        file_path = store.get_table_path(table)
-        df = pl.read_parquet(
-            file_path, n_rows=limit, storage_options=store.get_storage_options("polars", file_path.protocol)
-        )
-        return df
+        if table.view:
+            view = table.view
+            if isinstance(view.src, Iterable):
+                file_paths = [store.get_table_path(tbl) for tbl in view.src]
+                protocol = file_paths[0].protocol
+                file_paths = [str(path) for path in file_paths]
+            else:
+                file_paths = store.get_table_path(view.src)
+                protocol = file_paths.protocol
+                file_paths = str(file_paths)
+            lf = pl.scan_parquet(
+                file_paths, n_rows=limit, storage_options=store.get_storage_options("polars", protocol)
+            )
+            if view.sort_by is not None:
+                sort_cols = [c.col for c in view.sort_by]
+                sort_desc = [c.order == SortOrder.DESC for c in view.sort_by]
+                sort_nulls_last = [c.nulls_first == False for c in view.sort_by]  # noqa: E712
+                lf = lf.sort(sort_cols, descending=sort_desc, nulls_last=sort_nulls_last)
+            if view.columns is not None:
+                lf = lf.select(**view.columns)
+            if view.limit:
+                lf = lf.limit(view.limit)
+            return lf.collect()
+        else:
+            file_path = store.get_table_path(table)
+            df = pl.read_parquet(
+                str(file_path), n_rows=limit, storage_options=store.get_storage_options("polars", file_path.protocol)
+            )
+            return df
 
 
 @ParquetTableStore.register_table(pl)
@@ -1105,3 +1165,38 @@ class SQLAlchemyTableHook(sql_hooks.SQLAlchemyTableHook):
             ),
             CreateViewAsSelect(table_name, schema, store._read_parquet_query(file_path)),
         ]
+
+    @classmethod
+    def get_view_query(cls, view: View, store: ParquetTableStore):
+        """ParquetTableStore implements special version for src-only views."""
+        if view.columns is None and view.sort_by is None and view.limit is None:
+            if isinstance(view.src, Iterable):
+                try:
+                    from sqlalchemy.sql.base import ColumnCollection, ReadOnlyColumnCollection
+
+                    possible = True
+                except LookupError:
+                    possible = False
+
+                if possible:
+                    src_tables = list(view.src)
+                    files = [str(store.get_table_path(tbl)) for tbl in src_tables]
+                    assert len(src_tables) > 0
+                    tbl1 = SQLAlchemyTableHook.retrieve(
+                        store, src_tables[0], src_tables[0].stage.current_name, sa.Table
+                    )
+                    cols = tbl1.c  # this might be oversimplified for categorical columns
+                    file_refs = "['" + "','".join(files) + "']"
+                    base_from = sa.select(sa.text("*")).select_from(sa.text(f"read_parquet({file_refs})")).alias("sub")
+
+                    # reconstruct columns which were lost by select("*")
+                    def bind(c: sa.Column, expr):
+                        col = sa.Column(c.name, c.type)
+                        col.table = expr
+                        return col
+
+                    base_from.c = ReadOnlyColumnCollection(
+                        ColumnCollection([(c.name, bind(c, base_from)) for c in cols])
+                    )
+                    return base_from
+        return sql_hooks.get_view_query(view, store)

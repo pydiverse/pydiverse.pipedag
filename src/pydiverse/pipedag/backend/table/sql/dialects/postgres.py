@@ -7,6 +7,7 @@ from io import BytesIO, StringIO
 from typing import Any
 
 import pandas as pd
+import polars as pl
 import sqlalchemy as sa
 
 from pydiverse.common import Dtype
@@ -22,16 +23,6 @@ from pydiverse.pipedag.materialize.details import (
     BaseMaterializationDetails,
     resolve_materialization_details_label,
 )
-
-try:
-    import polars as pl
-except ImportError:
-    pl = None
-
-try:
-    import pyarrow as pa
-except ImportError:
-    pa = None
 
 
 @dataclass(frozen=True)
@@ -118,12 +109,10 @@ class PostgresTableStore(SQLTableStore):
             self.execute(stmt, conn=conn)
         return [stmt]
 
-    def check_materialization_details_supported(self, label: str | None) -> None:
-        _ = label
-        return
-
-    def _set_materialization_details(self, materialization_details: dict[str, dict[str | list[str]]] | None) -> None:
-        self.materialization_details = PostgresMaterializationDetails.create_materialization_details_dict(
+    def _create_materialization_details(
+        self, materialization_details: dict[str, dict[str | list[str]]] | None
+    ) -> BaseMaterializationDetails:
+        return PostgresMaterializationDetails.create_materialization_details_dict(
             materialization_details,
             self.strict_materialization_details,
             self.default_materialization_details,

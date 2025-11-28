@@ -55,9 +55,9 @@ def materialize_table(
     try:
         task_context = TaskContext.get()
         task = task_context.task  # type: ignore
-        task_name = task.name
+        task_name = task._name
 
-        table.stage = task.stage
+        table.stage = task._stage
         if schema is None:
             schema = table_store.get_schema(table.stage.transaction_name)
     except LookupError:

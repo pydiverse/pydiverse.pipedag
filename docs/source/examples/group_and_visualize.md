@@ -147,7 +147,8 @@ used for tasks and group nodes:
 
 ![Legend of default task and group node colors](color_legend.svg)
 
-The following code is a basis for testing the code snippets from above.
+The following code (see also [example.zip](zip/example.zip)) is a basis
+for testing the code snippets from above.
 It can also be executed as [jupyter notebook](https://github.com/pydiverse/pydiverse.pipedag/tree/main/docs/source/examples/group_and_visualize.ipynb)
 when using an ipython kernel similar to running `conda env create`
 with this [environment.yml](environment.yml).

@@ -17,7 +17,7 @@ from tests.fixtures.instances import (
 from tests.util import tasks_library as m
 from tests.util.tasks_library import simple_dataframe
 
-pytestmark = [with_instances(ALL_INSTANCES, ORCHESTRATION_INSTANCES)]
+pytestmark = [with_instances(tuple(set(ALL_INSTANCES) - {"snowflake"}), ORCHESTRATION_INSTANCES)]
 
 
 def test_unicode(unicode_str="äöüßéç"):

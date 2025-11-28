@@ -40,3 +40,7 @@ kept stable. On the one hand, this implies ignoring cache functions mentioned in
 it fails in case a task changes that has a cache function and thus might bring in data from external sources.
 
 An example showing how to implement this can be found here: [](/examples/multi_instance_pipeline).
+
+A more complex example that is closer to a real world scenario can be found
+[as example on GitHub](https://github.com/pydiverse/pydiverse.pipedag/blob/main/example_postgres/realistic_pipeline_sqa_instances.py#L494)
+and in the following [zip archive](/examples/zip/example_postgres.zip).

@@ -25,6 +25,8 @@ Public
 
 .. autoclass:: Table
 
+.. autoclass:: View
+
 .. autoclass:: RawSql
     :members:
     :special-members: __iter__, __getitem__, __contains__
@@ -68,6 +70,7 @@ Backend Classes
 Table Store
 -----------
 .. autoclass:: pydiverse.pipedag.backend.table.SQLTableStore
+.. autoclass:: pydiverse.pipedag.backend.table.ParquetTableStore
 
 SQLTableStore Dialects
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -94,7 +97,7 @@ IBM DB2
 
 .. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.IBMDB2TableStore
 .. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.ibm_db2.IBMDB2MaterializationDetails
-.. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.ibm_db2::IBMDB2CompressionTypes
+.. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.ibm_db2.IBMDB2CompressionTypes
     :members:
     :undoc-members:
 

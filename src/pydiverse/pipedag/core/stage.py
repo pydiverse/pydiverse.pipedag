@@ -198,7 +198,7 @@ class Stage:
         else:
             raise TypeError
 
-        tasks = [task for task in self.tasks if task.name == name]
+        tasks = [task for task in self.tasks if task._name == name]
         if not tasks:
             raise KeyError(f"Couldn't find a task with name '{name}' in stage '{self.name}'.")
 
@@ -248,26 +248,26 @@ class CommitStageTask(Task):
     def __init__(self, stage: Stage, flow: "Flow"):
         # Because the CommitStageTask doesn't get added to the stage.tasks list,
         # we can't call the super initializer.
-        self.name = f"Commit '{stage.name}'"
-        self.nout = None
+        self._name = f"Commit '{stage.name}'"
+        self._nout = None
 
-        self.logger = structlog.get_logger(logger_name="Commit Stage", stage=stage)
+        self._logger = structlog.get_logger(logger_name="Commit Stage", stage=stage)
 
-        self._bound_args = inspect.signature(self.fn).bind()
-        self.flow = flow
-        self.stage = stage
+        self._bound_args = inspect.signature(self._fn).bind()
+        self._flow = flow
+        self._stage = stage
 
-        self.flow.add_task(self)
+        self._flow.add_task(self)
 
-        self.input_tasks = {}
-        self.upstream_stages = [stage]
+        self._input_tasks = {}
+        self._upstream_stages = [stage]
 
         self._skip_commit = len(stage.tasks) == 0
         self._visualize_hidden = True
 
-    def fn(self):
+    def _fn(self):
         if self._skip_commit:
             return
 
-        self.logger.info("Committing stage")
-        ConfigContext.get().store.commit_stage(self.stage)
+        self._logger.info("Committing stage")
+        ConfigContext.get().store.commit_stage(self._stage)

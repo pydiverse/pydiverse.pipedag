@@ -38,9 +38,9 @@ def deep_cmp(a, b):
         return all([deep_cmp(v, b[k]) for k, v in a.items()])
     if isinstance(a, GenericAlias):
         base_cmp = get_origin(a) == get_origin(b)
-        return base_cmp and all([deep_cmp(v, w) for v, w in zip(get_args(a), get_args(b))])
+        return base_cmp and all([deep_cmp(v, w) for v, w in zip(get_args(a), get_args(b), strict=True)])
     if isinstance(a, Iterable):
-        return all([deep_cmp(v, w) for v, w in zip(a, b)])
+        return all([deep_cmp(v, w) for v, w in zip(a, b, strict=True)])
     if hasattr(a, "__dict__"):
 
         def fields(x):
@@ -76,7 +76,7 @@ def test_json_coder_primitive():
 
 
 def set_stage(x, s: Stage):
-    x.stage = s
+    x._stage = s
     return x
 
 

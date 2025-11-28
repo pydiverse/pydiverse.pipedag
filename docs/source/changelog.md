@@ -1,7 +1,51 @@
 # Changelog
 
-## 0.10.12 (2025-XX-XX)
+## 0.12.6 (2025-XX-XX)
 - Feat: Automatically check cache-validity of polars DataFrame tasks marked as lazy
+
+## 0.12.5 (2025-11-26)
+- Workaround snowflake sqlalchemy dialect to enable ExternalTableReference to other database
+- Flag in CreateTable and DropTable DDL statements allows not quoting schema (needed for multi-part schema)
+- Support side-channel fresh input in stable pipeline instance (mode=ASSERT_NO_FRESH_INPUT)
+
+## 0.12.4 (2025-11-17)
+- Support python 3.14, dropped support for python 3.10
+- Support pyarrow 22, arrow-odbc 9
+- Support dataframely >= 2.1 / colspec >= 0.3.1
+- Fixed pandas retrieval of view that renames columns
+- Fixed mssql automatic max-string-length adjustment for varchar(max) in index
+
+## 0.12.3 (2025-11-12)
+- Allow multiple runs with FileLockManager and filelock >= 3.11 installed
+
+## 0.12.2 (2025-11-12)
+- Support datetime.time and timedelta as task input and output (or anywhere where JSON serialization is needed).
+- Added support for Snowflake Database
+  * Known Issue: ADBC download screws up datetimes with year outside 64 bit ns range. Years 1700..2200 are fine.
+    Workaround: clip date range in query and add a column that rescues the correct year.
+    (typically, year 0 and 9999 are the only special values outside the range 1700..2200 used in practice)
+
+## 0.12.1 (2025-10-10)
+- Create all metadata tables even if some metadata tables already exist.
+  This fixes problems with conditional need for sync_views table.
+- Make table hooks work even without ConfigContext (see example_mssql/download_parquet_files.py)
+
+## 0.12.0 (2025-10-07)
+- Support pydiverse.common 0.4.1, pydiverse.transform 0.6.0, pydiverse.colspec 0.3.0.
+- Structlog logger initialization changed to stdlib logger factory to support dynamic loglevel filter in tests.
+- Switch cache misses from warning to info log level.
+
+## 0.11.0 (2025-10-01)
+- Support View as task output to allow multi-parquet fusion in ParquetTableStore or basic column selection/renaming
+  outside consumer task.
+- Support dataclass lazy field access at wiring time when a task returns a dataclass
+- Support Google Cloud Storage in ParquetTableStore (despite fsspec/gcsfs, configuration is a mess for s3 and gcs)
+- ExternalTableReference and View are automatically added to auto_table configuration
+- Expose optional dependency imports
+- Change some materialization detail error messages to warnings
+- Updated repr() and str() representations for some objects like Flow, ConfigContext, DagContext, ...
+- Fix: mssql pyarrow-adbc download to pandas/polars
+- Fix: S3 example and error messages
 
 ## 0.10.11 (2025-09-08)
 - Fix: Late initialization of ParquetTableCache instance_id allows use of multi-config `@input_stage_versions`
@@ -245,7 +289,7 @@ Workaround for known Problems:
 - Create initial documentation for pipedag.
 - Remove stage argument from [](#RawSql) initializer.
 - Add [](#RawSql) to public API.
-- Fix [](#PrefectTwoEngine) failing on retrieval of results.
+- Fix [](#pydiverse.pipedag.engine.prefect.PrefectTwoEngine) failing on retrieval of results.
 - Added [](#Flow.get_stage()), and [](#Stage.get_task()) methods.
 - Added [](#MaterializingTask.get_output_from_store()) method to allow retrieval of task output without running the Flow.
 - Created [TableReference](#ExternalTableReference) to simplify complex table loading operations.

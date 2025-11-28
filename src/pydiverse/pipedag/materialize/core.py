@@ -38,6 +38,7 @@ def materialize(
     add_input_source: bool = False,
     ordering_barrier: bool | dict[str, Any] = False,
     call_context: Callable[[], Any] | None = None,
+    allow_fresh_input: bool = False,
 ) -> Callable[[CallableT], CallableT | UnboundMaterializingTask]: ...
 
 
@@ -58,6 +59,7 @@ def materialize(
     add_input_source: bool = False,
     ordering_barrier: bool | dict[str, Any] = False,
     call_context: Callable[[], Any] | None = None,
+    allow_fresh_input: bool = False,
 ):
     """Decorator to create a task whose outputs get materialized.
 
@@ -157,11 +159,15 @@ def materialize(
     :param ordering_barrier:
         If true, the task will be surrounded by a GroupNode(ordering_barrier=True).
         If a dictionary is provided, it is surrounded by a
-        GroupNode(**ordering_barrier). This allows passing style, style_tag, and label
+        ``GroupNode(**ordering_barrier)``. This allows passing style, style_tag, and label
         arguments.
     :param call_context:
         An optional context manager function that is opened before the task or its
         optional cache function is called and closed afterward.
+    :param allow_fresh_input:
+        If true, it allows the task to update outputs (cache invalid) for
+        cache_validation.mode=ASSERT_NO_FRESH_INPUT and with cache function
+        indicating that this is an input task.
 
     Example
     -------
@@ -236,6 +242,7 @@ def materialize(
             add_input_source=add_input_source,
             ordering_barrier=ordering_barrier,
             call_context=call_context,
+            allow_fresh_input=allow_fresh_input,
         )
 
     return UnboundMaterializingTask(
@@ -250,6 +257,7 @@ def materialize(
         add_input_source=add_input_source,
         ordering_barrier=ordering_barrier,
         call_context=call_context,
+        allow_fresh_input=allow_fresh_input,
     )
 
 
@@ -266,6 +274,7 @@ def input_stage_versions(
     add_input_source: bool = False,
     ordering_barrier: bool | dict[str, Any] = True,
     call_context: Callable[[], Any] | None = None,
+    allow_fresh_input: bool = False,
     include_views=True,
     lock_source_stages=True,
     pass_args: Iterable[str] = tuple(),
@@ -289,6 +298,7 @@ def input_stage_versions(
     add_input_source: bool = False,
     ordering_barrier: bool | dict[str, Any] = True,
     call_context: Callable[[], Any] | None = None,
+    allow_fresh_input: bool = False,
     include_views=True,
     lock_source_stages=True,
     pass_args: Iterable[str] = tuple(),
@@ -372,19 +382,23 @@ def input_stage_versions(
     :param ordering_barrier:
         If true, the task will be surrounded by a GroupNode(ordering_barrier=True).
         If a dictionary is provided, it is surrounded by a
-        GroupNode(**ordering_barrier). This allows passing style, style_tag, and label
+        ``GroupNode(**ordering_barrier)``. This allows passing style, style_tag, and label
         arguments.
         Attention: In contrast to @materialize, the default value is True.
     :param call_context:
         An optional context manager function that is opened before the task or its
         optional cache function is called and closed afterward.
+    :param allow_fresh_input:
+        If true, it allows the task to update outputs (cache invalid) for
+        cache_validation.mode=ASSERT_NO_FRESH_INPUT and with cache function
+        indicating that this is an input task.
     :param include_views:
         In case no explicit table references are given, if true, include views when
         collecting all tables of both stage versions.
     :param lock_source_stages:
         If true, lock the other stage version when a ConfigContext object is passed to
         this task.
-    :param pass_args
+    :param pass_args:
         A list of named arguments that would be passed from the call to the task
         function. By default, no arguments are passed, and just tables are extracted.
 
@@ -418,6 +432,7 @@ def input_stage_versions(
         add_input_source=add_input_source,
         ordering_barrier=ordering_barrier,
         call_context=call_context,
+        allow_fresh_input=allow_fresh_input,
         include_views=include_views,
         lock_source_stages=lock_source_stages,
         pass_args=pass_args,
@@ -523,7 +538,7 @@ def input_stage_versions(
         lock_source_stages,
     ):
         _task = TaskContext.get().task
-        stage = _task.stage
+        stage = _task._stage
         pass_kwargs = {k: v for k, v in kwargs.items() if k in set(pass_args)}
 
         (
@@ -626,10 +641,14 @@ def input_stage_versions(
                             other_dict[key] = cfg2.store.dematerialize_item(tbl2, input_type)
                         else:
                             other_dict[key] = (
-                                f"Table not found in other stage version: {PipedagJSONEncoder().encode(tbl2)}"
+                                f"Table/Blob not found in other stage version: {PipedagJSONEncoder().encode(tbl2)}"
                             )
                     except Exception as e:
-                        _task.logger.error(
+                        if cfg1._swallow_exceptions:
+                            log = _task._logger.info
+                        else:
+                            log = _task._logger.error
+                        log(
                             "Failed to dematerialize table from other stage version",
                             table=ref,
                             stage=tbl2.stage,
@@ -751,10 +770,10 @@ def _get_output_from_store(
     from pydiverse.pipedag.context.run_context import DematerializeRunContext
     from pydiverse.pipedag.materialize.store import dematerialize_output_from_store
 
-    root_task = task if isinstance(task, Task) else task.task
+    root_task = task if isinstance(task, Task) else task._task
 
     store = ConfigContext.get().store
-    with DematerializeRunContext(root_task.flow, allow_write_local_table_cache=write_local_table_cache):
+    with DematerializeRunContext(root_task._flow, allow_write_local_table_cache=write_local_table_cache):
         cached_output, _ = store.retrieve_most_recent_task_output_from_cache(
             root_task, ignore_position_hashes=ignore_position_hashes
         )

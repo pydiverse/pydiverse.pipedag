@@ -142,7 +142,7 @@ class RunContextServer(IPCServer):
         self.stages = list(self.flow.stages.values())
         self.tasks = list(self.flow.tasks)
         self.stages.sort(key=lambda s: s.id)
-        self.tasks.sort(key=lambda t: t.id)
+        self.tasks.sort(key=lambda t: t._id)
 
         num_stages = len(self.stages)
 
@@ -218,7 +218,7 @@ class RunContextServer(IPCServer):
         # INITIALIZE REFERENCE COUNTERS
         for stage in self.stages:
             for task in stage.all_tasks():
-                for s in task.upstream_stages:
+                for s in task._upstream_stages:
                     self.ref_count[s.id] += 1
 
         self.__context_proxy = RunContext(self)
@@ -253,11 +253,17 @@ class RunContextServer(IPCServer):
                 exception_with_traceback = Exception(f"{type(e).__name__}: {e}\n{exception_tb}")
                 exception_with_traceback.__cause__ = e
                 pickled_exception = pickle.dumps(exception_with_traceback)
-            except Exception as e2:
+            except TypeError:
+                # stringify exception arguments to improve picklability
+                e.args = tuple(str(a) for a in e.args)
+                exception_with_traceback = Exception(f"{type(e).__name__}: {e}\n{exception_tb}")
+                exception_with_traceback.__cause__ = e
+                pickled_exception = pickle.dumps(exception_with_traceback)
+            except Exception as e3:
                 self.logger.error(
                     "failed pickling exception",
                     traceback=exception_tb,
-                    pickle_exception=str(e2),
+                    pickle_exception=str(e3),
                 )
                 pickled_exception = pickle.dumps(RuntimeError("failed pickling exception\n" + exception_tb))
 
@@ -450,7 +456,7 @@ class RunContextServer(IPCServer):
 
         stages_to_release = []
         with self.ref_count_lock:
-            for stage in task.upstream_stages:
+            for stage in task._upstream_stages:
                 self.ref_count[stage.id] -= 1
                 rc = self.ref_count[stage.id]
 
@@ -472,7 +478,7 @@ class RunContextServer(IPCServer):
 
     def enter_task_memo(self, task_id: int, cache_key: str) -> tuple[bool, Any]:
         task = self.tasks[task_id]
-        memo_key = (task.stage.id, cache_key)
+        memo_key = (task._stage.id, cache_key)
 
         with self.task_memo_lock:
             memo = self.task_memo[memo_key]
@@ -500,7 +506,7 @@ class RunContextServer(IPCServer):
     @synchronized("task_memo_lock")
     def exit_task_memo(self, task_id: int, cache_key: str, success: bool):
         task = self.tasks[task_id]
-        memo_key = (task.stage.id, cache_key)
+        memo_key = (task._stage.id, cache_key)
 
         if not success:
             self.task_memo[memo_key] = MemoState.FAILED
@@ -513,7 +519,7 @@ class RunContextServer(IPCServer):
     @synchronized("task_memo_lock")
     def store_task_memo(self, task_id: int, cache_key: str, value: Any):
         task = self.tasks[task_id]
-        memo_key = (task.stage.id, cache_key)
+        memo_key = (task._stage.id, cache_key)
         memo = self.task_memo[memo_key]
 
         if memo is not MemoState.WAITING:
@@ -666,26 +672,26 @@ class RunContext(BaseContext):
     # TASK
 
     def did_finish_task(self, task: "Task", final_state: FinalTaskState):
-        self._request("did_finish_task", task.id, final_state.value)
+        self._request("did_finish_task", task._id, final_state.value)
 
     def get_task_states(self) -> dict["Task", FinalTaskState]:
         states = [FinalTaskState(value) for value in self._request("get_task_states")]
-        return {task: states[task.id] for task in self.flow.tasks}
+        return {task: states[task._id] for task in self.flow.tasks}
 
     @contextmanager
     def task_memo(self, task: "Task", cache_key: str):
-        success, memo = self._request("enter_task_memo", task.id, cache_key)
+        success, memo = self._request("enter_task_memo", task._id, cache_key)
 
         try:
             yield success, memo
         except Exception as e:
-            self._request("exit_task_memo", task.id, cache_key, False)
+            self._request("exit_task_memo", task._id, cache_key, False)
             raise e
         else:
-            self._request("exit_task_memo", task.id, cache_key, True)
+            self._request("exit_task_memo", task._id, cache_key, True)
 
     def store_task_memo(self, task: "Task", cache_key: str, result: Any):
-        self._request("store_task_memo", task.id, cache_key, result)
+        self._request("store_task_memo", task._id, cache_key, result)
 
     # TABLE / BLOB: Names
 
@@ -718,6 +724,9 @@ class RunContext(BaseContext):
 
     def should_store_table_in_cache(self, table: "Table"):
         return self._request("should_store_table_in_cache", table.stage.id, table.name)
+
+    def __str__(self):
+        return f"{self.__class__.__name__}(run_id={self.run_id}, flow={self.flow.name}, client={self.client})"
 
 
 @attrs.frozen
