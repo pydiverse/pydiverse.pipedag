@@ -187,7 +187,7 @@ In this case, the task must produce a SQLAlchemy expression for
 all tabular outputs without executing them. Pipedag can render the query and will only produce a table based on this
 query expression if the query changed or one of the inputs to the task changed.
 
-For tasks returning Polars DataFrame, the hash of the resulting DataFrame is used to determine whether to
+For tasks returning a Polars or Pandas DataFrame, the hash of the resulting DataFrame is used to determine whether to
 cache-invalidate downstream tasks.
 
 ### Manual cache invalidation with `version` parameter

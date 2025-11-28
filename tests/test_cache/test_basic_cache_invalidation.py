@@ -314,9 +314,10 @@ def test_change_task_version_blob(mocker):
     "get_tbl_obj",
     [
         lambda query_value: select_as(query_value, "x"),
-        (lambda query_value: pl.DataFrame({"x": [query_value]})) if pl else None,
+        lambda query_value: pl.DataFrame({"x": [query_value]}),
+        lambda query_value: pd.DataFrame({"x": [query_value]}),
     ],
-    ids=["sql", "polars"],
+    ids=["sql", "polars", "pandas"],
 )
 def test_change_lazy_query(mocker, get_tbl_obj):
     if get_tbl_obj is None:
@@ -1031,10 +1032,9 @@ def test_ignore_task_version(mocker):
 def test_lazy_table_without_query_string(mocker):
     value = None
 
-    @materialize(lazy=True, nout=4)
+    @materialize(lazy=True, nout=3)
     def falsely_lazy_task():
         return (
-            Table(pd.DataFrame({"x": [value]}), name="pd_table"),
             Table(pl.DataFrame({"x": [value]}).lazy(), name="pl_lazy_table"),
             select_as(2, "y"),
             3,
@@ -1043,35 +1043,28 @@ def test_lazy_table_without_query_string(mocker):
     def get_flow():
         with Flow() as flow:
             with Stage("stage_1"):
-                pd_tbl, pl_lazy_tbl, select_tbl, constant = falsely_lazy_task()
-                res_pd = m.take_first(pd_tbl, as_int=True)
+                pl_lazy_tbl, select_tbl, constant = falsely_lazy_task()
                 res_pl_lazy = m.take_first(pl_lazy_tbl, as_int=True)
                 res_select = m.noop(select_tbl)
                 res_constant = m.noop(constant)
-        return flow, res_pd, res_pl_lazy, res_select, res_constant
+        return flow, res_pl_lazy, res_select, res_constant
 
     value = 0
-    flow, res_pd, res_pl_lazy, res_select, res_constant = get_flow()
+    flow, res_pl_lazy, res_select, res_constant = get_flow()
     with StageLockContext():
         result = flow.run()
-        assert result.get(res_pd) == 0
         assert result.get(res_pl_lazy) == 0
 
     value = 1
-    flow, res_pd, res_pl_lazy, res_select, res_constant = get_flow()
-    res_pd_spy = spy_task(mocker, res_pd)
+    flow, res_pl_lazy, res_select, res_constant = get_flow()
     res_pl_lazy_spy = spy_task(mocker, res_pl_lazy)
     select_spy = spy_task(mocker, res_select)
     constant_spy = spy_task(mocker, res_constant)
     with StageLockContext():
         result = flow.run()
-        assert result.get(res_pd) == 1
         assert result.get(res_pl_lazy) == 1
-        # res_pd is downstream of a pd.DataFrame from a lazy task,
-        # which should always be cache invalid. Hence, it should always be called.
-        res_pd_spy.assert_called_once()
 
-        # res_pd is downstream of a pl.LazyFrame from a lazy task,
+        # res_pl_lazy is downstream of a pl.LazyFrame from a lazy task,
         # which should always be cache invalid. Hence, it should always be called.
         # To avoid cache-invalidating the LazyFrame, we should use AUTOVERSION.
         res_pl_lazy_spy.assert_called_once()

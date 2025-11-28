@@ -125,13 +125,13 @@ def materialize(
         where the "query" is just the identifier of the table in the store.
 
         .. Note:: For tasks returning an ``ExternalTableReference`` pipedag cannot automatically
-        know if the external tables has changed of not. This should be controlled via a cache function
+        know if the external tables have changed of not. This should be controlled via a cache function
         given via the ``cache`` argument of ``materialize``.
         See :py:class:`ExternalTableReference <pydiverse.pipedag.container.ExternalTableReference>`
         for an example.
 
 
-        For tasks returning a Polars DataFrame, the output is deemed cache-valid
+        For tasks returning a Polars or Pandas DataFrame, the output is deemed cache-valid
         if the hash of the resulting DataFrame is the same as the hash of the previous run.
         So, even though the task always gets executed, downstream tasks can remain cache-valid
         if the DataFrame is the same as before. This is useful for small tasks that are hard to
@@ -143,9 +143,6 @@ def materialize(
 
         .. Warning:: A task returning a Polars LazyFrame should `not` be marked as lazy.
             Use ``version=AUTO_VERSION`` instead. See :py:class:`AUTO_VERSION`.
-        .. Warning:: A task returning a Pandas DataFrame should `not` be marked as lazy.
-           No hashing is implemented for Pandas DataFrames, so the task will always
-           be deemed cache-invalid, and thus, cache-invalidate all downstream tasks.
 
     :param group_node_tag:
         Set a tag that may add this task to a configuration based group node.
