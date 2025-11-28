@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.12.6 (2025-XX-XX)
+- Feat: Automatically check cache-validity of polars and pandas DataFrame tasks marked as lazy
+
 ## 0.12.5 (2025-11-26)
 - Workaround snowflake sqlalchemy dialect to enable ExternalTableReference to other database
 - Flag in CreateTable and DropTable DDL statements allows not quoting schema (needed for multi-part schema)
