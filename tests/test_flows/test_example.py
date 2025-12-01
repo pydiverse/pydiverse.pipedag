@@ -77,6 +77,17 @@ if sa and cs and pdt and xgb:
     s3_examples.append(example_s3_realistic)
     mssql_examples.append(example_mssql_realistic)
 
+if sa and cs and xgb:
+    from example_postgres.realistic_pipeline_sqa import main as example_postgres_realistic_sqa
+    from example_postgres.realistic_pipeline_sqa_instances import main as example_postgres_realistic_sqa_instances
+    from example_postgres.realistic_pipeline_sqa_instances_date import (
+        main as example_postgres_realistic_sqa_instances_date,
+    )
+
+    examples.append(example_postgres_realistic_sqa)
+    examples.append(example_postgres_realistic_sqa_instances)
+    examples.append(example_postgres_realistic_sqa_instances_date)
+
 
 @pytest.mark.parametrize(
     "fn",

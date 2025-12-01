@@ -42,5 +42,12 @@ it fails in case a task changes that has a cache function and thus might bring i
 An example showing how to implement this can be found here: [](/examples/multi_instance_pipeline).
 
 A more complex example that is closer to a real world scenario can be found
-[as example on GitHub](https://github.com/pydiverse/pydiverse.pipedag/blob/main/example_postgres/realistic_pipeline_sqa_instances.py#L494)
+[as example on GitHub](https://github.com/pydiverse/pydiverse.pipedag/blob/main/example_postgres/realistic_pipeline_sqa_instances.py#L502)
 and in the following [zip archive](/examples/zip/example_postgres.zip).
+
+In the same archive, a
+[simplified real world scenario](https://github.com/pydiverse/pydiverse.pipedag/blob/main/example_postgres/realistic_pipeline_sqa_instances_date.py#127)
+is also included which implements the same data pipeline instance
+types by using a date column filter to implement stable data instances.
+It allows a more fluid development approach if it is ok that new tables
+or columns enter the stable pipeline instances without warning.
