@@ -16,7 +16,7 @@ from pydiverse.common.util.hashing import stable_dataframe_hash
 from pydiverse.pipedag import Table
 from pydiverse.pipedag._typing import T, TableHookResolverT
 from pydiverse.pipedag.context import RunContext
-from pydiverse.pipedag.errors import StoreIncompatibleException
+from pydiverse.pipedag.errors import HashingError, StoreIncompatibleException
 from pydiverse.pipedag.materialize.materializing_task import (
     AutoVersionSupport,
     MaterializingTask,
@@ -435,5 +435,8 @@ class DataFrameTableHook:
         """The cache validity of the output of a Dataframe task depends on the content of the DataFrame.
         We thus compute a stable hash of the DataFrame as cache key."""
         _ = store
-        obj_hash = stable_dataframe_hash(obj)
+        try:
+            obj_hash = stable_dataframe_hash(obj)
+        except Exception as e:
+            raise HashingError(f"Failed to compute hash for DataFrame of type {type(obj)}.") from e
         return obj_hash

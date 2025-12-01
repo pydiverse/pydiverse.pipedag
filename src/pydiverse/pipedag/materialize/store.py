@@ -21,6 +21,7 @@ from pydiverse.pipedag.core.task import Task, TaskGetItem
 from pydiverse.pipedag.errors import (
     CacheError,
     DuplicateNameError,
+    HashingError,
     HookCheckException,
     StageError,
     StoreIncompatibleException,
@@ -141,12 +142,22 @@ class BaseTableStore(TableHookResolver, Disposable):
         try:
             hook = self.get_m_table_hook(table)
             query_str = hook.lazy_query_str(self, table.obj)
-        except TypeError:
+        except (HashingError, TypeError) as e:
+            if isinstance(e, TypeError):
+                warning_str = (
+                    f"The output table {table.name} given by a "
+                    f"{repr(type(table.obj))} of the lazy task {task._name} does "
+                    "not provide a query string."
+                )
+            else:
+                warning_str = (
+                    f"The output table {table.name} given by a "
+                    f"{repr(type(table.obj))} of the lazy task {task._name} could not "
+                    "be hashed."
+                )
+
             self.logger.warning(
-                f"The output table {table.name} given by a"
-                f" {repr(type(table.obj))} of the lazy task {task._name} does"
-                " not provide a query string. Lazy evaluation is not"
-                " possible. Assuming that the table is not cache valid."
+                warning_str + " Lazy evaluation is not possible. Assuming that the table is not cache valid."
             )
             # Assign random query string to ensure that task is not cache valid
             query_str = uuid.uuid4().hex

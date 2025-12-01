@@ -66,6 +66,12 @@ class StoreIncompatibleException(Exception):
     """
 
 
+class HashingError(Exception):
+    """
+    Exception raised when hashing fails.
+    """
+
+
 __all__ = [
     "FlowError",
     "StageError",
