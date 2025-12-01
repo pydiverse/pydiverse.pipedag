@@ -1,6 +1,10 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
+# This is a somewhat realistic example pipeline showing typical stages in `def get_pipeline()`.
+# Currently, pydiverse transform does not support snowflake. That is why this example is comparable to
+# example_postgres/realistic_pipeline_sqa.py and uses sqlalchemy instead.
+
 import os
 from dataclasses import dataclass
 

@@ -1,14 +1,16 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-# Compared with realistic_pipeline_sqa.py, this example shows how to set up multiple
-# data pipeline instances like it is recommended for a real world project.
-# (see bootstrap_pipeline_instances())
+# Compared with realistic_pipeline_sqa_instances.py, this version implements stable pipelines
+# simply by filtering on a date column. The assumption is that source table only get new rows
+# with newer dates in this column. Please note, that in practice, fully historized tables
+# typically have four date columns: valid_from, valid_to, known_from, known_to.
+# In this case, known_from would be the right column to filter on for stable pipelines. The
+# stable pipeline has to produce output independent of modified known_to dates in the future.
 
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 import polars as pl
@@ -29,8 +31,6 @@ from pydiverse.pipedag import (
     Table,
     Task,
     TaskGetItem,
-    View,
-    input_stage_versions,
     materialize,
 )
 from pydiverse.pipedag.context.context import CacheValidationMode, StageLockContext
@@ -74,10 +74,11 @@ def pk_polars(col_spec: cs.ColSpec):
     return [getattr(col_spec, name).polars for name in col_spec.primary_keys()]
 
 
-def get_pipeline(external_schema, cfg: ConfigContext, pipedag_config: PipedagConfig, *, update_stable_data=False):
+def get_pipeline(external_schema, cfg: ConfigContext):
     with Flow("flow") as flow:
-        with Stage("1_raw_input") as stage_1:
-            raw_tbls = get_input_data(external_schema, stage_1, cfg, pipedag_config, update_stable_data)
+        with Stage("1_raw_input"):
+            table_references = get_external_references(external_schema, cfg)
+            raw_tbls = get_input_data(table_references, cfg)
 
         with Stage("2_clean_input"):
             clean_tbls = clean(raw_tbls)
@@ -99,80 +100,57 @@ def get_pipeline(external_schema, cfg: ConfigContext, pipedag_config: PipedagCon
     return flow
 
 
-def get_external_references(cfg: ConfigContext, schema: str):
+def get_external_references(schema: str, cfg: ConfigContext):
     engine = cfg.store.table_store.engine
     inspector = sa.inspect(engine)
     tables = inspector.get_table_names(schema=schema)
-    refs = [ExternalTableReference(name, schema=schema) for name in sorted(tables)]
+    refs = [Table(ExternalTableReference(name, schema=schema)) for name in sorted(tables)]
     return refs
 
 
-def _new_input_hash(tbls: list[Table]):
+def get_filter_query(tbl: sa.Alias, cfg: ConfigContext | None = None):
+    if cfg is None:
+        cfg = ConfigContext.get()
+    attrs = cfg.attrs
+
+    query = sa.select(sa.text("*")).select_from(tbl)
+    if attrs["src_filtered_input"]:
+        # This is oversimplistic filtering with a View that limits number of rows according to src_filter_cnt.
+        # Better would be stable hash based sampling on some primary key columns. The relevant primary key
+        # must be joined to all large tables for this to work.
+        # Another alternative is a filter table in the repo with filtering IDs for choosing rows in
+        # mini/midi pipeline instance tables.
+        query = query.limit(attrs["src_filter_cnt"])
+    if attrs["stable_date"] > "1970-01-01":
+        query = query.where(tbl.c.known_from <= attrs["stable_date"])
+    return query
+
+
+def _new_input_hash(tbls: list[Table], cfg: ConfigContext | None = None):
     store = ConfigContext.get().store.table_store
 
-    # simply count rows of tables to see if a row was added
-    # (getting latest timestamp would be better in real case)
     def tbl_hash(ref: ExternalTableReference, conn) -> int:
-        tbl = sa.Table(ref.name, sa.MetaData(), schema=ref.schema)
-        query = sa.select(sa.func.count(sa.text("*"))).select_from(tbl)
+        tbl = sa.Table(ref.name, sa.MetaData(), schema=ref.schema, autoload_with=store.engine)
+        subquery = get_filter_query(tbl, cfg).alias("sub")
+        query = sa.select(
+            sa.func.count(sa.text("*")),
+            sa.func.sum(sa.func.length(sa.text("pk"))),
+            sa.func.max(sa.text("known_from")),
+            sa.func.max(sa.text("valid_from")),
+        ).select_from(subquery)
         with store.engine_connect() as conn:
             res = conn.execute(query)
-            cnt = res.fetchone()[0]
-        return cnt
+            summary_row = tuple(res.fetchone())
+        return summary_row
 
     with store.engine_connect() as conn:
         return tuple({tbl.name: tbl_hash(tbl.obj, conn) for tbl in tbls}.items())
 
 
-def _has_copy_source_fresh_input(
-    tbls: dict[str, sa.Alias],
-    other_tbls: dict[str, sa.Alias],
-    source_cfg: ConfigContext,
-    *,
-    attrs: dict[str, Any],
-    stage: Stage,
-):
-    _ = tbls, other_tbls, attrs
-    with source_cfg:
-        _hash = source_cfg.store.table_store.get_stage_hash(stage)
-    return _hash
-
-
-@input_stage_versions(
-    input_type=sa.Table,
-    cache=_has_copy_source_fresh_input,
-    pass_args=["attrs", "stage"],
-    lazy=True,
-)
-def _copy_filtered_inputs(
-    tbls: dict[str, sa.Alias],
-    source_tbls: dict[str, sa.Alias],
-    source_cfg: ConfigContext,
-    *,
-    attrs: dict[str, Any],
-    stage: Stage,
-):
-    # we assume that tables can be copied within database engine just from different schema
-    _ = source_cfg, stage
-    # we expect this schema to be still empty, one could check for collisions
-    _ = tbls
-    # Oversimplistic way of filtering (just limiting number of rows).
-    filter_cnt = attrs["copy_filter_cnt"]
-    ret = {
-        name.lower(): Table(sa.select(tbl).limit(filter_cnt), name)
-        for name, tbl in source_tbls.items()
-        if not name.startswith("_")
-    }
-    return [ret[name] for name in sorted(ret.keys())]
-
-
-def get_input_data(
-    external_schema: str, stage: Stage, cfg: ConfigContext, pipedag_config: PipedagConfig, update_stable_data: bool
-):
+@materialize(lazy=True, input_type=sa.Table, cache=_new_input_hash)
+def get_input_data(tbls: list[sa.Alias], cfg: ConfigContext | None = None):
     """
     Get input tables for this pipeline instance direct, filtered, or copied from external_schema.
-
-    Warning: this is highly complex code, but could be quite generic to handle all instance types.
 
     It is fine to use radically different implementation, but it is good practice to think in
     fresh/stable data and full/midi/mini input sizes. At least having full_fresh, mini_fresh,
@@ -180,59 +158,7 @@ def get_input_data(
     months should be used for most of the data pipeline development work.
     See https://pydiversepipedag.readthedocs.io/en/latest/examples/best_practices_instances.html
     """
-    attrs = cfg.attrs
-    table_references = get_external_references(cfg, external_schema)
-    if attrs["src_filtered_input"]:
-
-        @materialize(lazy=True, input_type=sa.Table, cache=_new_input_hash, name="get_input_data")
-        def do_get_input_data(tbls: list[sa.Alias]):
-            # This is oversimplistic filtering with a View that limits number of rows according to src_filter_cnt.
-            # Better would be stable hash based sampling on some primary key columns. The relevant primary key
-            # must be joined to all large tables for this to work.
-            # Another alternative is a filter table in the repo with filtering IDs for choosing rows in
-            # mini/midi pipeline instance tables.
-            return [Table(View(tbl, limit=attrs["src_filter_cnt"]), name=tbl.name) for tbl in tbls]
-
-        raw_tbls = do_get_input_data([Table(ref) for ref in table_references])
-    elif attrs["copy_filtered_input"]:
-        # copy filtered input tables from another pipeline instance
-        other_cfg = pipedag_config.get(attrs["copy_source"], attrs["copy_per_user"])
-        raw_tbls = _copy_filtered_inputs(other_cfg, stage=stage, attrs=attrs)
-    elif attrs["keep_input_stable"]:
-        if not update_stable_data:
-            # Determine table_references from cached output of do_get_input_data.
-            # This is necessary to be completely independent of tables in external schema.
-            tbl = Table(name="_input_table_list")
-            tbl.stage = stage
-            df = cfg.store.table_store.retrieve_table_obj(tbl, as_type=pl.DataFrame)
-            table_references = [
-                ExternalTableReference(table["name"], schema=table["schema"]) for table in df.to_dicts()
-            ]
-
-        # simply copy all input tables from external schema
-        @materialize(lazy=True, input_type=sa.Table, cache=_new_input_hash, name="get_input_data")
-        def do_get_input_data(tbls: list[sa.Alias]):
-            # This task is designed to stay cache valid as long as update_stable_data=False
-            if update_stable_data:
-                # Write tables names to special table. Alternative would be to JSON serialize table_references.
-                df = pl.DataFrame(dict(name=[tbl.name for tbl in tbls], schema=external_schema))
-                tbl = Table(df, name="_input_table_list")
-                tbl.stage = stage
-                cfg.store.table_store.store_table(tbl, task=None)
-            # copy the tables from external table references
-            return [Table(tbl, name=tbl.name) for tbl in tbls]
-
-        raw_tbls = do_get_input_data([Table(ref) for ref in table_references])
-    else:
-
-        @materialize(lazy=True, input_type=sa.Table, cache=_new_input_hash, name="get_input_data")
-        def do_get_input_data(tbls: list[sa.Alias]):
-            # this is the most simple full_fresh case: simply reference source tables form external schema
-            return [Table(View(tbl), name=tbl.name) for tbl in tbls]
-
-        raw_tbls = do_get_input_data([Table(ref) for ref in table_references])
-
-    return raw_tbls
+    return [Table(get_filter_query(tbl, cfg), name=tbl.name) for tbl in tbls]
 
 
 @materialize(input_type=sa.Table, lazy=True)
@@ -266,7 +192,7 @@ class EconomicRepresentation(cs.Collection):
 
 @materialize(input_type=sa.Table, lazy=True)
 def aa(a: sa.Alias, b: sa.Alias) -> Table:
-    b_cols = [c for c in b.c if c.name != "pk"]
+    b_cols = [c for c in b.c if c.name != "pk" and not c.name.startswith("valid_") and not c.name.startswith("known_")]
     return Table(sa.select(a, *b_cols).select_from(a.outerjoin(b, pk_match(a, b))), "aa", primary_key=pk_names(a))
 
 
@@ -404,15 +330,15 @@ def train_and_test_set(
     ).materialize()  # materialize subquery
 
     cols = [c for c in tbl.c if c.name != "row_num"]
-    training_set = Table(sa.select(*cols).where(tbl.c.row_num % 10 != 0), "training_set")
-    test_set = Table(sa.select(*cols).where(tbl.c.row_num % 10 == 0), "test_set")
+    training_set = Table(sa.select(*cols).where((tbl.c.row_num + 9) % 10 != 0), "training_set")
+    test_set = Table(sa.select(*cols).where((tbl.c.row_num + 9) % 10 == 0), "test_set")
 
     return (training_set, test_set)
 
 
 @materialize(input_type=pd.DataFrame, version="3.6.9")
 def model_training(train_set: FlatTable):
-    x = train_set.drop(["target", "pk"], axis=1)
+    x = train_set.drop(["target", "pk", "valid_from", "valid_to", "known_from", "known_to"], axis=1)
     y = train_set["target"]
     if y.min() == y.max():
         model = "No Model because training target had no variance!"
@@ -426,7 +352,7 @@ def model_training(train_set: FlatTable):
 
 
 def predict(model: xgboost.Booster, test_set: FlatTable):
-    x = test_set.drop(["target", "pk"], axis=1)
+    x = test_set.drop(["target", "pk", "valid_from", "valid_to", "known_from", "known_to"], axis=1)
 
     if isinstance(model, str):
         logger = structlog.get_logger(__name__)
@@ -449,30 +375,18 @@ def model_evaluation(model: xgboost.Booster, test_set: pd.DataFrame):
     return Table(result, "evaluation")
 
 
-def run_pipeline(instance_id: str, external_schema: str | None = None, *, update_stable_data=False):
+def run_pipeline(instance_id: str, external_schema: str | None = None):
     logger = structlog.get_logger(__name__)
-    logger.info("### Running pipeline ###", instance_id=instance_id, update_stable_data=update_stable_data)
-    pipedag_config = PipedagConfig(Path(__file__).parent / "pipedag_with_instances.yaml")
+    pipedag_config = PipedagConfig(Path(__file__).parent / "pipedag_with_instances_date.yaml")
     cfg = pipedag_config.get(instance_id)
-    # the stable "full" pipeline should not get fresh input unless explicitly requested
-    mode = (
-        CacheValidationMode.NORMAL
-        if not cfg.attrs["keep_input_stable"] or update_stable_data
-        else CacheValidationMode.ASSERT_NO_FRESH_INPUT
-    )
-    if update_stable_data:
-        # Override protection in pipedag config; see:
-        #   full:
-        #     attrs:
-        #       allow_fresh_input: false
-        cfg = cfg.evolve(attrs=dict(allow_fresh_input=True))
-    flow = get_pipeline(external_schema, cfg, pipedag_config, update_stable_data=update_stable_data)
-    result = flow.run(config=cfg, cache_validation_mode=mode)
+    logger.info("### Running pipeline ###", instance_id=instance_id, attrs=cfg.attrs)
+    flow = get_pipeline(external_schema, cfg)
+    result = flow.run(config=cfg)
     assert result.successful
 
 
 def init_external_input():
-    pipedag_config = PipedagConfig(Path(__file__).parent / "pipedag_with_instances.yaml")
+    pipedag_config = PipedagConfig(Path(__file__).parent / "pipedag_with_instances_date.yaml")
     instance_id = "full_fresh"  # just use this instance to get working config
 
     """Simulate external input that can be sourced by the pipeline via its internal database connection."""
@@ -493,8 +407,18 @@ def init_external_input():
 @materialize(version="1.0.0")
 def read_input_data(src_dir="data/pipedag_example_data"):
     src_dir = os.environ.get("DATA_DIR_PREFIX", "") + src_dir
+
+    def read_file(file: str) -> pd.DataFrame:
+        path = os.path.join(src_dir, file)
+        df = pd.read_csv(path)
+        df["valid_from"] = pd.to_datetime("2023-01-01") + pd.to_timedelta(df.index, unit="D")
+        df["valid_to"] = pd.Series(["9999-01-01"] * len(df)).astype("datetime64[s]")
+        df["known_from"] = pd.to_datetime("2023-01-01") + pd.to_timedelta((df.index // 7 + 1) * 7, unit="D")
+        df["known_to"] = pd.to_datetime("2023-01-01") + pd.to_timedelta((df.index // 7 + 2) * 7, unit="D")
+        return df
+
     return [
-        Table(pd.read_csv(os.path.join(src_dir, file)), name=file.removesuffix(".csv.gz"), primary_key="pk")
+        Table(read_file(file), name=file.removesuffix(".csv.gz"), primary_key="pk")
         for file in os.listdir(src_dir)
         if file.endswith(".csv.gz")
     ]
@@ -509,13 +433,13 @@ def bootstrap_pipeline_instances():
     # This instance runs with fresh data.
     run_pipeline("full_fresh", external_schema)
     # In regular intervals, full (stable) instance input stage is updated either from source or from full_fresh
-    run_pipeline("full", external_schema, update_stable_data=True)
+    run_pipeline("full", external_schema)  # this will load fresh data for the first time
     # Now, full stable can work without pulling fresh input data
-    run_pipeline("full")
+    run_pipeline("full", external_schema)  # this should be cache valid since no input data changed
     # Mini instance is used as subset of full to debug much faster (debug cases can be made manually selectable)
-    run_pipeline("mini")
+    run_pipeline("mini", external_schema)
     # Midi instance should be relevant sample of full (stable) instance to test all pipeline code
-    run_pipeline("midi")
+    run_pipeline("midi", external_schema)
 
 
 def main():
@@ -539,7 +463,7 @@ if __name__ == "__main__":
 
     # Run this pipeline with (might take a bit longer on first run in pixi environment):
     # ```shell
-    # pixi run python realistic_pipeline_sqa_instances.py
+    # pixi run python realistic_pipeline_sqa_instances_date.py
     # ```
 
     main()

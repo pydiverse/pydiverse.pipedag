@@ -1,6 +1,10 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
+# Compared with realistic_pipeline.py this version uses sqlalchemy instead of pydiverse transform.
+# Even though the sqlalchemy syntax is less convenient, it may be more familiar to work with and is
+# supported by more database targets.
+
 import os
 from dataclasses import dataclass
 
