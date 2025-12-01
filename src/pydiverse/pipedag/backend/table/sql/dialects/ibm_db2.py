@@ -11,6 +11,7 @@ import polars as pl
 import sqlalchemy as sa
 
 import pydiverse.common as pdc
+import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
 from pydiverse.common import Dtype
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateEmptyTableAsSelect,
@@ -19,7 +20,6 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     LockSourceTable,
     LockTable,
 )
-from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook, PolarsTableHook, SQLAlchemyTableHook
 from pydiverse.pipedag.backend.table.sql.reflection import PipedagDB2Reflection
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.container import Schema, Table
@@ -307,12 +307,12 @@ class DataframeIbmDb2TableHook:
 
 
 @IBMDB2TableStore.register_table(pd)
-class PandasTableHook(DataframeIbmDb2TableHook, PandasTableHook):
+class PandasTableHook(DataframeIbmDb2TableHook, sql_hooks.PandasTableHook):
     pass
 
 
 @IBMDB2TableStore.register_table(pd)
-class PolarsTableHook(DataframeIbmDb2TableHook, PolarsTableHook):
+class PolarsTableHook(DataframeIbmDb2TableHook, sql_hooks.PolarsTableHook):
     @classmethod
     def dialect_supports_polars_native_read(cls):
         # Polars read_database is utterly broken for IBM DB2.
@@ -321,7 +321,7 @@ class PolarsTableHook(DataframeIbmDb2TableHook, PolarsTableHook):
 
 
 @IBMDB2TableStore.register_table(sa)
-class SQLAlchemyTableHook(SQLAlchemyTableHook):
+class SQLAlchemyTableHook(sql_hooks.SQLAlchemyTableHook):
     """
     SQLAlchemy Table Hook for IBM DB2.
     """

@@ -320,8 +320,6 @@ def test_change_task_version_blob(mocker):
     ids=["sql", "polars", "pandas"],
 )
 def test_change_lazy_query(mocker, get_tbl_obj):
-    if get_tbl_obj is None:
-        pytest.skip("Polars is not installed, skipping Polars test.")
     query_value = 1
 
     @materialize(lazy=True, nout=2)

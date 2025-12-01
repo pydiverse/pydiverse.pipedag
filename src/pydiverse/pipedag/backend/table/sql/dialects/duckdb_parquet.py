@@ -23,6 +23,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     DropView,
 )
 from pydiverse.pipedag.backend.table.sql.dialects.duckdb import DuckDBTableStore
+from pydiverse.pipedag.backend.table.sql.hooks import DataframeSqlTableHook
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
 from pydiverse.pipedag.container import SortOrder, View
 from pydiverse.pipedag.context import RunContext
@@ -903,7 +904,7 @@ class ParquetTableStore(DuckDBTableStore):
 
 
 @ParquetTableStore.register_table(pd)
-class PandasTableHook(TableHook[ParquetTableStore]):
+class PandasTableHook(DataframeSqlTableHook, TableHook[ParquetTableStore]):
     auto_version_support = AutoVersionSupport.TRACE
 
     @classmethod

@@ -9,13 +9,9 @@ import polars as pl
 import sqlalchemy as sa
 from packaging.version import Version
 
+import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
 from pydiverse.common import Dtype
 from pydiverse.pipedag import Table
-from pydiverse.pipedag.backend.table.sql.hooks import (
-    IbisTableHook,
-    PandasTableHook,
-    PolarsTableHook,
-)
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.container import Schema
 from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
@@ -65,7 +61,7 @@ class DuckDBTableStore(SQLTableStore):
 
 
 @DuckDBTableStore.register_table(pd)
-class PandasTableHook(PandasTableHook):
+class PandasTableHook(sql_hooks.PandasTableHook):
     @classmethod
     def _execute_materialize(
         cls,
@@ -102,7 +98,7 @@ class PandasTableHook(PandasTableHook):
 
 
 @DuckDBTableStore.register_table(pl, duckdb)
-class PolarsTableHook(PolarsTableHook):
+class PolarsTableHook(sql_hooks.PolarsTableHook):
     @classmethod
     def dialect_supports_connectorx(cls):
         # ConnectorX (used by Polars read_database_uri) does not support DuckDB.
@@ -133,7 +129,7 @@ class PolarsTableHook(PolarsTableHook):
 
 
 @DuckDBTableStore.register_table(ibis.api.Table)
-class IbisTableHook(IbisTableHook):
+class IbisTableHook(sql_hooks.IbisTableHook):
     @classmethod
     def _conn(cls, store: DuckDBTableStore):
         return ibis.duckdb.from_connection(store.engine.raw_connection())

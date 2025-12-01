@@ -16,17 +16,13 @@ import sqlalchemy as sa
 import sqlalchemy.dialects.mssql
 from pandas.core.dtypes.base import ExtensionDtype
 
+import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
 from pydiverse.common import Datetime, Dtype
 from pydiverse.pipedag.backend.table.sql.ddl import (
     AddClusteredColumnstoreIndex,
     ChangeColumnTypes,
     CreateAlias,
     _mssql_update_definition,
-)
-from pydiverse.pipedag.backend.table.sql.hooks import (
-    IbisTableHook,
-    PandasTableHook,
-    PolarsTableHook,
 )
 from pydiverse.pipedag.backend.table.sql.reflection import PipedagMSSqlReflection
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
@@ -576,7 +572,7 @@ class DataframeMsSQLTableHook:
 
 
 @MSSqlTableStore.register_table(pd)
-class PandasTableHook(DataframeMsSQLTableHook, PandasTableHook):
+class PandasTableHook(DataframeMsSQLTableHook, sql_hooks.PandasTableHook):
     @classmethod
     def download_table(
         cls,
@@ -636,7 +632,7 @@ def reflect_pyodbc_column_types(query: str, odbc_string: str):
 
 
 @MSSqlTableStore.register_table(pl.DataFrame)
-class PolarsTableHook(DataframeMsSQLTableHook, PolarsTableHook):
+class PolarsTableHook(DataframeMsSQLTableHook, sql_hooks.PolarsTableHook):
     @classmethod
     def download_table(
         cls,
@@ -684,7 +680,7 @@ class PolarsTableHook(DataframeMsSQLTableHook, PolarsTableHook):
 
 
 @MSSqlTableStore.register_table(ibis.api.Table)
-class IbisTableHook(IbisTableHook):
+class IbisTableHook(sql_hooks.IbisTableHook):
     @classmethod
     def _conn(cls, store: MSSqlTableStore):
         url = store.engine_url

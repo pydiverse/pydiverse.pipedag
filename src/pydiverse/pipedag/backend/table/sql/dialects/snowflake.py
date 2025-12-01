@@ -11,8 +11,8 @@ import pandas as pd
 import polars as pl
 import sqlalchemy as sa
 
+import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
 from pydiverse.pipedag import Schema, Table
-from pydiverse.pipedag.backend.table.sql import hooks
 from pydiverse.pipedag.backend.table.sql.ddl import AddIndex
 from pydiverse.pipedag.backend.table.sql.hooks import (
     IbisTableHook,
@@ -243,7 +243,7 @@ class SnowflakeTableStore(SQLTableStore):
 
 
 @SnowflakeTableStore.register_table(snowflake)
-class SQLAlchemyTableHook(hooks.SQLAlchemyTableHook):
+class SQLAlchemyTableHook(sql_hooks.SQLAlchemyTableHook):
     @classmethod
     def retrieve(
         cls,
@@ -279,7 +279,7 @@ class SQLAlchemyTableHook(hooks.SQLAlchemyTableHook):
 
 
 @SnowflakeTableStore.register_table(snowflake)
-class PandasTableHook(hooks.PandasTableHook):
+class PandasTableHook(sql_hooks.PandasTableHook):
     @classmethod
     def upload_table(
         cls,
@@ -314,7 +314,7 @@ class PandasTableHook(hooks.PandasTableHook):
 
 
 @SnowflakeTableStore.register_table(snowflake)
-class PolarsTableHook(hooks.PolarsTableHook):
+class PolarsTableHook(sql_hooks.PolarsTableHook):
     @classmethod
     def dialect_supports_connectorx(cls):
         # ConnectorX (used by Polars read_database_uri) does not support Snowflake.

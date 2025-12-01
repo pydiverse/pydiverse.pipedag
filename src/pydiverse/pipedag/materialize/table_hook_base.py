@@ -7,8 +7,12 @@ from collections.abc import Iterable
 from enum import Enum
 from typing import Any, Generic, Self
 
+import pandas as pd
+import polars as pl
+
 from pydiverse.common.util import requires
 from pydiverse.common.util.computation_tracing import ComputationTracer
+from pydiverse.common.util.hashing import stable_dataframe_hash
 from pydiverse.pipedag import Table
 from pydiverse.pipedag._typing import T, TableHookResolverT
 from pydiverse.pipedag.context import RunContext
@@ -415,3 +419,21 @@ class TableHookResolver:
             "or because not all requirements have been met for the corresponding hook."
             "\nHooks with unmet requirements: " + ", ".join(cls.__hooks_with_unmet_requirements)
         )
+
+
+class DataFrameTableHook:
+    """
+    Base class for hooks that handle pandas or polars DataFrames.
+    """
+
+    @classmethod
+    def get_columns(cls, df):
+        return df.columns
+
+    @classmethod
+    def lazy_query_str(cls, store: Any, obj: pd.DataFrame | pl.DataFrame) -> str:
+        """The cache validity of the output of a Dataframe task depends on the content of the DataFrame.
+        We thus compute a stable hash of the DataFrame as cache key."""
+        _ = store
+        obj_hash = stable_dataframe_hash(obj)
+        return obj_hash
