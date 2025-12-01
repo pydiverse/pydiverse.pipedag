@@ -23,17 +23,10 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     DropView,
 )
 from pydiverse.pipedag.backend.table.sql.dialects.duckdb import DuckDBTableStore
-from pydiverse.pipedag.backend.table.sql.hooks import DataframeSqlTableHook
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
 from pydiverse.pipedag.container import SortOrder, View
 from pydiverse.pipedag.context import RunContext
 from pydiverse.pipedag.materialize.store import BaseTableStore
-from pydiverse.pipedag.materialize.table_hook_base import (
-    AutoVersionSupport,
-    CanMatResult,
-    CanRetResult,
-    TableHook,
-)
 from pydiverse.pipedag.optional_dependency.sqlalchemy import Select, SqlText, TextClause
 from pydiverse.pipedag.util.path import is_file_uri
 
@@ -904,18 +897,7 @@ class ParquetTableStore(DuckDBTableStore):
 
 
 @ParquetTableStore.register_table(pd)
-class PandasTableHook(DataframeSqlTableHook, TableHook[ParquetTableStore]):
-    auto_version_support = AutoVersionSupport.TRACE
-
-    @classmethod
-    def can_materialize(cls, tbl: Table) -> CanMatResult:
-        type_ = type(tbl.obj)
-        return CanMatResult.new(issubclass(type_, pd.DataFrame))
-
-    @classmethod
-    def can_retrieve(cls, type_) -> CanRetResult:
-        return CanRetResult.new(issubclass(type_, pd.DataFrame))
-
+class PandasTableHook(sql_hooks.PandasTableHook):
     @classmethod
     def materialize(
         cls,
@@ -1060,14 +1042,6 @@ class PandasTableHook(DataframeSqlTableHook, TableHook[ParquetTableStore]):
             pyarrow_path = path
             pyarrow_fs = None
         return pyarrow_path, pyarrow_fs
-
-    @classmethod
-    def auto_table(cls, obj: pd.DataFrame):
-        return sql_hooks.PandasTableHook.auto_table(obj)
-
-    @classmethod
-    def get_computation_tracer(cls):
-        return sql_hooks.PandasTableHook.ComputationTracer()
 
 
 @ParquetTableStore.register_table(pl, duckdb)
