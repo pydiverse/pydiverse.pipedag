@@ -5,7 +5,6 @@ import pandas as pd
 import polars as pl
 import pytest
 import sqlalchemy as sa
-from pyarrow import ArrowInvalid
 
 from pydiverse.pipedag import AUTO_VERSION, Blob, ConfigContext, Flow, Stage, Table
 from pydiverse.pipedag.container import RawSql
@@ -1028,63 +1027,45 @@ def test_ignore_task_version(mocker):
 
 
 @pytest.mark.polars
-def test_lazy_table_without_query_string(mocker, request):
+def test_lazy_table_without_query_string(mocker):
     value = None
 
-    @materialize(lazy=True, nout=4)
+    @materialize(lazy=True, nout=3)
     def falsely_lazy_task():
         return (
             Table(pl.DataFrame({"x": [value]}).lazy(), name="pl_lazy_table"),
             select_as(2, "y"),
-            # This table cannot be hashed, because it cannot be cast to pyarrow.
-            pd.DataFrame({"x": [value, "bla"]}),
             3,
         )
 
     def get_flow():
         with Flow() as flow:
             with Stage("stage_1"):
-                pl_lazy_tbl, select_tbl, pd_tbl, constant = falsely_lazy_task()
+                pl_lazy_tbl, select_tbl, constant = falsely_lazy_task()
                 res_pl_lazy = m.take_first(pl_lazy_tbl, as_int=True)
                 res_select = m.noop(select_tbl)
-                res_pd = m.take_first(pd_tbl, as_int=True)
                 res_constant = m.noop(constant)
-        return flow, res_pl_lazy, res_select, res_pd, res_constant
+        return flow, res_pl_lazy, res_select, res_constant
 
     value = 0
-    flow, res_pl_lazy, res_select, res_pd, res_constant = get_flow()
+    flow, res_pl_lazy, res_select, res_constant = get_flow()
     with StageLockContext():
-        # The pandas table with the column [0, "bla"] cannot be saved to
-        # a parquet file. Hence, we skip this case.
-        if request.node.callspec.id == "parquet_backend":
-            try:
-                result = flow.run()
-            except ArrowInvalid:
-                return
-        else:
-            result = flow.run()
+        result = flow.run()
         assert result.get(res_pl_lazy) == 0
-        assert result.get(res_pd) == 0
 
     value = 1
-    flow, res_pl_lazy, res_select, res_pd, res_constant = get_flow()
+    flow, res_pl_lazy, res_select, res_constant = get_flow()
     res_pl_lazy_spy = spy_task(mocker, res_pl_lazy)
-    res_pd_spy = spy_task(mocker, res_pd)
     select_spy = spy_task(mocker, res_select)
     constant_spy = spy_task(mocker, res_constant)
     with StageLockContext():
         result = flow.run()
         assert result.get(res_pl_lazy) == 1
-        assert result.get(res_pd) == 1
 
         # res_pl_lazy is downstream of a pl.LazyFrame from a lazy task,
         # which should always be cache invalid. Hence, it should always be called.
         # To avoid cache-invalidating the LazyFrame, we should use AUTOVERSION.
         res_pl_lazy_spy.assert_called_once()
-
-        # res_pd is downstream of a lazy task that returns a pandas DataFrame that
-        # cannot be hashed. Hence, it should always be cache invalid and always called.
-        res_pd_spy.assert_called_once()
 
         # res_select is downstream of an SQL query `select_tbl` (which did not change)
         # from a lazy task, hence select_tbl should be cache valid and the task
@@ -1095,3 +1076,39 @@ def test_lazy_table_without_query_string(mocker, request):
         # from a lazy task, hence res_constant should be cache valid and the task
         # producing res_select should not be called.
         constant_spy.assert_not_called()
+
+
+# The pandas table with the column [0, "bla"] is not supported by most DBs
+# and also not supported for the parquet backend (because it cannot be cast to pyarrow).
+@with_instances("postgres")
+def test_broken_df_hashing(mocker):
+    value = None
+
+    @materialize(lazy=True)
+    def non_hashable_pandas_df_task():
+        # This table cannot be hashed, because it cannot be cast to pyarrow.
+        return pd.DataFrame({"x": [value, "bla"]})
+
+    def get_flow():
+        with Flow() as flow:
+            with Stage("stage_1"):
+                pd_tbl = non_hashable_pandas_df_task()
+                res_pd = m.take_first(pd_tbl, as_int=True)
+        return flow, res_pd
+
+    value = 0
+    flow, res_pd = get_flow()
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(res_pd) == 0
+
+    value = 1
+    flow, res_pd = get_flow()
+    res_pd_spy = spy_task(mocker, res_pd)
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(res_pd) == 1
+
+        # res_pd is downstream of a lazy task that returns a pandas DataFrame that
+        # cannot be hashed. Hence, it should always be cache invalid and always called.
+        res_pd_spy.assert_called_once()
