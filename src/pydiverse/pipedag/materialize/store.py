@@ -151,12 +151,8 @@ class BaseTableStore(TableHookResolver, Disposable):
                 f"{repr(type(table.obj))} of the lazy task {task._name} does "
                 "not provide a query string."
             )
-        except HashingError:
-            warning_str = (
-                f"The output table {table.name} given by a "
-                f"{repr(type(table.obj))} of the lazy task {task._name} could not "
-                "be hashed."
-            )
+        except HashingError as e:
+            warning_str = f"The output table {table.name} of the lazy task {task._name} could not be hashed: {str(e)}."
         if not generate_lazy_query_str_success:
             self.logger.warning(
                 warning_str + " Lazy evaluation is not possible. Assuming that the table is not cache valid."

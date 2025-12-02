@@ -438,5 +438,5 @@ class DataFrameTableHook:
         try:
             obj_hash = stable_dataframe_hash(obj)
         except Exception as e:
-            raise HashingError(f"Failed to compute hash for DataFrame of type {type(obj)}.") from e
+            raise HashingError(f"Failed to compute hash for DataFrame of type {type(obj)}: {str(e)}") from e
         return obj_hash
