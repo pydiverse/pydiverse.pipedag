@@ -9,7 +9,7 @@ from pydiverse.pipedag.errors import CacheError, StageError
 from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import LazyTableMetadata, TaskMetadata
 from pydiverse.pipedag.materialize.store import BaseTableStore
-from pydiverse.pipedag.materialize.table_hook_base import CanMatResult, CanRetResult, TableHook
+from pydiverse.pipedag.materialize.table_hook_base import CanMatResult, CanRetResult, DataFrameTableHook, TableHook
 from pydiverse.pipedag.optional_dependency.transform import C, pdt
 
 
@@ -126,7 +126,7 @@ class DictTableStore(BaseTableStore):
 
 
 @DictTableStore.register_table(pd)
-class PandasTableHook(TableHook[DictTableStore]):
+class PandasTableHook(DataFrameTableHook, TableHook[DictTableStore]):
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanMatResult:
         type_ = type(tbl.obj)

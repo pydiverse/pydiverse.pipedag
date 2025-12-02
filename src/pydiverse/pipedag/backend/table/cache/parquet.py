@@ -15,7 +15,7 @@ import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
 from pydiverse.pipedag import ConfigContext, Stage, Table
 from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.store import BaseTableCache
-from pydiverse.pipedag.materialize.table_hook_base import CanMatResult, CanRetResult, TableHook
+from pydiverse.pipedag.materialize.table_hook_base import CanMatResult, CanRetResult, DataFrameTableHook, TableHook
 from pydiverse.pipedag.optional_dependency.transform import pdt, pdt_new, pdt_old
 from pydiverse.pipedag.util import normalize_name
 from pydiverse.pipedag.util.path import is_file_uri
@@ -98,7 +98,7 @@ class ParquetTableCache(BaseTableCache):
 
 
 @ParquetTableCache.register_table(pd)
-class PandasTableHook(TableHook[ParquetTableCache]):
+class PandasTableHook(DataFrameTableHook, TableHook[ParquetTableCache]):
     pd_version = Version(pd.__version__)
 
     @classmethod

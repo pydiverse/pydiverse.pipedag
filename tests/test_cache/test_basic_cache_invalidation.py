@@ -310,12 +310,21 @@ def test_change_task_version_blob(mocker):
     child_spy.assert_called_once()
 
 
-def test_change_lazy_query(mocker):
+@pytest.mark.parametrize(
+    "get_tbl_obj",
+    [
+        lambda query_value: select_as(query_value, "x"),
+        lambda query_value: pl.DataFrame({"x": [query_value]}),
+        lambda query_value: pd.DataFrame({"x": [query_value]}),
+    ],
+    ids=["sql", "polars", "pandas"],
+)
+def test_change_lazy_query(mocker, get_tbl_obj):
     query_value = 1
 
     @materialize(lazy=True, nout=2)
     def lazy_task():
-        return 0, Table(select_as(query_value, "x"), name="lazy_table")
+        return 0, Table(get_tbl_obj(query_value), name="lazy_table")
 
     @materialize(input_type=pd.DataFrame, version="1.0")
     def get_first(table, col):
@@ -1021,11 +1030,9 @@ def test_ignore_task_version(mocker):
 def test_lazy_table_without_query_string(mocker):
     value = None
 
-    @materialize(lazy=True, nout=5)
+    @materialize(lazy=True, nout=3)
     def falsely_lazy_task():
         return (
-            Table(pd.DataFrame({"x": [value]}), name="pd_table"),
-            Table(pl.DataFrame({"x": [value]}), name="pl_table"),
             Table(pl.DataFrame({"x": [value]}).lazy(), name="pl_lazy_table"),
             select_as(2, "y"),
             3,
@@ -1034,43 +1041,28 @@ def test_lazy_table_without_query_string(mocker):
     def get_flow():
         with Flow() as flow:
             with Stage("stage_1"):
-                pd_tbl, pl_tbl, pl_lazy_tbl, select_tbl, constant = falsely_lazy_task()
-                res_pd = m.take_first(pd_tbl, as_int=True)
-                res_pl = m.take_first(pl_tbl, as_int=True)
+                pl_lazy_tbl, select_tbl, constant = falsely_lazy_task()
                 res_pl_lazy = m.take_first(pl_lazy_tbl, as_int=True)
                 res_select = m.noop(select_tbl)
                 res_constant = m.noop(constant)
-        return flow, res_pd, res_pl, res_pl_lazy, res_select, res_constant
+        return flow, res_pl_lazy, res_select, res_constant
 
     value = 0
-    flow, res_pd, res_pl, res_pl_lazy, res_select, res_constant = get_flow()
+    flow, res_pl_lazy, res_select, res_constant = get_flow()
     with StageLockContext():
         result = flow.run()
-        assert result.get(res_pd) == 0
-        assert result.get(res_pl) == 0
         assert result.get(res_pl_lazy) == 0
 
     value = 1
-    flow, res_pd, res_pl, res_pl_lazy, res_select, res_constant = get_flow()
-    res_pd_spy = spy_task(mocker, res_pd)
-    res_pl_spy = spy_task(mocker, res_pl)
+    flow, res_pl_lazy, res_select, res_constant = get_flow()
     res_pl_lazy_spy = spy_task(mocker, res_pl_lazy)
     select_spy = spy_task(mocker, res_select)
     constant_spy = spy_task(mocker, res_constant)
     with StageLockContext():
         result = flow.run()
-        assert result.get(res_pd) == 1
-        assert result.get(res_pl) == 1
         assert result.get(res_pl_lazy) == 1
-        # res_pd is downstream of a pd.DataFrame from a lazy task,
-        # which should always be cache invalid. Hence, it should always be called.
-        res_pd_spy.assert_called_once()
 
-        # res_pd is downstream of a pl.DataFrame from a lazy task,
-        # which should always be cache invalid. Hence, it should always be called.
-        res_pl_spy.assert_called_once()
-
-        # res_pd is downstream of a pl.LazyFrame from a lazy task,
+        # res_pl_lazy is downstream of a pl.LazyFrame from a lazy task,
         # which should always be cache invalid. Hence, it should always be called.
         # To avoid cache-invalidating the LazyFrame, we should use AUTOVERSION.
         res_pl_lazy_spy.assert_called_once()
@@ -1084,3 +1076,39 @@ def test_lazy_table_without_query_string(mocker):
         # from a lazy task, hence res_constant should be cache valid and the task
         # producing res_select should not be called.
         constant_spy.assert_not_called()
+
+
+# The pandas table with the column [0, "bla"] is not supported by most DBs
+# and also not supported for the parquet backend (because it cannot be cast to pyarrow).
+@with_instances("postgres")
+def test_broken_df_hashing(mocker):
+    value = None
+
+    @materialize(lazy=True)
+    def non_hashable_pandas_df_task():
+        # This table cannot be hashed, because it cannot be cast to pyarrow.
+        return pd.DataFrame({"x": [value, "bla"]})
+
+    def get_flow():
+        with Flow() as flow:
+            with Stage("stage_1"):
+                pd_tbl = non_hashable_pandas_df_task()
+                res_pd = m.take_first(pd_tbl, as_int=True)
+        return flow, res_pd
+
+    value = 0
+    flow, res_pd = get_flow()
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(res_pd) == 0
+
+    value = 1
+    flow, res_pd = get_flow()
+    res_pd_spy = spy_task(mocker, res_pd)
+    with StageLockContext():
+        result = flow.run()
+        assert result.get(res_pd) == 1
+
+        # res_pd is downstream of a lazy task that returns a pandas DataFrame that
+        # cannot be hashed. Hence, it should always be cache invalid and always called.
+        res_pd_spy.assert_called_once()

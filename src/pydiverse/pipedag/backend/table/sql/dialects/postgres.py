@@ -10,8 +10,8 @@ import pandas as pd
 import polars as pl
 import sqlalchemy as sa
 
+import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
 from pydiverse.common import Dtype
-from pydiverse.pipedag.backend.table.sql import hooks
 from pydiverse.pipedag.backend.table.sql.ddl import (
     ChangeTableLogged,
     LockSourceTable,
@@ -121,12 +121,12 @@ class PostgresTableStore(SQLTableStore):
 
 
 @PostgresTableStore.register_table()
-class SQLAlchemyTableHook(hooks.SQLAlchemyTableHook):
-    pass  # postges is our reference dialect
+class SQLAlchemyTableHook(sql_hooks.SQLAlchemyTableHook):
+    pass  # postgres is our reference dialect
 
 
 @PostgresTableStore.register_table(pd)
-class PandasTableHook(hooks.PandasTableHook):
+class PandasTableHook(sql_hooks.PandasTableHook):
     @classmethod
     def _execute_materialize(
         cls,
@@ -180,7 +180,7 @@ class PandasTableHook(hooks.PandasTableHook):
 
 
 @PostgresTableStore.register_table(pl)
-class PolarsTableHook(hooks.PolarsTableHook):
+class PolarsTableHook(sql_hooks.PolarsTableHook):
     @classmethod
     def dialect_supports_connectorx(cls):
         # ConnectorX (used by Polars read_database_uri) supports PostgreSQL.

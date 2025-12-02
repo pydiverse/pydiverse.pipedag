@@ -46,6 +46,7 @@ from pydiverse.pipedag.materialize.table_hook_base import (
     AutoVersionSupport,
     CanMatResult,
     CanRetResult,
+    DataFrameTableHook,
     TableHook,
 )
 from pydiverse.pipedag.optional_dependency.colspec import cs
@@ -956,9 +957,9 @@ class ViewSqlalchemyMaterializationHook(BaseViewMaterializationHook):
 # region PANDAS
 
 
-class DataframeSqlTableHook:
+class DataframeSqlTableHook(DataFrameTableHook):
     """
-    Base class for hooks that handle pandas or polars DataFrames.
+    Base class for SQL hooks that handle pandas or polars DataFrames.
     Provides common functionality for uploading and downloading tables.
     """
 
@@ -1025,10 +1026,6 @@ class DataframeSqlTableHook:
         Create an empty table in the database.
         """
         raise NotImplementedError("This method must be implemented by subclasses.")
-
-    @classmethod
-    def get_columns(cls, df):
-        return df.columns
 
     @classmethod
     def _execute_materialize(
@@ -1115,7 +1112,7 @@ class DataframeSqlTableHook:
 
 
 @SQLTableStore.register_table(pd)
-class PandasTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
+class PandasTableHook(DataframeSqlTableHook, TableHook[SQLTableStore]):
     """
     Allows overriding the default dtype backend to use by setting the `dtype_backend`
     argument in the `hook_args` section of the table store config::
@@ -1355,7 +1352,7 @@ class PandasTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
 
 
 @SQLTableStore.register_table(pl)
-class PolarsTableHook(TableHook[SQLTableStore], DataframeSqlTableHook):
+class PolarsTableHook(DataframeSqlTableHook, TableHook[SQLTableStore]):
     @dataclass  # consider using pydantic instead
     class Config:
         disable_materialize_annotation_action: bool = False
