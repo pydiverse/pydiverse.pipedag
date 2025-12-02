@@ -332,10 +332,10 @@ For `pd.DataFrame` and `pl.DataFrame`, we don't try to guess which changes of th
 to avoid running the task, the user needs to help manually bumping a version number like `version="1.0.0"`.
 For development, `version=None` simply deactivates caching until the code is more stable. It is recommended to always
 develop with small pipeline instances anyways to achieve high iteration speed (see [multi_instance_pipeline.md](multi_instance_pipeline.md)).
-Setting `lazy=True` and `version=None` for `pd.DataFrame` and `pl.DataFrame` executes the task, but hashes the result to
+Setting `lazy=True` for tasks returning `pd.DataFrame` or `pl.DataFrame` objects, always executes the task, but hashes the result to
 determine the cache-validity of the task output and hence the cache invalidation of downstream tasks.
-This is a good choice for small tasks which are quick to compute and where the bumping the version number adds unwanted
-complexity to the development process.
+This is a good choice for tasks returning small dataframes which are quick to compute and where bumping the version number adds unwanted
+complexity to the development process. It is allowed to produce both dataframe and SQL output in one `@materialize(lazy=True, ...)` task.
 
 ### Integration with pydiverse colspec (same as dataframely but with pydiverse transform based SQL support)
 
