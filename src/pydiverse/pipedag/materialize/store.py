@@ -161,11 +161,11 @@ class BaseTableStore(TableHookResolver, Disposable):
             query_str = uuid.uuid4().hex
 
         if table.assumed_dependencies is None:
-            query_hash = stable_hash("LAZY-TABLE", query_str)
+            query_hash = stable_hash("LAZY-TABLE", query_str, table.name)
         else:
             # include assumed dependencies in query hash for imperative materialize
             dependencies = config_context.store.json_encoder.encode(table.assumed_dependencies)
-            query_hash = stable_hash("LAZY-TABLE", query_str, dependencies)
+            query_hash = stable_hash("LAZY-TABLE", query_str, table.name, dependencies)
 
         # Store the table
         try:

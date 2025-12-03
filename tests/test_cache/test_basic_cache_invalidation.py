@@ -1112,3 +1112,16 @@ def test_broken_df_hashing(mocker):
         # res_pd is downstream of a lazy task that returns a pandas DataFrame that
         # cannot be hashed. Hence, it should always be cache invalid and always called.
         res_pd_spy.assert_called_once()
+
+
+def test_lazy_dataframe_table_name_change():
+    @materialize(input_type=pd.DataFrame, lazy=True)
+    def get_df():
+        return Table(pd.DataFrame({"x": [0]}), name=name)
+
+    for i in range(2):
+        name = f"tbl_{i}"
+        with Flow("test") as flow:
+            with Stage("first"):
+                get_df()
+        flow.run()
