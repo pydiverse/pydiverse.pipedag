@@ -973,3 +973,20 @@ def test_task_and_stage_communication(task_1, task_2, noop, join):
             assert result.get(next_stage2, as_type=pd.DataFrame)["x2"][0] == 1
             assert result.get(next_same_stage, as_type=pd.DataFrame)["x"][0] == 1
             assert result.get(next_same_stage, as_type=pd.DataFrame)["x2"].isna().all()
+
+
+@pytest.mark.parametrize("lazy", [False, True])
+def test_many_imperative_tables(lazy):
+    @materialize(input_type=pd.DataFrame, lazy=lazy)
+    def imperative_task():
+        tables = []
+        for i in range(50):
+            df = pd.DataFrame({"counter": [i]})
+            tables.append(Table(df).materialize())
+        return Table(df)
+
+    with Flow() as flow:
+        with Stage("stage_1"):
+            pd_tbl = imperative_task()
+            m.noop(pd_tbl)
+    flow.run()

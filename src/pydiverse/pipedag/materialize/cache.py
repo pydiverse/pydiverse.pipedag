@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import itertools
+from copy import copy
 from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING
@@ -26,7 +27,9 @@ class ImperativeMaterializationState:
         self.auto_suffix_counter = itertools.count()
 
     def add_table_lookup(self, obj, table: Table):
-        self.assumed_dependencies.add(table)
+        table_without_assumed_dependencies = copy(table)
+        table_without_assumed_dependencies.assumed_dependencies = None
+        self.assumed_dependencies.add(table_without_assumed_dependencies)
         self.object_lookup[id(obj)] = table
         self.table_ids.add(id(table))
 
