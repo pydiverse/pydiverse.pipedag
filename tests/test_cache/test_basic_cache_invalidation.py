@@ -1114,9 +1114,13 @@ def test_broken_df_hashing(mocker):
         res_pd_spy.assert_called_once()
 
 
-def test_lazy_dataframe_table_name_change():
+@pytest.mark.parametrize("imperative", [False, True])
+def test_lazy_dataframe_table_name_change(imperative):
     @materialize(input_type=pd.DataFrame, lazy=True)
     def get_df():
+        if imperative:
+            for i in range(2):
+                Table(pd.DataFrame({"x": [i]}), name=f"{name}_{i}").materialize()
         return Table(pd.DataFrame({"x": [0]}), name=name)
 
     for i in range(2):
@@ -1124,4 +1128,5 @@ def test_lazy_dataframe_table_name_change():
         with Flow("test") as flow:
             with Stage("first"):
                 get_df()
-        flow.run()
+        result = flow.run()
+        assert result.successful
