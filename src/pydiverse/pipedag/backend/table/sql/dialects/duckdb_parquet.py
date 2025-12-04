@@ -763,18 +763,19 @@ class ParquetTableStore(DuckDBTableStore):
             cfg = ConfigContext.get()
             store = cfg.store.table_store
             schema = store.get_schema(schema_name)
-            # check view for indirection of table names
-            with store.engine_connect() as conn:
-                view_query = conn.execute(
-                    sa.text(
-                        "FROM duckdb_views() "
-                        f"SELECT sql WHERE SCHEMA_NAME='{schema.get()}' and VIEW_NAME='{table.name}'"
-                    )
-                ).fetchall()
-            # parse actual table name from view definition
-            if len(view_query) == 1:
-                if match := re.match(r"^CREATE VIEW .* FROM [^.]*\.([^;]*);$", view_query[0][0]):
-                    parquet_name = match.group(1)
+            # check view for indirection of table names in READ_VIEWS schema
+            if schema_name == table.stage.name:
+                with store.engine_connect() as conn:
+                    view_query = conn.execute(
+                        sa.text(
+                            "FROM duckdb_views() "
+                            f"SELECT sql WHERE SCHEMA_NAME='{schema.get()}' and VIEW_NAME='{table.name}'"
+                        )
+                    ).fetchall()
+                # parse actual table name from view definition
+                if len(view_query) == 1:
+                    if match := re.match(r"^CREATE VIEW .* FROM [^.]*\.([^;]*);$", view_query[0][0]):
+                        parquet_name = match.group(1)
         except LookupError:
             # schema-prefix/suffix not available if no ConfigContext active
             schema = Schema(schema_name)
