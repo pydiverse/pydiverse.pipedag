@@ -774,7 +774,7 @@ class ParquetTableStore(DuckDBTableStore):
                     ).fetchall()
                 # parse actual table name from view definition
                 if len(view_query) == 1:
-                    if match := re.match(r"^CREATE VIEW .* FROM [^.]*\.([^;]*);$", view_query[0][0]):
+                    if match := re.match(r'^CREATE VIEW .* FROM [^.]*\."?([^;"]*)"?;$', view_query[0][0]):
                         parquet_name = match.group(1)
         except LookupError:
             # schema-prefix/suffix not available if no ConfigContext active
