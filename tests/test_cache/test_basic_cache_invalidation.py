@@ -5,10 +5,11 @@ import pandas as pd
 import polars as pl
 import pytest
 import sqlalchemy as sa
+import structlog
 
 from pydiverse.pipedag import AUTO_VERSION, Blob, ConfigContext, Flow, Stage, Table
 from pydiverse.pipedag.container import RawSql
-from pydiverse.pipedag.context import StageLockContext
+from pydiverse.pipedag.context import FinalTaskState, StageLockContext
 from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.materialize.core import (
     input_stage_versions,
@@ -1112,3 +1113,31 @@ def test_broken_df_hashing(mocker):
         # res_pd is downstream of a lazy task that returns a pandas DataFrame that
         # cannot be hashed. Hence, it should always be cache invalid and always called.
         res_pd_spy.assert_called_once()
+
+
+def test_lazy_dataframe_table_name_change():
+    logger = structlog.get_logger(__name__ + ".test_lazy_dataframe_table_name_change")
+    name = None  # will be set before calling tasks
+
+    @materialize(lazy=True)
+    def get_df():
+        return Table(pd.DataFrame({"x": [0]}), name=name)
+
+    @materialize(lazy=True)
+    def get_tbl():
+        return Table(sa.select(sa.literal(1).label("x")), name=f"sql_{name}")
+
+    for i in range(2):
+        logger.info("### Running flow iteration", iteration=i)
+        name = f"tbl_{i}"
+        with Flow("test") as flow:
+            with Stage("first"):
+                df = get_df()
+                tbl = get_tbl()
+            with Stage("second"):
+                _ = m.noop(df), m.noop(tbl), m.noop_lazy(df), m.noop_lazy(tbl)
+        result = flow.run()
+        assert result.successful
+        if i > 0:
+            assert result.task_states[result.flow["first"]["get_df"]] == FinalTaskState.CACHE_VALID
+            assert result.task_states[result.flow["first"]["get_tbl"]] == FinalTaskState.CACHE_VALID

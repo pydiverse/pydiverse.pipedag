@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import os
+import re
 import shutil
 import uuid
 from collections.abc import Iterable
@@ -757,14 +758,27 @@ class ParquetTableStore(DuckDBTableStore):
         file_extension: str = ".parquet",
     ) -> UPath:
         schema_name = table.stage.current_name
+        parquet_name = table.name
         try:
             cfg = ConfigContext.get()
             store = cfg.store.table_store
             schema = store.get_schema(schema_name)
+            # check view for indirection of table names
+            with store.engine_connect() as conn:
+                view_query = conn.execute(
+                    sa.text(
+                        "FROM duckdb_views() "
+                        f"SELECT sql WHERE SCHEMA_NAME='{schema.get()}' and VIEW_NAME='{table.name}'"
+                    )
+                ).fetchall()
+            # parse actual table name from view definition
+            if len(view_query) == 1:
+                if match := re.match(r"^CREATE VIEW .* FROM [^.]*\.([^;]*);$", view_query[0][0]):
+                    parquet_name = match.group(1)
         except LookupError:
             # schema-prefix/suffix not available if no ConfigContext active
             schema = Schema(schema_name)
-        return self.get_table_schema_path(table.name, schema, file_extension)
+        return self.get_table_schema_path(parquet_name, schema, file_extension)
 
     def get_table_schema_path(self, table_name: str, schema: Schema, file_extension: str = ".parquet") -> UPath:
         # Parquet files might be stored in other transaction schema in case of cache
