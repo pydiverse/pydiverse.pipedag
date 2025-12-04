@@ -1115,16 +1115,23 @@ def test_broken_df_hashing(mocker):
         res_pd_spy.assert_called_once()
 
 
-def test_lazy_dataframe_table_name_change():
+@pytest.mark.parametrize("imperative", [False, True])
+def test_lazy_dataframe_table_name_change(imperative):
     logger = structlog.get_logger(__name__ + ".test_lazy_dataframe_table_name_change")
     name = None  # will be set before calling tasks
 
     @materialize(lazy=True)
     def get_df():
+        if imperative:
+            for i in range(2):
+                Table(pd.DataFrame({"x": [i]}), name=f"{name}_{i}").materialize()
         return Table(pd.DataFrame({"x": [0]}), name=name)
 
     @materialize(lazy=True)
     def get_tbl():
+        if imperative:
+            for i in range(2):
+                Table(sa.select(sa.literal(i).label("x")), name=f"sql_{name}_{i}").materialize()
         return Table(sa.select(sa.literal(1).label("x")), name=f"sql_{name}")
 
     for i in range(2):
@@ -1138,6 +1145,8 @@ def test_lazy_dataframe_table_name_change():
                 _ = m.noop(df), m.noop(tbl), m.noop_lazy(df), m.noop_lazy(tbl)
         result = flow.run()
         assert result.successful
-        if i > 0:
+        # We do not require cache validity for imperative mode, because the name of the assumed dependencies
+        # go into the cache key.
+        if i > 0 and not imperative:
             assert result.task_states[result.flow["first"]["get_df"]] == FinalTaskState.CACHE_VALID
             assert result.task_states[result.flow["first"]["get_tbl"]] == FinalTaskState.CACHE_VALID
