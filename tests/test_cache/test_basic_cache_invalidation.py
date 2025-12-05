@@ -1115,24 +1115,33 @@ def test_broken_df_hashing(mocker):
         res_pd_spy.assert_called_once()
 
 
+@pytest.mark.parametrize("other_imperative", [False, True])
 @pytest.mark.parametrize("imperative", [False, True])
-def test_lazy_dataframe_table_name_change(imperative):
+def test_lazy_dataframe_table_name_change(imperative, other_imperative):
     logger = structlog.get_logger(__name__ + ".test_lazy_dataframe_table_name_change")
     name = None  # will be set before calling tasks
 
     @materialize(lazy=True)
     def get_df():
-        if imperative:
+        if other_imperative:
             for i in range(2):
                 Table(pd.DataFrame({"x": [i]}), name=f"{name}_{i}").materialize()
-        return Table(pd.DataFrame({"x": [0]}), name=name)
+        tbl = Table(pd.DataFrame({"x": [0]}), name=name)
+        if imperative:
+            return tbl.materialize()
+        else:
+            return tbl
 
     @materialize(lazy=True)
     def get_tbl():
-        if imperative:
+        if other_imperative:
             for i in range(2):
                 Table(sa.select(sa.literal(i).label("x")), name=f"sql_{name}_{i}").materialize()
-        return Table(sa.select(sa.literal(1).label("x")), name=f"sql_{name}")
+        tbl = Table(sa.select(sa.literal(1).label("x")), name=f"sql_{name}")
+        if imperative:
+            return tbl.materialize()
+        else:
+            return tbl
 
     for i in range(2):
         logger.info("### Running flow iteration", iteration=i)
@@ -1145,8 +1154,8 @@ def test_lazy_dataframe_table_name_change(imperative):
                 _ = m.noop(df), m.noop(tbl), m.noop_lazy(df), m.noop_lazy(tbl)
         result = flow.run()
         assert result.successful
-        # We do not require cache validity for imperative mode, because the name of the assumed dependencies
+        # We do not require cache validity for other_imperative mode, because the name of the assumed dependencies
         # go into the cache key.
-        if i > 0 and not imperative:
+        if i > 0 and not other_imperative:
             assert result.task_states[result.flow["first"]["get_df"]] == FinalTaskState.CACHE_VALID
             assert result.task_states[result.flow["first"]["get_tbl"]] == FinalTaskState.CACHE_VALID
