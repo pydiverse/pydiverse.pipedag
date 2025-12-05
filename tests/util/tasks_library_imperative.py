@@ -134,7 +134,7 @@ def simple_dataframe_debug_materialize_twice():
         }
     )
     tbl = Table(df, name="simple_dataframe_dmt_%%")
-    _ = tbl.materialize()
+    _ = tbl.materialize(clear_table_obj=False)
     tbl.obj.iloc[3] = [4, "4"]
     res = tbl.materialize()
 

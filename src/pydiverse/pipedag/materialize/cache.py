@@ -23,6 +23,7 @@ class ImperativeMaterializationState:
         # tasks.
         self.object_lookup: dict[int, Table] = {}
         self.table_ids: set[int] = set()
+        self.tables: list[Table] = []  # this is just to make sure the IDs in self.table_ids are not reused
         self.auto_suffix_counter = itertools.count()
 
     def add_table_lookup(self, obj, table: Table):
@@ -31,6 +32,7 @@ class ImperativeMaterializationState:
         self.assumed_dependencies.add(table_without_assumed_dependencies)
         self.object_lookup[id(obj)] = table
         self.table_ids.add(id(table))
+        self.tables.append(table)
 
 
 @dataclass(frozen=True)

@@ -29,6 +29,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     DropTable,
     RenameSchema,
     RenameTable,
+    RenameView,
     split_ddl_statement,
 )
 from pydiverse.pipedag.container import RawSql, Schema
@@ -1242,6 +1243,7 @@ class SQLTableStore(BaseTableStore):
 
         try:
             ctx = RunContext.get()
+            cfg = ConfigContext.get()
             stage = table.stage
 
             self.execute(
@@ -1277,14 +1279,19 @@ class SQLTableStore(BaseTableStore):
                     {"table": table, "table_copy": table_copy},
                 ),
             )
-            ctx.defer_table_store_op(
-                stage,
-                DeferredTableStoreOp(
-                    "_rename_table",
-                    DeferredTableStoreOp.Condition.ON_STAGE_ABORT,
-                    (from_name, table.name, from_schema),
-                ),
-            )
+            # Lazy task outputs can be cache valid despite changing their name.
+            # If the complete stage is 100% cache valid, we only need to rename tables or table references at the source
+            if from_name != table.name:
+                ctx.defer_table_store_op(
+                    stage,
+                    DeferredTableStoreOp(
+                        "_rename_view"
+                        if cfg.stage_commit_technique == StageCommitTechnique.READ_VIEWS
+                        else "_rename_table",
+                        DeferredTableStoreOp.Condition.ON_STAGE_ABORT,
+                        (from_name, table.name, from_schema),
+                    ),
+                )
 
         except Exception as _e:
             msg = f"Failed to copy table {from_name} (schema: '{from_schema}') to transaction."
@@ -1327,8 +1334,14 @@ class SQLTableStore(BaseTableStore):
     def _rename_table(self, from_name: str, to_name: str, schema: Schema):
         if from_name == to_name:
             return
-        self.logger.info("RENAME", fr=from_name, to=to_name)
+        self.logger.info("rename table", _from=from_name, to=to_name, schema=schema.get())
         self.execute(RenameTable(from_name, to_name, schema))
+
+    def _rename_view(self, from_name: str, to_name: str, schema: Schema):
+        if from_name == to_name:
+            return
+        self.logger.info("rename view", _from=from_name, to=to_name, schema=schema.get())
+        self.execute(RenameView(from_name, to_name, schema))
 
     def copy_raw_sql_tables_to_transaction(self, metadata: RawSqlMetadata, target_stage: Stage):
         inspector = sa.inspect(self.engine)
