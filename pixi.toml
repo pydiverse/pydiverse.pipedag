@@ -22,7 +22,7 @@ click = ">=8.1.8,<9"
 pyparsing = ">=3.2.5,<4"
 sqlalchemy = ">=1.4.54,<3"
 pandas = ">=1.5.3,<3"
-pyarrow = ">=20.0.0,<23"
+pyarrow = ">=19.0.0,<23"  # just to test pyarrow 19 compatibility
 duckdb = ">=0.10.3,<2"
 duckdb-engine = ">=0.15.0,<0.16"
 polars = ">=1.2.1,<2"
@@ -182,10 +182,13 @@ check-deps = "sh -c .github/scripts/check_deps.sh"
 
 [feature.py311.dependencies]
 python = "3.11.*"
+pyarrow = ">=19.0.0,<20"  # just to test pyarrow 19 compatibility
 [feature.py312.dependencies]
 python = "3.12.*"
+pyarrow = ">=19.0.0,<20"  # just to test pyarrow 19 compatibility
 [feature.py313.dependencies]
 python = "3.13.*"
+pyarrow = ">=19.0.0,<20"  # just to test pyarrow 19 compatibility
 [feature.py314.dependencies]
 python = "3.14.*"
 [feature.pd1.dependencies]
