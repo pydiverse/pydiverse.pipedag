@@ -1179,8 +1179,9 @@ class SQLTableStore(BaseTableStore):
         else:
             self._deferred_copy_table(table, from_schema, from_name)
 
-    def _copy_table(self, table: Table, from_schema: Schema, from_name: str):
+    def _copy_table(self, table: Table, from_schema: Schema, from_name: str, is_deferred_copy: bool = False):
         """Copies the table immediately"""
+        _ = is_deferred_copy  # this is only relevant for some backends
         has_table = self.has_table_or_view(from_name, schema=from_schema)
         if not has_table:
             inspector = sa.inspect(self.engine)
@@ -1267,6 +1268,7 @@ class SQLTableStore(BaseTableStore):
                         table_copy,
                         from_schema,
                         from_name,
+                        True,  # is_deferred_copy=True
                     ),
                 ),
             )

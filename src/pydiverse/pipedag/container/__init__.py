@@ -252,8 +252,11 @@ class Table(Generic[T]):
             except (RuntimeError, DuplicateNameError):
                 # fall back to debug materialization when Table.materialize() is
                 # called twice for the same table
-                task_context.task._logger.info(
+                task_context.task._logger.warning(
                     "Falling back to debug materialization due to duplicate materializtion of this table"
+                )
+                assert self.obj is not None, (
+                    "Unfortunately, the table object already has been cleared (try clear_table_obj=False for debugging)"
                 )
 
                 def return_type_mutator(return_as_type):

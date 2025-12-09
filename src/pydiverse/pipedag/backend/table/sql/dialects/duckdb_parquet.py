@@ -642,7 +642,7 @@ class ParquetTableStore(DuckDBTableStore):
                     stage=stage,
                 )
 
-    def _copy_table(self, table: Table, from_schema: Schema, from_name: str):
+    def _copy_table(self, table: Table, from_schema: Schema, from_name: str, is_deferred_copy: bool = False):
         if from_name.endswith("__copy"):
             # we ignore the _copy_table which wants to write __copy tables
             return
@@ -668,7 +668,11 @@ class ParquetTableStore(DuckDBTableStore):
             shutil.copy(src_file_path, dest_file_path)
         else:
             src_file_path.fs.copy(src_file_path.as_uri(), dest_file_path.as_uri(), on_error="raise")
-        # No view needs to be created in duckdb file because copying underlying parquet file is sufficient.
+        if not is_deferred_copy:
+            # create view in duckdb database file
+            self.execute(CreateViewAsSelect(table.name, dest_schema, self._read_parquet_query(dest_file_path)))
+            self.metadata_track_view(table.name, dest_schema.get(), dest_file_path.as_uri(), "parquet")
+        # Otherwise, no view needs to be created in duckdb file because copying underlying parquet file is sufficient.
         # commit_stage() will create the correct view pointing to the parquet file if stage is not 100% cache valid.
 
     @staticmethod
