@@ -1017,7 +1017,7 @@ def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     from_table = compiler.preparer.quote(rename_table.from_name)
     to_table = compiler.preparer.quote(rename_table.to_name)
     schema = compiler.preparer.format_schema(rename_table.schema.get())
-    return f"ALTER VIEW {schema}.{from_table} RENAME TO {schema}.{to_table}"
+    return f"ALTER TABLE {schema}.{from_table} RENAME TO {schema}.{to_table}"
 
 
 @compiles(RenameView)
