@@ -252,6 +252,18 @@ class RenameView(DDLElement):
         self.schema = schema
 
 
+class RenameAlias(DDLElement):
+    def __init__(
+        self,
+        from_name,
+        to_name,
+        schema: Schema,
+    ):
+        self.from_name = from_name
+        self.to_name = to_name
+        self.schema = schema
+
+
 class DropTable(DDLElement):
     def __init__(self, name, schema: Schema | str, if_exists=False, cascade=False, quote_schema=True):
         self.name = name
@@ -996,7 +1008,7 @@ def visit_rename_table(rename_table: RenameTable, compiler, **kw):
     from_table = compiler.preparer.quote(rename_table.from_name)
     to_table = compiler.preparer.quote(rename_table.to_name)
     schema = compiler.preparer.format_schema(rename_table.schema.get())
-    return f"RENAME TABLE {schema}.{from_table} TO {to_table}"
+    return f"RENAME {schema}.{from_table} TO {to_table}"
 
 
 @compiles(RenameTable, "snowflake")
@@ -1034,7 +1046,7 @@ def visit_rename_view(rename_view: RenameView, compiler, **kw):
     from_table = compiler.preparer.quote(rename_view.from_name)
     to_table = compiler.preparer.quote(rename_view.to_name)
     schema = compiler.preparer.format_schema(rename_view.schema.get())
-    return f"RENAME VIEW {schema}.{from_table} TO {to_table}"
+    return f"RENAME {schema}.{from_table} TO {to_table}"
 
 
 @compiles(RenameView, "snowflake")
@@ -1043,6 +1055,41 @@ def visit_rename_view(rename_view: RenameView, compiler, **kw):
     from_table = compiler.preparer.quote(rename_view.from_name)
     to_table = compiler.preparer.quote(rename_view.to_name)
     schema = compiler.preparer.format_schema(rename_view.schema.get())
+    return f"ALTER VIEW {schema}.{from_table} RENAME TO {schema}.{to_table}"
+
+
+@compiles(RenameAlias)
+def visit_rename_alias(rename_alias: RenameAlias, compiler, **kw):
+    _ = kw
+    from_table = compiler.preparer.quote(rename_alias.from_name)
+    to_table = compiler.preparer.quote(rename_alias.to_name)
+    schema = compiler.preparer.format_schema(rename_alias.schema.get())
+    return f"ALTER VIEW {schema}.{from_table} RENAME TO {to_table}"
+
+
+@compiles(RenameAlias, "mssql")
+def visit_rename_alias(rename_alias: RenameAlias, compiler, **kw):
+    _ = kw
+
+    schema = compiler.preparer.format_schema(rename_alias.schema.get())
+    from_table = compiler.preparer.quote(rename_alias.from_name)
+    to_table = rename_alias.to_name  # no quoting is intentional
+
+    return f"EXEC sp_rename '{schema}.{from_table}', '{to_table}'"
+
+
+@compiles(RenameAlias, "ibm_db_sa")
+def visit_rename_alias(rename_alias: RenameAlias, compiler, **kw):
+    _ = kw
+    raise AssertionError("Renaming ALIAS is not supported in IBM DB2. You need to drop and recreate alias.")
+
+
+@compiles(RenameAlias, "snowflake")
+def visit_rename_alias(rename_alias: RenameAlias, compiler, **kw):
+    _ = kw
+    from_table = compiler.preparer.quote(rename_alias.from_name)
+    to_table = compiler.preparer.quote(rename_alias.to_name)
+    schema = compiler.preparer.format_schema(rename_alias.schema.get())
     return f"ALTER VIEW {schema}.{from_table} RENAME TO {schema}.{to_table}"
 
 

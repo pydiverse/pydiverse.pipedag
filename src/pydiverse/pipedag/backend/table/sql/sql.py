@@ -27,9 +27,9 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     DropSchema,
     DropSchemaContent,
     DropTable,
+    RenameAlias,
     RenameSchema,
     RenameTable,
-    RenameView,
     split_ddl_statement,
 )
 from pydiverse.pipedag.container import RawSql, Schema
@@ -1284,12 +1284,17 @@ class SQLTableStore(BaseTableStore):
             # Lazy task outputs can be cache valid despite changing their name.
             # If the complete stage is 100% cache valid, we only need to rename tables or table references at the source
             if from_name != table.name:
+                target_name, target_schema = self.resolve_alias(Table(name=from_name), table.stage.name)
                 ctx.defer_table_store_op(
                     stage,
                     DeferredTableStoreOp(
-                        "_rename_view"
-                        if cfg.stage_commit_technique == StageCommitTechnique.READ_VIEWS
-                        else "_rename_table",
+                        "_rename_alias",
+                        DeferredTableStoreOp.Condition.ON_STAGE_ABORT,
+                        (from_name, table.name, from_schema, target_name, target_schema),
+                    )
+                    if cfg.stage_commit_technique == StageCommitTechnique.READ_VIEWS
+                    else DeferredTableStoreOp(
+                        "_rename_table",
                         DeferredTableStoreOp.Condition.ON_STAGE_ABORT,
                         (from_name, table.name, from_schema),
                     ),
@@ -1339,11 +1344,19 @@ class SQLTableStore(BaseTableStore):
         self.logger.info("rename table", _from=from_name, to=to_name, schema=schema.get())
         self.execute(RenameTable(from_name, to_name, schema))
 
-    def _rename_view(self, from_name: str, to_name: str, schema: Schema):
-        if from_name == to_name:
+    def _rename_alias(
+        self, alias_from_name: str, alias_to_name: str, alias_schema: Schema, target_name: str, target_schema: str
+    ):
+        # either rename alias or recreate it with given target
+        if alias_from_name == alias_to_name:
             return
-        self.logger.info("rename view", _from=from_name, to=to_name, schema=schema.get())
-        self.execute(RenameView(from_name, to_name, schema))
+        self.logger.info("rename view", _from=alias_from_name, to=alias_to_name, schema=alias_schema.get())
+        try:
+            self.execute(RenameAlias(alias_from_name, alias_to_name, alias_schema))
+        except AssertionError:
+            # some dialects don't support renaming aliases, so we recreate it
+            self.execute(DropAlias(alias_from_name, alias_schema))
+            self.execute(CreateAlias(target_name, Schema(target_schema), alias_to_name, alias_schema))
 
     def copy_raw_sql_tables_to_transaction(self, metadata: RawSqlMetadata, target_stage: Stage):
         inspector = sa.inspect(self.engine)
