@@ -201,6 +201,7 @@ class Table(Generic[T]):
         schema: Schema | None = None,
         return_as_type=None,
         return_nothing=False,
+        clear_table_obj=True,
     ):
         """Materialize the table.
 
@@ -223,6 +224,8 @@ class Table(Generic[T]):
             list in order to receive a tuple of the dematerialized objects.
         :param return_nothing: If True, the method will return None instead of the
             dematerialized created table.
+        :param clear_table_obj: If True, the `obj` field of the Table will be set to
+            None during materialization in order to reduce memory consumption.
         """
         try:
             task_context = TaskContext.get()  # raises Lookup Error if no TaskContext is open
@@ -244,13 +247,16 @@ class Table(Generic[T]):
                 return self.obj
             try:
                 return task_context.imperative_materialize_callback(
-                    self, config_context, return_as_type, return_nothing
+                    self, config_context, return_as_type, return_nothing, clear_table_obj
                 )
             except (RuntimeError, DuplicateNameError):
                 # fall back to debug materialization when Table.materialize() is
                 # called twice for the same table
-                task_context.task._logger.info(
+                task_context.task._logger.warning(
                     "Falling back to debug materialization due to duplicate materializtion of this table"
+                )
+                assert self.obj is not None, (
+                    "Unfortunately, the table object already has been cleared (try clear_table_obj=False for debugging)"
                 )
 
                 def return_type_mutator(return_as_type):

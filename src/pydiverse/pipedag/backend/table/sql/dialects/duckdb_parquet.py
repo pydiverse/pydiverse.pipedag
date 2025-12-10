@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import os
+import re
 import shutil
 import uuid
 from collections.abc import Iterable
@@ -641,16 +642,23 @@ class ParquetTableStore(DuckDBTableStore):
                     stage=stage,
                 )
 
-    def _copy_table(self, table: Table, from_schema: Schema, from_name: str):
-        if table.name != from_name:
+    def _copy_table(self, table: Table, from_schema: Schema, from_name: str, is_deferred_copy: bool = False):
+        if from_name.endswith("__copy"):
             # we ignore the _copy_table which wants to write __copy tables
             return
+        final_table_name = (
+            table.name[0 : len(table.name) - len("__copy")] if table.name.endswith("__copy") else table.name
+        )
+        if from_schema.name == table.stage.name:
+            parquet_name = self.resolve_parquet_name(from_name, from_schema, store=self)
+        else:
+            parquet_name = from_name
         _ = from_schema  # not used because this only points to READ VIEW
         dest_schema = self.get_schema(table.stage.current_name)
         original_transaction_name = self._get_read_view_original_transaction_name(table.stage)
         original_schema = self.get_schema(original_transaction_name)
-        src_file_path = self.get_parquet_path(original_schema) / (from_name + ".parquet")
-        dest_file_path = self.get_parquet_path(dest_schema) / src_file_path.name
+        src_file_path = self.get_parquet_path(original_schema) / (parquet_name + ".parquet")
+        dest_file_path = self.get_parquet_path(dest_schema) / (final_table_name + ".parquet")
         self.logger.info(
             "Copying table between transactions",
             src_file_path=src_file_path,
@@ -660,9 +668,12 @@ class ParquetTableStore(DuckDBTableStore):
             shutil.copy(src_file_path, dest_file_path)
         else:
             src_file_path.fs.copy(src_file_path.as_uri(), dest_file_path.as_uri(), on_error="raise")
-        # create view in duckdb database file
-        self.execute(CreateViewAsSelect(table.name, dest_schema, self._read_parquet_query(dest_file_path)))
-        self.metadata_track_view(table.name, dest_schema.get(), dest_file_path.as_uri(), "parquet")
+        if not is_deferred_copy:
+            # create view in duckdb database file
+            self.execute(CreateViewAsSelect(table.name, dest_schema, self._read_parquet_query(dest_file_path)))
+            self.metadata_track_view(table.name, dest_schema.get(), dest_file_path.as_uri(), "parquet")
+        # Otherwise, no view needs to be created in duckdb file because copying underlying parquet file is sufficient.
+        # commit_stage() will create the correct view pointing to the parquet file if stage is not 100% cache valid.
 
     @staticmethod
     def _read_parquet_query(file_path):
@@ -699,19 +710,15 @@ class ParquetTableStore(DuckDBTableStore):
             for table in self.parquet_deferred_copy:
                 # remove views which were placed as aliases
                 self.execute(DropView(table.name, schema))
-                src_file_path = self.parquet_table_paths[(schema.name, table.name)]
-                dest_file_path = stage_transaction_path / src_file_path.name
+                # the parquet file was already put in correct dest_file_path by _copy_table
+                dest_file_path = stage_transaction_path / (table.name + ".parquet")
                 self.logger.info(
-                    "Copying table between transactions",
-                    src_file_path=src_file_path,
+                    "Redirecting VIEW to parquet file which was copied in the background",
+                    table_name=table.name,
+                    schema=schema,
                     dest_file_path=dest_file_path,
                 )
-                if is_file_uri(src_file_path):
-                    shutil.copy(src_file_path, dest_file_path)
-                else:
-                    src_file_path.fs.copy(src_file_path.as_uri(), dest_file_path.as_uri(), on_error="raise")
-                # replace view in duckdb database file (which was previously just
-                # alias to main schema)
+                # replace view in duckdb database file (which was previously just alias to main schema)
                 self.execute(CreateViewAsSelect(table.name, schema, self._read_parquet_query(dest_file_path)))
                 self.metadata_track_view(table.name, schema.get(), dest_file_path.as_uri(), "parquet")
             # switch committed transaction path to the new transaction path
@@ -756,15 +763,36 @@ class ParquetTableStore(DuckDBTableStore):
         table: Table,
         file_extension: str = ".parquet",
     ) -> UPath:
+        parquet_name, schema = self.resolve_parquet_name_and_schema(table)
+        return self.get_table_schema_path(parquet_name, schema, file_extension)
+
+    def resolve_parquet_name_and_schema(self, table: Table) -> tuple[Any, Any]:
         schema_name = table.stage.current_name
+        parquet_name = table.name
         try:
             cfg = ConfigContext.get()
             store = cfg.store.table_store
             schema = store.get_schema(schema_name)
+            if schema_name == table.stage.name:
+                parquet_name = self.resolve_parquet_name(table.name, schema, store)
         except LookupError:
             # schema-prefix/suffix not available if no ConfigContext active
             schema = Schema(schema_name)
-        return self.get_table_schema_path(table.name, schema, file_extension)
+        return parquet_name, schema
+
+    def resolve_parquet_name(self, table_name: str, schema: Schema, store: BaseTableStore) -> str | Any:
+        # check view for indirection of table names in READ_VIEWS schema
+        with store.engine_connect() as conn:
+            view_query = conn.execute(
+                sa.text(
+                    f"FROM duckdb_views() SELECT sql WHERE SCHEMA_NAME='{schema.get()}' and VIEW_NAME='{table_name}'"
+                )
+            ).fetchall()
+        # parse actual table name from view definition
+        if len(view_query) == 1:
+            if match := re.match(r'^CREATE VIEW .* FROM [^.]*\."?([^;"]*)"?;$', view_query[0][0]):
+                parquet_name = match.group(1)
+        return parquet_name
 
     def get_table_schema_path(self, table_name: str, schema: Schema, file_extension: str = ".parquet") -> UPath:
         # Parquet files might be stored in other transaction schema in case of cache

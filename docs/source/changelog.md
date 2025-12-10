@@ -2,7 +2,10 @@
 
 ## 0.12.6 (2025-XX-XX)
 - Feat: Automatically check cache-validity of polars and pandas DataFrame tasks marked as lazy
-- Fix: Fix hang when using many imperative materializations in a single task (the implementation was not designed for this and storage size grew unsustainably)
+- Fix: lazy=True tasks in 100% cache valid stage can still rename outputs. This did not work for
+  stage_commit_technique=READ_VIEWS.
+- Fix: Fix hang when using many imperative materializations in a single task
+  (the implementation was not designed for this and storage size grew unsustainably)
 
 ## 0.12.5 (2025-11-26)
 - Workaround snowflake sqlalchemy dialect to enable ExternalTableReference to other database

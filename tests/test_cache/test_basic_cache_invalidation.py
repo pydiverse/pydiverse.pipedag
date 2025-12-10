@@ -5,10 +5,11 @@ import pandas as pd
 import polars as pl
 import pytest
 import sqlalchemy as sa
+import structlog
 
 from pydiverse.pipedag import AUTO_VERSION, Blob, ConfigContext, Flow, Stage, Table
 from pydiverse.pipedag.container import RawSql
-from pydiverse.pipedag.context import StageLockContext
+from pydiverse.pipedag.context import FinalTaskState, StageLockContext
 from pydiverse.pipedag.context.context import CacheValidationMode
 from pydiverse.pipedag.materialize.core import (
     input_stage_versions,
@@ -1112,3 +1113,49 @@ def test_broken_df_hashing(mocker):
         # res_pd is downstream of a lazy task that returns a pandas DataFrame that
         # cannot be hashed. Hence, it should always be cache invalid and always called.
         res_pd_spy.assert_called_once()
+
+
+@pytest.mark.parametrize("other_imperative", [False, True])
+@pytest.mark.parametrize("imperative", [False, True])
+def test_lazy_dataframe_table_name_change(imperative, other_imperative):
+    logger = structlog.get_logger(__name__ + ".test_lazy_dataframe_table_name_change")
+    name = None  # will be set before calling tasks
+
+    @materialize(lazy=True)
+    def get_df():
+        if other_imperative:
+            for i in range(2):
+                Table(pd.DataFrame({"x": [i]}), name=f"{name}_{i}").materialize()
+        tbl = Table(pd.DataFrame({"x": [0]}), name=name)
+        if imperative:
+            return tbl.materialize()
+        else:
+            return tbl
+
+    @materialize(lazy=True)
+    def get_tbl():
+        if other_imperative:
+            for i in range(2):
+                Table(sa.select(sa.literal(i).label("x")), name=f"sql_{name}_{i}").materialize()
+        tbl = Table(sa.select(sa.literal(1).label("x")), name=f"sql_{name}")
+        if imperative:
+            return tbl.materialize()
+        else:
+            return tbl
+
+    for i in range(2):
+        logger.info("### Running flow iteration", iteration=i)
+        name = f"tbl_{i}"
+        with Flow("test") as flow:
+            with Stage("first"):
+                df = get_df()
+                tbl = get_tbl()
+            with Stage("second"):
+                _ = m.noop(df), m.noop(tbl), m.noop_lazy(df), m.noop_lazy(tbl)
+        result = flow.run()
+        assert result.successful
+        # We do not require cache validity for other_imperative mode, because the name of the assumed dependencies
+        # go into the cache key.
+        if i > 0 and not other_imperative:
+            assert result.task_states[result.flow["first"]["get_df"]] == FinalTaskState.CACHE_VALID
+            assert result.task_states[result.flow["first"]["get_tbl"]] == FinalTaskState.CACHE_VALID

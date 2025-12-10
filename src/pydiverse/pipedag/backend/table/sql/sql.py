@@ -27,6 +27,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     DropSchema,
     DropSchemaContent,
     DropTable,
+    RenameAlias,
     RenameSchema,
     RenameTable,
     split_ddl_statement,
@@ -1178,8 +1179,9 @@ class SQLTableStore(BaseTableStore):
         else:
             self._deferred_copy_table(table, from_schema, from_name)
 
-    def _copy_table(self, table: Table, from_schema: Schema, from_name: str):
+    def _copy_table(self, table: Table, from_schema: Schema, from_name: str, is_deferred_copy: bool = False):
         """Copies the table immediately"""
+        _ = is_deferred_copy  # this is only relevant for some backends
         has_table = self.has_table_or_view(from_name, schema=from_schema)
         if not has_table:
             inspector = sa.inspect(self.engine)
@@ -1242,6 +1244,7 @@ class SQLTableStore(BaseTableStore):
 
         try:
             ctx = RunContext.get()
+            cfg = ConfigContext.get()
             stage = table.stage
 
             self.execute(
@@ -1265,6 +1268,7 @@ class SQLTableStore(BaseTableStore):
                         table_copy,
                         from_schema,
                         from_name,
+                        True,  # is_deferred_copy=True
                     ),
                 ),
             )
@@ -1277,14 +1281,24 @@ class SQLTableStore(BaseTableStore):
                     {"table": table, "table_copy": table_copy},
                 ),
             )
-            ctx.defer_table_store_op(
-                stage,
-                DeferredTableStoreOp(
-                    "_rename_table",
-                    DeferredTableStoreOp.Condition.ON_STAGE_ABORT,
-                    (from_name, table.name, from_schema),
-                ),
-            )
+            # Lazy task outputs can be cache valid despite changing their name.
+            # If the complete stage is 100% cache valid, we only need to rename tables or table references at the source
+            if from_name != table.name:
+                target_name, target_schema = self.resolve_alias(Table(name=from_name), table.stage.name)
+                ctx.defer_table_store_op(
+                    stage,
+                    DeferredTableStoreOp(
+                        "_rename_alias",
+                        DeferredTableStoreOp.Condition.ON_STAGE_ABORT,
+                        (from_name, table.name, from_schema, target_name, target_schema),
+                    )
+                    if cfg.stage_commit_technique == StageCommitTechnique.READ_VIEWS
+                    else DeferredTableStoreOp(
+                        "_rename_table",
+                        DeferredTableStoreOp.Condition.ON_STAGE_ABORT,
+                        (from_name, table.name, from_schema),
+                    ),
+                )
 
         except Exception as _e:
             msg = f"Failed to copy table {from_name} (schema: '{from_schema}') to transaction."
@@ -1327,8 +1341,22 @@ class SQLTableStore(BaseTableStore):
     def _rename_table(self, from_name: str, to_name: str, schema: Schema):
         if from_name == to_name:
             return
-        self.logger.info("RENAME", fr=from_name, to=to_name)
+        self.logger.info("rename table", _from=from_name, to=to_name, schema=schema.get())
         self.execute(RenameTable(from_name, to_name, schema))
+
+    def _rename_alias(
+        self, alias_from_name: str, alias_to_name: str, alias_schema: Schema, target_name: str, target_schema: str
+    ):
+        # either rename alias or recreate it with given target
+        if alias_from_name == alias_to_name:
+            return
+        self.logger.info("rename view", _from=alias_from_name, to=alias_to_name, schema=alias_schema.get())
+        try:
+            self.execute(RenameAlias(alias_from_name, alias_to_name, alias_schema))
+        except AssertionError:
+            # some dialects don't support renaming aliases, so we recreate it
+            self.execute(DropAlias(alias_from_name, alias_schema))
+            self.execute(CreateAlias(target_name, Schema(target_schema), alias_to_name, alias_schema))
 
     def copy_raw_sql_tables_to_transaction(self, metadata: RawSqlMetadata, target_stage: Stage):
         inspector = sa.inspect(self.engine)

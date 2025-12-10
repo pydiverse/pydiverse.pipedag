@@ -690,6 +690,7 @@ class MaterializationWrapper:
                 config_context: ConfigContext | None,
                 return_as_type: type | None = None,
                 return_nothing: bool = False,
+                clear_table_obj: bool = True,
             ):
                 my_store = config_context.store if config_context is not None else store
                 state = task_cache_info.imperative_materialization_state
@@ -699,6 +700,9 @@ class MaterializationWrapper:
                     list(sorted(state.assumed_dependencies)) if len(state.assumed_dependencies) > 0 else []
                 )
                 _ = my_store.materialize_task(task, task_cache_info, table, disable_task_finalization=True)
+                assert table.stage is not None
+                if clear_table_obj:
+                    table.obj = None  # enable garbage collection of underlying data
                 if not return_nothing:
 
                     def get_return_obj(return_as_type):
@@ -734,6 +738,8 @@ class MaterializationWrapper:
                     # substitute imperatively materialized object references with
                     # their respective table objects
                     x = object_lookup[id(x)]
+                    assert isinstance(x, Table)
+                    assert x.stage is not None
                 if isinstance(x, (Table, RawSql)):
                     # fill assumed_dependencies for Tables that were not yet
                     # materialized
