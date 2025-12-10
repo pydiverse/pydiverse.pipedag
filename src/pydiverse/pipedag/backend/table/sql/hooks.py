@@ -1907,6 +1907,7 @@ class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
 
         if query is not None:
             return str(query)
+        # Currently, does not support hashing pandas backed transform table
         return super().lazy_query_str(store, obj)
 
 
@@ -2019,7 +2020,8 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
 
         if query is not None:
             return str(query)
-        return super().lazy_query_str(store, obj)
+        else:
+            return DataFrameTableHook.lazy_query_str(store, obj >> pdt.export(pdt.Polars(lazy=True)))
 
     @classmethod
     def retrieve_for_auto_versioning_lazy(
