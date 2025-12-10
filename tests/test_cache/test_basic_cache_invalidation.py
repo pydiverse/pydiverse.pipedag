@@ -15,6 +15,7 @@ from pydiverse.pipedag.materialize.core import (
     input_stage_versions,
     materialize,
 )
+from pydiverse.pipedag.optional_dependency.transform import pdt_new as pdt
 from pydiverse.pipedag.util.sql import compile_sql
 
 # Parameterize all tests in this file with several instance_id configurations
@@ -317,8 +318,9 @@ def test_change_task_version_blob(mocker):
         lambda query_value: select_as(query_value, "x"),
         lambda query_value: pl.DataFrame({"x": [query_value]}),
         lambda query_value: pd.DataFrame({"x": [query_value]}),
+        lambda query_value: pdt.Table({"x": [query_value]}) if pdt is not None else pytest.skip("pdt not installed"),
     ],
-    ids=["sql", "polars", "pandas"],
+    ids=["sql", "polars", "pandas", "transform"],
 )
 def test_change_lazy_query(mocker, get_tbl_obj):
     query_value = 1
@@ -342,7 +344,7 @@ def test_change_lazy_query(mocker, get_tbl_obj):
     # Initial Run
     lazy_spy = spy_task(mocker, lazy)
     with StageLockContext():
-        result = flow.run()
+        result = flow.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
         assert result.successful
         assert result.get(value) == 1
         lazy_spy.assert_called_once()

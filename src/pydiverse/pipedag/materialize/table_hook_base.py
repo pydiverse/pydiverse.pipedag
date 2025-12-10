@@ -431,11 +431,13 @@ class DataFrameTableHook:
         return df.columns
 
     @classmethod
-    def lazy_query_str(cls, store: Any, obj: pd.DataFrame | pl.DataFrame) -> str:
+    def lazy_query_str(cls, store: Any, obj: pd.DataFrame | pl.DataFrame | pl.LazyFrame) -> str:
         """The cache validity of the output of a Dataframe task depends on the content of the DataFrame.
         We thus compute a stable hash of the DataFrame as cache key."""
         _ = store
         try:
+            if isinstance(obj, pl.LazyFrame):
+                obj = obj.collect()
             obj_hash = stable_dataframe_hash(obj)
         except Exception as e:
             raise HashingError(f"Failed to compute hash for DataFrame of type {type(obj)}: {str(e)}") from e
