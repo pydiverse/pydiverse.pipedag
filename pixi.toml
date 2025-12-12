@@ -20,7 +20,7 @@ pyyaml = ">=6.0.3,<7"
 cryptography = ">=45.0.7,<47"
 click = ">=8.1.8,<9"
 pyparsing = ">=3.2.5,<4"
-sqlalchemy = ">=1.4.54,<3"
+sqlalchemy = ">=1.4.54,<3,!=2.0.45"  # exclude 2.0.45 due to duckdb incompatibility
 pandas = ">=1.5.3,<3"
 pyarrow = ">=19.0.0,<23"
 duckdb = ">=0.10.3,<2"
