@@ -649,10 +649,13 @@ class ParquetTableStore(DuckDBTableStore):
         final_table_name = (
             table.name[0 : len(table.name) - len("__copy")] if table.name.endswith("__copy") else table.name
         )
+        parquet_name = from_name
         if from_schema.name == table.stage.name:
-            parquet_name = self.resolve_parquet_name(from_name, from_schema, store=self)
-        else:
-            parquet_name = from_name
+            try:
+                parquet_name = self.resolve_parquet_name(from_name, from_schema, store=self)
+            except LookupError:
+                pass
+
         _ = from_schema  # not used because this only points to READ VIEW
         dest_schema = self.get_schema(table.stage.current_name)
         original_transaction_name = self._get_read_view_original_transaction_name(table.stage)
@@ -791,8 +794,8 @@ class ParquetTableStore(DuckDBTableStore):
         # parse actual table name from view definition
         if len(view_query) == 1:
             if match := re.match(r'^CREATE VIEW .* FROM [^.]*\."?([^;"]*)"?;$', view_query[0][0]):
-                parquet_name = match.group(1)
-        return parquet_name
+                return match.group(1)
+        raise LookupError("Failed resolving parquet name from top level view")
 
     def get_table_schema_path(self, table_name: str, schema: Schema, file_extension: str = ".parquet") -> UPath:
         # Parquet files might be stored in other transaction schema in case of cache
