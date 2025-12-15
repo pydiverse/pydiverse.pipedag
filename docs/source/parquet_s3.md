@@ -53,8 +53,8 @@ to copy the duckdb file for interactive use. A good UI (like Jetbrains DataGrip 
 offer configuration parameters to make this smooth:
 
 <p align="center">
-  <img src="_images/datagrip_s3_options01.png" width="45%" />
-  <img src="_images/datagrip_s3_options02.png" width="45%" />
+  <img src="images/datagrip_s3_options01.png" width="45%" />
+  <img src="images/datagrip_s3_options02.png" width="45%" />
 </p>
 
 Since duckdb files cannot be shared among team members, pipedag supports a field called `metadata_store:` under
