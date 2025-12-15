@@ -2164,7 +2164,7 @@ class IbisTableHook(TableHook[SQLTableStore]):
     ):
         t = table.obj
         table = table.copy_without_obj()
-        table.obj = sa.text(cls.lazy_query_str(store, t))
+        table.obj = sa.text(cls.get_query_str(store, t))
 
         sa_hook = store.get_m_table_hook(table)
         return sa_hook.materialize(store, table, stage_name)
@@ -2207,8 +2207,12 @@ class IbisTableHook(TableHook[SQLTableStore]):
             return super().auto_table(obj)
 
     @classmethod
+    def get_query_str(cls, store, obj: ibis.api.Table) -> str:
+        return str(ibis.to_sql(obj, cls.conn(store).name))
+
+    @classmethod
     def lazy_query_str(cls, store, obj: ibis.api.Table) -> str:
-        query = str(ibis.to_sql(obj, cls.conn(store).name))
+        query = cls.get_query_str(store, obj)
         return canonicalize_query(query)
 
 
