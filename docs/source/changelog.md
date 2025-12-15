@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.7 (2025-12-15)
+- Fix: cache invalidation works more reliably for pydiverse.transform and ibis
+- Fix: be more fault-tolerant in duckdb view parsing (ParquetTableStore)
+
 ## 0.12.6 (2025-12-10)
 - Feat: Automatically check cache-validity of polars and pandas DataFrame tasks marked as lazy
 - Fix: lazy=True tasks in 100% cache valid stage can still rename outputs. This did not work for

@@ -371,6 +371,14 @@ def get_view_query_pdt(view: View, store: SQLTableStore, name: str, stage_name: 
     return tbl
 
 
+def canonicalize_query(query_str: str) -> str:
+    # hacky way to canonicalize query (despite __tmp/__even/__odd suffixes
+    # and alias resolution)
+    query_str = re.sub(r'["\[\]]', "", query_str)
+    query_str = re.sub(r'(__tmp|__even|__odd)(?=[ \t\n.;"]|$)', "", query_str.lower())
+    return query_str
+
+
 @SQLTableStore.register_table()
 class SQLAlchemyTableHook(TableHook[SQLTableStore]):
     @dataclass  # consider using pydantic instead
@@ -641,10 +649,7 @@ class SQLAlchemyTableHook(TableHook[SQLTableStore]):
         else:
             query = obj
         query_str = str(query.compile(store.engine, compile_kwargs={"literal_binds": True}))
-        # hacky way to canonicalize query (despite __tmp/__even/__odd suffixes
-        # and alias resolution)
-        query_str = re.sub(r'["\[\]]', "", query_str)
-        query_str = re.sub(r'(__tmp|__even|__odd)(?=[ \t\n.;"]|$)', "", query_str.lower())
+        query_str = canonicalize_query(query_str)
         return query_str
 
 
@@ -1906,7 +1911,7 @@ class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
         query = obj >> build_query()
 
         if query is not None:
-            return str(query)
+            return canonicalize_query(str(query))
         # Currently, does not support hashing pandas backed transform table
         return super().lazy_query_str(store, obj)
 
@@ -2019,7 +2024,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         query = obj >> build_query()
 
         if query is not None:
-            return str(query)
+            return canonicalize_query(str(query))
         else:
             return DataFrameTableHook.lazy_query_str(store, obj >> pdt.export(pdt.Polars(lazy=True)))
 
@@ -2159,7 +2164,7 @@ class IbisTableHook(TableHook[SQLTableStore]):
     ):
         t = table.obj
         table = table.copy_without_obj()
-        table.obj = sa.text(cls.lazy_query_str(store, t))
+        table.obj = sa.text(cls.get_query_str(store, t))
 
         sa_hook = store.get_m_table_hook(table)
         return sa_hook.materialize(store, table, stage_name)
@@ -2202,8 +2207,13 @@ class IbisTableHook(TableHook[SQLTableStore]):
             return super().auto_table(obj)
 
     @classmethod
-    def lazy_query_str(cls, store, obj: ibis.api.Table) -> str:
+    def get_query_str(cls, store, obj: ibis.api.Table) -> str:
         return str(ibis.to_sql(obj, cls.conn(store).name))
+
+    @classmethod
+    def lazy_query_str(cls, store, obj: ibis.api.Table) -> str:
+        query = cls.get_query_str(store, obj)
+        return canonicalize_query(query)
 
 
 # endregion
