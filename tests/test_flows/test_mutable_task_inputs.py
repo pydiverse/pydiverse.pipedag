@@ -1,3 +1,6 @@
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
 from __future__ import annotations
 
 import pandas as pd
@@ -30,13 +33,13 @@ def double_a(tables: dict[str, pd.DataFrame]):
 
 
 @materialize(input_type=pd.DataFrame, version="1.0")
-def halfen_table(table: pd.DataFrame):
-    return table / 2
+def halve_table(df: pd.DataFrame):
+    return Table(df / 2, "%%")
 
 
-def halfen_tables(tables: dict[str, Table]):
+def halven_tables(tables: dict[str, Table]):
     for table_name in tables:
-        tables[table_name] = halfen_table(tables[table_name])
+        tables[table_name] = halve_table(tables[table_name])
     return tables
 
 
@@ -47,7 +50,7 @@ def get_flow():
             tables: dict[str, Table] = {"dfA": a}
             a2 = double_a(tables)
             tables["dfA2"] = a2
-            halfen_tables(tables)
+            halven_tables(tables)
 
     return flow
 
