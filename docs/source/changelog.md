@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.12.8 (202X-XX-XX)
+- Copy task inputs to protect against modifications before execution time
+
 ## 0.12.7 (2025-12-15)
 - Fix: cache invalidation works more reliably for pydiverse.transform and ibis
 - Fix: be more fault-tolerant in duckdb view parsing (ParquetTableStore)
