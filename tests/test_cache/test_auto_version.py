@@ -1,10 +1,11 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
 import pytest
 
 from pydiverse.pipedag import AUTO_VERSION, Blob, Flow, Stage, Table
-from pydiverse.pipedag.materialize.container import RawSql
+from pydiverse.pipedag.container import RawSql
 from pydiverse.pipedag.materialize.core import materialize
 from tests.fixtures.instances import with_instances
 from tests.util import swallowing_raises
@@ -19,18 +20,17 @@ def test_lazy_incompatible_with_auto_version():
     with pytest.raises(ValueError):
 
         @materialize(input_type=pd.DataFrame, version=AUTO_VERSION, lazy=True)
-        def task():
-            ...
+        def task(): ...
 
 
 def test_missing_input_type_auto_version():
     with pytest.raises(ValueError):
 
         @materialize(version=AUTO_VERSION)
-        def task():
-            ...
+        def task(): ...
 
 
+@with_instances("postgres")
 def test_auto_version_illegal_return_types():
     @materialize(input_type=pd.DataFrame, version=AUTO_VERSION)
     def blob():

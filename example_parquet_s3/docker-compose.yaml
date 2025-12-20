@@ -1,0 +1,22 @@
+version: "3.9"
+services:
+  minio:
+    image: quay.io/minio/minio
+    ports:
+      - "9000:9000" # API
+      - "9001:9001" # Console: using minioadmin:minioadmin
+    command: server /tmp/minio --console-address ":9001"
+  postgres:
+    image: postgres
+    environment:
+      POSTGRES_USER: sa
+      POSTGRES_PASSWORD: Pydiverse23
+    ports:
+      - "6543:5432"
+  zoo:
+    image: zookeeper
+    environment:
+      ZOO_4LW_COMMANDS_WHITELIST: ruok
+      ZOO_MAX_CLIENT_CNXNS: 100
+    ports:
+      - "2181:2181"

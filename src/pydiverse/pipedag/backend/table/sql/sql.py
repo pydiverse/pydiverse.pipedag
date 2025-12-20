@@ -1,48 +1,57 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import json
 import textwrap
+import time
 import warnings
 from collections.abc import Iterable
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, Literal
 
 import sqlalchemy as sa
 import sqlalchemy.exc
 
+from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import Stage, Table
-from pydiverse.pipedag.backend.table.base import BaseTableStore
 from pydiverse.pipedag.backend.table.sql.ddl import (
     AddIndex,
     AddPrimaryKey,
+    ChangeColumnNullable,
     CopyTable,
     CreateAlias,
     CreateDatabase,
     CreateSchema,
+    CreateTableAsSelect,
     DropAlias,
     DropSchema,
     DropSchemaContent,
     DropTable,
+    RenameAlias,
     RenameSchema,
     RenameTable,
-    Schema,
     split_ddl_statement,
 )
+from pydiverse.pipedag.container import RawSql, Schema
 from pydiverse.pipedag.context import RunContext
-from pydiverse.pipedag.context.context import ConfigContext, StageCommitTechnique
+from pydiverse.pipedag.context.context import (
+    CacheValidationMode,
+    ConfigContext,
+    StageCommitTechnique,
+)
 from pydiverse.pipedag.context.run_context import DeferredTableStoreOp
 from pydiverse.pipedag.errors import CacheError
-from pydiverse.pipedag.materialize.container import RawSql
-from pydiverse.pipedag.materialize.core import MaterializingTask
-from pydiverse.pipedag.materialize.details import (
-    resolve_materialization_details_label,
-)
+from pydiverse.pipedag.materialize.details import BaseMaterializationDetails, resolve_materialization_details_label
+from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.metadata import (
     LazyTableMetadata,
     RawSqlMetadata,
     TaskMetadata,
 )
-from pydiverse.pipedag.util.hashing import stable_hash
+from pydiverse.pipedag.materialize.store import BaseTableStore
+from pydiverse.pipedag.optional_dependency.sqlalchemy import Connection, Engine
+
+DISABLE_DIALECT_REGISTRATION = "__DISABLE_DIALECT_REGISTRATION"
 
 
 class SQLTableStore(BaseTableStore):
@@ -82,8 +91,10 @@ class SQLTableStore(BaseTableStore):
          - :py:class:`pd.DataFrame <pandas.DataFrame>`
 
        * - Polars
-         - :external+pl:doc:`pl.DataFrame <reference/dataframe/index>`
-         - :external+pl:doc:`pl.DataFrame <reference/dataframe/index>`
+         - | :external+pl:doc:`pl.DataFrame <reference/dataframe/index>`
+           | :external+pl:doc:`pl.LazyFrame <reference/lazyframe/index>`
+         - | :external+pl:doc:`pl.DataFrame <reference/dataframe/index>`
+           | :external+pl:doc:`pl.LazyFrame <reference/lazyframe/index>`
 
        * - tidypolars
          - :py:class:`tp.Tibble <tidypolars.tibble.Tibble>`
@@ -95,22 +106,28 @@ class SQLTableStore(BaseTableStore):
 
        * - pydiverse.transform
          - ``pdt.Table``
-         - | ``pdt.eager.PandasTableImpl``
-           | ``pdt.lazy.SQLTableImpl``
+         - | ``pdt.Polars``
+           | ``pdt.SqlAlchemy``
 
-       * - pydiverse.pipedag
-         - | :py:class:`~.TableReference`
-         -
+       * - pydiverse.pipedag table reference
+         - :py:class:`~.ExternalTableReference` (no materialization)
+         - Can be read with all dematerialization methods above
 
+       * - pydiverse.pipedag view
+         - :py:class:`~.View` (view with support for src union, column renaming, and sorting)
+         - Can be read with all dematerialization methods above
 
     :param url:
         The :external+sa:ref:`SQLAlchemy engine url <database_urls>`
-        use to connect to the database.
+        used to connect to the database.
 
         This URL may contain placeholders like ``{name}`` or ``{instance_id}``
         (additional ones can be defined in the ``url_attrs_file``) or
         environment variables like ``{$USER}`` which get substituted with their
         respective values.
+
+        Attention: passwords including special characters like ``@`` or ``:`` need
+        to be URL encoded.
 
     :param url_attrs_file:
         Filename of a yaml file which is read shortly before rendering the final
@@ -151,23 +168,60 @@ class SQLTableStore(BaseTableStore):
               table store does not support it.
             - a table references a ``materialization_details`` tag that is not defined
               in the config.
+
         If ``False``: Log an error instead of raising an exception
 
     :param materialization_details:
-        A dictionary with each entry describing a tag for materialization details of
-        the table store. See subclasses of :py:class:`BaseMaterializationDetails
-         <pydiverse.pipedag.materialize.details.BaseMaterializationDetails>`
-        for details.
+        A dictionary of tags that each define properties used for materialization by
+        the table store. If the tag ``__any__`` is present, the other labels will
+        inherit properties from it if they do not override them.
+
+        An example config for DB2 that goes into the ``args`` section of the
+        ``table_store`` config in ``pipedag.yaml``:
+
+        .. code-block:: yaml
+
+            materialization_details:
+              __any__:
+                compression: ["COMPRESS YES ADAPTIVE", "VALUE COMPRESSION"]
+                table_space_data: "USERSPACE1"
+              no_compression:
+                # user-defined tag. Inherits table_space_data from __any__
+                # but overwrites compression.
+                compression: ""
+
+        Then, by default, all tables will be created with the ``__any__`` config,
+        unless the label ``no_compression`` is specified at stage or table level.
+
+        See the documentation of the SQLTableStore Dialects for supported options for
+        each table store.
+
     :param default_materialization_details:
         The materialization_details that will be used if materialization_details
         is not specified on table level. If not set, the ``__any__`` tag (if specified)
         will be used.
+    :param max_concurrent_copy_operations:
+        In case of a partially cache-valid stage, we need to copy tables from the
+        cache schema to the new transaction schema. This parameter specifies the
+        maximum number of workers we use for concurrently copying tables.
+    :param sqlalchemy_pool_size:
+        The number of connections to keep open inside the connection pool.
+        It is recommended to choose a larger number than
+        ``max_concurrent_copy_operations`` to avoid running into pool_timeout.
+    :param sqlalchemy_pool_timeout:
+        The number of seconds to wait before giving up on getting a connection from
+        the pool. This may be relevant in case the connection pool is saturated
+        with concurrent operations each working with one or more database connections.
+    :param force_transaction_suffix:
+        This option is for use without proper pipedag flow. It disables lookup in stage
+        metadata table for determining correct transaction slot suffix.
+        (default: None)
     """
 
     METADATA_SCHEMA = "pipedag_metadata"
     LOCK_SCHEMA = "pipedag_locks"
 
-    __registered_dialects: dict[str, type[SQLTableStore]] = {}
+    __registered_dialects: dict[str, type["SQLTableStore"]] = {}
     _dialect_name: str
 
     def __new__(cls, engine_url: str, *args, **kwargs):
@@ -198,8 +252,12 @@ class SQLTableStore(BaseTableStore):
         print_sql: bool = False,
         no_db_locking: bool = True,
         strict_materialization_details: bool = True,
-        materialization_details: dict[str, dict[str | list[str]]] | None = None,
+        materialization_details: dict[str, dict[str, str | list[str]]] | None = None,
         default_materialization_details: str | None = None,
+        max_concurrent_copy_operations: int = 5,
+        sqlalchemy_pool_size: int = 12,
+        sqlalchemy_pool_timeout: int = 300,
+        force_transaction_suffix: str | None = None,
     ):
         super().__init__()
 
@@ -211,10 +269,22 @@ class SQLTableStore(BaseTableStore):
         self.print_sql = print_sql
         self.no_db_locking = no_db_locking
         self.strict_materialization_details = strict_materialization_details
+        self.max_concurrent_copy_operations = max_concurrent_copy_operations
+        self.sqlalchemy_pool_size = sqlalchemy_pool_size
+        self.squalchemy_pool_timeout = sqlalchemy_pool_timeout
+        self.force_transaction_suffix = force_transaction_suffix
 
         self.metadata_schema = self.get_schema(self.METADATA_SCHEMA)
         self.engine_url = sa.engine.make_url(engine_url)
+
+        # Prepare indirection of metadata table store (see set_metadata_store).
+        # This can be used to store metadata in another table store that allows
+        # better sharing or locking capabilities.
+        self.metadata_store = None
+
+        self._init_database_before_engine()
         self.engine = self._create_engine()
+        self.keep_alive_db_connections = None  # only used by derived classes like Snowflake
 
         # Dict where hooks are allowed to store values that should get cached
         self.hook_cache = {}
@@ -287,7 +357,7 @@ class SQLTableStore(BaseTableStore):
 
         self.default_materialization_details = default_materialization_details
 
-        self._set_materialization_details(materialization_details)
+        self.materialization_details = self._create_materialization_details(materialization_details)
 
         self.logger.info(
             "Initialized SQL Table Store",
@@ -308,25 +378,44 @@ class SQLTableStore(BaseTableStore):
                 f" But {cls.__name__}._dialect_name is None."
             )
 
-        if dialect_name in SQLTableStore.__registered_dialects:
-            warnings.warn(
-                f"Already registered a SQLTableStore for dialect {dialect_name}"
-            )
-        SQLTableStore.__registered_dialects[dialect_name] = cls
+        if dialect_name != DISABLE_DIALECT_REGISTRATION:
+            if dialect_name in SQLTableStore.__registered_dialects:
+                warnings.warn(f"Already registered a SQLTableStore for dialect {dialect_name}")
+            SQLTableStore.__registered_dialects[dialect_name] = cls
+
+    def set_metadata_store(self, store: BaseTableStore):
+        """Set the table store that should be used to store metadata tables.
+
+        This can be used to store metadata in another table store that allows
+        better sharing or locking capabilities.
+
+        The parent table store will still contain metadata tables but they will be flushed.
+
+        :param store:
+            The table store that should be used to store metadata tables.
+            If ``None``, the metadata tables will be stored in this table store.
+        """
+        self.metadata_store = store
 
     def _metadata_pk(self, name: str, table_name: str):
         return sa.Column(name, sa.BigInteger(), primary_key=True)
+
+    def _init_database_before_engine(self):
+        "File databases might have to create a directory here."
+        pass
 
     def _init_database(self):
         if not self.create_database_if_not_exists:
             return
 
-        raise NotImplementedError(
-            "create_database_if_not_exists is not implemented for this engine"
-        )
+        raise NotImplementedError("create_database_if_not_exists is not implemented for this engine")
 
     def _init_database_with_database(
-        self, database: str, execution_options: dict = None
+        self,
+        database: str,
+        execution_options: dict = None,
+        create_database: str | None = None,
+        disable_exists_check=False,
     ):
         if not self.create_database_if_not_exists:
             return
@@ -334,22 +423,25 @@ class SQLTableStore(BaseTableStore):
         if execution_options is None:
             execution_options = {}
 
-        try:
-            # Check if database exists
-            with self.engine.connect() as conn:
-                conn.exec_driver_sql("SELECT 1")
-            return
-        except sa.exc.DBAPIError:
-            # Database doesn't exist
-            pass
+        if not disable_exists_check:
+            try:
+                # Check if database exists
+                with self.engine.connect() as conn:
+                    conn.exec_driver_sql("SELECT 1")
+                return
+            except sa.exc.DBAPIError:
+                # Database doesn't exist
+                pass
 
         # Create new database using temporary engine object
         tmp_db_url = self.engine_url.set(database=database)
         tmp_engine = sa.create_engine(tmp_db_url, execution_options=execution_options)
 
         try:
+            if create_database is None:
+                create_database = self.engine_url.database
             with tmp_engine.connect() as conn:
-                conn.execute(CreateDatabase(self.engine_url.database))
+                conn.execute(CreateDatabase(create_database))
         except sa.exc.DBAPIError:
             # This happens if multiple instances try to create the database
             # at the same time.
@@ -357,99 +449,386 @@ class SQLTableStore(BaseTableStore):
                 # Verify database actually exists
                 conn.exec_driver_sql("SELECT 1")
 
-    def _create_engine(self):
+    def _default_isolation_level(self) -> str | None:
+        # we never want database transactional behavior (concurrent read+write)
+        return "READ UNCOMMITTED"
+
+    def _create_engine(self, **kwargs):
+        if self._default_isolation_level() is not None and "isolation_level" not in kwargs:
+            kwargs["isolation_level"] = self._default_isolation_level()
+
         # future=True enables SQLAlchemy 2.0 behaviour with version 1.4
-        return sa.create_engine(self.engine_url, future=True)
+        # However, it does not support pd.read_sql_table
+        return sa.create_engine(
+            self.engine_url,
+            # future=True,
+            pool_size=self.sqlalchemy_pool_size,
+            pool_timeout=self.squalchemy_pool_timeout,
+            **kwargs,
+        )
 
     @contextmanager
-    def engine_connect(self) -> sa.Connection:
+    def engine_connect(self) -> Connection:
         with self.engine.connect() as conn:
             yield conn
-            conn.commit()
+            if sa.__version__ >= "2.0.0":
+                conn.commit()
 
-    def get_schema(self, name):
+    @contextmanager
+    def metadata_connect(self, conn: Connection | None = None) -> Connection:
+        if self.metadata_store:
+            with self.metadata_store.engine.connect() as meta_conn:
+                yield meta_conn
+                if sa.__version__ >= "2.0.0":
+                    meta_conn.commit()
+        elif conn:
+            yield conn
+        else:
+            with self.engine_connect() as conn:
+                yield conn
+
+    def get_schema(self, name: str) -> Schema:
         return Schema(name, self.schema_prefix, self.schema_suffix)
 
-    def _execute(self, query, conn: sa.engine.Connection):
+    def _execute(self, query, conn: sa.engine.Connection, truncate_printed_select=False):
         if self.print_sql:
             if isinstance(query, str):
                 query_str = query
             else:
-                query_str = str(
-                    query.compile(self.engine, compile_kwargs={"literal_binds": True})
-                )
-            pretty_query_str = self.format_sql_string(query_str)
+                query_str = str(query.compile(self.engine, compile_kwargs={"literal_binds": True}))
+            pretty_query_str = self.format_sql_string(query_str, truncate_printed_select)
             self.logger.info("Executing sql", query=pretty_query_str)
 
         if isinstance(query, str):
-            return conn.execute(sa.text(query))
+            ret = conn.execute(sa.text(query))
         else:
-            return conn.execute(query)
+            ret = conn.execute(query)
+        return ret
 
-    def execute(self, query, *, conn: sa.engine.Connection = None):
+    def execute(
+        self,
+        query: str
+        | sqlalchemy.sql.expression.Selectable
+        | sqlalchemy.sql.expression.TextClause
+        | sqlalchemy.sql.ddl.DDLElement
+        | list[
+            str
+            | sqlalchemy.sql.expression.Selectable
+            | sqlalchemy.sql.expression.TextClause
+            | sqlalchemy.sql.ddl.DDLElement
+        ],
+        *,
+        conn: sa.engine.Connection = None,
+        truncate_printed_select=False,
+    ):
         if conn is None:
             with self.engine_connect() as conn:
-                return self.execute(query, conn=conn)
+                return self.execute(
+                    query,
+                    conn=conn,
+                    truncate_printed_select=truncate_printed_select,
+                )
 
-        if isinstance(query, sa.schema.DDLElement):
-            # Some custom DDL statements contain multiple statements.
-            # They are all seperated using a special seperator.
-            query_str = str(
-                query.compile(self.engine, compile_kwargs={"literal_binds": True})
-            )
+        if isinstance(query, sa.schema.DDLElement) or isinstance(query, list):
+            if not isinstance(query, list):
+                query = [query]
 
-            with conn.begin():
-                for part in split_ddl_statement(query_str):
-                    self._execute(part, conn)
+            @contextmanager
+            def transactional():
+                if conn.in_transaction():
+                    yield
+                else:
+                    with conn.begin():
+                        yield
+
+            with transactional():
+                # execute multiple statements in one transaction
+                for cur_query in query:
+                    if isinstance(cur_query, sa.schema.DDLElement):
+                        # Some custom DDL statements contain multiple statements.
+                        # They are all separated using a special separator.
+                        query_str = str(cur_query.compile(self.engine, compile_kwargs={"literal_binds": True}))
+                        query_str = query_str.replace("%%", "%")  # undo %% quoting
+                        for part in split_ddl_statement(query_str):
+                            self._execute(part, conn, truncate_printed_select)
+                    else:
+                        self._execute(cur_query, conn, truncate_printed_select)
             return
 
-        return self._execute(query, conn)
+        return self._execute(query, conn, truncate_printed_select)
+
+    def reflect_table(self, table_name: str, schema: str | Schema) -> sa.Table:
+        if isinstance(schema, Schema):
+            schema = schema.get()
+        tbl = None
+        for retry_iteration in range(4):
+            # retry operation since it might have been terminated as a deadlock victim
+            try:
+                tbl = sa.Table(
+                    table_name,
+                    sa.MetaData(),
+                    schema=schema,
+                    autoload_with=self.engine,
+                )
+                break
+            except (sa.exc.SQLAlchemyError, sa.exc.DBAPIError):
+                if retry_iteration == 3:
+                    raise
+                time.sleep(retry_iteration * retry_iteration * 1.2)
+        return tbl
+
+    def rename_table(self, table: Table, to_name: str, schema: Schema):
+        """Method can be overwritten by derived table stores like ParquetTableStore."""
+        self.execute(RenameTable(table.name, to_name, schema))
+
+    def write_subquery(
+        self,
+        query: sa.Text | sqlalchemy.sql.expression.Selectable | sqlalchemy.sql.expression.TextClause,
+        to_name: str,
+        neighbor_table: Table,
+        *,
+        unlogged: bool = False,
+        suffix: str | None = None,
+    ):
+        """Write a query to a table in same schema as neighbor_table.
+
+        This is mainly for overriding by derived table stores like ParquetTableStore.
+        """
+        schema = self.get_schema(neighbor_table.stage.transaction_name)
+        self.execute(
+            CreateTableAsSelect(
+                to_name,
+                schema,
+                query,
+                unlogged=unlogged,
+                suffix=suffix or "",
+            )
+        )
+        return schema
+
+    def drop_subquery_table(
+        self,
+        drop_name: str,
+        schema: Schema | str,
+        neighbor_table: Table,
+        if_exists: bool = False,
+        cascade: bool = False,
+    ):
+        """Drop a table in same schema as neighbor_table.
+
+        This is mainly for overriding by derived table stores like ParquetTableStore.
+        """
+        _ = neighbor_table
+        self.execute(DropTable(drop_name, schema, if_exists=if_exists, cascade=cascade))
 
     def check_materialization_details_supported(self, label: str | None) -> None:
         if label is None:
             return
-        error_msg = (
-            f"Materialization details are not supported"
-            f" for store {type(self).__name__}."
-        )
+        if self.materialization_details and label in self.materialization_details:
+            return
+        msg = f"{label} is an unknown materialization details label."
         if self.strict_materialization_details:
-            raise ValueError(
-                f"{error_msg} To silence this exception set"
-                f" strict_materialization_details=False"
-            )
+            raise ValueError(f"{msg} To silence this exception set strict_materialization_details=False")
         else:
-            self.logger.error(f"{error_msg}")
+            self.logger.warning(msg)
 
-    def _set_materialization_details(
+    def _create_materialization_details(
         self, materialization_details: dict[str, dict[str | list[str]]] | None
-    ) -> None:
-        if (
-            materialization_details is not None
-            or self.default_materialization_details is not None
-        ):
-            error_msg = (
-                f"{type(self).__name__} does not support materialization details."
-            )
-            if self.strict_materialization_details:
-                raise TypeError(
-                    f"{error_msg} To suppress this exception, "
-                    f"use strict_materialization_details=False"
-                )
-            self.logger.error(error_msg)
+    ) -> BaseMaterializationDetails | None:
+        """This function causes an error or exception if materialization details are specified for a table
+        store that does not support them.
 
-    def add_indexes(
-        self, table: Table, schema: Schema, *, early_not_null_possible: bool = False
+        Any table store that supports materialization details should override this method."""
+        if materialization_details is not None or self.default_materialization_details is not None:
+            msg = f"{type(self).__name__} does not support materialization details."
+            if self.strict_materialization_details:
+                raise ValueError(f"{msg} To silence this exception, use strict_materialization_details=False")
+            self.logger.warning(msg)
+        return None  # no materialization details object
+
+    def get_unlogged(self, materialization_details_label: str | None) -> bool:
+        _ = materialization_details_label
+        return False  # only available for some dialects
+
+    def get_create_table_suffix(self, materialization_details_label: str | None) -> str:
+        """
+        This method can be used to append materialization tables to CREATE TABLE
+        statements by dialects that support it.
+
+        :param materialization_details_label:
+            A label that can be controlled on table or stage level to reference
+            options laid out in detail in configuration
+        :return:
+            Suffix that is appended to CREATE TABLE statement as string
+        """
+        return ""
+
+    def get_limit_query(
+        self,
+        query: sa.sql.expression.Selectable | sa.sql.expression.TextClause,
+        rows: int,
+    ) -> sa.sql.expression.Select:
+        if isinstance(query, sa.sql.expression.TextClause):
+            return sa.select(sa.text("*")).limit(rows).select_from(sa.text("(" + str(query) + ") AS A"))
+        else:
+            return sa.select(sa.text("*")).limit(rows).select_from(query.alias("A"))
+
+    def lock_table(self, table: Table | str, schema: Schema | str, conn: Any = None) -> list:
+        """
+        For some dialects, it might be beneficial to lock a table before writing to it.
+
+        :returns
+            A list of SQLAlchemy statements that should be executed if conn=None
+        """
+        _ = table, schema, conn
+        return []
+
+    def lock_source_table(self, table: Table | str, schema: Schema | str, conn: Any = None) -> list:
+        """
+        For some dialects, it might be beneficial to lock source tables before reading.
+
+        :returns
+            A list of SQLAlchemy statements that should be executed if conn=None
+        """
+        _ = table, schema, conn
+        return []
+
+    def lock_source_tables(self, tables: list[dict[str, str]], conn: Any = None) -> list:
+        """
+        For some dialects, it might be beneficial to lock source tables before reading.
+
+        :returns
+            A list of SQLAlchemy statements that should be executed if conn=None
+        """
+        stmts = []
+        for table in tables:
+            if table["shared_lock_allowed"]:
+                stmts += self.lock_source_table(table["name"], table["schema"], conn)
+        return stmts
+
+    def get_forced_nullability_columns(self, table: Table, table_cols: Iterable[str]) -> tuple[list[str], list[str]]:
+        """
+        Get the columns that should be forced to be nullable or non-nullable.
+
+        This is typically applied on the materialized empty table, but may also
+        be applied after filling the table by some dialects. Some dialects may
+        choose to add primary key columns to non_nullable_cols if they need it
+        to set the primary key. However, some dialects do this separately because
+        they also need to change the type of primary key columns. Some dialects
+        only return non-nullable columns because all columns will be nullable
+        after initial materialization.
+
+        :param table:
+            Table to be materialized. It includes attributes like nullable,
+            non_nullable, and primary_key which may influence the return value.
+        :param table_cols:
+            The list of all columns in the table. If nullable and non_nullable is
+            specified, all columns must be mentioned. If only one of them is set,
+            the other one is calculated as the remaining set.
+        :return:
+            A tuple of two lists. The first list contains the columns that should
+            be forced to be nullable, the second list contains the columns that
+            should be forced to be non-nullable. Most dialects will not need to
+            force nullable columns because very column is nullable by default.
+        """
+        _, non_nullable_cols = self._process_table_nullable_parameters(table, table_cols)
+
+        # in most dialects columns are nullable by default
+        return [], non_nullable_cols
+
+    @staticmethod
+    def _process_table_nullable_parameters(table: Table, table_cols: Iterable[str]):
+        name = f'"{table.name}"'
+        nullable_set = set(table.nullable or [])
+        non_nullable_set = set(table.non_nullable or [])
+        table_cols_set = set(table_cols)
+
+        for prefix, col_set, cols in [
+            ("", nullable_set, table.nullable),
+            ("non_", non_nullable_set, table.non_nullable),
+        ]:
+            if invalid_cols := col_set - table_cols_set:
+                raise ValueError(
+                    f"The columns {invalid_cols} in Table({name},"
+                    f" {prefix}nullable={cols}) aren't contained in the table"
+                    f" columns: {table_cols}"
+                )
+
+        if table.nullable is not None and table.non_nullable is not None:
+            # If both are specified, they aren't allowed to intersect and
+            # their union must be the set of all columns.
+            if intersection := nullable_set & non_nullable_set:
+                raise ValueError(
+                    f"The columns {intersection} are both set to be nullable and non"
+                    f" nullable in Table({name}, nullable={table.nullable},"
+                    f" non_nullable={table.non_nullable})"
+                )
+            if missing_cols := table_cols_set - nullable_set - non_nullable_set:
+                raise ValueError(
+                    f"When setting Table({name}, nullable={table.nullable},"
+                    f" non_nullable={table.non_nullable}), all columns of the"
+                    f" table must be mentioned. Missing columns: {missing_cols}"
+                )
+            nullable = table.nullable
+            non_nullable = table.non_nullable
+        elif table.nullable is not None:
+            non_nullable = [c for c in table_cols if c not in nullable_set]
+            nullable = table.nullable
+        elif table.non_nullable is not None:
+            nullable = [c for c in table_cols if c not in non_nullable_set]
+            non_nullable = table.non_nullable
+        else:
+            nullable = []
+            non_nullable = []
+
+        return nullable, non_nullable
+
+    def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
+        _ = is_sql
+        return (
+            table.nullable is not None
+            or table.non_nullable is not None
+            or self.get_unlogged(resolve_materialization_details_label(table))
+        )
+
+    def add_indexes_and_set_nullable(
+        self,
+        table: Table,
+        schema: Schema,
+        *,
+        on_empty_table: bool | None = None,
+        table_cols: Iterable[str] | None = None,
     ):
+        if on_empty_table is None or on_empty_table:
+            # By default, we set non-nullable on empty table
+            if table_cols is None:
+                # reflect table:
+                inspector = sa.inspect(self.engine)
+                columns = inspector.get_columns(table.name, schema=schema.get())
+                table_cols = [col["name"] for col in columns]
+            nullable_cols, non_nullable_cols = self.get_forced_nullability_columns(table, table_cols)
+            if len(nullable_cols) > 0:
+                # some dialects represent literals as non-nullable types
+                self.execute(ChangeColumnNullable(table.name, schema, nullable_cols, nullable=True))
+            if len(non_nullable_cols) > 0:
+                self.execute(ChangeColumnNullable(table.name, schema, non_nullable_cols, nullable=False))
+        if on_empty_table is None or not on_empty_table:
+            # By default, we set indexes after loading full table. This can be
+            # overridden by dialect
+            self.add_table_primary_key(table, schema)
+            self.add_table_indexes(table, schema)
+
+    def add_table_indexes(self, table: Table, schema: Schema):
+        if table.indexes is not None:
+            for index in table.indexes:
+                self.add_index(table.name, schema, index)
+
+    def add_table_primary_key(self, table: Table, schema: Schema):
         if table.primary_key is not None:
             key = table.primary_key
             if isinstance(key, str):
                 key = [key]
-            self.add_primary_key(
-                table.name, schema, key, early_not_null_possible=early_not_null_possible
-            )
-        if table.indexes is not None:
-            for index in table.indexes:
-                self.add_index(table.name, schema, index)
+            self.add_primary_key(table.name, schema, key)
 
     def add_primary_key(
         self,
@@ -458,9 +837,7 @@ class SQLTableStore(BaseTableStore):
         key_columns: list[str],
         *,
         name: str | None = None,
-        early_not_null_possible: bool = False,
     ):
-        _ = early_not_null_possible  # only used for some dialects
         self.execute(AddPrimaryKey(table_name, schema, key_columns, name))
 
     def add_index(
@@ -472,9 +849,7 @@ class SQLTableStore(BaseTableStore):
     ):
         self.execute(AddIndex(table_name, schema, index_columns, name))
 
-    def copy_indexes(
-        self, src_table: str, src_schema: Schema, dest_table: str, dest_schema: Schema
-    ):
+    def copy_indexes(self, src_table: str, src_schema: Schema, dest_table: str, dest_schema: Schema):
         inspector = sa.inspect(self.engine)
         pk_constraint = inspector.get_pk_constraint(src_table, schema=src_schema.get())
         if len(pk_constraint["constrained_columns"]) > 0:
@@ -488,28 +863,21 @@ class SQLTableStore(BaseTableStore):
         for index in indexes:
             if len(index["include_columns"]) > 0:
                 self.logger.warning(
-                    "Perfect index recreation in caching is not net implemented",
+                    "Perfect index recreation in caching is not implemented, yet",
                     table=dest_table,
                     schema=dest_schema.get(),
                     include_columns=index["include_columns"],
                 )
-            if any(
-                not isinstance(val, list) or len(val) > 0
-                for val in index["dialect_options"].values()
-            ):
+            if any(not isinstance(val, list) or len(val) > 0 for val in index["dialect_options"].values()):
                 self.logger.warning(
-                    "Perfect index recreation in caching is not net implemented",
+                    "Perfect index recreation in caching is not implemented, yet",
                     table=dest_table,
                     schema=dest_schema.get(),
                     dialect_options=index["dialect_options"],
                 )
-            self.add_index(
-                dest_table, dest_schema, index["column_names"], index["name"]
-            )
+            self.add_index(dest_table, dest_schema, index["column_names"], index["name"])
 
-    def reflect_sql_types(
-        self, col_names: Iterable[str], table_name: str, schema: Schema
-    ):
+    def reflect_sql_types(self, col_names: Iterable[str], table_name: str, schema: Schema):
         inspector = sa.inspect(self.engine)
         columns = inspector.get_columns(table_name, schema=schema.get())
         types = {d["name"]: d["type"] for d in columns}
@@ -517,7 +885,9 @@ class SQLTableStore(BaseTableStore):
         return sql_types
 
     @staticmethod
-    def format_sql_string(query_str: str) -> str:
+    def format_sql_string(query_str: str, truncate_select=False) -> str:
+        if truncate_select and "SELECT" in query_str:
+            query_str = query_str.split("SELECT")[0] + "SELECT ...\n"
         return textwrap.dedent(query_str).strip()
 
     def execute_raw_sql(self, raw_sql: RawSql):
@@ -532,36 +902,49 @@ class SQLTableStore(BaseTableStore):
     def setup(self):
         super().setup()
         if not self.avoid_drop_create_schema:
+            # always create metadata_schema
             self.execute(CreateSchema(self.metadata_schema, if_not_exists=True))
-        with self.engine_connect() as conn:
+        if self.metadata_store:
+            # delete version_table to make sure changes in metadata_store will not result in usage of outdated metadata
             try:
-                version = conn.execute(
-                    sa.select(self.version_table.c.version)
-                ).scalar_one_or_none()
+                with self.engine_connect() as parent_meta_conn:
+                    parent_meta_conn.execute(self.version_table.delete().where(True))
             except sa.exc.ProgrammingError:
                 # table metadata_version does not yet exist
-                version = None
-        if version is None:
+                pass
+            # redirect setup of metadata tables
+            self.metadata_store.setup()
+            self.disable_caching = self.metadata_store.disable_caching
+        else:
+            with self.engine_connect() as conn:
+                try:
+                    version = conn.execute(sa.select(self.version_table.c.version)).scalar_one_or_none()
+                except sa.exc.ProgrammingError:
+                    # table metadata_version does not yet exist
+                    version = None
+            if version is None:
+                with self.engine_connect() as conn, conn.begin():
+                    self.sql_metadata.create_all(conn)
+                    version = conn.execute(sa.select(self.version_table.c.version)).scalar_one_or_none()
+                    assert version is None  # detect race condition
+                    conn.execute(
+                        self.version_table.insert().values(
+                            version=self.metadata_version,
+                        )
+                    )
+                return
+            elif version != self.metadata_version:
+                # disable caching due to incompatible metadata table schemas
+                # (in future versions, consider automatic metadata schema upgrade)
+                self.disable_caching = True
+                self.logger.warning(
+                    "Disabled caching due to metadata version mismatch",
+                    version=version,
+                    expected_version=self.metadata_version,
+                )
+            # in any case make sure all metadata tables exist (sync_views table is only needed for metadata_store)
             with self.engine_connect() as conn, conn.begin():
                 self.sql_metadata.create_all(conn)
-                version = conn.execute(
-                    sa.select(self.version_table.c.version)
-                ).scalar_one_or_none()
-                assert version is None  # detect race condition
-                conn.execute(
-                    self.version_table.insert().values(
-                        version=self.metadata_version,
-                    )
-                )
-        elif version != self.metadata_version:
-            # disable caching due to incompatible metadata table schemas
-            # (in future versions, consider automatic metadata schema upgrade)
-            self.disable_caching = True
-            self.logger.warning(
-                "Disabled caching due to metadata version mismatch",
-                version=version,
-                expected_version=self.metadata_version,
-            )
 
     def dispose(self):
         self.engine.dispose()
@@ -569,61 +952,68 @@ class SQLTableStore(BaseTableStore):
         super().dispose()
 
     def init_stage(self, stage: Stage):
-        stage_commit_technique = ConfigContext.get().stage_commit_technique
+        try:
+            cfg = ConfigContext.get()
+            stage_commit_technique = cfg.stage_commit_technique
+        except LookupError:
+            stage_commit_technique = StageCommitTechnique.READ_VIEWS
         if stage_commit_technique == StageCommitTechnique.SCHEMA_SWAP:
             return self._init_stage_schema_swap(stage)
         if stage_commit_technique == StageCommitTechnique.READ_VIEWS:
             return self._init_stage_read_views(stage)
         raise ValueError(f"Invalid stage commit technique: {stage_commit_technique}")
 
+    def optional_pause_for_db_transactionality(
+        self,
+        prev_action: Literal[
+            "table_drop",
+            "table_create",
+            "schema_drop",
+            "schema_create",
+            "schema_rename",
+        ],
+    ):
+        _ = type
+        # Some backends have transactionality problems with very quick
+        # DROP/CREATE or RENAME activities for both schemas and tables
+        # which happen in testing.
+        pass
+
     def _init_stage_schema_swap(self, stage: Stage):
         schema = self.get_schema(stage.name)
         transaction_schema = self.get_schema(stage.transaction_name)
 
         cs_base = CreateSchema(schema, if_not_exists=True)
-        ds_trans = DropSchema(
-            transaction_schema, if_exists=True, cascade=True, engine=self.engine
-        )
+        ds_trans = DropSchema(transaction_schema, if_exists=True, cascade=True, engine=self.engine)
         cs_trans = CreateSchema(transaction_schema, if_not_exists=False)
 
         with self.engine_connect() as conn:
             if self.avoid_drop_create_schema:
-                self.execute(
-                    DropSchemaContent(transaction_schema, self.engine), conn=conn
-                )
+                self.execute(DropSchemaContent(transaction_schema, self.engine), conn=conn)
+                self.optional_pause_for_db_transactionality("table_drop")
             else:
                 self.execute(cs_base, conn=conn)
                 self.execute(ds_trans, conn=conn)
+                self.optional_pause_for_db_transactionality("schema_drop")
                 self.execute(cs_trans, conn=conn)
+                self.optional_pause_for_db_transactionality("schema_create")
 
             if not self.disable_caching:
-                for table in [
-                    self.tasks_table,
-                    self.lazy_cache_table,
-                    self.raw_sql_cache_table,
-                ]:
-                    conn.execute(
-                        table.delete()
-                        .where(table.c.stage == stage.name)
-                        .where(table.c.in_transaction_schema)
-                    )
+                with self.metadata_connect(conn) as meta_conn:
+                    del conn  # prevent hard to test typos
+                    for table in [
+                        self.tasks_table,
+                        self.lazy_cache_table,
+                        self.raw_sql_cache_table,
+                    ]:
+                        meta_conn.execute(
+                            table.delete().where(table.c.stage == stage.name).where(table.c.in_transaction_schema)
+                        )
 
     def _init_stage_read_views(self, stage: Stage):
-        try:
-            with self.engine_connect() as conn:
-                metadata_rows = (
-                    conn.execute(
-                        self.stage_table.select().where(
-                            self.stage_table.c.stage == stage.name
-                        )
-                    )
-                    .mappings()
-                    .one()
-                )
-            cur_transaction_name = metadata_rows["cur_transaction_name"]
-        except (sa.exc.MultipleResultsFound, sa.exc.NoResultFound):
-            cur_transaction_name = ""
+        cur_transaction_name = self._get_read_view_transaction_name(stage.name)
 
+        # swap transaction name
         suffix = "__even" if cur_transaction_name.endswith("__odd") else "__odd"
         new_transaction_name = stage.name + suffix
 
@@ -633,13 +1023,30 @@ class SQLTableStore(BaseTableStore):
         # Call schema swap function with updated transaction name
         self._init_stage_schema_swap(stage)
 
+    def _get_read_view_transaction_name(self, schema_name: str):
+        """Returns transaction name where committed tables are stored."""
+        if self.force_transaction_suffix is not None:
+            return schema_name + self.force_transaction_suffix
+        try:
+            with self.metadata_connect() as meta_conn:
+                metadata_rows = (
+                    meta_conn.execute(self.stage_table.select().where(self.stage_table.c.stage == schema_name))
+                    .mappings()
+                    .one()
+                )
+            cur_transaction_name = metadata_rows["cur_transaction_name"]
+        except (sa.exc.MultipleResultsFound, sa.exc.NoResultFound):
+            cur_transaction_name = ""
+        return cur_transaction_name
+
     def commit_stage(self, stage: Stage):
         # If the stage is 100% cache valid, then we just need to update the
         # "in_transaction_schema" column of the metadata tables.
         if not RunContext.get().has_stage_changed(stage):
             self.logger.info("Stage is cache valid", stage=stage)
-            with self.engine_connect() as conn:
-                self._commit_stage_update_metadata(stage, conn)
+            with self.metadata_connect() as meta_conn:
+                self._commit_stage_update_metadata(stage, meta_conn)
+            self._committed_unchanged(stage)
             return
 
         # Commit normally
@@ -649,6 +1056,19 @@ class SQLTableStore(BaseTableStore):
         if stage_commit_technique == StageCommitTechnique.READ_VIEWS:
             return self._commit_stage_read_views(stage)
         raise ValueError(f"Invalid stage commit technique: {stage_commit_technique}")
+
+    def _committed_unchanged(self, stage):
+        # an opportunity for derived classes to take actions
+        pass
+
+    def _get_read_view_original_transaction_name(self, stage, override_transaction_name: str | None = None):
+        transaction_name = stage.transaction_name if override_transaction_name is None else override_transaction_name
+        # undo transaction name assignment
+        suffix = "__even" if transaction_name.endswith("__odd") else "__odd"
+        if self.force_transaction_suffix is not None:
+            suffix = self.force_transaction_suffix
+        original_transaction_name = stage.name + suffix
+        return original_transaction_name
 
     def _commit_stage_schema_swap(self, stage: Stage):
         schema = self.get_schema(stage.name)
@@ -667,20 +1087,26 @@ class SQLTableStore(BaseTableStore):
         with self.engine_connect() as conn:
             # TODO: self.avoid_drop_create_schema is currently being ignored...
             self.execute(
-                DropSchema(
-                    tmp_schema, if_exists=True, cascade=True, engine=self.engine
-                ),
+                DropSchema(tmp_schema, if_exists=True, cascade=True, engine=self.engine),
                 conn=conn,
             )
+            self.optional_pause_for_db_transactionality("schema_drop")
             self.execute(RenameSchema(schema, tmp_schema, self.engine), conn=conn)
-            self.execute(
-                RenameSchema(transaction_schema, schema, self.engine), conn=conn
-            )
-            self.execute(
-                RenameSchema(tmp_schema, transaction_schema, self.engine), conn=conn
-            )
+            self.optional_pause_for_db_transactionality("schema_rename")
+            self.execute(RenameSchema(transaction_schema, schema, self.engine), conn=conn)
+            self.optional_pause_for_db_transactionality("schema_rename")
+            self.execute(RenameSchema(tmp_schema, transaction_schema, self.engine), conn=conn)
+            self.optional_pause_for_db_transactionality("schema_rename")
 
-            self._commit_stage_update_metadata(stage, conn=conn)
+            with self.metadata_connect(conn) as meta_conn:
+                del conn  # prevent hard to test typos
+                self._commit_stage_update_metadata(stage, meta_conn)
+
+    def on_clear_schema(self, schema_name: str):
+        pass  # a hook for derived classes (see ParquetTableStore for example)
+
+    def on_read_view_alias(self, table_name: str, from_schema: str, to_schema: str):
+        pass  # a hook for derived classes (see ParquetTableStore for example)
 
     def _commit_stage_read_views(self, stage: Stage):
         dest_schema = self.get_schema(stage.name)
@@ -689,53 +1115,51 @@ class SQLTableStore(BaseTableStore):
         with self.engine_connect() as conn:
             # Clear contents of destination schema
             self.execute(DropSchemaContent(dest_schema, self.engine), conn=conn)
+            self.optional_pause_for_db_transactionality("table_drop")
+            self.on_clear_schema(dest_schema.get())
 
             # Create aliases for all tables in transaction schema
             inspector = sa.inspect(self.engine)
-            for table in inspector.get_table_names(schema=src_schema.get()):
+            for table in inspector.get_table_names(schema=src_schema.get()) + inspector.get_view_names(
+                schema=src_schema.get()
+            ):
                 self.execute(CreateAlias(table, src_schema, table, dest_schema))
+                self.on_read_view_alias(table, src_schema.get(), dest_schema.get())
 
             # Update metadata
-            stage_metadata_exists = (
-                conn.execute(
-                    sa.select(1).where(self.stage_table.c.stage == stage.name)
-                ).scalar()
-                == 1
-            )
-
-            if stage_metadata_exists:
-                conn.execute(
-                    self.stage_table.update()
-                    .where(self.stage_table.c.stage == stage.name)
-                    .values(cur_transaction_name=stage.transaction_name)
+            with self.metadata_connect(conn) as meta_conn:
+                del conn  # prevent hard to test typos
+                stage_metadata_exists = (
+                    meta_conn.execute(sa.select(1).where(self.stage_table.c.stage == stage.name)).scalar() == 1
                 )
-            else:
-                conn.execute(
-                    self.stage_table.insert().values(
-                        stage=stage.name,
-                        cur_transaction_name=stage.transaction_name,
+
+                if stage_metadata_exists:
+                    meta_conn.execute(
+                        self.stage_table.update()
+                        .where(self.stage_table.c.stage == stage.name)
+                        .values(cur_transaction_name=stage.transaction_name)
                     )
-                )
+                else:
+                    meta_conn.execute(
+                        self.stage_table.insert().values(
+                            stage=stage.name,
+                            cur_transaction_name=stage.transaction_name,
+                        )
+                    )
 
-            self._commit_stage_update_metadata(stage, conn=conn)
+                self._commit_stage_update_metadata(stage, meta_conn)
 
-    def _commit_stage_update_metadata(self, stage: Stage, conn: sa.engine.Connection):
+    def _commit_stage_update_metadata(self, stage: Stage, meta_conn: sa.engine.Connection):
         if not self.disable_caching:
             for table in [
                 self.tasks_table,
                 self.lazy_cache_table,
                 self.raw_sql_cache_table,
             ]:
-                conn.execute(
-                    table.delete()
-                    .where(table.c.stage == stage.name)
-                    .where(~table.c.in_transaction_schema)
+                meta_conn.execute(
+                    table.delete().where(table.c.stage == stage.name).where(~table.c.in_transaction_schema)
                 )
-                conn.execute(
-                    table.update()
-                    .where(table.c.stage == stage.name)
-                    .values(in_transaction_schema=False)
-                )
+                meta_conn.execute(table.update().where(table.c.stage == stage.name).values(in_transaction_schema=False))
 
     def copy_table_to_transaction(self, table: Table):
         from_schema = self.get_schema(table.stage.name)
@@ -755,16 +1179,15 @@ class SQLTableStore(BaseTableStore):
         else:
             self._deferred_copy_table(table, from_schema, from_name)
 
-    def _copy_table(self, table: Table, from_schema: Schema, from_name: str):
+    def _copy_table(self, table: Table, from_schema: Schema, from_name: str, is_deferred_copy: bool = False):
         """Copies the table immediately"""
-        from pydiverse.pipedag.backend.table.sql.dialects import IBMDB2TableStore
-
+        _ = is_deferred_copy  # this is only relevant for some backends
         has_table = self.has_table_or_view(from_name, schema=from_schema)
         if not has_table:
             inspector = sa.inspect(self.engine)
-            available_tables = inspector.get_table_names(
+            available_tables = inspector.get_table_names(from_schema.get()) + inspector.get_view_names(
                 from_schema.get()
-            ) + inspector.get_view_names(from_schema.get())
+            )
             msg = (
                 f"Can't copy table '{from_name}' (schema: '{from_schema}') to "
                 f"transaction because no such table exists.\n"
@@ -773,25 +1196,16 @@ class SQLTableStore(BaseTableStore):
             self.logger.error(msg)
             raise CacheError(msg)
 
-        self.check_materialization_details_supported(
-            resolve_materialization_details_label(table)
-        )
+        from_tbl = sa.Table(from_name, sa.MetaData(), schema=from_schema.get())
+        dest_tbl = table.copy_without_obj()
+        dest_tbl.obj = from_tbl
+        dest_tbl.shared_lock_allowed = True
 
-        self.execute(
-            CopyTable(
-                from_name,
-                from_schema,
-                table.name,
-                self.get_schema(table.stage.transaction_name),
-                early_not_null=table.primary_key,
-                suffix=self.get_create_table_suffix(
-                    resolve_materialization_details_label(table)
-                )
-                if isinstance(self, IBMDB2TableStore)
-                else None,
-            )
-        )
-        self.add_indexes(table, self.get_schema(table.stage.transaction_name))
+        # Copy table via executing a select statement with respective hook
+        RunContext.get().trace_hook.cache_pre_transfer(dest_tbl)
+        hook = self.get_m_table_hook(dest_tbl)
+        hook.materialize(self, dest_tbl, dest_tbl.stage.transaction_name, without_config_context=True)
+        RunContext.get().trace_hook.cache_post_transfer(dest_tbl)
 
     def _deferred_copy_table(
         self,
@@ -817,9 +1231,9 @@ class SQLTableStore(BaseTableStore):
         has_table = self.has_table_or_view(from_name, from_schema)
         if not has_table:
             inspector = sa.inspect(self.engine)
-            available_tables = inspector.get_table_names(
+            available_tables = inspector.get_table_names(from_schema.get()) + inspector.get_view_names(
                 from_schema.get()
-            ) + inspector.get_view_names(from_schema.get())
+            )
             msg = (
                 f"Can't deferred copy table '{from_name}' (schema: '{from_schema}') to "
                 f"transaction because no such table exists.\n"
@@ -830,6 +1244,7 @@ class SQLTableStore(BaseTableStore):
 
         try:
             ctx = RunContext.get()
+            cfg = ConfigContext.get()
             stage = table.stage
 
             self.execute(
@@ -853,6 +1268,7 @@ class SQLTableStore(BaseTableStore):
                         table_copy,
                         from_schema,
                         from_name,
+                        True,  # is_deferred_copy=True
                     ),
                 ),
             )
@@ -865,29 +1281,39 @@ class SQLTableStore(BaseTableStore):
                     {"table": table, "table_copy": table_copy},
                 ),
             )
-            ctx.defer_table_store_op(
-                stage,
-                DeferredTableStoreOp(
-                    "_rename_table",
-                    DeferredTableStoreOp.Condition.ON_STAGE_ABORT,
-                    (from_name, table.name, from_schema),
-                ),
-            )
+            # Lazy task outputs can be cache valid despite changing their name.
+            # If the complete stage is 100% cache valid, we only need to rename tables or table references at the source
+            if from_name != table.name:
+                target_name, target_schema = self.resolve_alias(Table(name=from_name), table.stage.name)
+                ctx.defer_table_store_op(
+                    stage,
+                    DeferredTableStoreOp(
+                        "_rename_alias",
+                        DeferredTableStoreOp.Condition.ON_STAGE_ABORT,
+                        (from_name, table.name, from_schema, target_name, target_schema),
+                    )
+                    if cfg.stage_commit_technique == StageCommitTechnique.READ_VIEWS
+                    else DeferredTableStoreOp(
+                        "_rename_table",
+                        DeferredTableStoreOp.Condition.ON_STAGE_ABORT,
+                        (from_name, table.name, from_schema),
+                    ),
+                )
 
         except Exception as _e:
-            msg = (
-                f"Failed to copy table {from_name} (schema: '{from_schema}') "
-                f"to transaction."
-            )
+            msg = f"Failed to copy table {from_name} (schema: '{from_schema}') to transaction."
             self.logger.exception(msg)
             raise CacheError(msg) from _e
 
-    def has_table_or_view(self, name, schema: Schema):
+    def has_table_or_view(self, name, schema: Schema | str):
+        if isinstance(schema, Schema):
+            schema = schema.get()
         inspector = sa.inspect(self.engine)
-        has_table = inspector.has_table(name, schema=schema.get())
+        has_table = inspector.has_table(name, schema=schema)
         # workaround for sqlalchemy backends that fail to find views with has_table
+        # in particular DuckDB https://github.com/duckdb/duckdb/issues/10322
         if not has_table:
-            has_table = name in inspector.get_view_names(schema=schema.get())
+            has_table = name in inspector.get_view_names(schema=schema)
         return has_table
 
     def _swap_alias_with_table_copy(self, table: Table, table_copy: Table):
@@ -909,21 +1335,30 @@ class SQLTableStore(BaseTableStore):
                 )
             )
         except Exception as _e:
-            msg = (
-                f"Failed putting copied table {table_copy.name} (schema: '{schema}') "
-                f"in place of alias."
-            )
+            msg = f"Failed putting copied table {table_copy.name} (schema: '{schema}') in place of alias."
             raise RuntimeError(msg) from _e
 
     def _rename_table(self, from_name: str, to_name: str, schema: Schema):
         if from_name == to_name:
             return
-        self.logger.info("RENAME", fr=from_name, to=to_name)
+        self.logger.info("rename table", _from=from_name, to=to_name, schema=schema.get())
         self.execute(RenameTable(from_name, to_name, schema))
 
-    def copy_raw_sql_tables_to_transaction(
-        self, metadata: RawSqlMetadata, target_stage: Stage
+    def _rename_alias(
+        self, alias_from_name: str, alias_to_name: str, alias_schema: Schema, target_name: str, target_schema: str
     ):
+        # either rename alias or recreate it with given target
+        if alias_from_name == alias_to_name:
+            return
+        self.logger.info("rename view", _from=alias_from_name, to=alias_to_name, schema=alias_schema.get())
+        try:
+            self.execute(RenameAlias(alias_from_name, alias_to_name, alias_schema))
+        except AssertionError:
+            # some dialects don't support renaming aliases, so we recreate it
+            self.execute(DropAlias(alias_from_name, alias_schema))
+            self.execute(CreateAlias(target_name, Schema(target_schema), alias_to_name, alias_schema))
+
+    def copy_raw_sql_tables_to_transaction(self, metadata: RawSqlMetadata, target_stage: Stage):
         inspector = sa.inspect(self.engine)
         src_schema = self.get_schema(metadata.stage)
         dest_schema = self.get_schema(target_stage.transaction_name)
@@ -931,20 +1366,16 @@ class SQLTableStore(BaseTableStore):
         # New tables (AND other objects)
         new_objects = set(metadata.new_objects) - set(metadata.prev_objects)
         tables_in_schema = set(inspector.get_table_names(src_schema.get()))
+        if ConfigContext.get().stage_commit_technique == StageCommitTechnique.READ_VIEWS:
+            # This is just a guess. If the RAW SQL created views, then we need to follow
+            # the read view alias to the actual table location.
+            tables_in_schema |= set(inspector.get_view_names(src_schema.get()))
         objects_in_schema = self._get_all_objects_in_schema(src_schema)
 
-        self.check_materialization_details_supported(
-            target_stage.materialization_details
-        )
+        self.check_materialization_details_supported(target_stage.materialization_details)
 
         tables_to_copy = new_objects & tables_in_schema
-        objects_to_copy = {
-            k: v
-            for k, v in objects_in_schema.items()
-            if k in new_objects and k not in tables_to_copy
-        }
-
-        from pydiverse.pipedag.backend.table.sql.dialects import IBMDB2TableStore
+        objects_to_copy = {k: v for k, v in objects_in_schema.items() if k in new_objects and k not in tables_to_copy}
 
         try:
             with self.engine_connect() as conn:
@@ -955,11 +1386,8 @@ class SQLTableStore(BaseTableStore):
                             src_schema,
                             name,
                             dest_schema,
-                            suffix=self.get_create_table_suffix(
-                                target_stage.materialization_details
-                            )
-                            if isinstance(self, IBMDB2TableStore)
-                            else None,
+                            unlogged=self.get_unlogged(target_stage.materialization_details),
+                            suffix=self.get_create_table_suffix(target_stage.materialization_details),
                         ),
                         conn=conn,
                     )
@@ -971,18 +1399,11 @@ class SQLTableStore(BaseTableStore):
                     )
 
                 for name, obj_metadata in objects_to_copy.items():
-                    self._copy_object_to_transaction(
-                        name, obj_metadata, src_schema, dest_schema, conn
-                    )
+                    self._copy_object_to_transaction(name, obj_metadata, src_schema, dest_schema, conn)
 
         except Exception as _e:
-            msg = (
-                f"Failed to copy raw sql generated object {name} (schema:"
-                f" '{src_schema}') to transaction."
-            )
-            self.logger.exception(
-                msg + " This error is treated as cache-lookup-failure."
-            )
+            msg = f"Failed to copy raw sql generated object {name} (schema: '{src_schema}') to transaction."
+            self.logger.exception(msg + " This error is treated as cache-lookup-failure.")
             raise CacheError(msg) from _e
 
     def _get_all_objects_in_schema(self, schema: Schema) -> dict[str, Any]:
@@ -1008,7 +1429,7 @@ class SQLTableStore(BaseTableStore):
         metadata: Any,
         src_schema: Schema,
         dest_schema: Schema,
-        conn: sa.Connection,
+        conn: Connection,
     ):
         """Copy a generic object from one schema to another.
 
@@ -1021,19 +1442,21 @@ class SQLTableStore(BaseTableStore):
         dialect = self.engine.dialect.name
         raise NotImplementedError(f"Not implemented for dialect '{dialect}'.")
 
-    def delete_table_from_transaction(self, table: Table):
+    def delete_table_from_transaction(self, table: Table, *, schema: Schema | None = None):
+        if schema is None:
+            schema = self.get_schema(table.stage.transaction_name)
         self.execute(
             DropTable(
                 table.name,
-                self.get_schema(table.stage.transaction_name),
+                schema,
                 if_exists=True,
             )
         )
 
     def store_task_metadata(self, metadata: TaskMetadata, stage: Stage):
         if not self.disable_caching:
-            with self.engine_connect() as conn:
-                conn.execute(
+            with self.metadata_connect() as meta_conn:
+                meta_conn.execute(
                     self.tasks_table.insert().values(
                         name=metadata.name,
                         stage=metadata.stage,
@@ -1048,24 +1471,19 @@ class SQLTableStore(BaseTableStore):
                     )
                 )
 
-    def retrieve_task_metadata(
-        self, task: MaterializingTask, input_hash: str, cache_fn_hash: str
-    ) -> TaskMetadata:
+    def retrieve_task_metadata(self, task: MaterializingTask, input_hash: str, cache_fn_hash: str) -> TaskMetadata:
         if self.disable_caching:
-            raise CacheError(
-                "Caching is disabled, so we also don't even try to retrieve task"
-                f" cache: {task}"
-            )
+            raise CacheError(f"Caching is disabled, so we also don't even try to retrieve task cache: {task}")
 
-        ignore_cache_function = ConfigContext.get().ignore_cache_function
+        ignore_cache_function = ConfigContext.get().cache_validation.mode == CacheValidationMode.IGNORE_FRESH_INPUT
         try:
-            with self.engine_connect() as conn:
+            with self.metadata_connect() as meta_conn:
                 result = (
-                    conn.execute(
+                    meta_conn.execute(
                         self.tasks_table.select()
-                        .where(self.tasks_table.c.name == task.name)
-                        .where(self.tasks_table.c.stage == task.stage.name)
-                        .where(self.tasks_table.c.version == task.version)
+                        .where(self.tasks_table.c.name == task._name)
+                        .where(self.tasks_table.c.stage == task._stage.name)
+                        .where(self.tasks_table.c.version == str(task._version))
                         .where(self.tasks_table.c.input_hash == input_hash)
                         .where(
                             self.tasks_table.c.cache_fn_hash == cache_fn_hash
@@ -1086,7 +1504,7 @@ class SQLTableStore(BaseTableStore):
         return TaskMetadata(
             name=result.name,
             stage=result.stage,
-            version=result.version,
+            version=str(result.version),
             timestamp=result.timestamp,
             run_id=result.run_id,
             position_hash=result.position_hash,
@@ -1095,24 +1513,23 @@ class SQLTableStore(BaseTableStore):
             output_json=result.output_json,
         )
 
-    def retrieve_all_task_metadata(self, task: MaterializingTask) -> list[TaskMetadata]:
-        with self.engine_connect() as conn:
-            results = (
-                conn.execute(
-                    self.tasks_table.select()
-                    .where(self.tasks_table.c.name == task.name)
-                    .where(self.tasks_table.c.stage == task.stage.name)
-                    .where(self.tasks_table.c.position_hash == task.position_hash)
-                )
-                .mappings()
-                .all()
-            )
+    def retrieve_all_task_metadata(
+        self, task: MaterializingTask, ignore_position_hashes: bool = False
+    ) -> list[TaskMetadata]:
+        match_condition = sa.and_(
+            self.tasks_table.c.name == task._name,
+            self.tasks_table.c.stage == task._stage.name,
+        )
 
+        if not ignore_position_hashes:
+            match_condition = match_condition & (self.tasks_table.c.position_hash == task._position_hash)
+        with self.metadata_connect() as meta_conn:
+            results = meta_conn.execute(self.tasks_table.select().where(match_condition)).mappings().all()
         return [
             TaskMetadata(
                 name=result.name,
                 stage=result.stage,
-                version=result.version,
+                version=str(result.version),
                 timestamp=result.timestamp,
                 run_id=result.run_id,
                 position_hash=result.position_hash,
@@ -1125,8 +1542,8 @@ class SQLTableStore(BaseTableStore):
 
     def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
         if not self.disable_caching:
-            with self.engine_connect() as conn:
-                conn.execute(
+            with self.metadata_connect() as meta_conn:
+                meta_conn.execute(
                     self.lazy_cache_table.insert().values(
                         name=metadata.name,
                         stage=metadata.stage,
@@ -1137,34 +1554,25 @@ class SQLTableStore(BaseTableStore):
                 )
 
     # noinspection DuplicatedCode
-    def retrieve_lazy_table_metadata(
-        self, query_hash: str, task_hash: str, stage: Stage
-    ) -> LazyTableMetadata:
+    def retrieve_lazy_table_metadata(self, query_hash: str, task_hash: str, stage: Stage) -> LazyTableMetadata:
         if self.disable_caching:
-            raise CacheError(
-                "Caching is disabled, so we also don't even try to retrieve lazy table"
-                " cache"
-            )
+            raise CacheError("Caching is disabled, so we also don't even try to retrieve lazy table cache")
 
         try:
-            with self.engine_connect() as conn:
+            with self.metadata_connect() as meta_conn:
                 result = (
-                    conn.execute(
+                    meta_conn.execute(
                         self.lazy_cache_table.select()
                         .where(self.lazy_cache_table.c.stage == stage.name)
                         .where(self.lazy_cache_table.c.query_hash == query_hash)
                         .where(self.lazy_cache_table.c.task_hash == task_hash)
-                        .where(
-                            self.lazy_cache_table.c.in_transaction_schema.in_([False])
-                        )
+                        .where(self.lazy_cache_table.c.in_transaction_schema.in_([False]))
                     )
                     .mappings()
                     .one_or_none()
                 )
         except sa.exc.MultipleResultsFound:
-            raise CacheError(
-                "Multiple results found for lazy table cache key"
-            ) from None
+            raise CacheError("Multiple results found for lazy table cache key") from None
 
         if result is None:
             raise CacheError("No result found for lazy table cache key")
@@ -1178,8 +1586,8 @@ class SQLTableStore(BaseTableStore):
 
     def store_raw_sql_metadata(self, metadata: RawSqlMetadata):
         if not self.disable_caching:
-            with self.engine_connect() as conn:
-                conn.execute(
+            with self.metadata_connect() as meta_conn:
+                meta_conn.execute(
                     self.raw_sql_cache_table.insert().values(
                         prev_objects=json.dumps(metadata.prev_objects),
                         new_objects=json.dumps(metadata.new_objects),
@@ -1191,28 +1599,19 @@ class SQLTableStore(BaseTableStore):
                 )
 
     # noinspection DuplicatedCode
-    def retrieve_raw_sql_metadata(
-        self, query_hash: str, task_hash: str, stage: Stage
-    ) -> RawSqlMetadata:
+    def retrieve_raw_sql_metadata(self, query_hash: str, task_hash: str, stage: Stage) -> RawSqlMetadata:
         if self.disable_caching:
-            raise CacheError(
-                "Caching is disabled, so we also don't even try to retrieve raw sql"
-                " cache"
-            )
+            raise CacheError("Caching is disabled, so we also don't even try to retrieve raw sql cache")
 
         try:
-            with self.engine_connect() as conn:
+            with self.metadata_connect() as meta_conn:
                 result = (
-                    conn.execute(
+                    meta_conn.execute(
                         self.raw_sql_cache_table.select()
                         .where(self.raw_sql_cache_table.c.stage == stage.name)
                         .where(self.raw_sql_cache_table.c.query_hash == query_hash)
                         .where(self.raw_sql_cache_table.c.task_hash == task_hash)
-                        .where(
-                            self.raw_sql_cache_table.c.in_transaction_schema.in_(
-                                [False]
-                            )
-                        )
+                        .where(self.raw_sql_cache_table.c.in_transaction_schema.in_([False]))
                     )
                     .mappings()
                     .one_or_none()
@@ -1231,18 +1630,35 @@ class SQLTableStore(BaseTableStore):
             task_hash=result.task_hash,
         )
 
-    def resolve_alias(self, table: str, schema: str) -> tuple[str, str]:
-        return table, schema
+    def resolve_alias(self, table: Table, stage_name: str | None) -> tuple[str, str]:
+        """
+        Convert Table objects to string table name and schema.
+
+        Take care of ExternalTableReference objects that turn into Table objects
+        with external_schema not None. For normal Table objects, the stage
+        schema name is needed. It will be prefixed/postfixed based on config.
+        Dialect specific implementations will also try to resolve table aliases
+        or synonyms since they may cause trouble with SQLAlchemy.
+
+        :param table: Table object
+        :param stage_name: Stage name component to schema (will be different
+            naming pattern for currently processed transaction stage)
+        :return: string table name and schema
+        """
+        schema = self.get_schema(stage_name).get() if table.external_schema is None else table.external_schema
+        return table.name, schema
 
     def get_objects_in_stage(self, stage: Stage):
-        schema = self.get_schema(stage.transaction_name)
+        schema = self.get_schema(stage.current_name)
         return list(self._get_all_objects_in_schema(schema).keys())
 
-    def get_table_objects_in_stage(self, stage: Stage):
+    def get_table_objects_in_stage(self, stage: Stage, include_views=True):
         schema = self.get_schema(stage.current_name).get()
         inspector = sa.inspect(self.engine)
 
         tables = inspector.get_table_names(schema)
+        if not include_views:
+            return tables
         views = inspector.get_view_names(schema)
         return [*tables, *views]
 
@@ -1252,11 +1668,9 @@ class SQLTableStore(BaseTableStore):
         # after evaluating lazy output objects for cache validity. This is the same
         # information we use for producing input_hash of downstream tasks.
         if self.disable_caching:
-            raise NotImplementedError(
-                "computing stage hash with disabled caching is currently not supported"
-            )
-        with self.engine_connect() as conn:
-            result = conn.execute(
+            raise NotImplementedError("computing stage hash with disabled caching is currently not supported")
+        with self.metadata_connect() as meta_conn:
+            result = meta_conn.execute(
                 sa.select(self.tasks_table.c.output_json)
                 .where(self.tasks_table.c.stage == stage.name)
                 .where(self.tasks_table.c.in_transaction_schema.in_([False]))
@@ -1267,59 +1681,13 @@ class SQLTableStore(BaseTableStore):
 
     # DatabaseLockManager
 
-    def get_engine_for_locking(self) -> sa.Engine:
+    def get_engine_for_locking(self) -> Engine:
+        if self.metadata_store:
+            return self.metadata_store.get_engine_for_locking()
         return self._create_engine()
 
     def get_lock_schema(self) -> Schema:
         return self.get_schema(self.LOCK_SCHEMA)
-
-
-class TableReference:
-    """Reference to a user-created table.
-
-    By returning a `TableReference` wrapped in a :py:class:`~.Table` from a task,
-    you can tell pipedag that you yourself created a new table inside
-    the correct schema of the table store.
-    This may be useful if you need to perform a complex load operation to create
-    a table (e.g. load a table from an Oracle database into Postgres
-    using `oracle_fdw`).
-
-    Only supported by :py:class:`~.SQLTableStore`.
-
-    Warning
-    -------
-    Using table references is not recommended unless you know what you are doing.
-    It may lead unexpected behaviour.
-    It also requires accessing non-public parts of the pipedag API which can
-    change without notice.
-
-    Example
-    -------
-    Making sure that the table is created in the correct schema is not trivial,
-    because the schema names usually are different from the stage names.
-    To get the correct schema name, you must use undocumented and non-public
-    parts of the pipedag API. To help you get started, we'll provide you with
-    this example, however, be warned that this might break without notice::
-
-        @materialize(version="1.0")
-        def task():
-            from pydiverse.pipedag.context import ConfigContext, TaskContext
-
-            table_store = ConfigContext.get().store.table_store
-            task = TaskContext.get().task
-
-            # Name of the schema in which you must create the table
-            schema_name = table_store.get_schema(task.stage.transaction_name).get()
-
-            # Use the table store's engine to create a table in the correct schema
-            with table_store.engine.begin() as conn:
-                conn.execute(...)
-
-            # Return a reference to the newly created table
-            return Table(TableReference(), "name_of_table")
-    """
-
-    pass
 
 
 # Load SQLTableStore Hooks

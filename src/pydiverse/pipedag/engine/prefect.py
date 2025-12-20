@@ -1,29 +1,20 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
-import warnings
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import structlog
 from packaging.specifiers import SpecifierSet
-from packaging.version import Version
 
+from pydiverse.common.util import requires
+from pydiverse.pipedag import ExternalTableReference, Table
 from pydiverse.pipedag.context import ConfigContext, RunContext
+from pydiverse.pipedag.core import Subflow, Task
 from pydiverse.pipedag.core.result import Result
-from pydiverse.pipedag.engine.base import OrchestrationEngine
-from pydiverse.pipedag.util import requires
-
-if TYPE_CHECKING:
-    from pydiverse.pipedag.core import Subflow, Task
-
-try:
-    import prefect
-
-    prefect_version = Version(prefect.__version__)
-except ImportError as e:
-    warnings.warn(str(e), ImportWarning)
-
-    prefect = None
-    prefect_version = Version("0")
+from pydiverse.pipedag.engine.base import (
+    OrchestrationEngine,
+)
+from pydiverse.pipedag.optional_dependency.prefect import prefect, prefect_version
 
 
 @requires(prefect, ImportError("Module 'prefect' not installed"))
@@ -47,7 +38,13 @@ class PrefectOneEngine(OrchestrationEngine):
         self.flow_kwargs = flow_kwargs or {}
         self.logger = structlog.get_logger(stage=self)
 
-    def construct_prefect_flow(self, f: Subflow):
+    def construct_prefect_flow(
+        self,
+        f: Subflow,
+        inputs: dict[Task, ExternalTableReference] | None = None,
+    ):
+        inputs = inputs if inputs is not None else {}
+
         run_context = RunContext.get()
         config_context = ConfigContext.get()
 
@@ -60,16 +57,23 @@ class PrefectOneEngine(OrchestrationEngine):
         tasks: dict[Task, prefect.Task] = {}
 
         for t in f.get_tasks():
-            task = prefect.task(name=t.name)(t.run)
+            task = prefect.task(name=t._name)(t._do_run)
             tasks[t] = task
+
+            # if desired input is passed in inputs use it,
+            # otherwise try to get it from results
+            task_inputs = {
+                **{
+                    in_id: tasks[in_t] for in_id, in_t in t._input_tasks.items() if in_t in tasks and in_t not in inputs
+                },
+                **{in_id: Table(inputs[in_t]) for in_id, in_t in t._input_tasks.items() if in_t in inputs},
+            }
 
             flow.add_task(task)
             flow.set_dependencies(
                 task,
                 keyword_tasks=dict(
-                    inputs={
-                        in_id: tasks[in_t] for in_id, in_t in t.input_tasks.items()
-                    },
+                    inputs=task_inputs,
                     run_context=run_context,
                     config_context=config_context,
                 ),
@@ -87,8 +91,15 @@ class PrefectOneEngine(OrchestrationEngine):
 
         return flow, tasks
 
-    def run(self, flow: Subflow, **run_kwargs):
-        prefect_flow, tasks_map = self.construct_prefect_flow(flow)
+    def run(
+        self,
+        flow: Subflow,
+        ignore_position_hashes: bool = False,
+        inputs: dict[Task, ExternalTableReference] | None = None,
+        **run_kwargs,
+    ):
+        _ = ignore_position_hashes
+        prefect_flow, tasks_map = self.construct_prefect_flow(flow, inputs)
         result = prefect_flow.run(**run_kwargs)
 
         # Compute task_values
@@ -105,9 +116,7 @@ class PrefectOneEngine(OrchestrationEngine):
                     break
             else:
                 # Generic Fallback
-                exception = Exception(
-                    f"Prefect run failed with message: {result.message}"
-                )
+                exception = Exception(f"Prefect run failed with message: {result.message}")
 
         return Result.init_from(
             subflow=flow,
@@ -120,8 +129,8 @@ class PrefectOneEngine(OrchestrationEngine):
 
 @requires(prefect, ImportError("Module 'prefect' not installed"))
 @requires(
-    prefect_version in SpecifierSet("~=2.0"),
-    ImportWarning(f"Requires prefect version 2.x (found {prefect_version})"),
+    prefect_version in SpecifierSet(">=2.0,<4.0"),
+    ImportWarning(f"Requires prefect version 2.x or 3.x (found {prefect_version})"),
 )
 class PrefectTwoEngine(OrchestrationEngine):
     """
@@ -129,7 +138,7 @@ class PrefectTwoEngine(OrchestrationEngine):
 
     :param flow_kwargs:
         Optional dictionary of keyword arguments that get passed to the
-        initializer of |@prefect2.flow|_ deecorator.
+        initializer of |@prefect2.flow|_ decorator.
 
     .. |@prefect2.flow| replace:: ``@prefect.flow``
     .. _@prefect2.flow:
@@ -139,8 +148,14 @@ class PrefectTwoEngine(OrchestrationEngine):
     def __init__(self, flow_kwargs: dict[str, Any] = None):
         self.flow_kwargs = flow_kwargs or {}
 
-    def construct_prefect_flow(self, f: Subflow) -> prefect.Flow:
-        from pydiverse.pipedag.materialize.core import MaterializingTask
+    def construct_prefect_flow(
+        self,
+        f: Subflow,
+        inputs: dict[Task, ExternalTableReference] | None = None,
+    ) -> prefect.Flow:
+        from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
+
+        inputs = inputs if inputs is not None else {}
 
         run_context = RunContext.get()
         config_context = ConfigContext.get()
@@ -156,16 +171,24 @@ class PrefectTwoEngine(OrchestrationEngine):
             futures: dict[Task, prefect.futures.PrefectFuture] = {}
 
             for t in f.get_tasks():
-                task_kwargs = {"name": t.name}
+                task_kwargs = {"name": t._name}
                 if isinstance(t, MaterializingTask):
-                    task_kwargs["version"] = t.version
+                    task_kwargs["version"] = str(t._version)
 
-                task = prefect.task(**task_kwargs)(t.run)
+                task = prefect.task(**task_kwargs)(t._do_run)
 
                 parents = [futures[p] for p in f.get_parent_tasks(t)]
-                inputs = {in_id: futures[in_t] for in_id, in_t in t.input_tasks.items()}
+                task_inputs = {
+                    **{
+                        in_id: futures[in_t]
+                        for in_id, in_t in t._input_tasks.items()
+                        if in_t in futures and in_t not in inputs
+                    },
+                    **{in_id: Table(inputs[in_t]) for in_id, in_t in t._input_tasks.items() if in_t in inputs},
+                }
+
                 futures[t] = task.submit(
-                    inputs=inputs,
+                    inputs=task_inputs,
                     run_context=run_context,
                     config_context=config_context,
                     wait_for=parents,
@@ -175,10 +198,17 @@ class PrefectTwoEngine(OrchestrationEngine):
 
         return pipedag_flow
 
-    def run(self, flow: Subflow, **kwargs):
+    def run(
+        self,
+        flow: Subflow,
+        ignore_position_hashes: bool = False,
+        inputs: dict[Task, ExternalTableReference] | None = None,
+        **kwargs,
+    ):
+        _ = ignore_position_hashes
         if kwargs:
             raise TypeError(f"{type(self).__name__}.run doesn't take kwargs.")
-        prefect_flow = self.construct_prefect_flow(flow)
+        prefect_flow = self.construct_prefect_flow(flow, inputs)
         result = prefect_flow(return_state=True)
 
         # Compute task_values
@@ -213,7 +243,8 @@ class PrefectTwoEngine(OrchestrationEngine):
 
 if prefect_version in SpecifierSet("~=1.0"):
     PrefectEngine = PrefectOneEngine
-elif prefect_version in SpecifierSet("~=2.0"):
+elif prefect_version in SpecifierSet(">=2.0,<4.0"):
+    # prefect 2 and 3 are not that different
     PrefectEngine = PrefectTwoEngine
 else:
     from abc import ABC

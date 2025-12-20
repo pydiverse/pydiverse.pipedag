@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import hashlib
 import threading
@@ -13,9 +14,12 @@ from pydiverse.pipedag import ConfigContext, Stage
 from pydiverse.pipedag.backend.lock.base import BaseLockManager, Lockable, LockState
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateSchema,
-    Schema,
 )
+from pydiverse.pipedag.container import Schema
 from pydiverse.pipedag.errors import LockError
+from pydiverse.pipedag.optional_dependency.sqlalchemy import Connection, Engine
+
+DISABLE_DIALECT_REGISTRATION = "__DISABLE_DIALECT_REGISTRATION"
 
 
 class DatabaseLockManager(BaseLockManager):
@@ -34,28 +38,24 @@ class DatabaseLockManager(BaseLockManager):
     PostgreSQL, Microsoft SQL Server, IBM DB2.
     """
 
-    __registered_dialects: dict[str, type[DatabaseLockManager]] = {}
+    __registered_dialects: dict[str, type["DatabaseLockManager"]] = {}
     _dialect_name: str
 
-    def __new__(cls, engine: sa.Engine, *args, **kwargs):
+    def __new__(cls, engine: Engine, *args, **kwargs):
         if cls != DatabaseLockManager:
             return super().__new__(cls)
 
         # If calling DatabaseLockManager(engine), then we want to dynamically
         # instantiate the correct dialect specific subclass based on the engine dialect.
         dialect = engine.dialect.name
-        dialect_specific_cls = DatabaseLockManager.__registered_dialects.get(
-            dialect, cls
-        )
-        return super(DatabaseLockManager, dialect_specific_cls).__new__(
-            dialect_specific_cls
-        )
+        dialect_specific_cls = DatabaseLockManager.__registered_dialects.get(dialect, None)
+        if dialect_specific_cls is None:
+            raise RuntimeError(f"DatabaseLockManager is not supported for SQL dialect: '{dialect}'")
+        return super(DatabaseLockManager, dialect_specific_cls).__new__(dialect_specific_cls)
 
     @classmethod
     def _init_conf_(cls, config: dict[str, Any]):
-        assert (
-            len(config) == 0
-        ), "DatabaseLockManager doesn't take any additional arguments"
+        assert len(config) == 0, "DatabaseLockManager doesn't take any additional arguments"
 
         cfg_context = ConfigContext.get()
         return cls.init_from_config_context(cfg_context)
@@ -77,12 +77,12 @@ class DatabaseLockManager(BaseLockManager):
 
     def __init__(
         self,
-        engine: sa.Engine,
+        engine: Engine,
         instance_id: str,
         lock_schema: Schema | None = None,
         create_lock_schema: bool = True,
     ):
-        super().__init__()
+        super().__init__(logger_kwargs=dict(engine_url=engine.url, instance_id=instance_id, schema=lock_schema))
 
         self.engine = engine
         self.instance_id = instance_id
@@ -113,11 +113,10 @@ class DatabaseLockManager(BaseLockManager):
                 f"attribute. But {cls.__name__}._dialect_name is None."
             )
 
-        if dialect_name in DatabaseLockManager.__registered_dialects:
-            warnings.warn(
-                f"Already registered a DatabaseLockManager for dialect {dialect_name}"
-            )
-        DatabaseLockManager.__registered_dialects[dialect_name] = cls
+        if dialect_name != DISABLE_DIALECT_REGISTRATION:
+            if dialect_name in DatabaseLockManager.__registered_dialects:
+                warnings.warn(f"Already registered a DatabaseLockManager for dialect {dialect_name}")
+            DatabaseLockManager.__registered_dialects[dialect_name] = cls
 
     def prepare(self):
         pass
@@ -148,6 +147,7 @@ class DatabaseLockManager(BaseLockManager):
 
     @property
     def supports_stage_level_locking(self):
+        # this property is overridden by derived DatabaseLockManager classes
         raise NotImplementedError
 
     def acquire(self, lockable: Lockable):
@@ -207,9 +207,7 @@ class DatabaseLockManager(BaseLockManager):
         elif isinstance(lock, str):
             return self.instance_id + "#" + lock
         else:
-            raise NotImplementedError(
-                f"Can't lock object of type '{type(lock).__name__}'"
-            )
+            raise NotImplementedError(f"Can't lock object of type '{type(lock).__name__}'")
 
 
 class Lock(ABC):
@@ -233,7 +231,7 @@ class PostgresLock(Lock):
     https://www.postgresql.org/docs/current/functions-admin.html#FUNCTIONS-ADVISORY-LOCKS
     """
 
-    def __init__(self, name: str, connection: sa.Connection):
+    def __init__(self, name: str, connection: Connection):
         self.name = name
 
         digest = hashlib.sha256(name.encode("utf-8")).digest()
@@ -243,17 +241,13 @@ class PostgresLock(Lock):
         self._locked = False
 
     def acquire(self) -> bool:
-        result = self._connection.exec_driver_sql(
-            f"SELECT pg_catalog.pg_advisory_lock({self._id})"
-        ).scalar()
+        result = self._connection.exec_driver_sql(f"SELECT pg_catalog.pg_advisory_lock({self._id})").scalar()
         result = False if result is False else True
         self._locked = result
         return result
 
     def release(self) -> bool:
-        result = self._connection.exec_driver_sql(
-            f"SELECT pg_catalog.pg_advisory_unlock({self._id})"
-        ).scalar()
+        result = self._connection.exec_driver_sql(f"SELECT pg_catalog.pg_advisory_unlock({self._id})").scalar()
         self._locked = False
         return False if result is False else True
 
@@ -286,7 +280,7 @@ class MSSqlLock(Lock):
     https://learn.microsoft.com/en-us/sql/relational-databases/system-stored-procedures/sp-getapplock-transact-sql?view=sql-server-ver15
     """
 
-    def __init__(self, name: str, connection: sa.Connection):
+    def __init__(self, name: str, connection: Connection):
         self.name = name
         self._connection = connection
         self._locked = False
@@ -354,7 +348,7 @@ class DB2Lock(Lock):
     not suitable for fine grain locking.
     """
 
-    def __init__(self, table: str, schema: str, engine: sa.Engine):
+    def __init__(self, table: str, schema: str, engine: Engine):
         self._engine = engine
         self._connection = None
         self._locked = False
@@ -382,9 +376,7 @@ class DB2Lock(Lock):
             self._connection = self._engine.connect()
             self._connection.begin()
 
-        self._connection.exec_driver_sql(
-            f"LOCK TABLE {schema}.{table} IN EXCLUSIVE MODE"
-        )
+        self._connection.exec_driver_sql(f"LOCK TABLE {schema}.{table} IN EXCLUSIVE MODE")
 
         self._locked = True
         return True

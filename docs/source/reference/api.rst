@@ -11,6 +11,7 @@ Public
     :members:
     :inherited-members:
     :special-members: __getitem__
+
 .. autoclass:: Stage
     :members:
     :inherited-members:
@@ -18,21 +19,36 @@ Public
 
 .. autodecorator:: materialize
 
+.. autodecorator:: input_stage_versions
+
 .. autodata:: AUTO_VERSION
 
 .. autoclass:: Table
+
+.. autoclass:: View
+
 .. autoclass:: RawSql
     :members:
     :special-members: __iter__, __getitem__, __contains__
+
 .. autoclass:: Blob
+
+.. autoclass:: GroupNode
+
+.. autoclass:: VisualizationStyle
+
+.. autoclass:: Schema
+    :members:
 
 .. autoclass:: Result
     :members:
 
 .. autoclass:: PipedagConfig
     :inherited-members:
+
 .. autoclass:: ConfigContext
     :inherited-members:
+
 .. autoclass:: StageLockContext
     :inherited-members:
 
@@ -54,16 +70,40 @@ Backend Classes
 Table Store
 -----------
 .. autoclass:: pydiverse.pipedag.backend.table.SQLTableStore
+.. autoclass:: pydiverse.pipedag.backend.table.ParquetTableStore
 
 SQLTableStore Dialects
-^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~
+
+PostgreSQL
+^^^^^^^^^^
+
 .. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.PostgresTableStore
+.. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.postgres.PostgresMaterializationDetails
+
+DuckDB
+^^^^^^
+
 .. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.DuckDBTableStore
+
+Microsoft SQL Server / T-SQL
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 .. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.MSSqlTableStore
+.. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.mssql.MSSqlMaterializationDetails
+
+IBM DB2
+^^^^^^^
+
 .. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.IBMDB2TableStore
+.. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.ibm_db2.IBMDB2MaterializationDetails
+.. autoclass:: pydiverse.pipedag.backend.table.sql.dialects.ibm_db2.IBMDB2CompressionTypes
+    :members:
+    :undoc-members:
+
 
 Local Table Cache
-^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~
 .. autoclass:: pydiverse.pipedag.backend.table.cache.ParquetTableCache
 
 Blob Store
@@ -83,17 +123,17 @@ Orchestration Engine
 .. autoclass:: pydiverse.pipedag.engine.DaskEngine
 
 .. py:class:: PrefectEngine
-   :canonical: pydiverse.pipedag.engine.PrefectEngine
+   :canonical: pydiverse.pipedag.engine.prefect.PrefectEngine
 
    Alias for either
-   :class:`PrefectOneEngine <pydiverse.pipedag.engine.PrefectOneEngine>` or
-   :class:`PrefectTwoEngine <pydiverse.pipedag.engine.PrefectTwoEngine>`
+   :class:`PrefectOneEngine <pydiverse.pipedag.engine.prefect.PrefectOneEngine>` or
+   :class:`PrefectTwoEngine <pydiverse.pipedag.engine.prefect.PrefectTwoEngine>`
    depending on the version of Prefect that is installed.
 
-.. autoclass:: pydiverse.pipedag.engine.PrefectOneEngine
-.. autoclass:: pydiverse.pipedag.engine.PrefectTwoEngine
+.. autoclass:: pydiverse.pipedag.engine.prefect.PrefectOneEngine
+.. autoclass:: pydiverse.pipedag.engine.prefect.PrefectTwoEngine
 
 Special Table Types
 -------------------
 
-.. autoclass:: pydiverse.pipedag.backend.table.sql.TableReference
+.. autoclass:: pydiverse.pipedag.container.ExternalTableReference

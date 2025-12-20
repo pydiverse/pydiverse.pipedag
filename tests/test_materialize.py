@@ -1,24 +1,34 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
+from concurrent.futures.process import BrokenProcessPool
 
 import pandas as pd
 import pytest
 import sqlalchemy as sa
 import structlog
 
-from pydiverse.pipedag import ConfigContext, Flow, Stage, Table, materialize
-from pydiverse.pipedag.context import RunContext, StageLockContext
+from pydiverse.pipedag import AUTO_VERSION, ConfigContext, Flow, Stage, Table, materialize
+from pydiverse.pipedag.container import SortCol, SortOrder, View
+from pydiverse.pipedag.context import FinalTaskState, RunContext, StageLockContext
+from pydiverse.pipedag.context.context import CacheValidationMode
+from pydiverse.pipedag.context.trace_hook import PrintTraceHook
 from pydiverse.pipedag.core.config import PipedagConfig
+from pydiverse.pipedag.optional_dependency.sqlalchemy import Alias
+from pydiverse.pipedag.optional_dependency.transform import C, pdt
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import (
     ALL_INSTANCES,
     ORCHESTRATION_INSTANCES,
+    skip_instances,
     with_instances,
 )
 from tests.util import select_as, swallowing_raises
 from tests.util import tasks_library as m
+from tests.util import tasks_library_imperative as m2
 
-pytestmark = [with_instances(ALL_INSTANCES, ORCHESTRATION_INSTANCES)]
+pytestmark = [with_instances(tuple(set(ALL_INSTANCES) - {"snowflake"}), ORCHESTRATION_INSTANCES)]
 
 
 def test_materialize_literals():
@@ -75,45 +85,297 @@ def test_materialize_literals():
     assert f.run().successful
 
 
-def test_materialize_table():
+@with_instances(tuple(set(ALL_INSTANCES) | set(ORCHESTRATION_INSTANCES)))
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_table(imperative):
+    _m = m if not imperative else m2
     with Flow("flow") as f:
         with Stage("stage"):
-            x = m.simple_dataframe()
-            m.assert_table_equal(x, x)
+            x = _m.simple_dataframe()
+            _m.assert_table_equal(x, x)
 
     assert f.run().successful
 
 
-def test_materialize_table_twice():
+@materialize(input_type=sa.Table, lazy=True)
+def create_view1(tbl: Alias):
+    return Table(View(src=tbl, sort_by=tbl.c.col2, columns=tbl.c.col1.label("c1"), limit=2))
+
+
+@materialize(input_type=sa.Table, lazy=True)
+def create_view2(tbl: Alias, tbl2: Alias):
+    return Table(View(src=[tbl, tbl2], sort_by=[tbl.c.col2.desc(), tbl.c.col1], columns=[tbl.c.col1], limit=2))
+
+
+@materialize(input_type=sa.Table, lazy=True)
+def create_view_view1(tbl: Alias):
+    return Table(View(src=tbl, columns=tbl.c.c1))
+
+
+@materialize(input_type=sa.Table, lazy=True)
+def create_view_view2(tbl: Alias):
+    return Table(View(src=tbl, sort_by=SortCol(tbl.c.col1, SortOrder.DESC), limit=3))
+
+
+@materialize(input_type=pdt.SqlAlchemy, lazy=True)
+def create_view_pdt1(tbl: pdt.Table):
+    return Table(View(src=tbl, sort_by=tbl.col2, columns=dict(c1=tbl.col1), limit=2))
+
+
+@materialize(input_type=pdt.SqlAlchemy, lazy=True)
+def create_view_pdt2(tbl: pdt.Table, tbl2: pdt.Table):
+    return Table(View(src=[tbl, tbl2], sort_by=[tbl.col2.descending(), tbl2.col1], columns=[C.col1], limit=2))
+
+
+@materialize(input_type=pdt.SqlAlchemy, lazy=True)
+def create_view_pdt2b(tbl: pdt.Table, tbl2: pdt.Table):
+    # currently, multi-source views are not supported by consuming tasks with input_type=pdt.Sqlalchemy
+    return Table(View(src=tbl, sort_by=[tbl.col2.descending(), tbl2.col1], columns=[C.col1], limit=2))
+
+
+@materialize(input_type=pdt.SqlAlchemy, lazy=True)
+def create_view_view_pdt1(tbl: pdt.Table):
+    return Table(View(src=tbl, columns=tbl.c1))
+
+
+@materialize(input_type=pdt.SqlAlchemy, lazy=True)
+def create_view_view_pdt2(tbl: pdt.Table):
+    return Table(View(src=tbl, sort_by=[tbl.col1], limit=3))
+
+
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_view(imperative):
+    logger = structlog.getLogger(__name__ + ".test_materialize_view")
+    _m = m if not imperative else m2
     with Flow("flow") as f:
         with Stage("stage"):
-            x = m.simple_dataframe()
-            y = m.simple_dataframe()
+            x = _m.simple_dataframe()
+            x2 = _m.noop(x)
+            y = create_view1(x)
+            z = create_view2(x, x2)
+            k = create_view_view1(y)
+            n = create_view_view2(z)
+            yy = _m.noop(y)
+            zz = _m.noop(z)
+            kk = _m.noop(k)
+            nn = _m.noop(n)
+            yy_lazy = _m.noop_lazy(y)
+            zz_lazy = _m.noop_lazy(z)
+            kk_lazy = _m.noop_lazy(k)
+            nn_lazy = _m.noop_lazy(n)
+            _ = yy, zz, kk, nn, yy_lazy, zz_lazy, kk_lazy, nn_lazy
+
+    assert f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID).successful
+
+    for i in range(2):
+        logger.info(f"** Starting run: {i}")
+        # run three times to test some caching behavior (this is at least a smoke test for caching)
+        assert f.run().successful
+
+
+@pytest.mark.skipif(C is None, reason="Pydiverse.transform not available")
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_view_union(imperative):
+    """The implementation of this special case is different in ParquetTableStore."""
+    logger = structlog.getLogger(__name__ + ".test_materialize_view")
+
+    @materialize(input_type=sa.Table, lazy=True)
+    def create_view(tbl: Alias, tbl2: Alias):
+        return Table(View(src=[tbl, tbl2]))
+
+    @materialize(input_type=pdt.SqlAlchemy, lazy=True)
+    def create_view_pdt(tbl: pdt.Table, tbl2: pdt.Table):
+        return Table(View(src=[tbl, tbl2]))
+
+    _m = m if not imperative else m2
+    with Flow("flow") as f:
+        with Stage("stage"):
+            x = _m.simple_dataframe()
+            x2 = _m.noop(x)
+            y = create_view(x, x2)
+            z = create_view_pdt(x, x2)
+            yy_lazy = _m.noop_lazy(y)
+            zz_lazy = _m.noop_lazy(z)
+            yy = _m.noop(y)
+            zz = _m.noop(z)
+            _ = yy, zz, yy_lazy, zz_lazy
+
+    assert f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID).successful
+
+    for i in range(2):
+        logger.info(f"** Starting run: {i}")
+        # run three times to test some caching behavior (this is at least a smoke test for caching)
+        assert f.run().successful
+
+
+@pytest.mark.skipif(C is None, reason="Pydiverse.transform not available")
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_view_pdt(imperative):
+    @materialize(input_type=pdt.SqlAlchemy, lazy=True)
+    def noop_lazy_pdt(tbl: pdt.Table, name: str | None = None):
+        if name is None:
+            return tbl
+        return tbl >> pdt.alias(name)
+
+    @materialize(input_type=pdt.Polars, version=AUTO_VERSION)
+    def noop_pdt(tbl: pdt.Table, name: str | None = None):
+        if name is None:
+            return tbl
+        return tbl >> pdt.alias(name)
+
+    logger = structlog.getLogger(__name__ + ".test_materialize_view_pdt")
+    _m = m if not imperative else m2
+    with Flow("flow") as f:
+        with Stage("stage"):
+            x = _m.simple_dataframe()
+            x2 = _m.noop(x)
+            a = create_view1(x)
+            y = create_view_pdt1(x)
+            z = create_view_pdt2(x, x2)
+            zb = create_view_pdt2b(x, x2)  # workaround
+            k = create_view_view_pdt1(y)
+            la = create_view_view_pdt1(a)
+            n = create_view_view_pdt2(zb)
+            yy = _m.noop(y)
+            zz = _m.noop(z)
+            kk = _m.noop(k)
+            nn = _m.noop(n)
+            pdt_aa = noop_pdt(a, name="aa")
+            pdt_yy = noop_pdt(y, name="yy")
+            pdt_zz = noop_pdt(z, name="zz")
+            pdt_kk = noop_pdt(k, name="kk")
+            pdt_nn = noop_pdt(n, name="nn")
+            yy_lazy = _m.noop_lazy(y)
+            zz_lazy = _m.noop_lazy(z)
+            pdt_aa_lazy = noop_lazy_pdt(a, name="laa")
+            pdt_yy_lazy = noop_lazy_pdt(y, name="lyy")
+            pdt_zz_lazy = noop_lazy_pdt(zb, name="lzz")
+            pdt_kk_lazy = noop_lazy_pdt(k, name="lkk")
+            pdt_nn_lazy = noop_lazy_pdt(n, name="lnn")
+            _ = (
+                la,
+                yy,
+                zz,
+                kk,
+                nn,
+                pdt_aa,
+                pdt_yy,
+                pdt_zz,
+                pdt_kk,
+                pdt_nn,
+                yy_lazy,
+                zz_lazy,
+                pdt_aa_lazy,
+                pdt_yy_lazy,
+                pdt_zz_lazy,
+                pdt_kk_lazy,
+                pdt_nn_lazy,
+            )
+
+    for i in range(3):
+        logger.info(f"** Starting run: {i}")
+        # run three times to test some caching behavior (this is at least a smoke test for caching)
+        assert f.run().successful
+
+
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_table_subtask(imperative):
+    _m = m if not imperative else m2
+    with Flow("flow") as f:
+        with Stage("stage"):
+            x = _m.simple_dataframe_subtask()
+            y = _m.noop_subtask(x)
+            z = _m.noop_subtask_lazy(x)
+            _m.assert_table_equal(x, y)
+            _m.assert_table_equal(x, z)
+
+    assert f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID).successful
+    assert f.run().successful
+    assert f.run().successful
+
+
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_table_subtask_fail_input_type(imperative):
+    _m = m if not imperative else m2
+    with Flow("flow") as f:
+        with Stage("stage"):
+            x = _m.simple_dataframe_subtask()
+            _ = _m.noop_subtask_fail_input_type(x)
+    with swallowing_raises(RuntimeError, match="does not match parent task input type"):
+        try:
+            f.run()
+        except BrokenProcessPool as e:
+            # TODO: find out whether we can avoid BrokenProcessPool from happening
+            raise RuntimeError("does not match parent task input type + BrokenProcessPool") from e
+
+
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_table_twice(imperative):
+    _m = m if not imperative else m2
+    with Flow("flow") as f:
+        with Stage("stage"):
+            x = _m.simple_dataframe()
+            y = _m.simple_dataframe()
 
             m.assert_table_equal(x, y)
 
     assert f.run().successful
 
 
-def test_debug_materialize_table_no_taint():
+@pytest.mark.parametrize("imperative", [False, True])
+def test_debug_materialize_table_no_taint(imperative):
+    _m = m if not imperative else m2
     with Flow("flow") as f:
         with Stage("stage"):
-            x = m.simple_dataframe_debug_materialize_no_taint()
-            m.assert_table_equal(x, x)
+            x = _m.simple_dataframe_debug_materialize_no_taint()
+            _m.assert_table_equal(x, x)
 
     assert f.run().successful
 
 
-def test_debug_materialize_table_twice():
+@pytest.mark.parametrize("imperative", [False, True])
+def test_debug_materialize_table_twice(imperative):
+    _m = m if not imperative else m2
     with Flow("flow") as f:
         with Stage("stage"):
-            x = m.simple_dataframe_debug_materialize_twice()
-            m.assert_table_equal(x, x)
+            x = _m.simple_dataframe_debug_materialize_twice()
+            _m.assert_table_equal(x, x)
 
-    with pytest.raises(RuntimeError, match="interactive debugging"):
+    with swallowing_raises(RuntimeError, match="interactive debugging"):
         assert f.run().successful
 
 
+@with_instances("postgres")
+def test_imperative_minimal_example():
+    with Flow("flow") as f:
+        with Stage("input"):
+            in_ = m.simple_dataframe()
+        with Stage("stage"):
+            _ = m.complex_imperative_materialize(in_)
+
+    trace_hook = PrintTraceHook()  # can be used to debug caching issues
+    result1 = f.run(
+        cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID,
+        trace_hook=trace_hook,
+    )
+
+    result2 = f.run(trace_hook=trace_hook)
+
+    print("Run 1:")
+    for task in f.tasks:
+        print(f"{task._name}: {result1.task_states.get(task)}")
+
+    print("Run 2:")
+    for task in f.tasks:
+        print(f"{task._name}: {result2.task_states.get(task)}")
+
+    # Expectation: In Run 2 all tasks should be cached
+    for task in f.tasks:
+        if not task._name.startswith("Commit"):
+            assert result2.task_states.get(task) == FinalTaskState.CACHE_VALID
+
+
+@with_instances("postgres")
 def test_materialize_blob():
     with Flow("flow") as f:
         with Stage("stage_0"):
@@ -155,6 +417,15 @@ def test_return_pipedag_config():
         f.run(fail_fast=True)
 
 
+def test_return_config_context():
+    with Flow("flow") as f:
+        with Stage("failure_stage"):
+            m.noop(PipedagConfig.default.get())
+
+    with swallowing_raises(TypeError, match="ConfigContext"):
+        f.run(fail_fast=True)
+
+
 def test_materialize_memo_literal():
     # A flow should be able to contain the same task with the same inputs
     # more than once and still run successfully.
@@ -183,41 +454,57 @@ def test_materialize_memo_literal():
     assert f.run().successful
 
 
-def test_materialize_memo_table():
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_memo_table(imperative):
+    _m = m if not imperative else m2
     with Flow("flow") as f:
         with Stage("stage_0"):
-            t_0 = m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
-            t_1 = m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
-            t_2 = m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
-            t_3 = m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
+            t_0 = _m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
+            t_1 = _m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
+            t_2 = _m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
+            t_3 = _m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
 
-            m.assert_table_equal(t_0, t_1)
-            m.assert_table_equal(t_1, t_2)
-            m.assert_table_equal(t_2, t_3)
+            _m.assert_table_equal(t_0, t_1)
+            _m.assert_table_equal(t_1, t_2)
+            _m.assert_table_equal(t_2, t_3)
 
         with Stage("stage_1"):
-            t_4 = m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
-            t_5 = m.noop(t_4)
-            t_6 = m.noop(t_5)
-            t_7 = m.noop(t_0)
-            t_8 = m.noop_sql(t_4)
-            t_9 = m.noop_sql(t_5)
-            t_10 = m.noop_sql(t_0)
-            t_11 = m.noop_lazy(t_4)
-            t_12 = m.noop_lazy(t_5)
-            t_13 = m.noop_lazy(t_0)
+            t_4 = _m.pd_dataframe({"x": [0, 0], "y": [0, 0]})
+            t_5 = _m.noop(t_4)
+            t_6 = _m.noop(t_5)
+            t_7 = _m.noop(t_0)
+            t_8 = _m.noop_sql(t_4)
+            t_9 = _m.noop_sql(t_5)
+            t_10 = _m.noop_sql(t_0)
+            t_11 = _m.noop_lazy(t_4)
+            t_12 = _m.noop_lazy(t_5)
+            t_13 = _m.noop_lazy(t_0)
+            if _m.pl is not None:
+                t_14 = _m.noop_polars(t_4)
+                t_15 = _m.noop_polars(t_5)
+                t_16 = _m.noop_polars(t_0)
+                t_17 = _m.noop_lazy_polars(t_4)
+                t_18 = _m.noop_lazy_polars(t_5)
+                t_19 = _m.noop_lazy_polars(t_0)
 
         with Stage("stage_2"):
-            m.assert_table_equal(t_0, t_4)
-            m.assert_table_equal(t_1, t_5)
-            m.assert_table_equal(t_2, t_6)
-            m.assert_table_equal(t_3, t_7)
-            m.assert_table_equal(t_1, t_8)
-            m.assert_table_equal(t_2, t_9)
-            m.assert_table_equal(t_3, t_10)
-            m.assert_table_equal(t_1, t_11)
-            m.assert_table_equal(t_2, t_12)
-            m.assert_table_equal(t_3, t_13)
+            _m.assert_table_equal(t_0, t_4)
+            _m.assert_table_equal(t_1, t_5)
+            _m.assert_table_equal(t_2, t_6)
+            _m.assert_table_equal(t_3, t_7)
+            _m.assert_table_equal(t_1, t_8)
+            _m.assert_table_equal(t_2, t_9)
+            _m.assert_table_equal(t_3, t_10)
+            _m.assert_table_equal(t_1, t_11)
+            _m.assert_table_equal(t_2, t_12)
+            _m.assert_table_equal(t_3, t_13)
+            if _m.pl is not None:
+                _m.assert_table_equal(t_1, t_14)
+                _m.assert_table_equal(t_2, t_15)
+                _m.assert_table_equal(t_3, t_16)
+                _m.assert_table_equal(t_1, t_17)
+                _m.assert_table_equal(t_2, t_18)
+                _m.assert_table_equal(t_3, t_19)
 
     assert f.run().successful
 
@@ -318,14 +605,17 @@ def test_nout_and_getitem():
     assert f.run().successful
 
 
-def test_name_mangling_tables():
+@pytest.mark.parametrize("imperative", [False, True])
+def test_name_mangling_tables(imperative):
     @materialize
     def table_task_1():
-        return Table(pd.DataFrame({"x": [1]}), name="table_%%")
+        tbl = Table(pd.DataFrame({"x": [1]}), name="table_%%")
+        return tbl.materialize() if imperative else tbl
 
     @materialize
     def table_task_2():
-        return Table(pd.DataFrame({"x": [2]}), name="table_%%")
+        tbl = Table(pd.DataFrame({"x": [2]}), name="table_%%")
+        return tbl.materialize() if imperative else tbl
 
     with Flow() as f:
         with Stage("stage_1"):
@@ -338,14 +628,17 @@ def test_name_mangling_tables():
         assert result.get(table_2, as_type=pd.DataFrame)["x"][0] == 2
 
 
-def test_name_mangling_lazy_tables():
+@pytest.mark.parametrize("imperative", [False, True])
+def test_name_mangling_lazy_tables(imperative):
     @materialize(lazy=True)
     def lazy_task_1():
-        return Table(select_as(1, "x"), name="table_%%")
+        tbl = Table(select_as(1, "x"), name="table_%%")
+        return tbl.materialize() if imperative else tbl
 
     @materialize(lazy=True)
     def lazy_task_2():
-        return Table(select_as(2, "x"), name="table_%%")
+        tbl = Table(select_as(2, "x"), name="table_%%")
+        return tbl.materialize() if imperative else tbl
 
     with Flow() as f:
         with Stage("stage_1"):
@@ -358,15 +651,18 @@ def test_name_mangling_lazy_tables():
         assert result.get(lazy_2, as_type=pd.DataFrame)["x"][0] == 2
 
 
-def test_name_mangling_lazy_table_cache_fn():
+@pytest.mark.parametrize("imperative", [False, True])
+def test_name_mangling_lazy_table_cache_fn(imperative):
     # Only the cache fn output of these two tasks is different
     @materialize(lazy=True, cache=lambda: 1, name="lazy_task")
     def lazy_task_1():
-        return Table(select_as(1, "x"))
+        tbl = Table(select_as(1, "x"))
+        return tbl.materialize() if imperative else tbl
 
     @materialize(lazy=True, cache=lambda: 2, name="lazy_task")
     def lazy_task_2():
-        return Table(select_as(2, "x"))
+        tbl = Table(select_as(2, "x"))
+        return tbl.materialize() if imperative else tbl
 
     with Flow() as f:
         with Stage("stage_1"):
@@ -387,6 +683,187 @@ def test_run_flow_with_empty_stage():
     assert f.run().successful
 
 
+@materialize(lazy=True, input_type=sa.Table)
+def _check_nullable_task(tables):
+    assert len(tables) == 18
+    # This is dialect specific:
+    # assert [c.nullable for c in tables[0].c] == [True, True, True]
+    assert [c.nullable for c in tables[1].c] == [False, True, False]
+    assert [c.nullable for c in tables[2].c] == [True, False, True]
+    assert [c.nullable for c in tables[3].c] == [True, False, True]
+    assert [c.nullable for c in tables[4].c] == [False, True, False]
+    assert [c.nullable for c in tables[5].c] == [True, True, True]
+    assert [c.nullable for c in tables[6].c] == [True, False, True]
+    assert [c.nullable for c in tables[7].c] == [False, True, False]
+    assert [c.nullable for c in tables[8].c] == [False, False, False]
+    # assert [c.nullable for c in tables[9].c] == [True, True, True]
+    assert [c.nullable for c in tables[10].c][1:] == [True, False]
+    assert [c.nullable for c in tables[11].c][1:] == [False, True]
+    assert [c.nullable for c in tables[12].c][1:] == [False, True]
+    assert [c.nullable for c in tables[13].c][1:] == [True, False]
+    assert [c.nullable for c in tables[14].c][1:] == [True, True]
+    assert [c.nullable for c in tables[15].c][1:] == [False, True]
+    assert [c.nullable for c in tables[16].c][1:] == [True, False]
+    assert [c.nullable for c in tables[17].c][1:] == [False, False]
+    return tables
+
+
+def _test_nullable_lazy_get_flow():
+    cols = sa.literal(1).label("x"), sa.literal(2).label("y"), sa.literal(3).label("z")
+
+    @materialize(lazy=True)
+    def lazy_task_1():
+        q = sa.select(*cols)
+        tables = [
+            Table(q),
+            Table(q, nullable=["y"]),
+            Table(q, nullable=["x", "z"]),
+            Table(q, non_nullable=["y"]),
+            Table(q, non_nullable=["x", "z"]),
+            Table(q, nullable=["x", "y", "z"], non_nullable=[]),
+            Table(q, nullable=["x", "z"], non_nullable=["y"]),
+            Table(q, nullable=["y"], non_nullable=["x", "z"]),
+            Table(q, nullable=[], non_nullable=["x", "y", "z"]),
+            Table(q, primary_key=["x"]),
+            Table(q, primary_key=["x"], nullable=["y"]),
+            Table(q, primary_key=["x"], nullable=["x", "z"]),
+            Table(q, primary_key=["x"], non_nullable=["y"]),
+            Table(q, primary_key=["x"], non_nullable=["x", "z"]),
+            Table(q, primary_key=["x"], nullable=["x", "y", "z"], non_nullable=[]),
+            Table(q, primary_key=["x"], nullable=["x", "z"], non_nullable=["y"]),
+            Table(q, primary_key=["x"], nullable=["y"], non_nullable=["x", "z"]),
+            Table(q, primary_key=["x"], nullable=[], non_nullable=["x", "y", "z"]),
+        ]
+        return tables
+
+    with Flow() as f:
+        with Stage("stage_1"):
+            lazy_tables = lazy_task_1()
+            _check_nullable_task(lazy_tables)
+    return f, lazy_tables
+
+
+def _test_nullable_get_flow():
+    @materialize
+    def task_1():
+        df = pd.DataFrame({"x": [1], "y": [2], "z": [3]})
+        tables = [
+            Table(df),
+            Table(df, nullable=["y"]),
+            Table(df, nullable=["x", "z"]),
+            Table(df, non_nullable=["y"]),
+            Table(df, non_nullable=["x", "z"]),
+            Table(df, nullable=["x", "y", "z"], non_nullable=[]),
+            Table(df, nullable=["x", "z"], non_nullable=["y"]),
+            Table(df, nullable=["y"], non_nullable=["x", "z"]),
+            Table(df, nullable=[], non_nullable=["x", "y", "z"]),
+            Table(df, primary_key=["x"]),
+            Table(df, primary_key=["x"], nullable=["y"]),
+            Table(df, primary_key=["x"], nullable=["x", "z"]),
+            Table(df, primary_key=["x"], non_nullable=["y"]),
+            Table(df, primary_key=["x"], non_nullable=["x", "z"]),
+            Table(df, primary_key=["x"], nullable=["x", "y", "z"], non_nullable=[]),
+            Table(df, primary_key=["x"], nullable=["x", "z"], non_nullable=["y"]),
+            Table(df, primary_key=["x"], nullable=["y"], non_nullable=["x", "z"]),
+            Table(df, primary_key=["x"], nullable=[], non_nullable=["x", "y", "z"]),
+        ]
+        return tables
+
+    with Flow() as f:
+        with Stage("stage_1"):
+            lazy_tables = task_1()
+            _check_nullable_task(lazy_tables)
+    return f, lazy_tables
+
+
+@skip_instances("snowflake", "parquet_backend", "parquet_s3_backend", "parquet_s3_backend_db2")
+@pytest.mark.parametrize("_get_flow", [_test_nullable_get_flow, _test_nullable_lazy_get_flow])
+def test_nullable(_get_flow):
+    f, tables = _get_flow()
+
+    with StageLockContext():
+        result = f.run()
+        assert result.successful
+        for i in range(18):  # unfortunately, 'for tbl in tables' does not work
+            tbl = tables[i]
+            assert len(result.get(tbl, as_type=pd.DataFrame)) == 1
+            assert result.get(tbl, as_type=pd.DataFrame)["x"][0] == 1
+            assert result.get(tbl, as_type=pd.DataFrame)["y"][0] == 2
+            assert result.get(tbl, as_type=pd.DataFrame)["z"][0] == 3
+        # check that there are 9 tables with one primary key column each by checking
+        # the sum of all primary key columns
+        if ConfigContext.get().store.table_store.engine.dialect.name != "duckdb":
+            assert (
+                sum(col.primary_key for i in range(18) for col in result.get(tables[i], as_type=sa.Table).original.c)
+                == 9
+            )
+
+
+# duckdb does not persist nullable flags over connections; snowflake is slow
+@skip_instances("duckdb", "snowflake", "parquet_backend", "parquet_s3_backend", "parquet_s3_backend_db2")
+@pytest.mark.parametrize("_get_flow", [_test_nullable_get_flow, _test_nullable_lazy_get_flow])
+def test_nullable_output(_get_flow):
+    f, tables = _get_flow()
+
+    def get_nullable(idx):
+        return [c.nullable for c in result.get(tables[idx], as_type=sa.Table).c]
+
+    with StageLockContext():
+        result = f.run()
+        assert result.successful
+        # This is dialect specific:
+        # assert get_nullable(0) == [True, True, True]
+        assert get_nullable(1) == [False, True, False]
+        assert get_nullable(2) == [True, False, True]
+        assert get_nullable(3) == [True, False, True]
+        assert get_nullable(4) == [False, True, False]
+        assert get_nullable(5) == [True, True, True]
+        assert get_nullable(6) == [True, False, True]
+        assert get_nullable(7) == [False, True, False]
+        assert get_nullable(8) == [False, False, False]
+
+
+@pytest.mark.parametrize(
+    "nullable, non_nullable, error",
+    [
+        (["a"], None, ValueError),
+        (None, ["a"], ValueError),
+        (["a", "x", "y", "z"], None, ValueError),
+        (None, ["a", "x", "y", "z"], ValueError),
+        (["x", "y", "z"], ["a"], ValueError),
+        (["a"], ["x", "y", "z"], ValueError),
+        (["x"], ["x"], ValueError),
+        (["x"], ["y"], ValueError),
+        (["x", "y"], ["y"], ValueError),
+        ("x", None, TypeError),
+        (None, "x", TypeError),
+        (1, None, TypeError),
+        (None, 2, TypeError),
+    ],
+)
+def test_nullable_raises(nullable, non_nullable, error):
+    cols = sa.literal(1).label("x"), sa.literal(2).label("y"), sa.literal(3).label("z")
+
+    @materialize(lazy=True)
+    def lazy_task_1():
+        q = sa.select(*cols)
+        df = pd.DataFrame({"x": [1], "y": [2], "z": [3]})
+        tables = [
+            Table(q, nullable=nullable, non_nullable=non_nullable),
+            Table(df, nullable=nullable, non_nullable=non_nullable),
+            Table(q, primary_key=["x"], nullable=nullable, non_nullable=non_nullable),
+            Table(df, primary_key=["x"], nullable=nullable, non_nullable=non_nullable),
+        ]
+        return tables
+
+    with Flow() as f:
+        with Stage("stage_1"):
+            lazy_task_1()
+
+    with swallowing_raises(error):
+        f.run()
+
+
 @materialize(lazy=True)
 def _lazy_task_1():
     return Table(select_as(1, "x"), name="t1", primary_key="x")
@@ -400,10 +877,8 @@ def _lazy_task_2():
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def _lazy_join(src1: sa.Table, src2: sa.Table):
-    query = sa.select(src1.c.x, src2.c.x.label("x2")).select_from(
-        src1.outerjoin(src2, src1.c.x == src2.c.x)
-    )
+def _lazy_join(src1: sa.sql.expression.Alias, src2: sa.sql.expression.Alias):
+    query = sa.select(src1.c.x, src2.c.x.label("x2")).select_from(src1.outerjoin(src2, src1.c.x == src2.c.x))
     return Table(query, "t3_%%", indexes=[["x2"], ["x", "x2"]])
 
 
@@ -421,10 +896,8 @@ def _sql_task_2():
 
 
 @materialize(version="1.0", input_type=sa.Table)
-def _sql_join(src1: sa.Table, src2: sa.Table):
-    query = sa.select(src1.c.x, src2.c.x.label("x2")).select_from(
-        src1.outerjoin(src2, src1.c.x == src2.c.x)
-    )
+def _sql_join(src1: sa.sql.expression.Alias, src2: sa.sql.expression.Alias):
+    query = sa.select(src1.c.x, src2.c.x.label("x2")).select_from(src1.outerjoin(src2, src1.c.x == src2.c.x))
     return Table(query, "t3_%%", indexes=[["x2"], ["x", "x2"]])
 
 
@@ -500,3 +973,20 @@ def test_task_and_stage_communication(task_1, task_2, noop, join):
             assert result.get(next_stage2, as_type=pd.DataFrame)["x2"][0] == 1
             assert result.get(next_same_stage, as_type=pd.DataFrame)["x"][0] == 1
             assert result.get(next_same_stage, as_type=pd.DataFrame)["x2"].isna().all()
+
+
+@pytest.mark.parametrize("lazy", [False, True])
+def test_many_imperative_tables(lazy):
+    @materialize(input_type=pd.DataFrame, lazy=lazy)
+    def imperative_task():
+        tables = []
+        for i in range(50):
+            df = pd.DataFrame({"counter": [i]})
+            tables.append(Table(df).materialize())
+        return Table(df)
+
+    with Flow() as flow:
+        with Stage("stage_1"):
+            pd_tbl = imperative_task()
+            m.noop(pd_tbl)
+    flow.run()

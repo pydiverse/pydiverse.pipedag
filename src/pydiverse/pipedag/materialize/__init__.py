@@ -1,11 +1,9 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
-from .container import Blob, RawSql, Table
-from .core import materialize
+from .core import input_stage_versions, materialize
 
 __all__ = [
-    "Table",
-    "Blob",
-    "RawSql",
     "materialize",
+    "input_stage_versions",
 ]

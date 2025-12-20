@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import itertools
 import logging
@@ -8,7 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from pydiverse.pipedag.util.structlog import setup_logging
+from pydiverse.common.util.structlog import setup_logging
+from pydiverse.pipedag.util.testing_s3 import initialize_test_s3_bucket
 
 # Load the `run_with_instances` fixture, so it gets applied to all tests
 from tests.fixtures.instances import INSTANCE_MARKS, fixture_run_with_instance
@@ -32,11 +34,22 @@ def setup_environ():
     os.environ["MSSQL_PASSWORD"] = "PydiQuant27"
 
     os.environ["PYDIVERSE_PIPEDAG_PYTEST"] = "1"
+    os.environ["AWS_ACCESS_KEY_ID"] = "minioadmin"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "minioadmin"
+    # unfortunately duckdb does not read AWS_ENDPOINT_URL environment variable (see pipedag.yaml)
+
+    os.environ["DATA_DIR_PREFIX"] = str(Path(__file__).parent.parent / "example_postgres") + os.path.sep
 
 
 setup_environ()
 
-log_level = logging.INFO if not os.environ.get("DEBUG", "") else logging.DEBUG
+log_level = (
+    logging.ERROR
+    if os.environ.get("ERROR_ONLY", "0") != "0"
+    else logging.INFO
+    if os.environ.get("DEBUG", "0") == "0"
+    else logging.DEBUG
+)
 setup_logging(log_level=log_level)
 
 
@@ -46,7 +59,7 @@ setup_logging(log_level=log_level)
 @pytest.fixture(autouse=True, scope="function")
 def structlog_test_info(request):
     """Add testcase information to structlog context"""
-    if not os.environ.get("DEBUG", ""):
+    if os.environ.get("DEBUG", "0") == "0" and os.environ.get("LOG_TEST_NAME", "0") == "0":
         yield
         return
 
@@ -87,6 +100,8 @@ def pytest_generate_tests(metafunc: pytest.Metafunc):
 
 
 supported_options = [
+    "postgres",  # see default_options
+    "snowflake",
     "mssql",
     "ibm_db2",
     "duckdb",
@@ -95,7 +110,13 @@ supported_options = [
     "polars",
     "dask",
     "prefect",
+    "s3",
+    "lock_tests",
 ]
+
+default_options = ["postgres", "duckdb", "polars", "lock_tests"]
+
+sub_backends = dict(duckdb=["parquet_backend"], s3=["parquet_s3_backend"], ibm_db2=["parquet_s3_backend_db2"])
 
 
 def pytest_addoption(parser):
@@ -106,15 +127,32 @@ def pytest_addoption(parser):
             default=False,
             help=f"run test that require {opt}",
         )
+        if opt in default_options:
+            # it seems the pytest parser is not automatically offering --no-flag
+            parser.addoption(
+                "--no-" + opt,
+                action="store_true",
+                default=False,
+                help=f"run test that require {opt}",
+            )
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items):
     for opt in supported_options:
-        if not config.getoption("--" + opt):
-            skip = pytest.mark.skip(reason=f"{opt} not selected")
-            for item in items:
-                if opt in item.keywords:
-                    item.add_marker(skip)
+        if not (config.getoption("--" + opt) or (opt in default_options and not config.getoption("--no-" + opt))):
+            all_opts = [opt]
+            if opt in sub_backends:
+                all_opts.extend(sub_backends[opt])
+            for opt2 in all_opts:
+                skip = pytest.mark.skip(reason=f"{opt2} not selected")
+                for item in items:
+                    if (
+                        opt2 in item.keywords
+                        or any(itm.startswith(opt2 + "-") for itm in item.keywords)
+                        or any(itm.endswith("-" + opt2) for itm in item.keywords)
+                        or any("-" + opt2 + "-" in itm for itm in item.keywords)
+                    ):
+                        item.add_marker(skip)
 
 
 @pytest.hookimpl
@@ -138,3 +176,9 @@ def pytest_parallelize_group_items(config, items):
 
         groups[group].append(item)
     return groups
+
+
+def pytest_sessionstart(session):
+    # initialize the S3 test bucket in case --s3 option was given
+    if session.config.getoption("--s3"):
+        initialize_test_s3_bucket()

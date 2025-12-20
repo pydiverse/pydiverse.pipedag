@@ -1,20 +1,75 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
-from pydiverse.pipedag.context import ConfigContext, StageLockContext
-from pydiverse.pipedag.core import Flow, PipedagConfig, Result, Stage, Task
-from pydiverse.pipedag.materialize import Blob, RawSql, Table, materialize
-from pydiverse.pipedag.materialize.core import AUTO_VERSION
+# In order to avoid circular dependencies, we use the following import order:
+# - Containers
+# - Contexts
+# - Task
+# - Materialize
+# - Core:
+#   * PipedagConfig (rather independent from other core)
+#   * GroupNode (connected to task)
+#   * VisualizationStyle (connected to GroupNode)
+#   * Stage (needed by Flow)
+#   * Result (needed by Flow)
+#   * Flow (needs a lot of the above)
+# - Engine
+# - Backends
+
+# isort: skip_file
+from .container import (
+    Blob,
+    ExternalTableReference,
+    RawSql,
+    Schema,
+    Table,
+    View,
+    SortCol,
+    SortOrder,
+    materialize_table,
+)
+from .context import ConfigContext, StageLockContext
+from .core.task import (
+    Task,
+    TaskGetItem,
+)
+from .materialize import (
+    input_stage_versions,
+    materialize,
+)
+from .materialize.materializing_task import AUTO_VERSION
+from .core import (
+    PipedagConfig,
+    GroupNode,
+    VisualizationStyle,
+    Stage,
+    Result,
+    Flow,
+)
+from . import backend
 
 __all__ = [
     "Flow",
     "Stage",
     "materialize",
-    "AUTO_VERSION",
+    "input_stage_versions",
     "Table",
+    "View",
+    "SortCol",
+    "SortOrder",
     "RawSql",
     "Blob",
+    "ExternalTableReference",
+    "Task",
+    "TaskGetItem",
+    "GroupNode",
+    "VisualizationStyle",
+    "Schema",
     "Result",
     "PipedagConfig",
     "ConfigContext",
     "StageLockContext",
+    "AUTO_VERSION",
+    "backend",
+    "materialize_table",
 ]

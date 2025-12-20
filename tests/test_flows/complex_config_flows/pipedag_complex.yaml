@@ -34,7 +34,21 @@ technical_setups:
     # abort as fast a possible on task failure and print most readable stack trace
     fail_fast: true
 
+    # Attention: For disable_kroki: false, stage and task names might be sent to the kroki_url.
+    #   You can self-host kroki if you like:
+    #   https://docs.kroki.io/kroki/setup/install/
+    #   You need to install optional dependency 'pydot' for any visualization
+    #   URL to appear.
+    disable_kroki: true
+    kroki_url: "https://kroki.io"
+
     instance_id: pipedag_default
+
+    cache_validation:
+      mode: "normal"
+      disable_cache_function: false
+      ignore_task_version: false
+
     table_store:
       class: "pydiverse.pipedag.backend.table.SQLTableStore"
 
@@ -46,7 +60,7 @@ technical_setups:
 
       args:
         create_database_if_not_exists: True
-        # print select statements before being encapsualted in materialize expressions and tables before writing to
+        # print select statements before being encapsulated in materialize expressions and tables before writing to
         # database
         print_materialize: true
         # print final sql statements
@@ -57,14 +71,12 @@ technical_setups:
       blob_store_connection: file
 
     lock_manager:
-      class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
-      args:
-        hosts: "localhost:2181"
+      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
 
     orchestration:
       class: "pydiverse.pipedag.engine.SequentialEngine"
       ## Activate this class to work either with prefect 1.x or prefect 2.y
-      # class: "pydiverse.pipedag.engine.PrefectEngine"
+      # class: "pydiverse.pipedag.engine.prefect.PrefectEngine"
 
 instances:
   __any__:
@@ -119,6 +131,27 @@ instances:
     # Full dataset is using default database connection and schemas
     table_store:
       table_store_connection: mssql
+
+  ## Test different lock managers on real flows
+
+  lock_zookeeper:
+    instance_id: pd_zookeeper
+    table_store:
+      table_store_connection: postgres
+    lock_manager:
+      class: "pydiverse.pipedag.backend.lock.ZooKeeperLockManager"
+      args:
+        hosts: "localhost:2181"
+
+  lock_file:
+    instance_id: pd_filelock
+    table_store:
+      table_store_connection: postgres
+    lock_manager:
+      class: "pydiverse.pipedag.backend.lock.FileLockManager"
+      args:
+        base_path: "/tmp/pipedag/locks"
+
 
 flows:
 #  __any__:

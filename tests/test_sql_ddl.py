@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 from pydiverse.pipedag.backend.table.sql.ddl import insert_into_in_query
 
@@ -14,9 +15,10 @@ def test_insert_into():
         "Select 1 UNION ALL SELECT 2": "Select 1 INTO a.b UNION ALL SELECT 2",
         "Select 1 From X": "Select 1 INTO a.b From X",
         "Select (SELECT 1 FROM Y) From X": "Select (SELECT 1 FROM Y) INTO a.b From X",
-        "Select (SELECT (SELECT 1 FROM Z) FROM Y) From X": (
-            "Select (SELECT (SELECT 1 FROM Z) FROM Y) INTO a.b From X"
-        ),
+        "Select (SELECT (SELECT 1 FROM Z) FROM Y) From X": ("Select (SELECT (SELECT 1 FROM Z) FROM Y) INTO a.b From X"),
+        "Select a.[from] from a": "Select a.[from] INTO a.b from a",
+        "Select a.[ from ] from a": "Select a.[ from ] INTO a.b from a",
+        'Select "from" from a': 'Select "from" INTO a.b from a',
     }
     for raw_query, expected_query in test_pairs.items():
         res = insert_into_in_query(raw_query, "a", "b")

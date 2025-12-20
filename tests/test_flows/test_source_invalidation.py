@@ -1,9 +1,12 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import StageLockContext
+from pydiverse.pipedag.context.context import CacheValidationMode
+from tests.fixtures.instances import with_instances
 
 dfA_source = pd.DataFrame(
     {
@@ -54,6 +57,7 @@ def get_flow():
     return flow, b2, a3
 
 
+@with_instances("postgres")
 def test_source_invalidation():
     # trigger reload of input data
     global dfA
@@ -86,7 +90,7 @@ def test_source_invalidation():
 
     with StageLockContext():
         # this run should ignore fresh input at source nodes and not change outputs
-        result = flow.run(ignore_cache_function=True)
+        result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
         assert result.successful
 
         v_out1, v_out2 = result.get(out1), result.get(out2)

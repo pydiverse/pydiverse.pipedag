@@ -1,4 +1,7 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+
+from pydiverse.common.errors import DisposedError
 
 
 class FlowError(Exception):
@@ -8,6 +11,12 @@ class FlowError(Exception):
 
 
 class StageError(Exception):
+    """
+    Exception raised when something is wrong with the stage.
+    """
+
+
+class GroupNodeError(Exception):
     """
     Exception raised when something is wrong with the stage.
     """
@@ -44,8 +53,33 @@ class RemoteProcessError(IPCError):
     """
 
 
-class DisposedError(Exception):
+class HookCheckException(Exception):
     """
-    Exception raise when an object has been disposed, but some attributes are
-    being accessed nevertheless.
+    Exception raised if a hook check fails. It is caught to surface as a
+    normal task failure.
     """
+
+
+class StoreIncompatibleException(Exception):
+    """
+    Exception raised if a store is incompatible for retrieving a table type.
+    """
+
+
+class HashingError(Exception):
+    """
+    Exception raised when hashing fails.
+    """
+
+
+__all__ = [
+    "FlowError",
+    "StageError",
+    "GroupNodeError",
+    "CacheError",
+    "LockError",
+    "DuplicateNameError",
+    "IPCError",
+    "RemoteProcessError",
+    "DisposedError",
+]

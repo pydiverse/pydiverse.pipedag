@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
 import sqlalchemy as sa
@@ -36,7 +37,7 @@ def double_values(df: pd.DataFrame):
 
 
 @materialize(input_type=sa.Table, lazy=True)
-def join_on_a(left: sa.Table, right: sa.Table):
+def join_on_a(left: sa.sql.expression.Alias, right: sa.sql.expression.Alias):
     return Table(left.select().join(right, left.c.a == right.c.a))
 
 
@@ -54,7 +55,7 @@ def get_flow():
     return flow
 
 
-@with_instances(DATABASE_INSTANCES, ORCHESTRATION_INSTANCES)
+@with_instances(DATABASE_INSTANCES, ORCHESTRATION_INSTANCES, ["snowflake"])
 def test_simple_flow():
     flow = get_flow()
     result = flow.run()

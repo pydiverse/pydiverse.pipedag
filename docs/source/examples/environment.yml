@@ -1,0 +1,8 @@
+name: pipedag-howto-jupyter
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - pydiverse-pipedag
+  - ipython
+  - jupyter

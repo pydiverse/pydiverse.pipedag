@@ -13,4 +13,3 @@ GO
 -- Test that function exists
 SELECT ({{in_schema}}.f (1, 2));
 GO
-

@@ -1,16 +1,14 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import pytest
 
-from .sesson import Session
+from .session import Session
 from .util import parse_config
 
 
 def pytest_addoption(parser):
-    workers_help = (
-        "Set the max num of workers (aka processes) to start "
-        "(int or 'auto' - one per core)"
-    )
+    workers_help = "Set the max num of workers (aka processes) to start (int or 'auto' - one per core)"
 
     group = parser.getgroup("parallelize")
     group.addoption("--workers", dest="workers", help=workers_help)

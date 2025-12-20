@@ -1,12 +1,13 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 from pathlib import Path
 
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Stage, materialize
+from pydiverse.pipedag.container import RawSql
 from pydiverse.pipedag.context import ConfigContext, TaskContext
-from pydiverse.pipedag.materialize.container import RawSql
 
 
 @materialize(input_type=sa.Table, lazy=True)
@@ -18,18 +19,16 @@ def sql_script(
     depend=None,
 ):
     _ = depend  # only relevant for adding additional task dependency
-    stage = TaskContext.get().task.stage
+    stage = TaskContext.get().task._stage
 
     script_path = script_directory / name
-    sql = Path(script_path).read_text()
+    sql = Path(script_path).read_text(encoding="utf-8")
     sql = raw_sql_bind_schema(sql, "out_", stage, transaction=True)
     sql = raw_sql_bind_schema(sql, "in_", input_stage)
     return RawSql(sql)
 
 
-def raw_sql_bind_schema(
-    sql, prefix: str, stage: Stage | RawSql | None, *, transaction=False
-):
+def raw_sql_bind_schema(sql, prefix: str, stage: Stage | RawSql | None, *, transaction=False):
     config = ConfigContext.get()
     store = config.store.table_store
     if stage is not None:

@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
 import sqlalchemy as sa
@@ -6,6 +7,7 @@ from pandas.testing import assert_frame_equal
 
 from pydiverse.pipedag import Blob, Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import StageLockContext
+from tests.fixtures.instances import with_instances
 
 dfA = pd.DataFrame(
     {
@@ -36,7 +38,7 @@ def double_values(df: pd.DataFrame):
 
 
 @materialize(input_type=sa.Table, lazy=True)
-def join_on_a(left: sa.Table, right: sa.Table):
+def join_on_a(left: sa.sql.expression.Alias, right: sa.sql.expression.Alias):
     return Table(left.select().join(right, left.c.a == right.c.a))
 
 
@@ -51,7 +53,8 @@ def blob_task(x, y):
     return Blob(x), Blob(y)
 
 
-def test_simple_flow():
+@with_instances("postgres")
+def test_simple_flow(with_blob=True):
     with Flow() as flow:
         with Stage("simple_flow_stage1"):
             inp = inputs()
@@ -67,11 +70,12 @@ def test_simple_flow():
             joined = join_on_a(a2, b4)
             joined_times_2 = double_values(joined)
 
-            v = blob_task(x, x)
-            v = blob_task(v, v)
-            v = blob_task(v, v)
+            if with_blob:
+                v = blob_task(x, x)
+                v = blob_task(v, v)
+                v = blob_task(v, v)
 
-            blob_tuple = blob_task(1, 2)
+                blob_tuple = blob_task(1, 2)
 
     with StageLockContext():
         result = flow.run()  # this will use the default configuration instance=__any__
@@ -91,8 +95,9 @@ def test_simple_flow():
         assert_frame_equal(res_joined * 2, res_joined_times_2)
 
         result.get(x)
-        result.get(v)
-        assert tuple(result.get(blob_tuple)) == (1, 2)
+        if with_blob:
+            result.get(v)
+            assert tuple(result.get(blob_tuple)) == (1, 2)
 
 
 if __name__ == "__main__":

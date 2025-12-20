@@ -1,0 +1,24 @@
+[workspace]
+authors = ["windiana42 <windiana@users.sf.net>"]
+channels = ["conda-forge"]
+name = "example"
+platforms = ["osx-arm64", "linux-64", "win-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+pydiverse-pipedag = ">=0.12.0,<0.13"
+pydot = ">=4.0.1,<5"
+# dependencies for IBM DB2 access
+ibm_db = ">=3.2.5, <3.2.7" # somehow there is a version conflict for 3.2.7 that fails empty queries
+ibm_db_sa = ">=0.3.8"
+connectorx = ">=0.3.3"
+# optional dependency for using pydiverse-transform (pdt.Table)
+pydiverse-transform = ">=0.6.0,<0.7"
+# optional dependency for dataframely schema classes
+dataframely = ">=2.1.0,<3"
+# optional dependency for colspec classes (same as dataframely but with SQL support)
+pydiverse-colspec = ">=0.3.1,<0.4"
+# this could be installed in separate environment simply for running docker-compose
+docker-compose = ">=2.39.1,<3"

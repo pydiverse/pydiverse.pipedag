@@ -1,23 +1,35 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
+from typing import Any
 
+import polars as pl
 import pytest
+from pandas.core.dtypes.base import ExtensionDtype
 
-from pydiverse.pipedag import *
+from pydiverse.pipedag import (
+    AUTO_VERSION,
+    ConfigContext,
+    Flow,
+    Stage,
+    Table,
+    materialize,
+)
+from pydiverse.pipedag.backend.table.sql.hooks import PolarsTableHook
+from pydiverse.pipedag.backend.table.sql.sql import (
+    DISABLE_DIALECT_REGISTRATION,
+    SQLTableStore,
+)
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import DATABASE_INSTANCES, with_instances
+from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
 from tests.util.spy import spy_task
+from tests.util.sql import get_config_with_table_store
 from tests.util.tasks_library import assert_table_equal
 
 pytestmark = [
     pytest.mark.polars,
-    with_instances(DATABASE_INSTANCES),
+    with_instances(tuple(list(DATABASE_INSTANCES) + ["snowflake"])),
 ]
-
-try:
-    import polars as pl
-except ImportError:
-    pl = None
 
 
 def test_table_store():
@@ -27,16 +39,27 @@ def test_table_store():
             pl.DataFrame(
                 {
                     "col": [0, 1, 2, 3],
+                    "str_col": ["a", "abc", "".join("x" for _ in range(1024)), None],
                 }
             )
         )
 
     @materialize()
     def expected_out_table():
+        expected_length = 1024
+        store = ConfigContext.get().store.table_store
+        if store.engine.dialect.name == "mssql":
+            expected_length = 256
         return Table(
             pl.DataFrame(
                 {
                     "col": [0, 1, 2, 3],
+                    "str_col": [
+                        "a",
+                        "abc",
+                        "".join("x" for _ in range(expected_length)),
+                        None,
+                    ],
                     "x": [1, 1, 1, 1],
                     "y": [2, 2, 2, 2],
                 }
@@ -73,6 +96,7 @@ def test_table_store():
     assert f.run().successful
 
 
+@skip_instances("snowflake")  # speedup tests 3min
 def test_auto_version_1(mocker):
     should_swap = True
     value_to_add = 1
@@ -161,3 +185,56 @@ def test_auto_version_2(mocker):
     should_swap_inputs = True
     f.run()
     in_tables_spy.assert_called(2)
+
+
+@skip_instances("parquet_backend")
+def test_custom_download():
+    class TestTableStore(ConfigContext.get().store.table_store.__class__):
+        _dialect_name = DISABLE_DIALECT_REGISTRATION
+        # this subclass is just to make sure hooks of other tests are not affected
+        pass
+
+    cfg = get_config_with_table_store(ConfigContext.get(), TestTableStore)
+
+    import numpy as np
+
+    @TestTableStore.register_table(pl, replace_hooks=[PolarsTableHook])
+    class CustomPolarsDownloadTableHook(PolarsTableHook):
+        @classmethod
+        def download_table(
+            cls,
+            query: Any,
+            store: SQLTableStore,
+            dtypes: dict[str, ExtensionDtype | np.dtype] | None = None,
+        ) -> pl.DataFrame:
+            # to simplify this test with various dependencies and platforms, it is
+            # easier to use pandas:
+            import pandas as pd
+
+            connection_uri = store.engine_url.render_as_string(hide_password=False)
+            pandas_df = pd.read_sql(query, con=connection_uri)
+            # # pl.read_database_uri fails for duckdb and osx-arm64
+            # # (newer conda-forge builds for connectorx for osx-arm64 are broken)
+            # df = pl.read_database_uri(query, connection_uri)
+            df = pl.from_pandas(pandas_df)
+            return df.with_columns(pl.lit(True).alias("custom_download"))
+
+    @materialize()
+    def numpy_input():
+        df = pl.DataFrame(
+            {
+                "col": [0, 1, 2, 3],
+            }
+        )
+        return Table(df)
+
+    @materialize(input_type=pl.DataFrame)
+    def verify_custom(t):
+        assert "custom_download" in t.columns
+
+    with Flow() as f:
+        with Stage("stage"):
+            t = numpy_input()
+            verify_custom(t)
+
+    assert f.run(config=cfg).successful

@@ -6,25 +6,48 @@ A pipeline orchestration library executing tasks within one python session. It t
 (de)materialization, caching and cache invalidation. Blob storage is supported as well for example
 for storing model files.
 
-This is an early stage version 0.x which lacks documentation. Please contact
-https://github.com/orgs/pydiverse/teams/code-owners if you like to become an early adopter
-or to contribute early stage usage examples.
+This is an early stage version 0.x, however, it is already used in real projects. We are happy to receive your
+feedback as [issues](https://github.com/pydiverse/pydiverse.pipedag/issues) on the GitHub repo. Feel free to also
+comment on existing issues to extend them to your needs or to add solution ideas.
 
 ## Usage
 
-pydiverse.pipedag can either be installed via pypi with `pip install pydiverse-pipedag` or via conda-forge
-with `conda install pydiverse-pipedag -c conda-forge`.
+pydiverse.pipedag can either be installed via pypi with `pip install pydiverse-pipedag pydot` or via
+conda-forge with `conda install pydiverse-pipedag pydot -c conda-forge`. Our recommendation would be
+to use [pixi](https://pixi.sh/latest/) which is also based on conda-forge:
+
+```bash
+mkdir my_project
+pixi init
+pixi add pydiverse-pipedag pydot
+```
+
+With pixi, you run python like this:
+
+```bash
+pixi run python -c 'import pydiverse.pipedag'
+```
+
+or this:
+
+```bash
+pixi run python my_script.py
+```
 
 ## Example
 
 A flow can look like this (i.e. put this in a file named `run_pipeline.py`):
 
 ```python
+import tempfile
+
 import pandas as pd
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import StageLockContext
+from pydiverse.pipedag.core.config import create_basic_pipedag_config
+from pydiverse.common.util.structlog import setup_logging
 
 
 @materialize(lazy=True)
@@ -36,7 +59,7 @@ def lazy_task_1():
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_2(input1: sa.Table, input2: sa.Table):
+def lazy_task_2(input1: sa.Alias, input2: sa.Alias):
     query = sa.select(
         (input1.c.x * 5).label("x5"),
         input2.c.a,
@@ -46,13 +69,13 @@ def lazy_task_2(input1: sa.Table, input2: sa.Table):
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_3(input1: sa.Table):
-    return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.name}")
+def lazy_task_3(input1: sa.Alias):
+    return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.original.name}")
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_4(input1: sa.Table):
-    return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.name}")
+def lazy_task_4(input1: sa.Alias):
+    return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.original.name}")
 
 
 @materialize(nout=2, version="1.0.0")
@@ -78,127 +101,77 @@ def eager_task(tbl1: pd.DataFrame, tbl2: pd.DataFrame):
 
 
 def main():
-    with Flow() as f:
-        with Stage("stage_1"):
-            lazy_1 = lazy_task_1()
-            a, b = eager_inputs()
+    with tempfile.TemporaryDirectory() as temp_dir:
+        cfg = create_basic_pipedag_config(
+            f"duckdb:///{temp_dir}/db.duckdb",
+            disable_stage_locking=True,  # This is special for duckdb
+            # Attention: If uncommented, stage and task names might be sent to the following URL.
+            #   You can self-host kroki if you like:
+            #   https://docs.kroki.io/kroki/setup/install/
+            #   You need to install optional dependency 'pydot' for any visualization
+            #   URL to appear.
+            # kroki_url="https://kroki.io",
+        ).get("default")
+        with cfg:
+            with Flow() as f:
+                with Stage("stage_1"):
+                    lazy_1 = lazy_task_1()
+                    a, b = eager_inputs()
 
-        with Stage("stage_2"):
-            lazy_2 = lazy_task_2(lazy_1, b)
-            lazy_3 = lazy_task_3(lazy_2)
-            eager = eager_task(lazy_1, b)
+                with Stage("stage_2"):
+                    lazy_2 = lazy_task_2(lazy_1, b)
+                    lazy_3 = lazy_task_3(lazy_2)
+                    eager = eager_task(lazy_1, b)
 
-        with Stage("stage_3"):
-            lazy_4 = lazy_task_4(lazy_2)
-        _ = lazy_3, lazy_4, eager  # unused terminal output tables
+                with Stage("stage_3"):
+                    lazy_4 = lazy_task_4(lazy_2)
+                _ = lazy_3, lazy_4, eager  # unused terminal output tables
 
-    # Run flow
-    result = f.run()
-    assert result.successful
+            # Run flow
+            result = f.run()
+            assert result.successful
 
-    # Run in a different way for testing
-    with StageLockContext():
-        result = f.run()
-        assert result.successful
-        assert result.get(lazy_1, as_type=pd.DataFrame)["x"][0] == 1
+            # Run in a different way for testing
+            with StageLockContext():
+                result = f.run()
+                assert result.successful
+                assert result.get(lazy_1, as_type=pd.DataFrame)["x"][0] == 1
 
 
 if __name__ == "__main__":
+    setup_logging()  # you can set up the logging and/or structlog libraries as you wish
     main()
 ```
 
-Create a file called `pipedag.yaml` in the same directory:
+The `with tempfile.TemporaryDirectory()` is only needed to have an OS independent temporary directory available.
+You can also get rid of it like this:
 
-```yaml
-instances:
-  __any__:
-    network_interface: "127.0.0.1"
-    auto_table:
-      - "pandas.DataFrame"
-      - "sqlalchemy.sql.expression.TextClause"
-      - "sqlalchemy.sql.expression.Selectable"
-
-    fail_fast: true
-    instance_id: pipedag_default
-    table_store:
-      class: "pydiverse.pipedag.backend.table.SQLTableStore"
-      args:
-        url: "postgresql://sa:Pydiverse23@127.0.0.1:6543/{instance_id}"
-        create_database_if_not_exists: True
-
-        print_materialize: true
-        print_sql: true
-
-      local_table_cache:
-        store_input: true
-        store_output: true
-        use_stored_input_as_cache: true
-        class: "pydiverse.pipedag.backend.table.cache.ParquetTableCache"
-        args:
-          base_path: "/tmp/pipedag/table_cache"
-
-    blob_store:
-      class: "pydiverse.pipedag.backend.blob.FileBlobStore"
-      args:
-        base_path: "/tmp/pipedag/blobs"
-
-    lock_manager:
-      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
-
-    orchestration:
-      class: "pydiverse.pipedag.engine.SequentialEngine"
+```python
+def main():
+    cfg = create_basic_pipedag_config(
+        "duckdb:////tmp/pipedag/{instance_id}/db.duckdb",
+        disable_stage_locking=True,  # This is special for duckdb
+    ).get("default")
+    ...
 ```
 
-If you don't have a postgres database at hand, you can start a postgres database, with the following `docker-compose.yaml` file:
-
-```yaml
-version: "3.9"
-services:
-  postgres:
-    image: postgres
-    environment:
-      POSTGRES_USER: sa
-      POSTGRES_PASSWORD: Pydiverse23
-    ports:
-      - "6543:5432"
-```
-
-Run `docker-compose up` in the directory of your `docker-compose.yaml` and then execute
-the flow script as follows with a shell like `bash` and a python environment that
-includes `pydiverse-pipedag`, `pandas`, and `sqlalchemy`:
-
-```bash
-poetry run python run_pipeline.py
-```
-
-Finally, you may connect to your localhost postgres database `pipedag_default` and
-look at tables in schemas `stage_1`..`stage_3`.
-
-If you don't have a SQL UI at hand, you may use `psql` command line tool inside the docker container.
-Check out the `NAMES` column in `docker ps` output. If the name of your postgres container is
-`example_postgres_1`, then you can look at output tables like this:
-
-```bash
-docker exec example_postgres_1 psql --username=sa --dbname=pipedag_default -c 'select * from stage_1.dfa;'
-```
-
-Or more interactively:
-
-```bash
-docker exec -t -i example_postgres_1 bash
-psql --username=sa --dbname=pipedag_default
-\dt stage_*.*
-select * from stage_2.task_2_out;
-```
+For a more sophisticated setup with a `pipedag.yaml` configuration file and with a separate database
+(i.e. containerized Postgres), please look [here](https://pydiversepipedag.readthedocs.io/en/latest/database_testing.html).
 
 ## Troubleshooting
 
 ### Installing mssql odbc driver for linux
 
 Installing with
-instructions [here](https://docs.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server?view=sql-server-ver16#suse18)
+instructions [here](https://docs.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server)
 worked.
 But `odbcinst -j` revealed that it installed the configuration in `/etc/unixODBC/*`. But conda installed pyodbc brings
 its own `odbcinst` executable and that shows odbc config files are expected in `/etc/*`. Symlinks were enough to fix the
 problem. Try `python -c 'import pyodbc;print(pyodbc.drivers())'` and see whether you get more than an empty list.
 Furthermore, make sure you use 127.0.0.1 instead of localhost. It seems that /etc/hosts is ignored.
+
+### Incompatibility with specific `pydiverse.transform` Versions
+
+pydiverse.pipedag currently doesn't support `pydiverse.transform` Versions (0.2.0, 0.2.1, 0.2.2), due to major
+differences to pdt 0.2.3 and pdt <0.2.
+However, it does still work with pdt <0.2.

@@ -1,139 +1,116 @@
 # pydiverse.pipedag
 
-[![Tests](https://github.com/pydiverse/pydiverse.pipedag/actions/workflows/tests.yml/badge.svg)](https://github.com/pydiverse/pydiverse.pipedag/actions/workflows/tests.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/pydiverse/pydiverse.pipedag/tests.yml?style=flat-square&branch=main&label=tests)](https://github.com/pydiverse/pydiverse.pipedag/actions/workflows/tests.yml)
+[![Docs](https://readthedocs.org/projects/pydiversepipedag/badge/?version=latest&style=flat-square)](https://pydiversepipedag.readthedocs.io/en/latest)
+[![pypi-version](https://img.shields.io/pypi/v/pydiverse-pipedag.svg?logo=pypi&logoColor=white&style=flat-square)](https://pypi.org/project/pydiverse-pipedag)
+[![conda-forge](https://img.shields.io/conda/pn/conda-forge/pydiverse-pipedag?logoColor=white&logo=conda-forge&style=flat-square)](https://prefix.dev/channels/conda-forge/packages/pydiverse-pipedag)
 
 A pipeline orchestration library executing tasks within one python session. It takes care of SQL table
 (de)materialization, caching and cache invalidation. Blob storage is supported as well for example
 for storing model files.
 
-This is an early stage version 0.x which lacks documentation. Please contact
-https://github.com/orgs/pydiverse/teams/code-owners if you like to become an early adopter
-or to contribute early stage usage examples.
+This is an early stage version 0.x, however, it is already used in real projects. We are happy to receive your
+feedback as [issues](https://github.com/pydiverse/pydiverse.pipedag/issues) on the GitHub repo. Feel free to also
+comment on existing issues to extend them to your needs or to add solution ideas.
 
 ## Preparing installation
 
-To install the package locally in development mode, you first have to install
-[Poetry](https://python-poetry.org/docs/#installation).
+To install the package locally in development mode, you will need to install
+[pixi](https://pixi.sh/latest/). For those who haven't used pixi before, it is a
+poetry style dependency management tool based on conda/micromamba/conda-forge package
+ecosystem. The conda-forge repository has well maintained packages for Linux, macOS,
+and Windows supporting both ARM and X86 architectures. Especially, installing
+psycopg2 in a portable way got much easier with pixi. In addition, pixi is really
+strong in creating lock files for reproducible environments (including system libraries)
+with many essential features missing in alternative tools like poetry (see [pixi.toml](pixi.toml)).
 
-When installing poetry using conda (I know this sounds odd), it is recommended to install
-also compilers, so source packages can be built on `poetry install`. Since we use psycopg2,
-it also helps to install psycopg2 in conda to have pg_config available:
+Docker is used to test against Postgres, MS SQL Server, and DB2 database targets. The bulk of
+unit tests requires a Postgres test database to be up and running which can be started with
+docker-compose. Pixi can also help you install docker-compose if it is not already part of your
+docker (or alternative container runtime) installation:
 
 ```bash
-conda create -n poetry -c conda-forge poetry compilers cmake make psycopg2 docker-compose
-conda activate poetry  # only needed for poetry install
-```
-
-On OSX, a way to install pg_config (needed for source building psycopg2 by `poetry install`) is
-
-```bash
-brew install postgresql
-```
-
-On OS X with `arm64` architecture, an `x86_64` toolchain is required for DB2 development:
-- Ensure that Rosetta 2 is installed:
-```bash
-softwareupdate --install-rosetta
-```
-- Create the conda environment in `x86_64` mode:
-```bash
-conda create -n poetry
-conda activate poetry
-conda config --env --set subdir osx-64 
-conda install -c conda-forge poetry compilers cmake make psycopg2 docker-compose python=3.11
-```
-- Install homebrew for  `x86_64`  and use it to install gcc. We need this because ibm_db depends on `libstdc++.6.dylib`:
-```bash
-arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-arch -x86_64 /usr/local/bin/brew install gcc
+pixi global install docker-compose
 ```
 
 ## Installation
 
-> Currently, development on pipedag is not possible with Windows. The current setup of installing prefect and running
-> tests with docker (to spin up Postgres and Zookeeper) fail in poetry dependency resolution. It would be a nice
-> contribution to find drop-in replacements for both that run as simple python dependency without docker and moving
-> docker based tests to github actions (multi-DB target tests will be moved to cloud anyways).
+> Currently, development on pipedag is not tested with Windows. Installing packages with pixi
+> should work. If you are interested in contributing with Windows, please submit an
+> [issue](https://github.com/pydiverse/pydiverse.pipedag/issues)
+> and we will try to help you with initial setup problems.
 
-After that, install pydiverse pipedag like this:
+To install pydiverse pipedag try this:
 
 ```bash
 git clone https://github.com/pydiverse/pydiverse.pipedag.git
 cd pydiverse.pipedag
 
 # Create the environment, activate it and install the pre-commit hooks
-poetry install --all-extras
-poetry shell
-pre-commit install
+pixi install  # see pixi.toml for more environments
+pixi run pre-commit install
 ```
+
+You can either put src/ directory on PYTHONPATH (e.g. in PyCharm use `Mark directory as ... Sources Root`) or install
+this checkout editable by running:
+```bash
+pixi run postinstall
+```
+
+You can also use alternative environments as you find them in [pixi.toml](pixi.toml):
+
+```bash
+pixi install -e py312all
+pixi run -e py312all postinstall
+pixi run -e py312all pre-commit install
+```
+
+Please, bear in mind, that we currently still want to be python 3.10 compatible while
+always supporting the newest python version available on conda-forge.
+
+When using Pycharm, you might find it useful that we install a `conda` executable stub you can
+use for creating conda interpreters: `<pydiverse.pipedag checkout>/.pixi/envs/default/libexec/conda`
+For more information, see [here](https://pixi.sh/latest/ide_integration/pycharm/).
 
 ## Testing
 
-After installation, you should be able to run:
+Most tests are based on a Postgres container running. You can launch it with a working docker-compose setup via:
 
 ```bash
-poetry run pytest --workers 4
+docker-compose down; docker-compose up
 ```
 
-To be able to run all tests (for different databases or table types), you have to install the test dependency group:
+The down command helps ensure a clean state within the databases launched.
+
+After installation and launching docker container in the background, you should be able to run:
 
 ```bash
-poetry install --with=tests
+pixi run pytest --workers 4
 ```
 
-## Pre-commit install with conda and python 3.9
-
-We currently have some pre-commit hooks bound to python=3.9. So pre-commit install may fail when running with
-python=3.10 python environment. However, the pre-commit environment does not need to be the same as the environment
-used for testing pipedag code. When using conda, you may try:
+You can peak in [pytest.ini](pytest.ini) and [github actions](.github/workflows/tests.yml)
+to see different parameters to launch more tests.
 
 ```bash
-conda create -n python39 -c conda-forge python=3.9 pre-commit
-conda activate python39
-pre-commit install
+pixi run pytest --workers=auto --mssql --duckdb --snowflake --pdtransform --ibis --polars --dask --prefect
 ```
 
-## Testing
-
-To facilitate easy testing, we provide a Docker Compose file to start all required servers.
-Just run `docker compose up` in the root directory of the project to start everything, and then run `pytest` in a new
-tab.
-
-You can inspect the contents of the PipeDAT Postgres database at `postgresql://postgres:pipedag@127.0.0.1/pipedag`.
-To reset the state of the docker containers you can run `docker compose down`.
-This might be necessary if the database cache gets corrupted.
-
-To run tests in parallel, pass the `--workers auto` flag to pytest.
-
-## Testing db2 functionality
-
-For running @pytest.mark.ibm_db2 tests, you need to spin up a docker container without `docker compose` since it needs
-the `--priviledged` option which `docker compose` does not offer.
-
-```bash
-docker run -h db2server --name db2server --restart=always --detach --privileged=true -p 50000:50000 --env-file docker_db2.env_list -v /Docker:/database icr.io/db2_community/db2
-```
-
-On OS X we need to use
-```bash
-docker run -h db2server  --platform linux/amd64 --name db2server --restart=always --detach --privileged=true -p 50000:50000 --env-file docker_db2.env_list --env IS_OSXFS=true --env PERSISTENT_HOME=false -v /Users/`whoami`/Docker:/database icr.io/db2_community/db2
-```
-instead.
-
-Then check `docker logs db2server | grep -i completed` until you see `(*) Setup has completed.`.
-
-Afterwards you can run `pytest --ibm_db2`.
+for `--ibm_db2`, see the [IBM DB2 development](#ibm-db2-development) section.
 
 ## Example
 
-A flow can look like this (see `example/run_pipeline.py`):
+A flow can look like this (see [`example/run_pipeline.py`](example/run_pipeline.py)):
 
 ```python
+import tempfile
+
 import pandas as pd
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import StageLockContext
+from pydiverse.pipedag.core.config import create_basic_pipedag_config
+from pydiverse.common.util.structlog import setup_logging
 
 
 @materialize(lazy=True)
@@ -145,7 +122,7 @@ def lazy_task_1():
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_2(input1: sa.Table, input2: sa.Table):
+def lazy_task_2(input1: sa.Alias, input2: sa.Alias):
     query = sa.select(
         (input1.c.x * 5).label("x5"),
         input2.c.a,
@@ -155,13 +132,13 @@ def lazy_task_2(input1: sa.Table, input2: sa.Table):
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_3(input1: sa.Table):
-    return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.name}")
+def lazy_task_3(input1: sa.Alias):
+    return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.original.name}")
 
 
 @materialize(lazy=True, input_type=sa.Table)
-def lazy_task_4(input1: sa.Table):
-    return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.name}")
+def lazy_task_4(input1: sa.Alias):
+    return sa.text(f"SELECT * FROM {input1.original.schema}.{input1.original.name}")
 
 
 @materialize(nout=2, version="1.0.0")
@@ -187,103 +164,92 @@ def eager_task(tbl1: pd.DataFrame, tbl2: pd.DataFrame):
 
 
 def main():
-    with Flow() as f:
-        with Stage("stage_1"):
-            lazy_1 = lazy_task_1()
-            a, b = eager_inputs()
+    with tempfile.TemporaryDirectory() as temp_dir:
+        cfg = create_basic_pipedag_config(
+            f"duckdb:///{temp_dir}/db.duckdb",
+            disable_stage_locking=True,  # This is special for duckdb
+            # Attention: If uncommented, stage and task names might be sent to the following URL.
+            #   You can self-host kroki if you like:
+            #   https://docs.kroki.io/kroki/setup/install/
+            #   You need to install optional dependency 'pydot' for any visualization
+            #   URL to appear.
+            # kroki_url="https://kroki.io",
+        ).get("default")
+        with cfg:
+            with Flow() as f:
+                with Stage("stage_1"):
+                    lazy_1 = lazy_task_1()
+                    a, b = eager_inputs()
 
-        with Stage("stage_2"):
-            lazy_2 = lazy_task_2(lazy_1, b)
-            lazy_3 = lazy_task_3(lazy_2)
-            eager = eager_task(lazy_1, b)
+                with Stage("stage_2"):
+                    lazy_2 = lazy_task_2(lazy_1, b)
+                    lazy_3 = lazy_task_3(lazy_2)
+                    eager = eager_task(lazy_1, b)
 
-        with Stage("stage_3"):
-            lazy_4 = lazy_task_4(lazy_2)
-        _ = lazy_3, lazy_4, eager  # unused terminal output tables
+                with Stage("stage_3"):
+                    lazy_4 = lazy_task_4(lazy_2)
+                _ = lazy_3, lazy_4, eager  # unused terminal output tables
 
-    # Run flow
-    result = f.run()
-    assert result.successful
+            # Run flow
+            result = f.run()
+            assert result.successful
 
-    # Run in a different way for testing
-    with StageLockContext():
-        result = f.run()
-        assert result.successful
-        assert result.get(lazy_1, as_type=pd.DataFrame)["x"][0] == 1
+            # Run in a different way for testing
+            with StageLockContext():
+                result = f.run()
+                assert result.successful
+                assert result.get(lazy_1, as_type=pd.DataFrame)["x"][0] == 1
 
 
 if __name__ == "__main__":
+    setup_logging()  # you can setup the logging and/or structlog libraries as you wish
     main()
 ```
 
-You also need a file called `pipedag.yaml` in the same directory (see `example/pipedag.yaml`):
+You can run this example with:
 
-```yaml
-instances:
-  __any__:
-    network_interface: "127.0.0.1"
-    auto_table:
-      - "pandas.DataFrame"
-      - "sqlalchemy.sql.expression.TextClause"
-      - "sqlalchemy.sql.expression.Selectable"
-
-    fail_fast: true
-    instance_id: pipedag_default
-    table_store:
-      class: "pydiverse.pipedag.backend.table.SQLTableStore"
-      args:
-        url: "postgresql://sa:Pydiverse23@127.0.0.1:6543/{instance_id}"
-        create_database_if_not_exists: True
-
-        print_materialize: true
-        print_sql: true
-
-      local_table_cache:
-        store_input: true
-        store_output: true
-        use_stored_input_as_cache: true
-        class: "pydiverse.pipedag.backend.table.cache.ParquetTableCache"
-        args:
-          base_path: "/tmp/pipedag/table_cache"
-
-    blob_store:
-      class: "pydiverse.pipedag.backend.blob.FileBlobStore"
-      args:
-        base_path: "/tmp/pipedag/blobs"
-
-    lock_manager:
-      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
-
-    orchestration:
-      class: "pydiverse.pipedag.engine.SequentialEngine"
+```bash
+pixi run python example/run_pipeline.py
 ```
 
-If you don't have a postgres database at hand, you can start a postgres database, you can use a file like `example/docker-compose.yaml`:
-
-```yaml
-version: "3.9"
-services:
-  postgres:
-    image: postgres
-    environment:
-      POSTGRES_USER: sa
-      POSTGRES_PASSWORD: Pydiverse23
-    ports:
-      - "6543:5432"
-```
-
-You can run the example with `bash` as follows:
+Each example directory has its own pixi.toml. So this also works:
 
 ```bash
 cd example
+pixi run python run_pipeline.py
+```
+
+The `with tempfile.TemporaryDirectory()` is only needed to have an OS independent temporary directory available.
+You can also get rid of it like this:
+
+```python
+def main():
+    cfg = create_basic_pipedag_config(
+        "duckdb:////tmp/pipedag/{instance_id}/db.duckdb",
+        disable_stage_locking=True,  # This is special for duckdb
+    ).get("default")
+    ...
+```
+
+## Example with separate database server and configuration file (i.e. Postgres in docker container)
+
+A more realistic example can be found in [`example_postgres/run_pipeline.py`](example_postgres/run_pipeline.py).
+Please note that there are `pipedag.yaml` and `docker-compose.yaml` files in the example directory.
+This is also described on
+[pydiversepipedag.readthedocs.io](https://pydiversepipedag.readthedocs.io/en/latest/database_testing.html).
+
+You can run this example with `bash` as follows:
+
+```bash
+cd example_postgres
 docker-compose up
 ```
 
 and in another terminal
 
 ```bash
-cd example
-poetry run python run_pipeline.py
+cd example_postgres
+pixi run python run_pipeline.py
 ```
 
 Finally, you may connect to your localhost postgres database `pipedag_default` and
@@ -294,71 +260,100 @@ Check out the `NAMES` column in `docker ps` output. If the name of your postgres
 `example_postgres_1`, then you can look at output tables like this:
 
 ```bash
-docker exec example_postgres_1 psql --username=sa --dbname=pipedag_default -c 'select * from stage_1.dfa;'
+docker exec example_postgres-postgres-1 psql --username=sa --dbname=pipedag_default -c 'select * from stage_1.dfa;'
 ```
 
 Or more interactively:
 
 ```bash
-docker exec -t -i example_postgres_1 bash
+docker exec -t -i example_postgres-postgres-1 bash
 psql --username=sa --dbname=pipedag_default
 \dt stage_*.*
 select * from stage_2.task_2_out;
 ```
 
+### IBM DB2 development
+
+The `ibm_db` package is only available on the following platforms: linux-64, osx-arm64, win-64.
+
+> [!NOTE]
+> Because of this, the IBM DB2 drivers are only available in the `py312ibm` and `py310ibm`
+> environments.
+> You can run tests using `pixi run -e py312ibm pytest --ibm_db2 -m ibm_db2`.
+
 ## Troubleshooting
 
-### Installing mssql odbc driver for linux
+### IBM DB2 container not yet up and running
 
-Installing with
-instructions [here](https://docs.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server?view=sql-server-ver16#suse18)
-worked.
-But `odbcinst -j` revealed that it installed the configuration in `/etc/unixODBC/*`. But conda installed pyodbc brings
-its own `odbcinst` executable and that shows odbc config files are expected in `/etc/*`. Symlinks were enough to fix the
-problem. Try `python -c 'import pyodbc;print(pyodbc.drivers())'` and see whether you get more than an empty list.
-Furthermore, make sure you use 127.0.0.1 instead of localhost. It seems that /etc/hosts is ignored.
-
-On `arm64` OS X with an `x86_64` environment it is necessary to compile `pyodbc` using
-```bash
-arch -x86_64 /usr/local/bin/brew install unixodbc
-LDFLAGS="$LDFLAGS -L/usr/local/lib"
-CPPFLAGS="$CPPFLAGS -I/usr/local/include"
-pip uninstall pyodbc
-pip install --no-cache --pre --no-binary :all: pyodbc
+The IBM DB2 container takes a long time to start. You can find out the name of the container with `docker ps`
+(see column `NAMES`):
+```
+CONTAINER ID   IMAGE                                        COMMAND                  CREATED         STATUS         PORTS                                                                                 NAMES
+8578e0e471ff   icr.io/db2_community/db2                     "/var/db2_setup/lib/…"   3 minutes ago   Up 3 minutes   22/tcp, 55000/tcp, 60006-60007/tcp, 0.0.0.0:50000->50000/tcp, [::]:50000->50000/tcp   pydiversepipedag-ibm_db2-1
 ```
 
-## Packaging and publishing to Pypi using github actions
+If it is `pydiversepipedag-ibm_db2-1`, then you can look for `Setup has completed` in the log with
+`docker logs pydiversepipedag-ibm_db2-1`.
 
-- `poetry version prerelease` or `poetry version patch`
-- set correct release date in changelog.md
+### Installing mssql odbc driver for macOS and Linux
+
+Install via Microsoft's
+instructions for [Linux](https://docs.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server)
+or [macOS](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos).
+
+In one Linux installation case, `odbcinst -j` revealed that it installed the configuration in `/etc/unixODBC/*`.
+But conda installed pyodbc brings its own `odbcinst` executable and that shows odbc config files are expected in
+`/etc/*`. Symlinks were enough to fix the problem. Try `pixi run python -c 'import pyodbc;print(pyodbc.drivers())'`
+and see whether you get more than an empty list.
+
+Same happened for MacOS. The driver was installed in `/opt/homebrew/etc/odbcinst.ini` but pyodbc expected it in
+`/etc/odbcinst.ini`. This can also be solved by `sudo ln -s /opt/homebrew/etc/odbcinst.ini /etc/odbcinst.ini`.
+
+Furthermore, make sure you use 127.0.0.1 instead of localhost. It seems that /etc/hosts is ignored.
+
+### Incompatibility with pydiverse.transform 0.2.0 - 0.2.2
+
+Pydiverse.pipedag doesn't support pydiverse.transform 0.2.0 - 0.2.2, please consider using a newer Version,
+or downgrading to pydiverse.transform 0.1.6.
+
+### Incompatibility of ibm-db2 with pydiverse.transform > 0.2.2
+
+The current versions of pydiverse.transform do not support ibm-db2 backend.
+
+## Packaging and publishing to pypi and conda-forge using github actions
+
+- bump version number in [pyproject.toml](pyproject.toml)
+- set correct release date in [changelog.md](docs/source/changelog.md)
 - push increased version number to `main` branch
 - tag commit with `git tag <version>`, e.g. `git tag 0.7.0`
 - `git push --tags`
 
-## Packaging and publishing to Pypi manually
+The package should appear on https://pypi.org/project/pydiverse-pipedag/ in a timely manner. It is normal that it takes
+a few hours until the new package version is available on https://conda-forge.org/packages/.
 
-For publishing with poetry to pypi, see:
-https://www.digitalocean.com/community/tutorials/how-to-publish-python-packages-to-pypi-using-poetry-on-ubuntu-22-04
+### Packaging and publishing to Pypi manually
 
 Packages are first released on test.pypi.org:
 
-- see https://stackoverflow.com/questions/68882603/using-python-poetry-to-publish-to-test-pypi-org
-- `poetry version prerelease` or `poetry version patch`
+- bump version number in [pyproject.toml](pyproject.toml) (check consistency with [changelog.md](docs/source/changelog.md))
 - push increased version number to `main` branch
-- `poetry build`
-- `poetry publish -r test-pypi`
+- `pixi run -e release hatch build`
+- `pixi run -e release twine upload --repository testpypi dist/*`
 - verify with https://test.pypi.org/search/?q=pydiverse.pipedag
 
 Finally, they are published via:
 
-- `git tag `\<version>
+- `git tag <version>`
 - `git push --tags`
-- `poetry publish`
+- Attention: Please, only continue here, if automatic publishing fails for some reason!
+- `pixi run -e release hatch build`
+- `pixi run -e release twine upload --repository pypi dist/*`
 
-## Publishing package on conda-forge
+### Publishing package on conda-forge manually
 
 Conda-forge packages are updated via:
 
+- Attention: Please, only continue here, if automatic conda-forge publishing fails for longer than 24h!
 - https://github.com/conda-forge/pydiverse-pipedag-feedstock#updating-pydiverse-pipedag-feedstock
 - update `recipe/meta.yaml`
 - test meta.yaml in pipedag repo: `conda-build build ../pydiverse-pipedag-feedstock/recipe/meta.yaml`

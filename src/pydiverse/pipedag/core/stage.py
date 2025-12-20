@@ -1,19 +1,23 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import inspect
+from functools import total_ordering
 from typing import TYPE_CHECKING
 
 import structlog
 
 from pydiverse.pipedag.context import ConfigContext, DAGContext
+from pydiverse.pipedag.core.group_node import GroupNode
 from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.errors import StageError
 from pydiverse.pipedag.util import normalize_name
 
 if TYPE_CHECKING:
-    from pydiverse.pipedag.core.flow import Flow
+    from pydiverse.pipedag import Flow
 
 
+@total_ordering
 class Stage:
     """A stage represents a collection of related tasks.
 
@@ -40,20 +44,50 @@ class Stage:
         before any of its upstream stage dependencies have been committed.
     """
 
-    def __init__(self, name: str, materialization_details: str | None = None):
+    def __init__(
+        self,
+        name: str,
+        materialization_details: str | None = None,
+        group_node_tag: str | None = None,
+        force_committed=False,
+    ):
         self._name = normalize_name(name)
         self._transaction_name = f"{self._name}__tmp"
 
         self.tasks: list[Task] = []
         self.commit_task: CommitStageTask = None  # type: ignore
+        self.barrier_tasks: list[Task] = []
         self.outer_stage: Stage | None = None
+        self.outer_group_node: GroupNode | None = None
 
         self.logger = structlog.get_logger(logger_name=type(self).__name__, stage=self)
         self.id: int = None  # type: ignore
 
         self.materialization_details = materialization_details
+        self.group_node_tag = group_node_tag
 
+        self.force_committed = force_committed
         self._did_enter = False
+
+    def __lt__(self, other: "Stage"):
+        # Essentially stage name is all that matters and should be unique per flow.
+        # In case of comparing stages among different flows or pipeline instances,
+        # the caller needs to check whether those are different. The stage links to
+        # tasks which are somewhat bound to a flow, but it is unclear what behavior the
+        # caller wants from the comparison operators.
+        return self.name < other.name
+
+    def __eq__(self, other: "Stage"):
+        # Essentially stage name is all that matters and should be unique per flow.
+        # See __lt__ for more details.
+        if not isinstance(other, Stage):
+            return False
+        return self.name == other.name
+
+    def __hash__(self):
+        # Essentially stage name is all that matters and should be unique per flow.
+        # See __lt__ for more details.
+        return hash(self.name)
 
     @property
     def name(self) -> str:
@@ -85,6 +119,9 @@ class Stage:
 
     @property
     def did_commit(self) -> bool:
+        if self.force_committed:
+            return True
+
         from pydiverse.pipedag.context.run_context import RunContext, StageState
 
         return RunContext.get().get_stage_state(self) == StageState.COMMITTED
@@ -96,15 +133,13 @@ class Stage:
         state = self.__dict__.copy()
         state.pop("tasks", None)
         state.pop("commit_task", None)
+        state.pop("barrier_tasks", None)
         state.pop("logger", None)
         return state
 
     def __enter__(self):
         if self._did_enter:
-            raise StageError(
-                f"Stage '{self.name}' has already been entered."
-                " Can't reuse the same stage twice."
-            )
+            raise StageError(f"Stage '{self.name}' has already been entered. Can't reuse the same stage twice.")
         self._did_enter = True
 
         # Capture information from surrounding Flow or Stage block
@@ -117,6 +152,9 @@ class Stage:
         outer_ctx.flow.add_stage(self)
         if outer_ctx.stage is not None:
             self.outer_stage = outer_ctx.stage
+        if outer_ctx.group_node is not None:
+            self.outer_group_node = outer_ctx.group_node
+            outer_ctx.group_node.add_stage(self)
 
         # Initialize new context (both Flow and Stage use DAGContext to transport
         # information to @materialize annotations within the flow and to support
@@ -124,6 +162,7 @@ class Stage:
         self._ctx = DAGContext(
             flow=outer_ctx.flow,
             stage=self,
+            group_node=outer_ctx.group_node,
         )
         self._ctx.__enter__()
         return self
@@ -159,11 +198,9 @@ class Stage:
         else:
             raise TypeError
 
-        tasks = [task for task in self.tasks if task.name == name]
+        tasks = [task for task in self.tasks if task._name == name]
         if not tasks:
-            raise KeyError(
-                f"Couldn't find a task with name '{name}' in stage '{self.name}'."
-            )
+            raise KeyError(f"Couldn't find a task with name '{name}' in stage '{self.name}'.")
 
         if index is None:
             if len(tasks) == 1:
@@ -185,9 +222,10 @@ class Stage:
 
     def all_tasks(self):
         yield from self.tasks
+        yield from self.barrier_tasks
         yield self.commit_task
 
-    def is_inner(self, other: Stage):
+    def is_inner(self, other: "Stage"):
         outer = self.outer_stage
         while outer is not None:
             if outer == other:
@@ -207,29 +245,29 @@ class Stage:
 
 
 class CommitStageTask(Task):
-    def __init__(self, stage: Stage, flow: Flow):
+    def __init__(self, stage: Stage, flow: "Flow"):
         # Because the CommitStageTask doesn't get added to the stage.tasks list,
         # we can't call the super initializer.
-        self.name = f"Commit '{stage.name}'"
-        self.nout = None
+        self._name = f"Commit '{stage.name}'"
+        self._nout = None
 
-        self.logger = structlog.get_logger(logger_name="Commit Stage", stage=stage)
+        self._logger = structlog.get_logger(logger_name="Commit Stage", stage=stage)
 
-        self._bound_args = inspect.signature(self.fn).bind()
-        self.flow = flow
-        self.stage = stage
+        self._bound_args = inspect.signature(self._fn).bind()
+        self._flow = flow
+        self._stage = stage
 
-        self.flow.add_task(self)
+        self._flow.add_task(self)
 
-        self.input_tasks = {}
-        self.upstream_stages = [stage]
+        self._input_tasks = {}
+        self._upstream_stages = [stage]
 
         self._skip_commit = len(stage.tasks) == 0
         self._visualize_hidden = True
 
-    def fn(self):
+    def _fn(self):
         if self._skip_commit:
             return
 
-        self.logger.info("Committing stage")
-        ConfigContext.get().store.commit_stage(self.stage)
+        self._logger.info("Committing stage")
+        ConfigContext.get().store.commit_stage(self._stage)

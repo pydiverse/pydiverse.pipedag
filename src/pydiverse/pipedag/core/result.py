@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 from typing import TYPE_CHECKING, Any
 
@@ -6,15 +7,17 @@ import structlog
 from attrs import frozen
 
 from pydiverse.pipedag.context import ConfigContext, StageLockContext
-from pydiverse.pipedag.context.run_context import DematerializeRunContext, RunContext
+from pydiverse.pipedag.context.run_context import (
+    DematerializeRunContext,
+    FinalTaskState,
+    RunContext,
+)
 from pydiverse.pipedag.core.task import Task, TaskGetItem
 from pydiverse.pipedag.errors import LockError
 
 if TYPE_CHECKING:
-    import pydot
-
-    from pydiverse.pipedag.context.run_context import FinalTaskState
     from pydiverse.pipedag.core import Flow, Subflow
+    from pydiverse.pipedag.core.flow import pydot
 
 
 @frozen
@@ -40,8 +43,8 @@ class Result:
         this attribute.
     """
 
-    flow: Flow
-    subflow: Subflow
+    flow: "Flow"
+    subflow: "Subflow"
 
     underlying: Any
     successful: bool
@@ -54,12 +57,12 @@ class Result:
     @staticmethod
     def init_from(
         *,
-        subflow: Subflow,
+        subflow: "Subflow",
         underlying: Any,
         successful: bool,
         task_values: dict[Task, Any],
         exception: Exception | None,
-    ) -> Result:
+    ) -> "Result":
         return Result(
             flow=subflow.flow,
             subflow=subflow,
@@ -71,7 +74,11 @@ class Result:
             exception=exception,
         )
 
-    def get(self, task: Task | TaskGetItem, as_type: type = None) -> Any:
+    def evolve(self, **changes):
+        kwargs = {**dir(self), **changes}
+        return Result(**kwargs)
+
+    def get(self, task: Task | TaskGetItem, as_type: type = None, write_local_table_cache: bool = False) -> Any:
         """Retrieve the output produced by a task.
 
         Any tables and blobs returned by a task get loaded from their
@@ -84,15 +91,21 @@ class Result:
         :param as_type: The type as which tables produced by this task should
             be dematerialized. If no type is specified, the input type of
             the task is used.
+        :param write_local_table_cache: Flag that determines whether the table should be
+            stored in the local table cache, if it is not already there and cache valid.
+            If no local table cache is configured or the type as which the table is retrieved,
+            is not compatible with the local table cache, this flag has no effect.
+
+            .. Warning:: It is not safe to call this method with `write_local_table_cache=True`
+                from several threads at the same time.
+
         :return: The results of the task.
         """
         from pydiverse.pipedag.materialize.store import dematerialize_output_from_store
 
         if not self.successful:
             logger = structlog.get_logger(logger_name=type(self).__name__)
-            logger.warning(
-                "Attention: getting tables from unsuccessful run is unreliable!"
-            )
+            logger.warning("Attention: getting tables from unsuccessful run is unreliable!")
 
         if self.config_context.strict_result_get_locking:
             try:
@@ -107,26 +120,29 @@ class Result:
         if isinstance(task, Task):
             task_output = self.task_values[task]
         else:
-            task_output = self.task_values[task.task]
+            task_output = self.task_values[task._task]
 
-        with self.config_context, DematerializeRunContext(self.flow):
+        with (
+            self.config_context,
+            DematerializeRunContext(self.flow, allow_write_local_table_cache=write_local_table_cache),
+        ):
             store = self.config_context.store
             return dematerialize_output_from_store(store, task, task_output, as_type)
 
-    def visualize(self):
+    def visualize(self, visualization_tag: str | None = None):
         """
         Wrapper for :py:meth:`Flow.visualize()`.
         """
-        return self.subflow.visualize(result=self)
+        return self.subflow.visualize(self, visualization_tag)
 
-    def visualize_url(self) -> str:
+    def visualize_url(self, visualization_tag: str | None = None) -> str:
         """
         Wrapper for :py:meth:`Flow.visualize_url()`.
         """
-        return self.subflow.visualize_url(result=self)
+        return self.subflow.visualize_url(self, visualization_tag)
 
-    def visualize_pydot(self) -> pydot.Dot:
+    def visualize_pydot(self, visualization_tag: str | None = None) -> "pydot.Dot":
         """
         Wrapper for :py:meth:`Flow.visualize_pydot()`.
         """
-        return self.subflow.visualize_pydot(result=self)
+        return self.subflow.visualize_pydot(self, visualization_tag)

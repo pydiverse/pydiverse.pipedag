@@ -1,11 +1,12 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import traceback
 
 import pytest
 
+from pydiverse.common.util import Disposable, requires
 from pydiverse.pipedag.errors import DisposedError
-from pydiverse.pipedag.util import Disposable, requires
 
 
 def test_requires():

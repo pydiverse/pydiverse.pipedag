@@ -1,0 +1,69 @@
+instances:
+  __any__:
+    network_interface: "127.0.0.1"
+    auto_table:
+      # When a Task returns an object of these classes, they will automatically be wrapped
+      # in a pipedag Table object and materialized with the table store.
+      - "pandas.DataFrame"
+      - "polars.DataFrame"
+      - "polars.LazyFrame"
+      - "sqlalchemy.sql.expression.TextClause"
+      - "sqlalchemy.sql.expression.Selectable"
+      - "pydiverse.transform.Table"
+
+    fail_fast: true  # this provides better stack traces but less fault tolerance
+    instance_id: pipedag_default
+
+    # Attention: For disable_kroki: false, stage and task names might be sent to the kroki_url.
+    #   You can self-host kroki if you like:
+    #   https://docs.kroki.io/kroki/setup/install/
+    #   You need to install optional dependency 'pydot' for any visualization
+    #   URL to appear.
+    disable_kroki: true
+    kroki_url: "https://kroki.io"
+
+    table_store:
+      class: "pydiverse.pipedag.backend.table.ParquetTableStore"
+      args:
+        # This is the main location where the ParquetTableStore will store tables.
+        parquet_base_path: "s3://pipedag-test-bucket/table_store/"
+        s3_endpoint_url: "http://localhost:9000"  # test with minio instead of AWS S3
+        s3_url_style: "path"
+        s3_region: "us-east-1"
+        # There is still a duckdb file which keeps read views to all the parquet files.
+        # This database file can also be used with a SQL UI to access the parquet files
+        # associated with a specific pipeline instance.
+        url: "duckdb:////tmp/pipedag/parquet_duckdb/{instance_id}.duckdb"
+        create_database_if_not_exists: true
+        print_materialize: true
+        print_sql: true
+
+      metadata_table_store:
+        # Postgres database can be used to synchronize a pipeline instance between multiple team members even though
+        # duckdb (basis for ParquetTableStore) does not support this. This also enables the use of the
+        # DatabaseLockManager
+        class: "pydiverse.pipedag.backend.table.SQLTableStore"
+        args:
+          url: "postgresql://sa:Pydiverse23@127.0.0.1:6543/{instance_id}_s3"
+          create_database_if_not_exists: True
+
+      hook_args:
+        sql:
+          # This controls when temporary tables created by ColSpec will be cleaned up
+          cleanup_annotation_action_on_success: false
+          cleanup_annotation_action_intermediate_state: false
+
+    # duckdb does not support schema renaming so this is mandatory:
+    stage_commit_technique: READ_VIEWS
+
+    lock_manager:
+      # the DatabaseLockManager uses the metadata_table_store for locking (here: the Postgres DB)
+      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
+
+    blob_store:
+      class: "pydiverse.pipedag.backend.blob.FileBlobStore"
+      args:
+        base_path: "/tmp/pipedag/blobs"
+
+    orchestration:
+      class: "pydiverse.pipedag.engine.SequentialEngine"

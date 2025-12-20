@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import os
 from pathlib import Path
@@ -11,6 +12,9 @@ import sqlalchemy as sa
 from pydiverse.pipedag import Flow, Stage, Table, materialize
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.core.config import PipedagConfig
+from tests.fixtures.instances import with_instances
+
+pytestmark = [with_instances("postgres")]
 
 
 @pytest.fixture(
@@ -56,9 +60,7 @@ def input_task():
     return Table(dfA, "dfA"), Table(dfA, "dfB")
 
 
-def has_copy_source_fresh_input(
-    stage: Stage, attrs: dict[str, Any], pipedag_config: PipedagConfig
-):
+def has_copy_source_fresh_input(stage: Stage, attrs: dict[str, Any], pipedag_config: PipedagConfig):
     source = attrs["copy_source"]
     per_user = attrs["copy_per_user"]
     source_cfg = pipedag_config.get(instance=source, per_user=per_user)
@@ -68,9 +70,7 @@ def has_copy_source_fresh_input(
 
 
 @materialize(input_type=pd.DataFrame, cache=has_copy_source_fresh_input, version="1.0")
-def copy_filtered_inputs(
-    stage: Stage, attrs: dict[str, Any], pipedag_config: PipedagConfig
-):
+def copy_filtered_inputs(stage: Stage, attrs: dict[str, Any], pipedag_config: PipedagConfig):
     source = attrs["copy_source"]
     per_user = attrs["copy_per_user"]
     filter_cnt = attrs["copy_filter_cnt"]
@@ -91,10 +91,7 @@ def _get_source_tbls(source, per_user, stage, pipedag_config):
         schema = source_cfg.store.table_store.get_schema(stage.name)
         meta = sa.MetaData()
         meta.reflect(bind=engine, schema=schema.name)
-        tbls = {
-            tbl.name: pd.read_sql_table(tbl.name, con=engine, schema=schema.name)
-            for tbl in meta.tables.values()
-        }
+        tbls = {tbl.name: pd.read_sql_table(tbl.name, con=engine, schema=schema.name) for tbl in meta.tables.values()}
     return tbls
 
 
@@ -105,8 +102,8 @@ def double_values(df: pd.DataFrame):
 
 @materialize(nout=2, input_type=sa.Table, lazy=True)
 def extract_a_b(tbls: list[sa.Table]):
-    a = [tbl for tbl in tbls if tbl.name == "dfa"][0]
-    b = [tbl for tbl in tbls if tbl.name == "dfb"][0]
+    a = [tbl for tbl in tbls if tbl.original.name == "dfa"][0]
+    b = [tbl for tbl in tbls if tbl.original.name == "dfb"][0]
     return a, b
 
 
@@ -138,7 +135,7 @@ def test_instance_selection(cfg_file_path):
 
     with StageLockContext():
         result = flow.run(config=cfg)
-        _check_result(result, out1, out2)
+        check_result(result, out1, out2)
 
     cfg = pipedag_config.get(instance="midi")
 
@@ -146,7 +143,7 @@ def test_instance_selection(cfg_file_path):
 
     with StageLockContext():
         result = flow.run(config=cfg)
-        _check_result(result, out1, out2, head=2)
+        check_result(result, out1, out2, head=2)
 
     cfg = pipedag_config.get(instance="mini")
 
@@ -154,10 +151,10 @@ def test_instance_selection(cfg_file_path):
 
     with StageLockContext():
         result = flow.run(config=cfg)
-        _check_result(result, out1, out2, head=1)
+        check_result(result, out1, out2, head=1)
 
 
-def _check_result(result, out1, out2, *, head=999):
+def check_result(result, out1, out2, *, head=999):
     assert result.successful
     v_out1, v_out2 = result.get(out1), result.get(out2)
     pd.testing.assert_frame_equal(dfA_source.head(head) * 2, v_out1, check_dtype=False)

@@ -1,0 +1,83 @@
+on:
+  workflow_call:
+    inputs:
+      os:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+      docker-services:
+        required: false
+        type: string
+      pytest-arguments:
+        required: false
+        type: string
+      workers:
+        default: 4
+        type: number
+      timeout-minutes:
+        default: 30
+        type: number
+    secrets:
+      SNOWFLAKE_PASSWORD:
+        required: false
+      SNOWFLAKE_ACCOUNT:
+        required: false
+      SNOWFLAKE_USER:
+        required: false
+
+jobs:
+  test:
+    name: pytest
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
+        with:
+          environments: ${{ inputs.environment }}
+
+      - name: Start Docker Compose
+        if: ${{ inputs.docker-services != '' }}
+        uses: isbang/compose-action@3846bcd61da338e9eaaf83e7ed0234a12b099b72
+        with:
+          compose-file: docker-compose.yaml
+          services: ${{ inputs.docker-services }}
+
+      - name: Install Microsoft ODBC
+        if: ${{ contains(inputs.docker-services, 'mssql') }}
+        run: |
+          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+          sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18
+          echo /opt/mssql-tools18/bin >> $GITHUB_PATH
+
+      - name: Test BCP
+        if: ${{ contains(inputs.docker-services, 'mssql') }}
+        run: bcp -v
+
+      - name: Wait for Docker Servers
+        if: ${{ inputs.docker-services != '' }}
+        run: |
+          # store the (possibly multiline) input in a variable
+          services="${{ inputs.docker-services }}"
+          # replace every newline with a single space
+          services="${services//$'\n'/ }"
+          until bash ./.github/scripts/docker_compose_ready.sh ${services}; do
+            sleep 1
+          done
+
+      - name: Run tests
+        env:
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_DB_SUFFIX: ${{ inputs.environment }}
+          PREFECT_API_URL: http://127.0.0.1:4200/api
+          PREFECT_SERVER_ALLOW_EPHEMERAL_MODE: false
+          ERROR_ONLY: 1
+          LOG_TEST_NAME: 1
+        run: |
+          pixi run -e ${{ inputs.environment }} pytest tests ${RUNNER_DEBUG:+-v} --color=yes --workers=${{ inputs.workers }} ${{ inputs.pytest-arguments }}

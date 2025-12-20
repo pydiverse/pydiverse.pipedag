@@ -1,4 +1,5 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 from itertools import chain
 
@@ -22,13 +23,18 @@ INSTANCE_MARKS = {
     "postgres_unlogged": pytest.mark.postgres,
     "mssql": pytest.mark.mssql,
     "mssql_pytsql": pytest.mark.mssql,
+    "mssql_nobulk": pytest.mark.mssql,
+    "mssql_noaodbc": pytest.mark.mssql,
+    "mssql_columnstore": pytest.mark.mssql,
     "ibm_db2": pytest.mark.ibm_db2,
     "ibm_db2_avoid_schema": pytest.mark.ibm_db2,
     "ibm_db2_materialization_details": pytest.mark.ibm_db2,
     "duckdb": pytest.mark.duckdb,
+    "snowflake": pytest.mark.snowflake,
     # Local Table Cache Instances
     "local_table_cache": pytest.mark.postgres,
     "local_table_cache_inout": pytest.mark.postgres,
+    "local_table_cache_inout_numpy": pytest.mark.postgres,
     "local_table_store": pytest.mark.postgres,
     # Orchestration Instances
     "dask_engine": [pytest.mark.dask, pytest.mark.postgres],
@@ -41,6 +47,10 @@ DATABASE_INSTANCES = (
     "mssql",
     "ibm_db2",
     "duckdb",
+    "parquet_backend",
+    "parquet_s3_backend",
+    "parquet_s3_backend_db2",
+    # "snowflake",  # too slow for all tests
 )
 
 ORCHESTRATION_INSTANCES = (
@@ -54,11 +64,17 @@ ALL_INSTANCES = (
     "postgres_unlogged",
     "mssql",
     "mssql_pytsql",
+    "mssql_nobulk",
+    "mssql_noaodbc",
+    "mssql_columnstore",
     "ibm_db2",
     "ibm_db2_avoid_schema",
     "ibm_db2_materialization_details",
     "duckdb",
+    "snowflake",
     "local_table_cache",
+    "parquet_backend",
+    "parquet_s3_backend",
 )
 
 

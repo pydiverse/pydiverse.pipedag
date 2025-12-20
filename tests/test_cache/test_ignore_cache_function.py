@@ -1,11 +1,13 @@
-from __future__ import annotations
+# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
 import sqlalchemy as sa
 
 from pydiverse.pipedag import Blob, Flow, Stage, Table
+from pydiverse.pipedag.container import RawSql
 from pydiverse.pipedag.context import StageLockContext
-from pydiverse.pipedag.materialize.container import RawSql
+from pydiverse.pipedag.context.context import CacheValidationMode, ConfigContext
 from pydiverse.pipedag.materialize.core import materialize
 
 # Parameterize all tests in this file with several instance_id configurations
@@ -14,7 +16,8 @@ from tests.util import select_as
 from tests.util import tasks_library as m
 from tests.util.spy import spy_task
 
-pytestmark = [with_instances(ALL_INSTANCES)]
+# snowflake tests are too slow, possibly they could move to nightly tests
+pytestmark = [with_instances(tuple(set(ALL_INSTANCES) - {"snowflake"}))]
 
 
 # Test that running a flow that contains a task with an invalid cache function
@@ -58,7 +61,7 @@ def test_literal(mocker):
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(ignore_cache_function=True)
+            result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
             assert result.get(out) == 0
             assert result.get(child) == 0
             out_spy.assert_not_called()
@@ -111,7 +114,7 @@ def test_table(mocker):
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(ignore_cache_function=True)
+            result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
             assert result.get(child) == 0
             out_spy.assert_not_called()
             child_spy.assert_not_called()
@@ -167,7 +170,7 @@ def test_lazy_table(mocker):
     # still call the lazy task.
     cache_value = 1
     with StageLockContext():
-        result = flow.run(ignore_cache_function=True)
+        result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
         assert result.get(child) == 0
         assert result.get(cache_child) == 1
         out_spy.assert_called_once()
@@ -177,7 +180,7 @@ def test_lazy_table(mocker):
     # Only changing the lazy_value should cause the child task to get called
     lazy_value = 1
     with StageLockContext():
-        result = flow.run(ignore_cache_function=True)
+        result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
         assert result.get(child) == 1
         assert result.get(cache_child) == 1
         out_spy.assert_called_once()
@@ -206,6 +209,7 @@ def test_lazy_table(mocker):
             cache_spy.assert_not_called()
 
 
+@with_instances("postgres")
 def test_blob(mocker):
     cache_value = 0
 
@@ -242,7 +246,7 @@ def test_blob(mocker):
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(ignore_cache_function=True)
+            result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
             assert result.get(out) == 0
             assert result.get(child) == 0
             out_spy.assert_not_called()
@@ -257,10 +261,17 @@ def test_blob(mocker):
         child_spy.assert_called_once()
 
 
+def ref(tbl):
+    return f"{tbl.original.schema}.{tbl.original.name}"
+
+
 # TODO: Determine exactly why this test only works with postgres
 @skip_instances(
     "mssql",
     "mssql_pytsql",
+    "mssql_nobulk",
+    "mssql_noaodbc",
+    "mssql_columnstore",
     "ibm_db2",
     "ibm_db2_avoid_schema",
     "ibm_db2_materialization_details",
@@ -275,16 +286,18 @@ def test_raw_sql(mocker):
 
     @materialize(lazy=True, cache=cache)
     def raw_sql_task(stage):
+        store = ConfigContext.get().store.table_store
+        schema = store.get_schema(stage.transaction_name).get()
         return RawSql(
             f"""
-            CREATE TABLE {stage.transaction_name}.raw_table AS
+            CREATE TABLE {schema}.raw_table AS
             SELECT {raw_value} as x
             """
         )
 
     @materialize(version="1.0", input_type=sa.Table)
-    def child_task(x):
-        return Table(sa.text(f"SELECT * FROM {x.stage.transaction_name}.raw_table"))
+    def child_task(raw_sql):
+        return Table(sa.text(f"SELECT * FROM {ref(raw_sql['raw_table'])}"))
 
     with Flow() as flow:
         with Stage("raw_sql_stage") as stage:
@@ -310,7 +323,7 @@ def test_raw_sql(mocker):
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(ignore_cache_function=True)
+            result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
             assert result.get(child, as_type=pd.DataFrame)["x"][0] == 0
             out_spy.assert_called_once()
             child_spy.assert_not_called()
@@ -318,7 +331,7 @@ def test_raw_sql(mocker):
     # Only changing the raw_value should cause the child task to get called
     raw_value = 1
     with StageLockContext():
-        result = flow.run(ignore_cache_function=True)
+        result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
         assert result.get(child, as_type=pd.DataFrame)["x"][0] == 1
         out_spy.assert_called_once()
         child_spy.assert_called_once()
@@ -368,7 +381,7 @@ def test_input_invalid(mocker):
     out_spy = spy_task(mocker, out)
     child_spy = spy_task(mocker, child)
     with StageLockContext():
-        result = flow.run(ignore_cache_function=True)
+        result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
         assert result.get(out) == 0
         assert result.get(child) == 0
         out_spy.assert_called_once()
@@ -378,7 +391,7 @@ def test_input_invalid(mocker):
     # because its inputs changed
     lazy_value = 1
     with StageLockContext():
-        result = flow.run(ignore_cache_function=True)
+        result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
         assert result.get(out) == 1
         assert result.get(child) == 1
         out_spy.assert_called_once()
@@ -421,7 +434,7 @@ def test_cache_temporarily_different(mocker):
     cache_value = 1
     for _ in range(3):
         with StageLockContext():
-            result = flow.run(ignore_cache_function=True)
+            result = flow.run(cache_validation_mode=CacheValidationMode.IGNORE_FRESH_INPUT)
             assert result.get(out) == 0
             assert result.get(child) == 0
             out_spy.assert_not_called()

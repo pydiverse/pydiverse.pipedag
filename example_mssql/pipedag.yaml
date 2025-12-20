@@ -1,0 +1,55 @@
+instances:
+  __any__:
+    network_interface: "127.0.0.1"
+    auto_table:
+      - "pandas.DataFrame"
+      - "polars.DataFrame"
+      - "polars.LazyFrame"
+      - "sqlalchemy.sql.expression.TextClause"
+      - "sqlalchemy.sql.expression.Selectable"
+      - "pydiverse.transform.Table"
+
+    fail_fast: true
+    instance_id: pipedag_default
+
+    # Attention: For disable_kroki: false, stage and task names might be sent to the kroki_url.
+    #   You can self-host kroki if you like:
+    #   https://docs.kroki.io/kroki/setup/install/
+    #   You need to install optional dependency 'pydot' for any visualization
+    #   URL to appear.
+    disable_kroki: true
+    kroki_url: "https://kroki.io"
+
+    table_store:
+      class: "pydiverse.pipedag.backend.table.SQLTableStore"
+      args:
+        url: "mssql+pyodbc://sa:PydiQuant27@127.0.0.1:1433/{instance_id}?driver=ODBC+Driver+18+for+SQL+Server&encrypt=no"
+        create_database_if_not_exists: true
+        strict_materialization_details: false
+
+        print_materialize: true
+        print_sql: true
+
+      hook_args:
+        sql:
+          cleanup_annotation_action_on_success: false
+          cleanup_annotation_action_intermediate_state: false
+
+      local_table_cache:
+        store_input: true
+        store_output: true
+        use_stored_input_as_cache: true
+        class: "pydiverse.pipedag.backend.table.cache.ParquetTableCache"
+        args:
+          base_path: "/tmp/pipedag/table_cache"
+
+    blob_store:
+      class: "pydiverse.pipedag.backend.blob.FileBlobStore"
+      args:
+        base_path: "/tmp/pipedag/blobs"
+
+    lock_manager:
+      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
+
+    orchestration:
+      class: "pydiverse.pipedag.engine.SequentialEngine"
