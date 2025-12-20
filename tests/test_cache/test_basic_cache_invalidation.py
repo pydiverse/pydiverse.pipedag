@@ -57,14 +57,15 @@ def test_change_bound_argument(mocker):
         out_spy.assert_not_called()
         child_spy.assert_not_called()
 
-    # Changing the input object should invalidate the cache
+    # Changing the input object should _not_ invalidate the task
+    # since we deepcopy
     input_list[0] = 2
     with StageLockContext():
         result = flow.run()
-        assert result.get(out)[0] == 2
-        assert result.get(child)[0] == 2
-        out_spy.assert_called_once()
-        child_spy.assert_called_once()
+        assert result.get(out)[0] == 1
+        assert result.get(child)[0] == 1
+        out_spy.assert_not_called()
+        child_spy.assert_not_called()
 
 
 def test_changed_cache_fn_literal(mocker):

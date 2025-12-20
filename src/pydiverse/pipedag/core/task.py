@@ -1,6 +1,7 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
+import copy
 import inspect
 from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any
@@ -78,7 +79,9 @@ class UnboundTask:
             raise StageError("Can't call pipedag task outside of a stage.")
 
         # Construct Task
-        bound_args = self._signature.bind(*args, **kwargs)
+        Task.__deepcopy__ = lambda self, memo: self
+        bound_args = self._signature.bind(*copy.deepcopy(args), **copy.deepcopy(kwargs))
+        delattr(Task, "__deepcopy__")
         task = self._bound_task_type(self, bound_args, ctx.flow, ctx.stage)
         if ctx.group_node is not None:
             ctx.group_node.add_task(task)
