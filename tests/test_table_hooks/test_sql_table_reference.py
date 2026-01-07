@@ -33,7 +33,7 @@ pytestmark = [with_instances(DATABASE_INSTANCES)]
 
 @skip_instances("parquet_backend", "parquet_s3_backend", "parquet_s3_backend_db2")
 def test_smoke_table_reference():
-    @materialize(lazy=True)
+    @materialize(lazy=True, nout=2)
     def in_table():
         table_store = ConfigContext.get().store.table_store
         schema = Schema("user_controlled_schema", prefix="", suffix="")
@@ -48,7 +48,8 @@ def test_smoke_table_reference():
                 query,
             )
         )
-        return Table(ExternalTableReference(table_name, schema=schema.get()))
+        ref = Table(ExternalTableReference(table_name, schema=schema.get()))
+        return ref, ref  # test that returning multiple references with same name works
 
     @materialize(input_type=sa.Table)
     def duplicate_table_reference(tbl: sa.sql.expression.Alias):
@@ -56,7 +57,7 @@ def test_smoke_table_reference():
 
     with Flow() as f:
         with Stage("sql_table_reference"):
-            table1 = in_table()
+            table1, _ = in_table()
             table2 = duplicate_table_reference(table1)
             _ = m.assert_table_equal(table1, table2, check_dtype=False)
 

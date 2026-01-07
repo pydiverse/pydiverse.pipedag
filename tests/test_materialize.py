@@ -4,16 +4,27 @@
 from concurrent.futures.process import BrokenProcessPool
 
 import pandas as pd
+import polars as pl
 import pytest
 import sqlalchemy as sa
 import structlog
 
-from pydiverse.pipedag import AUTO_VERSION, ConfigContext, Flow, Stage, Table, materialize
-from pydiverse.pipedag.container import SortCol, SortOrder, View
-from pydiverse.pipedag.context import FinalTaskState, RunContext, StageLockContext
-from pydiverse.pipedag.context.context import CacheValidationMode
+from pydiverse.pipedag import (
+    AUTO_VERSION,
+    CacheValidationMode,
+    ConfigContext,
+    Flow,
+    PipedagConfig,
+    SortCol,
+    SortOrder,
+    Stage,
+    StageLockContext,
+    Table,
+    View,
+    materialize,
+)
+from pydiverse.pipedag.context import FinalTaskState, RunContext
 from pydiverse.pipedag.context.trace_hook import PrintTraceHook
-from pydiverse.pipedag.core.config import PipedagConfig
 from pydiverse.pipedag.optional_dependency.sqlalchemy import Alias
 from pydiverse.pipedag.optional_dependency.transform import C, pdt
 
@@ -276,6 +287,68 @@ def test_materialize_view_pdt(imperative):
         logger.info(f"** Starting run: {i}")
         # run three times to test some caching behavior (this is at least a smoke test for caching)
         assert f.run().successful
+
+
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_batching(imperative):
+    @materialize(input_type=sa.Table, lazy=True)
+    def union(tbls: list[sa.Alias]):
+        return Table(View(src=tbls))
+
+    @materialize(input_type=pl.LazyFrame, lazy=True)
+    def batching(lf: pl.LazyFrame):
+        def mat(lf: pl.LazyFrame) -> Table:
+            if imperative:
+                return Table(lf).materialize()
+            else:
+                return Table(lf)
+
+        return [mat(lf.filter(pl.col("col1") == i)) for i in range(4)]
+
+    _m = m if not imperative else m2
+    with Flow("flow") as f:
+        with Stage("stage"):
+            x = _m.simple_dataframe()
+            y = batching(x)
+            z = union(y)
+            z1 = _m.noop(z)
+            z2 = _m.noop_lazy(z)
+            _ = z1, z2
+
+    result = f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+    assert result.successful
+    result = f.run()
+    assert result.successful
+
+
+@pytest.mark.skip(reason="not implemented, yet")
+@pytest.mark.parametrize("imperative", [False, True])
+def test_materialize_batching_imperative(imperative):
+    @materialize(input_type=pl.LazyFrame, lazy=True)
+    def batching(lf: pl.LazyFrame):
+        def mat(lf: pl.LazyFrame) -> Table:
+            return Table(lf).materialize()
+
+        tbls = [mat(lf.filter(pl.col("col1") == i)) for i in range(4)]
+        view = Table(View(src=tbls))
+        if imperative:
+            return view.materialize()
+        else:
+            return view
+
+    _m = m if not imperative else m2
+    with Flow("flow") as f:
+        with Stage("stage"):
+            x = _m.simple_dataframe()
+            y = batching(x)
+            z1 = _m.noop(y)
+            z2 = _m.noop_lazy(y)
+            _ = z1, z2
+
+    result = f.run(cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
+    assert result.successful
+    result = f.run()
+    assert result.successful
 
 
 @pytest.mark.parametrize("imperative", [False, True])

@@ -229,6 +229,11 @@ class Table(Generic[T]):
         """
         try:
             task_context = TaskContext.get()  # raises Lookup Error if no TaskContext is open
+        except LookupError:
+            # LookupError happens if no TaskContext is open
+            task_context = None
+
+        if task_context is not None:
             if config_context is not None and config_context is not ConfigContext.get():
                 raise ValueError(
                     "config_context must be identical to ConfigContext.get() "
@@ -275,10 +280,7 @@ class Table(Generic[T]):
                     return_as_type = tuple(return_type_mutator(t) for t in return_as_type)
                 else:
                     return_as_type = return_type_mutator(return_as_type)
-        except LookupError:
-            # LookupError happens if no TaskContext is open
-            pass
-        if config_context is not None:
+
             if schema is None:
                 raise ValueError(
                     "schema must be provided when task is not regularly executed by pipedag orchestration."
