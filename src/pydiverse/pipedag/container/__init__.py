@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 import copy
@@ -280,7 +280,7 @@ class Table(Generic[T]):
                     return_as_type = tuple(return_type_mutator(t) for t in return_as_type)
                 else:
                     return_as_type = return_type_mutator(return_as_type)
-
+        if config_context is not None:
             if schema is None:
                 raise ValueError(
                     "schema must be provided when task is not regularly executed by pipedag orchestration."
