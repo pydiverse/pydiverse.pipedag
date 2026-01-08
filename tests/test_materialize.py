@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 from concurrent.futures.process import BrokenProcessPool
@@ -292,7 +292,7 @@ def test_materialize_view_pdt(imperative):
 @pytest.mark.parametrize("imperative", [False, True])
 def test_materialize_batching(imperative):
     @materialize(input_type=sa.Table, lazy=True)
-    def union(tbls: list[sa.Alias]):
+    def union(tbls: list[sa.sql.selectable.Alias]):
         return Table(View(src=tbls))
 
     @materialize(input_type=pl.LazyFrame, lazy=True)

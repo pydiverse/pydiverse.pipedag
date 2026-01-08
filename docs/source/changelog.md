@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.12.8 (2026-01-DD)
+## 0.12.8 (2026-01-08)
 - Fix #315: DuplicateNameError in case a task returns several ExternalTableReference objects with the same table name
 - Implement #316: Support top level import pydiverse.pipedag.CacheValidationMode
 - Fix: pydiverse.transform repr implementation could make `with TaskContext():` exit expensive
