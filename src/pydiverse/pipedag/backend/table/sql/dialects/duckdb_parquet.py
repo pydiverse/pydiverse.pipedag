@@ -1181,7 +1181,7 @@ class SQLAlchemyTableHook(sql_hooks.SQLAlchemyTableHook):
                     from sqlalchemy.sql.base import ColumnCollection, ReadOnlyColumnCollection
 
                     possible = True
-                except LookupError:
+                except ImportError:
                     possible = False
 
                 if possible:
