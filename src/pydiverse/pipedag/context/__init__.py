@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 from pydiverse.pipedag.context.context import (
+    CacheValidationMode,
     ConfigContext,
     DAGContext,
     StageLockContext,
@@ -23,4 +24,5 @@ __all__ = [
     "StageLockContext",
     "FinalTaskState",
     "default_config_dict",
+    "CacheValidationMode",
 ]

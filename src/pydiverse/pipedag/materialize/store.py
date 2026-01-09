@@ -1001,7 +1001,7 @@ class PipeDAGStore(Disposable):
         # Check names: No duplicates in task
         seen_tn = set()
         seen_bn = set()
-        tn_dup = [e.name for e in tables if e.name in seen_tn or seen_tn.add(e.name)]
+        tn_dup = [e.name for e in tables if e.external_schema is None and (e.name in seen_tn or seen_tn.add(e.name))]
         bn_dup = [e.name for e in blobs if e.name in seen_bn or seen_bn.add(e.name)]
 
         if tn_dup or bn_dup:

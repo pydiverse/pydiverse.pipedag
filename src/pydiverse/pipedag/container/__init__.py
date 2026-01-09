@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 import copy
@@ -229,6 +229,11 @@ class Table(Generic[T]):
         """
         try:
             task_context = TaskContext.get()  # raises Lookup Error if no TaskContext is open
+        except LookupError:
+            # LookupError happens if no TaskContext is open
+            task_context = None
+
+        if task_context is not None:
             if config_context is not None and config_context is not ConfigContext.get():
                 raise ValueError(
                     "config_context must be identical to ConfigContext.get() "
@@ -275,9 +280,6 @@ class Table(Generic[T]):
                     return_as_type = tuple(return_type_mutator(t) for t in return_as_type)
                 else:
                     return_as_type = return_type_mutator(return_as_type)
-        except LookupError:
-            # LookupError happens if no TaskContext is open
-            pass
         if config_context is not None:
             if schema is None:
                 raise ValueError(
