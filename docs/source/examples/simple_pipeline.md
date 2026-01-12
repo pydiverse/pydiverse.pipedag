@@ -114,4 +114,61 @@ if __name__ == "__main__":
     main()
 ```
 
+## What happens when `f.run()` is called
+
+When you call `f.run()`, pipedag executes your pipeline stage by stage. Here's a step-by-step breakdown of what happens:
+
+### 1. Stage-by-stage execution
+
+Pipedag processes stages in order (`stage_1` → `stage_2` → `stage_3`). All tasks within a stage are executed before
+moving to the next stage. Tasks within a stage may run in parallel if you use a parallel orchestration engine (like Dask
+or Prefect).
+
+If only a subset of stages is specified for execution (using `f.run(stage_2, stage_3)`), only those stages are run.
+
+### 2. Using a temporary schema per stage
+
+A stage corresponds to a **production schema** in the database (e.g., `stage_1`) and a **temporary schema** (e.g.,
+`stage_1__tmp`).
+When executing a stage, pipedag uses a **temporary schema** (e.g., `stage_1__tmp`) where all task outputs for
+that stage are written. This keeps the work-in-progress isolated from any previously committed results.
+If the schema already exists (e.g., from a previous run), all of its contents are dropped at the beginning of the
+stage execution.
+
+Note: Depending on the backend, schema renaming may not be supported. In such cases, schema names with `__odd` and
+`__even` suffixes are used to alternate between two schemas for each stage.
+
+### 3. Task execution, caching, and materialization
+
+How and if a task runs depends on its type (lazy or eager) and cache validity.
+
+- **Lazy tasks** (like `lazy_task_1`): The task function is always executed to produce its result. This is
+  typically a lightweight operation e.g., a SQL query or small dataframes. The output of the
+  task (e.g., the SQL query or the dataframe) is used as an input for determining the cache validity of the task. The
+  task is only materialized (i.e. written to the database) if its cache is invalid.
+- **Eager tasks** (like `eager_inputs`): The cache is checked *before execution*. If valid, the task is skipped entirely
+  and the cached result is reused. Only cache-invalid eager tasks actually run their Python code.
+
+During task execution, all outputs are written to the temporary schema of the current stage. If a task is cache-valid,
+its output is either copied from the production schema or a view / synonym is created in the temporary schema.
+To avoid a mixture of copies and views / synonyms within a stage, if at least one task in the stage is cache-invalid,
+all cache-valid tasks are copied into the temporary schema.
+
+### 4. Schema swapping
+
+Once **all tasks in a stage complete successfully**, pipedag performs a swap of the temporary schema with the production
+schema: In this example `stage_1` and `stage_1__tmp` are swapped. Hence, after the swap, `stage_1` contains the newly
+computed
+tables,
+and `stage_1__tmp` contains the previous version (which will be dropped on the next run).
+
+This ensures that the production schema always contains a consistent set of tables from a fully completed stage.
+
+### 5. Final result
+
+After all stages complete, `f.run()` returns a `Result` object. You can:
+
+- Check `result.successful` to verify the pipeline completed
+- Use `result.get(task_output, as_type=pd.DataFrame)` to retrieve any task's output as a specific type
+
 ![Simple pipeline visualization](simple_pipeline01.svg)
