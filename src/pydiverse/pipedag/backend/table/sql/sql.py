@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 import json
@@ -1688,7 +1688,7 @@ class SQLTableStore(BaseTableStore):
         if self.disable_caching:
             raise NotImplementedError("computing stage hash with disabled caching is currently not supported")
         metadata_store = self.metadata_store or self
-        tasks_table = metadata_store.task_table
+        tasks_table = metadata_store.tasks_table
         with self.metadata_connect() as meta_conn:
             result = meta_conn.execute(
                 sa.select(tasks_table.c.output_json)
