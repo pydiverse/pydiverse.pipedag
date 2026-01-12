@@ -4,6 +4,7 @@
 - Fix #315: DuplicateNameError in case a task returns several ExternalTableReference objects with the same table name
 - Implement #316: Support top level import pydiverse.pipedag.CacheValidationMode
 - Fix: pydiverse.transform repr implementation could make `with TaskContext():` exit expensive
+- Fix: metadata_table_store uses correct schema_prefix for pipedag_metadata tables
 
 ## 0.12.7 (2025-12-15)
 - Fix: cache invalidation works more reliably for pydiverse.transform and ibis
