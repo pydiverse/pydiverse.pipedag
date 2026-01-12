@@ -137,6 +137,7 @@ stage execution.
 
 Note: Depending on the backend, schema renaming may not be supported. In such cases, schema names with `__odd` and
 `__even` suffixes are used to alternate between two schemas for each stage.
+This behavior is triggered by setting `stage_commit_technique: READ_VIEWS` in pipedag.yaml.
 
 ### 3. Task execution, caching, and materialization
 
