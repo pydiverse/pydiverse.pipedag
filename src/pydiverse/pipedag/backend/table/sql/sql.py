@@ -1132,22 +1132,22 @@ class SQLTableStore(BaseTableStore):
 
             # Update metadata
             metadata_store = self.metadata_store or self
+            stage_table = metadata_store.stage_table
             with self.metadata_connect(conn) as meta_conn:
                 del conn  # prevent hard to test typos
                 stage_metadata_exists = (
-                    meta_conn.execute(sa.select(1).where(metadata_store.stage_table.c.stage == stage.name)).scalar()
-                    == 1
+                    meta_conn.execute(sa.select(1).where(stage_table.c.stage == stage.name)).scalar() == 1
                 )
 
                 if stage_metadata_exists:
                     meta_conn.execute(
-                        metadata_store.stage_table.update()
-                        .where(self.stage_table.c.stage == stage.name)
+                        stage_table.update()
+                        .where(stage_table.c.stage == stage.name)
                         .values(cur_transaction_name=stage.transaction_name)
                     )
                 else:
                     meta_conn.execute(
-                        metadata_store.stage_table.insert().values(
+                        stage_table.insert().values(
                             stage=stage.name,
                             cur_transaction_name=stage.transaction_name,
                         )
