@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 import os
@@ -275,7 +275,7 @@ class ParquetTableStore(DuckDBTableStore):
         # make sure sync_views_table exists in metadata_store
         self.sync_views_table = sa.Table(
             "sync_views",
-            store.sql_metadata,
+            store.sql_metadata,  # this links the table to the correct schema of metadata_store
             sa.Column("schema", sa.String(128), primary_key=True),
             sa.Column("view_name", sa.String(128), primary_key=True),
             sa.Column("user_id", sa.String(64), primary_key=True),
@@ -402,7 +402,7 @@ class ParquetTableStore(DuckDBTableStore):
         """
         if self.metadata_store:
             with self.metadata_store.engine_connect() as meta_conn:
-                tbl = self.sync_views_table
+                tbl = self.sync_views_table  # already liked to metadata_store schema (incl. prefix)
                 match_user_id = (tbl.c.schema == schema_name) & (tbl.c.user_id == self.user_id)
                 obsolete_views = meta_conn.execute(
                     sa.select(tbl.c.view_name).where(match_user_id & (tbl.c.obsolete != 0))
@@ -495,7 +495,7 @@ class ParquetTableStore(DuckDBTableStore):
         """
         if self.metadata_store:
             with self.metadata_store.engine_connect() as meta_conn:
-                tbl = self.sync_views_table
+                tbl = self.sync_views_table  # already liked to metadata_store schema (incl. prefix)
                 deleted = meta_conn.execute(tbl.delete().where(tbl.c.schema == schema_name)).rowcount
                 if deleted > 0:
                     self.logger.info(
@@ -512,7 +512,7 @@ class ParquetTableStore(DuckDBTableStore):
         """
         if self.metadata_store:
             with self.metadata_store.engine_connect() as meta_conn:
-                tbl = self.sync_views_table
+                tbl = self.sync_views_table  # already liked to metadata_store schema (incl. prefix)
                 view_match = (tbl.c.schema == schema_name) & (tbl.c.view_name == table_name)
                 # mark all other user views as obsolete
                 updated = meta_conn.execute(tbl.update().where(view_match).values(obsolete=1)).rowcount
@@ -560,7 +560,7 @@ class ParquetTableStore(DuckDBTableStore):
         """
         if self.metadata_store:
             with self.metadata_store.engine_connect() as meta_conn:
-                tbl = self.sync_views_table
+                tbl = self.sync_views_table  # already liked to metadata_store schema (incl. prefix)
                 view_match = (tbl.c.schema == schema_name) & (tbl.c.view_name == table_name)
                 deleted = meta_conn.execute(tbl.delete().where(view_match & (tbl.c.user_id == self.user_id))).rowcount
                 if deleted > 0:

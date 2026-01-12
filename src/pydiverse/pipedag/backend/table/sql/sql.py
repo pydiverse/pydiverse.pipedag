@@ -398,7 +398,7 @@ class SQLTableStore(BaseTableStore):
         self.metadata_store = store
 
     def _metadata_pk(self, name: str, table_name: str):
-        return sa.Column(name, sa.BigInteger(), primary_key=True)
+        return sa.Column(name, sa.BigInteger(), primary_key=True, autoincrement=True)
 
     def _init_database_before_engine(self):
         "File databases might have to create a directory here."
@@ -999,12 +999,13 @@ class SQLTableStore(BaseTableStore):
                 self.optional_pause_for_db_transactionality("schema_create")
 
             if not self.disable_caching:
+                metadata_store = self.metadata_store or self
                 with self.metadata_connect(conn) as meta_conn:
                     del conn  # prevent hard to test typos
                     for table in [
-                        self.tasks_table,
-                        self.lazy_cache_table,
-                        self.raw_sql_cache_table,
+                        metadata_store.tasks_table,
+                        metadata_store.lazy_cache_table,
+                        metadata_store.raw_sql_cache_table,
                     ]:
                         meta_conn.execute(
                             table.delete().where(table.c.stage == stage.name).where(table.c.in_transaction_schema)
@@ -1028,9 +1029,12 @@ class SQLTableStore(BaseTableStore):
         if self.force_transaction_suffix is not None:
             return schema_name + self.force_transaction_suffix
         try:
+            metadata_store = self.metadata_store or self
             with self.metadata_connect() as meta_conn:
                 metadata_rows = (
-                    meta_conn.execute(self.stage_table.select().where(self.stage_table.c.stage == schema_name))
+                    meta_conn.execute(
+                        metadata_store.stage_table.select().where(metadata_store.stage_table.c.stage == schema_name)
+                    )
                     .mappings()
                     .one()
                 )
@@ -1127,21 +1131,23 @@ class SQLTableStore(BaseTableStore):
                 self.on_read_view_alias(table, src_schema.get(), dest_schema.get())
 
             # Update metadata
+            metadata_store = self.metadata_store or self
             with self.metadata_connect(conn) as meta_conn:
                 del conn  # prevent hard to test typos
                 stage_metadata_exists = (
-                    meta_conn.execute(sa.select(1).where(self.stage_table.c.stage == stage.name)).scalar() == 1
+                    meta_conn.execute(sa.select(1).where(metadata_store.stage_table.c.stage == stage.name)).scalar()
+                    == 1
                 )
 
                 if stage_metadata_exists:
                     meta_conn.execute(
-                        self.stage_table.update()
+                        metadata_store.stage_table.update()
                         .where(self.stage_table.c.stage == stage.name)
                         .values(cur_transaction_name=stage.transaction_name)
                     )
                 else:
                     meta_conn.execute(
-                        self.stage_table.insert().values(
+                        metadata_store.stage_table.insert().values(
                             stage=stage.name,
                             cur_transaction_name=stage.transaction_name,
                         )
@@ -1151,10 +1157,11 @@ class SQLTableStore(BaseTableStore):
 
     def _commit_stage_update_metadata(self, stage: Stage, meta_conn: sa.engine.Connection):
         if not self.disable_caching:
+            metadata_store = self.metadata_store or self
             for table in [
-                self.tasks_table,
-                self.lazy_cache_table,
-                self.raw_sql_cache_table,
+                metadata_store.tasks_table,
+                metadata_store.lazy_cache_table,
+                metadata_store.raw_sql_cache_table,
             ]:
                 meta_conn.execute(
                     table.delete().where(table.c.stage == stage.name).where(~table.c.in_transaction_schema)
@@ -1455,9 +1462,10 @@ class SQLTableStore(BaseTableStore):
 
     def store_task_metadata(self, metadata: TaskMetadata, stage: Stage):
         if not self.disable_caching:
+            metadata_store = self.metadata_store or self
             with self.metadata_connect() as meta_conn:
                 meta_conn.execute(
-                    self.tasks_table.insert().values(
+                    metadata_store.tasks_table.insert().values(
                         name=metadata.name,
                         stage=metadata.stage,
                         version=metadata.version,
@@ -1477,20 +1485,22 @@ class SQLTableStore(BaseTableStore):
 
         ignore_cache_function = ConfigContext.get().cache_validation.mode == CacheValidationMode.IGNORE_FRESH_INPUT
         try:
+            metadata_store = self.metadata_store or self
+            tasks_table = metadata_store.tasks_table
             with self.metadata_connect() as meta_conn:
                 result = (
                     meta_conn.execute(
-                        self.tasks_table.select()
-                        .where(self.tasks_table.c.name == task._name)
-                        .where(self.tasks_table.c.stage == task._stage.name)
-                        .where(self.tasks_table.c.version == str(task._version))
-                        .where(self.tasks_table.c.input_hash == input_hash)
+                        tasks_table.select()
+                        .where(tasks_table.c.name == task._name)
+                        .where(tasks_table.c.stage == task._stage.name)
+                        .where(tasks_table.c.version == str(task._version))
+                        .where(tasks_table.c.input_hash == input_hash)
                         .where(
-                            self.tasks_table.c.cache_fn_hash == cache_fn_hash
+                            tasks_table.c.cache_fn_hash == cache_fn_hash
                             if not ignore_cache_function
                             else sa.literal(True)
                         )
-                        .where(self.tasks_table.c.in_transaction_schema.in_([False]))
+                        .where(tasks_table.c.in_transaction_schema.in_([False]))
                     )
                     .mappings()
                     .one_or_none()
@@ -1516,15 +1526,17 @@ class SQLTableStore(BaseTableStore):
     def retrieve_all_task_metadata(
         self, task: MaterializingTask, ignore_position_hashes: bool = False
     ) -> list[TaskMetadata]:
+        metadata_store = self.metadata_store or self
+        tasks_table = metadata_store.tasks_table
         match_condition = sa.and_(
-            self.tasks_table.c.name == task._name,
-            self.tasks_table.c.stage == task._stage.name,
+            tasks_table.c.name == task._name,
+            tasks_table.c.stage == task._stage.name,
         )
 
         if not ignore_position_hashes:
-            match_condition = match_condition & (self.tasks_table.c.position_hash == task._position_hash)
+            match_condition = match_condition & (tasks_table.c.position_hash == task._position_hash)
         with self.metadata_connect() as meta_conn:
-            results = meta_conn.execute(self.tasks_table.select().where(match_condition)).mappings().all()
+            results = meta_conn.execute(tasks_table.select().where(match_condition)).mappings().all()
         return [
             TaskMetadata(
                 name=result.name,
@@ -1542,9 +1554,10 @@ class SQLTableStore(BaseTableStore):
 
     def store_lazy_table_metadata(self, metadata: LazyTableMetadata):
         if not self.disable_caching:
+            metadata_store = self.metadata_store or self
             with self.metadata_connect() as meta_conn:
                 meta_conn.execute(
-                    self.lazy_cache_table.insert().values(
+                    metadata_store.lazy_cache_table.insert().values(
                         name=metadata.name,
                         stage=metadata.stage,
                         query_hash=metadata.query_hash,
@@ -1559,14 +1572,16 @@ class SQLTableStore(BaseTableStore):
             raise CacheError("Caching is disabled, so we also don't even try to retrieve lazy table cache")
 
         try:
+            metadata_store = self.metadata_store or self
+            lazy_cache_table = metadata_store.lazy_cache_table
             with self.metadata_connect() as meta_conn:
                 result = (
                     meta_conn.execute(
-                        self.lazy_cache_table.select()
-                        .where(self.lazy_cache_table.c.stage == stage.name)
-                        .where(self.lazy_cache_table.c.query_hash == query_hash)
-                        .where(self.lazy_cache_table.c.task_hash == task_hash)
-                        .where(self.lazy_cache_table.c.in_transaction_schema.in_([False]))
+                        lazy_cache_table.select()
+                        .where(lazy_cache_table.c.stage == stage.name)
+                        .where(lazy_cache_table.c.query_hash == query_hash)
+                        .where(lazy_cache_table.c.task_hash == task_hash)
+                        .where(lazy_cache_table.c.in_transaction_schema.in_([False]))
                     )
                     .mappings()
                     .one_or_none()
@@ -1586,9 +1601,10 @@ class SQLTableStore(BaseTableStore):
 
     def store_raw_sql_metadata(self, metadata: RawSqlMetadata):
         if not self.disable_caching:
+            metadata_store = self.metadata_store or self
             with self.metadata_connect() as meta_conn:
                 meta_conn.execute(
-                    self.raw_sql_cache_table.insert().values(
+                    metadata_store.raw_sql_cache_table.insert().values(
                         prev_objects=json.dumps(metadata.prev_objects),
                         new_objects=json.dumps(metadata.new_objects),
                         stage=metadata.stage,
@@ -1604,14 +1620,16 @@ class SQLTableStore(BaseTableStore):
             raise CacheError("Caching is disabled, so we also don't even try to retrieve raw sql cache")
 
         try:
+            metadata_store = self.metadata_store or self
+            raw_sql_cache_table = metadata_store.raw_sql_cache_table
             with self.metadata_connect() as meta_conn:
                 result = (
                     meta_conn.execute(
-                        self.raw_sql_cache_table.select()
-                        .where(self.raw_sql_cache_table.c.stage == stage.name)
-                        .where(self.raw_sql_cache_table.c.query_hash == query_hash)
-                        .where(self.raw_sql_cache_table.c.task_hash == task_hash)
-                        .where(self.raw_sql_cache_table.c.in_transaction_schema.in_([False]))
+                        raw_sql_cache_table.select()
+                        .where(raw_sql_cache_table.c.stage == stage.name)
+                        .where(raw_sql_cache_table.c.query_hash == query_hash)
+                        .where(raw_sql_cache_table.c.task_hash == task_hash)
+                        .where(raw_sql_cache_table.c.in_transaction_schema.in_([False]))
                     )
                     .mappings()
                     .one_or_none()
@@ -1669,11 +1687,13 @@ class SQLTableStore(BaseTableStore):
         # information we use for producing input_hash of downstream tasks.
         if self.disable_caching:
             raise NotImplementedError("computing stage hash with disabled caching is currently not supported")
+        metadata_store = self.metadata_store or self
+        tasks_table = metadata_store.task_table
         with self.metadata_connect() as meta_conn:
             result = meta_conn.execute(
-                sa.select(self.tasks_table.c.output_json)
-                .where(self.tasks_table.c.stage == stage.name)
-                .where(self.tasks_table.c.in_transaction_schema.in_([False]))
+                sa.select(tasks_table.c.output_json)
+                .where(tasks_table.c.stage == stage.name)
+                .where(tasks_table.c.in_transaction_schema.in_([False]))
             ).scalars()
             result = sorted(result)
 

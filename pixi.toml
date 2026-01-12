@@ -104,7 +104,7 @@ pytsql = ">=1.4.0,<2"
 bcpandas = ">=2.6.3,<3"
 
 [feature.pdtransform-new.dependencies]
-pydiverse-transform = ">=0.6.0,<0.7"
+pydiverse-transform = ">=0.7.0,<0.8"
 
 [feature.pdtransform-old.dependencies]
 pydiverse-transform = "<0.2"
