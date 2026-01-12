@@ -146,7 +146,7 @@ How and if a task runs depends on its type (lazy or eager) and cache validity.
 - **Lazy tasks** (like `lazy_task_1`): The task function is always executed to produce its result. This is
   typically a lightweight operation e.g., a SQL query or small dataframes. The output of the
   task (e.g., the SQL query or the dataframe) is used as an input for determining the cache validity of the task. Any
-  task is only materialized (i.e. written to the database) if its cache is invalid.
+  task output is only materialized (i.e. written to the database) if it is cache invalid (e.g. the generated SQL query changed).
 - **Eager tasks** (like `eager_inputs`): The cache is checked *before execution*. If valid, the task is skipped entirely
   and the cached result is reused. Only cache-invalid eager tasks actually run their Python code.
 
