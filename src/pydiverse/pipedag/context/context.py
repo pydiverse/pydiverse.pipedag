@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import copy
+import logging
 import threading
 import typing
 from collections.abc import Mapping
@@ -54,14 +55,15 @@ class BaseContext:
             _tokens = self._thread_state[_id]
             token = self._context_var.set(self)
             _tokens.append(token)
-            self.get_logger().debug(
-                f"Entering {type(self).__name__}",
-                id=id(self),
-                thread_id=threading.get_ident(),
-                key=_id,
-                depth=len(_tokens),
-                z=str(self)[:100],
-            )
+            if self.get_logger().isEnabledFor(logging.DEBUG):
+                self.get_logger().debug(
+                    f"Entering {type(self).__name__}",
+                    id=id(self),
+                    thread_id=threading.get_ident(),
+                    key=_id,
+                    depth=len(_tokens),
+                    z=str(self)[:100],  # potentially expensive
+                )
             if id(self) not in self._instance_state:
                 self._instance_state[id(self)] = 0
             # count threads that entered this context object
@@ -72,14 +74,15 @@ class BaseContext:
         with self._lock:
             _id = id(self) + (threading.get_ident() << 64)
             _tokens = self._thread_state.get(_id)
-            self.get_logger().debug(
-                f"Exiting {type(self).__name__}",
-                id=id(self),
-                thread_id=threading.get_ident(),
-                key=_id,
-                depth=len(_tokens) if _tokens is not None else 0,
-                z=str(self)[:100],
-            )
+            if self.get_logger().isEnabledFor(logging.DEBUG):
+                self.get_logger().debug(
+                    f"Exiting {type(self).__name__}",
+                    id=id(self),
+                    thread_id=threading.get_ident(),
+                    key=_id,
+                    depth=len(_tokens) if _tokens is not None else 0,
+                    z=str(self)[:100],  # potentially expensive
+                )
             if not _tokens:
                 raise RuntimeError(
                     "Fatal error in context handling: "

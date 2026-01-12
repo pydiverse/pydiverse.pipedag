@@ -28,7 +28,7 @@ from .container import (
     SortOrder,
     materialize_table,
 )
-from .context import ConfigContext, StageLockContext
+from .context import ConfigContext, StageLockContext, CacheValidationMode
 from .core.task import (
     Task,
     TaskGetItem,
@@ -69,6 +69,7 @@ __all__ = [
     "PipedagConfig",
     "ConfigContext",
     "StageLockContext",
+    "CacheValidationMode",
     "AUTO_VERSION",
     "backend",
     "materialize_table",
