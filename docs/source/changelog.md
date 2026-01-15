@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.12.9 (2026-01-dd)
+- Fix: DatabaseLockManager uses correct schema_prefix in case of metadata_table_store
+
 ## 0.12.8 (2026-01-12)
 - Fix #315: DuplicateNameError in case a task returns several ExternalTableReference objects with the same table name
 - Implement #316: Support top level import pydiverse.pipedag.CacheValidationMode
