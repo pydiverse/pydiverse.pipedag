@@ -1707,7 +1707,8 @@ class SQLTableStore(BaseTableStore):
         return self._create_engine()
 
     def get_lock_schema(self) -> Schema:
-        return self.get_schema(self.LOCK_SCHEMA)
+        metadata_store = self.metadata_store or self
+        return metadata_store.get_schema(self.LOCK_SCHEMA)
 
 
 # Load SQLTableStore Hooks
