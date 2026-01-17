@@ -1077,8 +1077,9 @@ class PandasTableHook(sql_hooks.PandasTableHook):
 
 @ParquetTableStore.register_table(pl, duckdb)
 class PolarsTableHook(sql_hooks.PolarsTableHook):
-    def _execute_materialize_polars(table, store, stage_name):
-        _ = stage_name
+    @classmethod
+    def _execute_materialize_polars(cls, table, store, stage_name):
+        _ = cls, stage_name
         file_path = store.get_table_path(table)
         schema = store.get_schema(table.stage.current_name)
         df = table.obj
