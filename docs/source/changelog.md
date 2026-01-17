@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.12.9 (2026-01-dd)
+## 0.12.9 (2026-01-17)
 - Fix: DatabaseLockManager uses correct schema_prefix in case of metadata_table_store
 
 ## 0.12.8 (2026-01-12)
