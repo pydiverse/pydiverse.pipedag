@@ -328,6 +328,8 @@ instances:
       metadata_table_store:
         class: "pydiverse.pipedag.backend.table.SQLTableStore"
         table_store_connection: ibm_db2
+        args:
+          avoid_drop_create_schema: true
       args:
         parquet_base_path: "s3://pipedag-test-bucket/table_store/"
         s3_endpoint_url: "http://localhost:9000"  # test with minio instead of AWS S3
