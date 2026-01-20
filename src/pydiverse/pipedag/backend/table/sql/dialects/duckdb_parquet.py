@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from upath import UPath
 
 import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
-from pydiverse.pipedag import ConfigContext, Schema, Stage, Table
+from pydiverse.pipedag import ConfigContext, Flow, Schema, Stage, Table
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CopySelectTo,
     CreateSchema,
@@ -298,6 +298,49 @@ class ParquetTableStore(DuckDBTableStore):
                     # create a new UUID if it does not exist, yet
                     self.user_id = uuid.uuid4().hex
                     conn.execute(sa.insert(self.user_id_table).values(user_id=self.user_id))
+
+    def sync_metadata(self, flow: Flow):
+        """Sync this DuckDB file with the metadata store for all stages in the flow.
+
+        This method brings the local DuckDB file completely in-sync with the shared
+        metadata store. It creates any missing schemas and syncs views from other
+        users for all stages defined in the flow.
+
+        This is useful when a user wants to access tables created by other users
+        without running the full flow.
+
+        Example usage::
+
+            cfg = ConfigContext.get()
+            store = cfg.store.table_store
+            store.sync_metadata(flow)
+
+        :param flow: The flow containing stages to sync.
+        """
+        if not self.metadata_store:
+            self.logger.warning("sync_metadata called but no metadata_store configured; nothing to sync")
+            return
+
+        for stage in flow.stages.values():
+            # Get the current and alternate transaction schema names
+            # (similar to init_stage logic)
+            current_transaction_name = self._get_read_view_transaction_name(stage.name)
+            alternate_transaction_name = self._get_read_view_original_transaction_name(stage, current_transaction_name)
+
+            # Sync all schemas related to this stage:
+            # - stage.name: the read view schema
+            # - current transaction schema (e.g., stage_1__odd)
+            # - alternate transaction schema (e.g., stage_1__even)
+            schemas_to_sync = [current_transaction_name] if current_transaction_name != "" else []
+            schemas_to_sync += [self.get_schema(stage.name).get(), alternate_transaction_name]
+
+            for schema_name in schemas_to_sync:
+                self.metadata_sync_views(schema_name)
+
+        self.logger.info(
+            "Finished syncing metadata for all stages",
+            stages=list(flow.stages.keys()),
+        )
 
     def get_storage_options(self, kind: Literal["polars", "fsspec"], protocol) -> dict[str, Any] | None:
         if protocol != "s3" or (self.s3_endpoint_url is None and self.s3_region is None):
@@ -603,7 +646,6 @@ class ParquetTableStore(DuckDBTableStore):
             schemas = [old_transaction_name] if old_transaction_name != "" else []
             schemas = schemas + [self.get_schema(stage.name).get(), new_transaction_name]
             for schema in schemas:
-                self.execute(CreateSchema(Schema(schema, prefix="", suffix=""), if_not_exists=True))
                 self.metadata_sync_views(schema)
 
         with self.engine_connect() as conn:
