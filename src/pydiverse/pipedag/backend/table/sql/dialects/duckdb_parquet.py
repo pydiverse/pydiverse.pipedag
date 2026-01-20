@@ -465,10 +465,16 @@ class ParquetTableStore(DuckDBTableStore):
                     )
                 with self.engine_connect() as conn:
                     del meta_conn  # prevent typo errors
+                    schema = Schema(schema_name, prefix="", suffix="")
+                    conn.execute(
+                        CreateSchema(
+                            schema,
+                            if_not_exists=True,
+                        )
+                    )
                     for view, target, target_type in create_views:
                         try:
                             conn.execute(DropView(view, schema_name, if_exists=True))
-                            schema = Schema(schema_name, prefix="", suffix="")
                             if target_type == "parquet":
                                 conn.execute(CreateViewAsSelect(view, schema, self._read_parquet_query(target)))
                             elif target_type == "schema":
