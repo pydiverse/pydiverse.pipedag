@@ -552,7 +552,7 @@ class ParquetTableStore(DuckDBTableStore):
                                 conn.execute(CreateViewAsSelect(view, schema, self._read_parquet_query(target)))
                             elif target_type == "schema":
                                 conn.execute(
-                                    CreateViewAsSelect(view, schema, sa.text(f"SELECT * FROM {target}.{view}"))
+                                    CreateViewAsSelect(view, schema, sa.text(f'SELECT * FROM "{target}"."{view}"'))
                                 )
                             else:
                                 meta_engine = self.metadata_schema.engine
