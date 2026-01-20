@@ -332,7 +332,7 @@ class ParquetTableStore(DuckDBTableStore):
             # - current transaction schema (e.g., stage_1__odd)
             # - alternate transaction schema (e.g., stage_1__even)
             schemas_to_sync = [current_transaction_name] if current_transaction_name != "" else []
-            schemas_to_sync += [self.get_schema(stage.name).get(), alternate_transaction_name]
+            schemas_to_sync += [alternate_transaction_name, self.get_schema(stage.name).get()]
 
             for schema_name in schemas_to_sync:
                 self.metadata_sync_views(schema_name)
