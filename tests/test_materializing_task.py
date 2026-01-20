@@ -320,40 +320,44 @@ def test_sync_metadata():
     # Run flow with cfg1 to create views in metadata_store
     logger.info("** Running flow with cfg1 to create metadata entries **")
     with StageLockContext():
+        # repopulate both cache slots to ensure consistent state of parquet files and metadata store
+        f.run(config=cfg1, cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
         f.run(config=cfg1, cache_validation_mode=CacheValidationMode.FORCE_CACHE_INVALID)
 
-    # Create a fresh DuckDB file for "User B"
-    for i in range(2):
-        fresh_duckdb_path = f"/tmp/pipedag/parquet_duckdb/parquet_s3_sync_metadata_test{i}.duckdb"
-        Path(fresh_duckdb_path).unlink(missing_ok=True)
+        # Create a fresh DuckDB file for "User B"
+        for i in range(2):
+            fresh_duckdb_path = f"/tmp/pipedag/parquet_duckdb/parquet_s3_sync_metadata_test{i}.duckdb"
+            Path(fresh_duckdb_path).unlink(missing_ok=True)
 
-        cfg2 = cfg1.evolve(
-            _config_dict=dict(table_store=dict(args=dict(url=f"duckdb:///{fresh_duckdb_path}"))),
-            _transfer_cache_=False,
-        )
+            cfg2 = cfg1.evolve(
+                _config_dict=dict(table_store=dict(args=dict(url=f"duckdb:///{fresh_duckdb_path}"))),
+                _transfer_cache_=False,
+            )
 
-        store2 = cfg2.store.table_store
-        store2.setup()
+            store2 = cfg2.store.table_store
+            store2.setup()
 
-        # Call sync_metadata to bring the DuckDB file in sync (includes creating stage schemas)
-        logger.info("** Calling sync_metadata **", iteration=i + 1, db_file=store2.engine.url)
-        store2.sync_metadata(f if i == 0 else None)  # pass flow only on first iteration
+            # Call sync_metadata to bring the DuckDB file in sync (includes creating stage schemas)
+            logger.info("** Calling sync_metadata **", iteration=i + 1, db_file=store2.engine.url)
+            store2.sync_metadata(f if i == 0 else None)  # pass flow only on first iteration
 
-        # Verify all stage schemas were created and views exist
-        with store2.engine_connect() as conn:
-            schemas = [row[0] for row in conn.execute(sa.text("SELECT schema_name FROM duckdb_schemas()")).fetchall()]
-
-            for stage_name in ["stage_1", "stage_2", "stage_3"]:
-                stage_schema = store2.get_schema(stage_name).get()
-                assert stage_schema in schemas, f"Schema {stage_schema} should have been created"
-
-                # Check that views exist in each stage schema
-                views = [
-                    row[0]
-                    for row in conn.execute(
-                        sa.text(f"SELECT view_name FROM duckdb_views() WHERE schema_name = '{stage_schema}'")
-                    ).fetchall()
+            # Verify all stage schemas were created and views exist
+            with store2.engine_connect() as conn:
+                schemas = [
+                    row[0] for row in conn.execute(sa.text("SELECT schema_name FROM duckdb_schemas()")).fetchall()
                 ]
-                assert len(views) > 0, f"Views should have been synced to {stage_schema}"
+
+                for stage_name in ["stage_1", "stage_2", "stage_3"]:
+                    stage_schema = store2.get_schema(stage_name).get()
+                    assert stage_schema in schemas, f"Schema {stage_schema} should have been created"
+
+                    # Check that views exist in each stage schema
+                    views = [
+                        row[0]
+                        for row in conn.execute(
+                            sa.text(f"SELECT view_name FROM duckdb_views() WHERE schema_name = '{stage_schema}'")
+                        ).fetchall()
+                    ]
+                    assert len(views) > 0, f"Views should have been synced to {stage_schema}"
 
     logger.info("** Test passed: sync_metadata successfully synced all stages **")
