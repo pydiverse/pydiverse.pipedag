@@ -146,7 +146,7 @@ def test_no_lock():
         pytest.fail("No lock manager MUST fail the lock manager tests")
 
 
-@with_instances("postgres", "mssql", "ibm_db2")
+@with_instances("postgres", "mssql", "ibm_db2", "parquet_s3_backend_db2")
 def test_database():
     from pydiverse.pipedag import ConfigContext
     from pydiverse.pipedag.backend.lock import DatabaseLockManager

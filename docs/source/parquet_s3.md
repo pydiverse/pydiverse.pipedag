@@ -57,11 +57,20 @@ offer configuration parameters to make this smooth:
   <img src="images/datagrip_s3_options02.png" width="45%" />
 </p>
 
-Since duckdb files cannot be shared among team members, pipedag supports a field called `metadata_store:` under
-table store. It offers the configuration of a complete table store. However, it is only used for synchronizing
+Since duckdb files cannot be shared among team members, pipedag supports a field called `metadata_table_store:` under
+`table_store`. It offers the configuration of a complete table store. However, it is only used for synchronizing
 metadata and for implementing database based locking. Since S3 does not support any synchronization or locking
 capabilities, the following example uses a small postgres database for this purpose. The postgres database can
 also help synchronizing other state like MLFlow experiments.
+
+When using `metadata_table_store` with ParquetTableStore, your local duckdb file will automatically be synchronized with
+the newest parquet files when running `flow.run()`. If you like to access the duckdb file with your favorite SQL editor
+or a jupyter notebook, don't forget to synchronize explicitly to get access to flow runs of your team member via:
+```python
+pipedag_config = PipedagConfig.default
+store = pipedag_config.get(instance_id).store.table_store
+store.sync_from_metadata(flow)
+```
 
 The example uses the following configuration file `pipedag.yaml`:
 
