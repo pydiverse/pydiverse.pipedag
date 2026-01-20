@@ -299,48 +299,78 @@ class ParquetTableStore(DuckDBTableStore):
                     self.user_id = uuid.uuid4().hex
                     conn.execute(sa.insert(self.user_id_table).values(user_id=self.user_id))
 
-    def sync_metadata(self, flow: Flow):
-        """Sync this DuckDB file with the metadata store for all stages in the flow.
+    def sync_metadata(self, flow: Flow | None = None):
+        """Sync this DuckDB file with the metadata store.
 
         This method brings the local DuckDB file completely in-sync with the shared
         metadata store. It creates any missing schemas and syncs views from other
-        users for all stages defined in the flow.
+        users for all stages defined in the flow or for all schemas for which metadata
+        exists.
 
         This is useful when a user wants to access tables created by other users
         without running the full flow.
 
         Example usage::
 
-            cfg = ConfigContext.get()
+            cfg = PipedagConfig.default.get(instance_id)
             store = cfg.store.table_store
-            store.sync_metadata(flow)
+            store.sync_metadata()
 
-        :param flow: The flow containing stages to sync.
+        Attention: No stage locking is performed, so parquet files can get out-of-sync if pipeline instance is executed
+        by other team members while exploring data in duckdb file. However, stage level transactionality keeps your data
+        in main schema stable until the second pipeline run starts.
+
+        :param flow: The flow containing stages to sync. If no flow is given, all schemas for which metadata exists
+            are synchronized.
         """
         if not self.metadata_store:
             self.logger.warning("sync_metadata called but no metadata_store configured; nothing to sync")
             return
 
-        for stage in flow.stages.values():
-            # Get the current and alternate transaction schema names
-            # (similar to init_stage logic)
-            current_transaction_name = self._get_read_view_transaction_name(stage.name)
-            alternate_transaction_name = self._get_read_view_original_transaction_name(stage, current_transaction_name)
+        if flow is None:
+            with self.metadata_store.engine_connect() as meta_conn:
+                tbl = self.sync_views_table  # already liked to metadata_store schema (incl. prefix)
+                metadata_schemas = meta_conn.execute(sa.select(tbl.c.schema.distinct())).fetchall()
+            transaction_schemas = [
+                schema_name
+                for (schema_name,) in metadata_schemas
+                if schema_name.endswith("__odd") or schema_name.endswith("__even")
+            ]
+            main_schemas = [
+                schema_name for (schema_name,) in metadata_schemas if schema_name not in transaction_schemas
+            ]
+            for schemas in [transaction_schemas, main_schemas]:
+                for schema_name in schemas:
+                    self.metadata_sync_views(schema_name)
 
-            # Sync all schemas related to this stage:
-            # - current transaction schema (e.g., stage_1__odd)
-            # - alternate transaction schema (e.g., stage_1__even)
-            # - stage.name: the read view schema (must be last, as it links to transaction schemas)
-            schemas_to_sync = [current_transaction_name] if current_transaction_name != "" else []
-            schemas_to_sync += [alternate_transaction_name, self.get_schema(stage.name).get()]
+            self.logger.info(
+                "Finished synchronizing metadata for all stages",
+                transaction_schemas=transaction_schemas,
+                main_schemas=main_schemas,
+            )
+        else:
+            for stage in flow.stages.values():
+                # Get the current and alternate transaction schema names
+                # (similar to init_stage logic)
+                current_transaction_name = self._get_read_view_transaction_name(stage.name)
+                alternate_transaction_name = self._get_read_view_original_transaction_name(
+                    stage, current_transaction_name
+                )
 
-            for schema_name in schemas_to_sync:
-                self.metadata_sync_views(schema_name)
+                # Sync all schemas related to this stage:
+                # - current transaction schema (e.g., stage_1__odd)
+                # - alternate transaction schema (e.g., stage_1__even)
+                # - stage.name: the read view schema (must be last, as it links to transaction schemas)
+                schemas_to_sync = [current_transaction_name] if current_transaction_name != "" else []
+                schemas_to_sync += [alternate_transaction_name, self.get_schema(stage.name).get()]
 
-        self.logger.info(
-            "Finished synchronizing metadata for all stages",
-            stages=list(flow.stages.keys()),
-        )
+                for schema_name in schemas_to_sync:
+                    self.metadata_sync_views(schema_name)
+
+            self.logger.info(
+                "Finished synchronizing metadata for all stages",
+                stages=list(flow.stages.keys()),
+            )
 
     def get_storage_options(self, kind: Literal["polars", "fsspec"], protocol) -> dict[str, Any] | None:
         if protocol != "s3" or (self.s3_endpoint_url is None and self.s3_region is None):
