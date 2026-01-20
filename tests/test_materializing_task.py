@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import copy
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -241,7 +242,7 @@ def test_imperative_materialize_given_config():
     assert sa_tbl.name == tbl.name
 
 
-@with_instances("parquet_s3_backend")
+@with_instances("parquet_s3_backend", "parquet_s3_backend_db2")
 def test_metadata_store_synchronization():
     logger = structlog.get_logger(__name__ + ".test_metadata_store_synchronization")
     x = {"x": [0, 1, 2, 3]}
@@ -258,10 +259,10 @@ def test_metadata_store_synchronization():
 
     cfg1 = ConfigContext.get()
     # setup second configuration with different local duckdb file
+    path = "/tmp/pipedag/parquet_duckdb/test_other_user.duckdb"
+    Path(path).unlink(missing_ok=True)
     cfg2 = cfg1.evolve(
-        _config_dict=dict(
-            table_store=dict(args=dict(url="duckdb:////tmp/pipedag/parquet_duckdb/parquet_s3_backend2.duckdb"))
-        ),
+        _config_dict=dict(table_store=dict(args=dict(url=f"duckdb:///{path}"))),
         _transfer_cache_=False,
     )
 
