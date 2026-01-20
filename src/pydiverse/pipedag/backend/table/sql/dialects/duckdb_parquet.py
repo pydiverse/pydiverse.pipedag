@@ -328,9 +328,9 @@ class ParquetTableStore(DuckDBTableStore):
             alternate_transaction_name = self._get_read_view_original_transaction_name(stage, current_transaction_name)
 
             # Sync all schemas related to this stage:
-            # - stage.name: the read view schema
             # - current transaction schema (e.g., stage_1__odd)
             # - alternate transaction schema (e.g., stage_1__even)
+            # - stage.name: the read view schema (must be last, as it links to transaction schemas)
             schemas_to_sync = [current_transaction_name] if current_transaction_name != "" else []
             schemas_to_sync += [alternate_transaction_name, self.get_schema(stage.name).get()]
 
@@ -338,7 +338,7 @@ class ParquetTableStore(DuckDBTableStore):
                 self.metadata_sync_views(schema_name)
 
         self.logger.info(
-            "Finished syncing metadata for all stages",
+            "Finished synchronizing metadata for all stages",
             stages=list(flow.stages.keys()),
         )
 
