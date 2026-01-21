@@ -247,7 +247,9 @@ class ParquetTableStore(DuckDBTableStore):
             self.sql_metadata_local,
             sa.Column("user_id", sa.String(64)),
         )
+        # filled during late-initialization in set_metadata_store() and setup()
         self.sync_views_table = None
+        self.user_id = None
 
         # ## state
 
@@ -326,6 +328,9 @@ class ParquetTableStore(DuckDBTableStore):
         if not self.metadata_store:
             self.logger.warning("sync_metadata called but no metadata_store configured; nothing to sync")
             return
+
+        if self.user_id is None:
+            self.setup()
 
         if flow is None:
             with self.metadata_store.engine_connect() as meta_conn:

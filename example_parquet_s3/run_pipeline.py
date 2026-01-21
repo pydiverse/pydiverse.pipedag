@@ -7,11 +7,12 @@ import dataframely as dy
 import pandas as pd
 import polars as pl
 import sqlalchemy as sa
+import structlog
 
 import pydiverse.colspec as cs
 import pydiverse.transform as pdt
 from pydiverse.common.util.structlog import setup_logging
-from pydiverse.pipedag import AUTO_VERSION, Flow, Stage, Table, materialize
+from pydiverse.pipedag import AUTO_VERSION, Flow, PipedagConfig, Stage, Table, materialize
 from pydiverse.pipedag.context import StageLockContext
 from pydiverse.pipedag.util.testing_s3 import initialize_test_s3_bucket
 from pydiverse.transform.extended import left_join
@@ -180,6 +181,16 @@ def main():
         result = f.run()
         assert result.successful
         assert result.get(lazy_1, as_type=pd.DataFrame)["x"][0] == 1
+
+    # If you simply want to interactively run SQL on your duckdb file against parquet files on S3, you can get your
+    # duckdb file in-sync with the newest run of your colleague (via metadata_table_store) with the following:
+    instance = None  # in a real life situation, it is recommended to have multiple pipeline instances in pipedag.yaml
+    cfg = PipedagConfig.default.get(instance)
+    store = cfg.store.table_store
+    store.sync_metadata()
+
+    logger = structlog.get_logger(__name__)
+    logger.info("Now, you are ready to interactively query your duckdb file", db_path=store.engine.url)
 
 
 if __name__ == "__main__":

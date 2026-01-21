@@ -47,6 +47,13 @@ You can open it with the Database UI of your choice and still execute SQL comman
 parquet files which reside in the minio container. Pipedag places views in the correct schemas.
 This query should work after running `run_pipeline.py`: `SELECT * FROM stage_1.dfa`
 
+You can also explore the parquet files with SQL by using a jupyter notebook or jupyter like interactive environment
+provided by your IDE:
+
+```bash
+pixi run -e jupyter jupyter-notebook jupyter_sql.ipynb
+```
+
 The main problem with working with the duckdb file is that duckdb recently introduced extremely strict locking.
 As a consequence, the Database UI cannot keep a connection open while running the pipeline. One way to solve this is
 to copy the duckdb file for interactive use. A good UI (like Jetbrains DataGrip or PyCharm Professional) will also
