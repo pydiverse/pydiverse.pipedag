@@ -11,7 +11,7 @@ from pydiverse.pipedag.context.context import CacheValidationMode, ConfigContext
 from pydiverse.pipedag.materialize.core import materialize
 
 # Parameterize all tests in this file with several instance_id configurations
-from tests.fixtures.instances import ALL_INSTANCES, skip_instances, with_instances
+from tests.fixtures.instances import ALL_INSTANCES, with_instances
 from tests.util import select_as
 from tests.util import tasks_library as m
 from tests.util.spy import spy_task
@@ -265,17 +265,13 @@ def ref(tbl):
     return f"{tbl.original.schema}.{tbl.original.name}"
 
 
-# TODO: Determine exactly why this test only works with postgres
-@skip_instances(
-    "mssql",
-    "mssql_pytsql",
-    "mssql_nobulk",
-    "mssql_noaodbc",
-    "mssql_columnstore",
-    "ibm_db2",
-    "ibm_db2_avoid_schema",
-    "ibm_db2_materialization_details",
+@with_instances(
+    "postgres",
     "duckdb",
+    "parquet_backend",
+    # metadata synchronization currently does not work for raw SQL tables
+    # "parquet_s3_backend"
+    # "parquet_s3_backend_db2"
 )
 def test_raw_sql(mocker):
     cache_value = 0

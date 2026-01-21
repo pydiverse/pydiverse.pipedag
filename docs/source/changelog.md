@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.12.10 (2026-01-20)
+- Feat: Add ParquetTableStore.sync_metadata() function to sync local duckdb file with metadata store without running
+  flow
+- Move schema creation inside ParquetTableStore.metadata_sync_views()
+
 ## 0.12.9 (2026-01-17)
 - Fix: DatabaseLockManager uses correct schema_prefix in case of metadata_table_store
 

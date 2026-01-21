@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from upath import UPath
 
 import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
-from pydiverse.pipedag import ConfigContext, Schema, Stage, Table
+from pydiverse.pipedag import ConfigContext, Flow, Schema, Stage, Table
 from pydiverse.pipedag.backend.table.sql.ddl import (
     CopySelectTo,
     CreateSchema,
@@ -299,6 +299,79 @@ class ParquetTableStore(DuckDBTableStore):
                     self.user_id = uuid.uuid4().hex
                     conn.execute(sa.insert(self.user_id_table).values(user_id=self.user_id))
 
+    def sync_metadata(self, flow: Flow | None = None):
+        """Sync this DuckDB file with the metadata store.
+
+        This method brings the local DuckDB file completely in-sync with the shared
+        metadata store. It creates any missing schemas and syncs views from other
+        users for all stages defined in the flow or for all schemas for which metadata
+        exists.
+
+        This is useful when a user wants to access tables created by other users
+        without running the full flow.
+
+        Example usage::
+
+            cfg = PipedagConfig.default.get(instance_id)
+            store = cfg.store.table_store
+            store.sync_metadata()
+
+        Attention: No stage locking is performed, so parquet files can get out-of-sync if pipeline instance is executed
+        by other team members while exploring data in duckdb file. However, stage level transactionality keeps your data
+        in main schema stable until the second pipeline run starts.
+
+        :param flow: The flow containing stages to sync. If no flow is given, all schemas for which metadata exists
+            are synchronized.
+        """
+        if not self.metadata_store:
+            self.logger.warning("sync_metadata called but no metadata_store configured; nothing to sync")
+            return
+
+        if flow is None:
+            with self.metadata_store.engine_connect() as meta_conn:
+                tbl = self.sync_views_table  # already liked to metadata_store schema (incl. prefix)
+                metadata_schemas = meta_conn.execute(sa.select(tbl.c.schema.distinct())).fetchall()
+            transaction_schemas = [
+                schema_name
+                for (schema_name,) in metadata_schemas
+                if schema_name.endswith("__odd") or schema_name.endswith("__even")
+            ]
+            main_schemas = [
+                schema_name for (schema_name,) in metadata_schemas if schema_name not in transaction_schemas
+            ]
+            for schemas in [transaction_schemas, main_schemas]:
+                for schema_name in schemas:
+                    self.metadata_sync_views(schema_name)
+
+            self.logger.info(
+                "Finished synchronizing metadata for all stages",
+                transaction_schemas=transaction_schemas,
+                main_schemas=main_schemas,
+            )
+        else:
+            for stage in flow.stages.values():
+                # Get the current and alternate transaction schema names
+                # (similar to init_stage logic)
+                current_transaction_name = self._get_read_view_transaction_name(stage.name)
+                alternate_transaction_name = self._get_read_view_original_transaction_name(
+                    stage, current_transaction_name
+                )
+
+                # Sync all schemas related to this stage:
+                # - current transaction schema (e.g., stage_1__odd)
+                # - alternate transaction schema (e.g., stage_1__even)
+                # - stage.name: the read view schema (must be last, as it links to transaction schemas)
+                schemas_to_sync = [current_transaction_name] if current_transaction_name != "" else []
+                schemas_to_sync += [alternate_transaction_name, self.get_schema(stage.name).get()]
+
+                for schema_name in schemas_to_sync:
+                    self.metadata_sync_views(schema_name)
+
+            self.logger.info(
+                "Finished synchronizing metadata for all stages",
+                stages=list(flow.stages.keys()),
+            )
+
     def get_storage_options(self, kind: Literal["polars", "fsspec"], protocol) -> dict[str, Any] | None:
         if protocol != "s3" or (self.s3_endpoint_url is None and self.s3_region is None):
             return None
@@ -465,15 +538,21 @@ class ParquetTableStore(DuckDBTableStore):
                     )
                 with self.engine_connect() as conn:
                     del meta_conn  # prevent typo errors
+                    schema = Schema(schema_name, prefix="", suffix="")
+                    conn.execute(
+                        CreateSchema(
+                            schema,
+                            if_not_exists=True,
+                        )
+                    )
                     for view, target, target_type in create_views:
                         try:
                             conn.execute(DropView(view, schema_name, if_exists=True))
-                            schema = Schema(schema_name, prefix="", suffix="")
                             if target_type == "parquet":
                                 conn.execute(CreateViewAsSelect(view, schema, self._read_parquet_query(target)))
                             elif target_type == "schema":
                                 conn.execute(
-                                    CreateViewAsSelect(view, schema, sa.text(f"SELECT * FROM {target}.{view}"))
+                                    CreateViewAsSelect(view, schema, sa.text(f'SELECT * FROM "{target}"."{view}"'))
                                 )
                             else:
                                 meta_engine = self.metadata_schema.engine
@@ -597,7 +676,6 @@ class ParquetTableStore(DuckDBTableStore):
             schemas = [old_transaction_name] if old_transaction_name != "" else []
             schemas = schemas + [self.get_schema(stage.name).get(), new_transaction_name]
             for schema in schemas:
-                self.execute(CreateSchema(Schema(schema, prefix="", suffix=""), if_not_exists=True))
                 self.metadata_sync_views(schema)
 
         with self.engine_connect() as conn:
