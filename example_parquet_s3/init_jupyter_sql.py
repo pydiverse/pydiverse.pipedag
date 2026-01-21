@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 # %%
@@ -40,7 +40,7 @@ def initialize_notebook(instance: str | None = None):
 
     ip = _init_ipython()
     _init_sql_magic_conn(ip, engine)
-    return engine
+    return engine, instance_cfg
 
 
 # %%

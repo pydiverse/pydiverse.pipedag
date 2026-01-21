@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 import os
 from pathlib import Path
@@ -146,6 +146,8 @@ def lazy_task_colspec_pdt(tbl1: Tbl1ColSpec, tbl2: pdt.Table) -> OutputColSpec:
 
 
 def main():
+    logger = structlog.get_logger(__name__)
+
     with Flow() as f:
         with Stage("stage_1"):
             lazy_1 = lazy_task_1()
@@ -182,15 +184,28 @@ def main():
         assert result.successful
         assert result.get(lazy_1, as_type=pd.DataFrame)["x"][0] == 1
 
+        # This is how to load a table from the result as polars LazyFrame:
+        logger.info("stage_1.lazy_1", df=result.get(lazy_1, as_type=pl.LazyFrame).collect())
+
     # If you simply want to interactively run SQL on your duckdb file against parquet files on S3, you can get your
-    # duckdb file in-sync with the newest run of your colleague (via metadata_table_store) with the following:
+    # duckdb file in-sync with the newest run of your colleague (via metadata_table_store) with the following code:
     instance = None  # in a real life situation, it is recommended to have multiple pipeline instances in pipedag.yaml
-    cfg = PipedagConfig.default.get(instance)
+    cfg = PipedagConfig.default.get(instance)  # this should generally work
+    cfg = PipedagConfig(Path(__file__).parent / "pipedag.yaml").get(instance)  # only needed for unit tests
     store = cfg.store.table_store
     store.sync_metadata()
 
     logger = structlog.get_logger(__name__)
     logger.info("Now, you are ready to interactively query your duckdb file", db_path=store.engine.url)
+
+    # Once the StageLockContext is closed, you can still get the data if you know that nobody is messing with it:
+    lf = lazy_1.get_output_from_store(as_type=pl.LazyFrame, config=cfg)
+    logger.info("stage_1.lazy_1", df=lf.collect())
+
+    # Here is another way to get a pl.LazyFrame to a table if you don't have the objects from the flow:
+    table = Table(name="lazy_1", stage=Stage("stage_1", force_committed=True))
+    lf = store.retrieve_table_obj(table, as_type=pl.LazyFrame)
+    logger.info("stage_1.lazy_1", df=lf.collect())
 
 
 if __name__ == "__main__":

@@ -87,6 +87,9 @@ class Table(Generic[T]):
         is not None, all other columns will be nullable.
     :param materialization_details: The label of the materialization_details to be used.
         Overwrites the label given by the stage.
+    :param stage:
+        This parameter should not be set when returning Table objects in pipedag tasks. But it can be used to manually
+        retrieve a table from the table store.
 
     .. seealso:: You can specify which types of objects should automatically get
         converted to tables using the :ref:`auto_table` config option.
@@ -104,10 +107,11 @@ class Table(Generic[T]):
         non_nullable: list[str] | None = None,
         materialization_details: str | None = None,
         annotation: type | None = None,
+        stage: "Stage | None" = None,
     ):
         # state
         self._name = None
-        self.stage: Stage | None = None
+        self.stage: Stage | None = stage
         self.external_schema: str | None = None
         self.shared_lock_allowed: bool = True
         self.view: View | None = None
