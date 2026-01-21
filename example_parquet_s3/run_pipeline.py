@@ -187,25 +187,30 @@ def main():
         # This is how to load a table from the result as polars LazyFrame:
         logger.info("stage_1.lazy_1", df=result.get(lazy_1, as_type=pl.LazyFrame).collect())
 
-    # If you simply want to interactively run SQL on your duckdb file against parquet files on S3, you can get your
-    # duckdb file in-sync with the newest run of your colleague (via metadata_table_store) with the following code:
-    instance = None  # in a real life situation, it is recommended to have multiple pipeline instances in pipedag.yaml
-    cfg = PipedagConfig.default.get(instance)  # this should generally work
-    cfg = PipedagConfig(Path(__file__).parent / "pipedag.yaml").get(instance)  # only needed for unit tests
-    store = cfg.store.table_store
-    store.sync_metadata()
+        # The following code can be executed standalone outside StageLockContext in case there is not too much
+        # concurrent activity on the pipeline instance:
 
-    logger = structlog.get_logger(__name__)
-    logger.info("Now, you are ready to interactively query your duckdb file", db_path=store.engine.url)
+        # If you simply want to interactively run SQL on your duckdb file against parquet files on S3, you can get your
+        # duckdb file in-sync with the newest run of your colleague (via metadata_table_store) with the following code:
+        instance = (
+            None  # in a real life situation, it is recommended to have multiple pipeline instances in pipedag.yaml
+        )
+        cfg = PipedagConfig.default.get(instance)  # this should generally work
+        cfg = PipedagConfig(Path(__file__).parent / "pipedag.yaml").get(instance)  # only needed for unit tests
+        store = cfg.store.table_store
+        store.sync_metadata()
 
-    # Once the StageLockContext is closed, you can still get the data if you know that nobody is messing with it:
-    lf = lazy_1.get_output_from_store(as_type=pl.LazyFrame, config=cfg)
-    logger.info("stage_1.lazy_1", df=lf.collect())
+        logger = structlog.get_logger(__name__)
+        logger.info("Now, you are ready to interactively query your duckdb file", db_path=store.engine.url)
 
-    # Here is another way to get a pl.LazyFrame to a table if you don't have the objects from the flow:
-    table = Table(name="lazy_1", stage=Stage("stage_1", force_committed=True))
-    lf = store.retrieve_table_obj(table, as_type=pl.LazyFrame)
-    logger.info("stage_1.lazy_1", df=lf.collect())
+        # Once the StageLockContext is closed, you can still get the data if you know that nobody is messing with it:
+        lf = lazy_1.get_output_from_store(as_type=pl.LazyFrame, config=cfg)
+        logger.info("stage_1.lazy_1", df=lf.collect())
+
+        # Here is another way to get a pl.LazyFrame to a table if you don't have the objects from the flow:
+        table = Table(name="lazy_1", stage=Stage("stage_1", force_committed=True))
+        lf = store.retrieve_table_obj(table, as_type=pl.LazyFrame)
+        logger.info("stage_1.lazy_1", df=lf.collect())
 
 
 if __name__ == "__main__":
