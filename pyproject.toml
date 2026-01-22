@@ -6,6 +6,7 @@ authors = [
   { name = "QuantCo, Inc." },
   { name = "Nicolas Camenisch", email = "garnele007@gmail.com" },
   { name = "Finn Rudolph", email = "finn.rudolph@t-online.de" },
+  { name = "Nicolas Mueller", email = "github@nicolasmueller.eu" },
   { name = "Martin Trautmann", email = "windiana@users.sf.net" },
 ]
 license = { file = "LICENSE" }
@@ -29,7 +30,7 @@ classifiers = [
 ]
 
 dependencies = [
-  "pydiverse-common >=0.4.3,<0.5",
+  "pydiverse-common >=0.4.4,<0.5",
   "typing-extensions >=4.15.0,<5",
   "networkx >=3.4,<4",
   "attrs >=25.4.0,<26",

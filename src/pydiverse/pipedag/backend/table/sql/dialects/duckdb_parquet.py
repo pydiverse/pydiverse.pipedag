@@ -247,7 +247,9 @@ class ParquetTableStore(DuckDBTableStore):
             self.sql_metadata_local,
             sa.Column("user_id", sa.String(64)),
         )
+        # filled during late-initialization in set_metadata_store() and setup()
         self.sync_views_table = None
+        self.user_id = None
 
         # ## state
 
@@ -326,6 +328,9 @@ class ParquetTableStore(DuckDBTableStore):
         if not self.metadata_store:
             self.logger.warning("sync_metadata called but no metadata_store configured; nothing to sync")
             return
+
+        if self.user_id is None:
+            self.setup()
 
         if flow is None:
             with self.metadata_store.engine_connect() as meta_conn:
@@ -1153,10 +1158,168 @@ class PandasTableHook(sql_hooks.PandasTableHook):
         return pyarrow_path, pyarrow_fs
 
 
+# TODO: implement scan/sink parquet
+# @ParquetTableStore.register_table(
+#     pl, replace_hooks=[duckdb_parquet.LazyPolarsTableHook]
+# )
+# class LazyPolarsTableHook(duckdb_parquet.LazyPolarsTableHook):
+#     @classmethod
+#     def materialize(
+#         cls,
+#         store: ParquetTableStore,
+#         table: dag.Table[pl.LazyFrame],
+#         stage_name,
+#         without_config_context: bool = False,
+#     ):
+#         # PolarsTableHook can also handle LazyFrame
+#         polars_hook = store.get_m_table_hook(dag.Table(pl.DataFrame()))
+#         return polars_hook.materialize(store, table, stage_name)
+#
+#     @classmethod
+#     def retrieve(
+#         cls,
+#         store: ParquetTableStore,
+#         table: dag.Table,
+#         stage_name: str | None,
+#         as_type: type[pl.DataFrame],
+#         limit: int | None = None,
+#     ) -> pl.LazyFrame:
+#         # polars_hook will take care of resolving views as input table.
+#
+#         polars_hook = store.get_r_table_hook(pl.DataFrame)
+#         result = polars_hook.retrieve(store, table, stage_name, as_type, limit)
+#
+#         return result.lazy()
+#
+#     @classmethod
+#     def retrieve_for_auto_versioning_lazy(
+#         cls,
+#         store: ParquetTableStore,
+#         table: dag.Table,
+#         stage_name: str,
+#         as_type: type[pl.LazyFrame],
+#     ) -> pl.LazyFrame:
+#         # polars_hook will take care of resolving views as input table.
+#
+#         polars_hook = store.get_r_table_hook(pl.DataFrame)  # type: PolarsTableHook
+#         df = polars_hook.retrieve(store, table, stage_name, as_type, limit=0)
+#
+#         # Create lazy frame where each column is identified by:
+#         #     stage name, table name, column name
+#         # We then rename all columns to match the names of the table.
+#         #
+#         # This allows us to properly trace the origin of each column in
+#         # the output `.serialize` back to the table where it originally came from.
+#
+#         schema = {}
+#         rename = {}
+#         for (
+#             name,
+#             dtype,
+#         ) in df.collect_schema().items():  # <= this is the main difference
+#             qualified_name = f"[{table.stage.name}].[{table.name}].[{name}]"
+#             schema[qualified_name] = dtype
+#             rename[qualified_name] = name
+#
+#         lf = pl.LazyFrame(schema=schema).rename(rename)
+#         return lf
+#
+#
+# @ParquetTableStore.register_table(pl, replace_hooks=[duckdb_parquet.PolarsTableHook])
+# class PolarsTableHook(duckdb_parquet.PolarsTableHook):
+#     """
+#     Attention: due to this quick-shot implementation, input_type=pl.DataFrame also returns a LazyFrame.
+#     """
+#
+#     @staticmethod
+#     def _execute_materialize_polars(table, store, stage_name):
+#         _ = stage_name
+#         file_path = store.get_table_path(table)
+#         schema = store.get_schema(table.stage.current_name)
+#         df = table.obj
+#
+#         if store.print_materialize:
+#             store.logger.info(
+#                 f"Writing polars table '{schema.get()}.{table.name}' to parquet (sink_parquet)",
+#                 file_path=file_path,
+#             )
+#         if options := store.get_storage_options("polars", file_path.protocol):
+#             if pl.__version__ < "1.3.0":
+#                 raise RuntimeError(
+#                     "Storing polars tables with custom storage options is not supported for polars < 1.3.0. "
+#                     f"Current version is {pl.__version__}: {options}"
+#                 )
+#             # at some point polars supported UPath, but 1.33.1 does not
+#             if isinstance(df, pl.LazyFrame):
+#                 df.sink_parquet(str(file_path), storage_options=options)
+#             else:
+#                 df.write_parquet(str(file_path), storage_options=options)
+#         else:
+#             if isinstance(df, pl.LazyFrame):
+#                 df.sink_parquet(str(file_path))
+#             else:
+#                 df.write_parquet(str(file_path))
+#         if store.allow_overwrite:
+#             store.execute(DropView(table.name, schema, if_exists=True))
+#         store.execute(
+#             CreateViewAsSelect(table.name, schema, store._read_parquet_query(file_path))
+#         )
+#         store.metadata_track_view(
+#             table.name, schema.get(), file_path.as_uri(), "parquet"
+#         )
+#
+#     @classmethod
+#     def _execute_query(
+#         cls,
+#         store: ParquetTableStore,
+#         table: dag.Table,
+#         stage_name: str,
+#         as_type: type,
+#         limit: int | None = None,
+#     ) -> pl.DataFrame:
+#         _ = as_type
+#         if table.view:
+#             view = table.view
+#             if isinstance(view.src, Iterable):
+#                 file_paths = [store.get_table_path(tbl) for tbl in view.src]
+#                 protocol = file_paths[0].protocol
+#                 file_paths = [str(path) for path in file_paths]
+#             else:
+#                 file_paths = store.get_table_path(view.src)
+#                 protocol = file_paths.protocol
+#                 file_paths = str(file_paths)
+#             lf = pl.scan_parquet(
+#                 file_paths,
+#                 n_rows=limit,
+#                 storage_options=store.get_storage_options("polars", protocol),
+#             )
+#             if view.sort_by is not None:
+#                 sort_cols = [c.col for c in view.sort_by]
+#                 sort_desc = [c.order == SortOrder.DESC for c in view.sort_by]
+#                 sort_nulls_last = [c.nulls_first == False for c in view.sort_by]  # noqa: E712
+#                 lf = lf.sort(
+#                     sort_cols, descending=sort_desc, nulls_last=sort_nulls_last
+#                 )
+#             if view.columns is not None:
+#                 lf = lf.select(**view.columns)
+#             if view.limit:
+#                 lf = lf.limit(view.limit)
+#             return lf
+#         else:
+#             file_path = store.get_table_path(table)
+#             lf = pl.scan_parquet(
+#                 str(file_path),
+#                 n_rows=limit,
+#                 storage_options=store.get_storage_options("polars", file_path.protocol),
+#             )
+#             return lf
+
+
 @ParquetTableStore.register_table(pl, duckdb)
 class PolarsTableHook(sql_hooks.PolarsTableHook):
-    def _execute_materialize_polars(table, store, stage_name):
-        _ = stage_name
+    @classmethod
+    def _execute_materialize_polars(cls, table, store, stage_name):
+        _ = cls, stage_name
         file_path = store.get_table_path(table)
         schema = store.get_schema(table.stage.current_name)
         df = table.obj

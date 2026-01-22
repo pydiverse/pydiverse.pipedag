@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.12.11 (2026-01-21)
+- Feat: simplify accessing tables in ParquetTableStore with polars
+
 ## 0.12.10 (2026-01-20)
 - Feat: Add ParquetTableStore.sync_metadata() function to sync local duckdb file with metadata store without running
   flow

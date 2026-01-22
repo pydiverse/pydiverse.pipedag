@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 import copy
@@ -55,7 +55,7 @@ class BaseContext:
             _tokens = self._thread_state[_id]
             token = self._context_var.set(self)
             _tokens.append(token)
-            if self.get_logger().isEnabledFor(logging.DEBUG):
+            if hasattr(self.get_logger(), "isEnabledFor") and self.get_logger().isEnabledFor(logging.DEBUG):
                 self.get_logger().debug(
                     f"Entering {type(self).__name__}",
                     id=id(self),
@@ -74,7 +74,7 @@ class BaseContext:
         with self._lock:
             _id = id(self) + (threading.get_ident() << 64)
             _tokens = self._thread_state.get(_id)
-            if self.get_logger().isEnabledFor(logging.DEBUG):
+            if hasattr(self.get_logger(), "isEnabledFor") and self.get_logger().isEnabledFor(logging.DEBUG):
                 self.get_logger().debug(
                     f"Exiting {type(self).__name__}",
                     id=id(self),

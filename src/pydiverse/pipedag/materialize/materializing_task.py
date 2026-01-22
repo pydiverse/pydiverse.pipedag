@@ -360,7 +360,11 @@ class MaterializingTask(Task):
         return super()._do_run(inputs, **kwargs)
 
     def get_output_from_store(
-        self, as_type: type = None, ignore_position_hashes: bool = False, write_local_table_cache: bool = False
+        self,
+        as_type: type = None,
+        ignore_position_hashes: bool = False,
+        write_local_table_cache: bool = False,
+        config: ConfigContext | None = None,
     ) -> Any:
         """Retrieves the output of the task from the cache.
 
@@ -412,6 +416,7 @@ class MaterializingTask(Task):
             as_type,
             ignore_position_hashes=ignore_position_hashes,
             write_local_table_cache=write_local_table_cache,
+            config=config,
         )
 
 

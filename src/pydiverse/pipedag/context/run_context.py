@@ -742,8 +742,8 @@ class DematerializeRunContext(BaseAttrsContext):
 
     _context_var = RunContext._context_var
 
-    flow: "Flow"
-    allow_write_local_table_cache: bool
+    flow: "Flow | None" = None
+    allow_write_local_table_cache: bool = False
 
     def get_stage_state(self, stage: "Stage") -> StageState:
         _ = stage
