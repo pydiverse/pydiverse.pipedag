@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 import abc
@@ -1436,9 +1436,10 @@ class PolarsTableHook(DataframeSqlTableHook, TableHook[SQLTableStore]):
                 # try using ADBC, first
                 return cls.adbc_write_database(df, store, schema_name, table_name)
             except Exception as e:  # noqa
-                store.logger.warning(
+                store.logger.exception(
                     f"Failed writing table using ADBC, falling back to sqlalchemy: {table.name}",
                 )
+                store.execute(DropTable(table.name, schema, if_exists=True, cascade=True))
         df.write_database(
             f"{schema_name}.{table_name}",
             engine,
