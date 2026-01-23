@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 import copy
 import dataclasses
@@ -436,7 +436,8 @@ class DataframeMsSQLTableHook:
             )
 
         if mssqlkit:
-            cls._dialect_create_empty_table(store, table, schema, dtypes)
+            if not early:
+                cls._dialect_create_empty_table(store, table, schema, dtypes)
             mss.table.bulk_upload(
                 engine=store.engine,
                 table_name=f"{schema_name}.{table.name}",
