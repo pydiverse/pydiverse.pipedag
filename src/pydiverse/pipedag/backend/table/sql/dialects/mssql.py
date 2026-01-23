@@ -22,6 +22,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     AddClusteredColumnstoreIndex,
     ChangeColumnTypes,
     CreateAlias,
+    DropTable,
     _mssql_update_definition,
 )
 from pydiverse.pipedag.backend.table.sql.reflection import PipedagMSSqlReflection
@@ -435,10 +436,12 @@ class DataframeMsSQLTableHook:
             )
 
         if mssqlkit:
+            cls._dialect_create_empty_table(store, table, schema, dtypes)
             mss.table.bulk_upload(
                 engine=store.engine,
                 table_name=f"{schema_name}.{table.name}",
                 data=df,
+                string_encoding="cp1252",  # MSSQL ODBC is more reliable with 1-byte encodings
             )
         else:
             # use bcpandas
@@ -589,7 +592,7 @@ class PandasTableHook(DataframeMsSQLTableHook, sql_hooks.PandasTableHook):
                 df = pl_df.to_pandas()
                 return cls._fix_dtypes(df, dtypes)
             except Exception as e:  # noqa
-                store.logger.warning("Failed to download table using arrow-odbc, falling back to sqlalchemy/pandas.")
+                store.logger.exception("Failed to download table using arrow-odbc, falling back to sqlalchemy/pandas.")
 
         return super().download_table(query, store, dtypes)
 
@@ -607,6 +610,7 @@ class PandasTableHook(DataframeMsSQLTableHook, sql_hooks.PandasTableHook):
                 return cls.upload_table_bulk_insert(table, schema, dtypes, store, early)
             except Exception as e:  # noqa
                 store.logger.exception("Failed to upload table using bulk insert, falling back to pandas.")
+                store.execute(DropTable(table, schema, if_exists=True, cascade=True))
         # TODO: consider using arrow-odbc for uploading
         super().upload_table(table, schema, dtypes, store, early)
 
@@ -651,7 +655,7 @@ class PolarsTableHook(DataframeMsSQLTableHook, sql_hooks.PolarsTableHook):
             try:
                 return cls.download_table_arrow_odbc(query, store, dtypes)
             except Exception as e:  # noqa
-                store.logger.warning(
+                store.logger.exception(
                     "Failed to download table using arrow-odbc, falling back to "
                     "sqlalchemy/polars which currently uses pandas in the back."
                 )
@@ -675,7 +679,10 @@ class PolarsTableHook(DataframeMsSQLTableHook, sql_hooks.PolarsTableHook):
             try:
                 return cls.upload_table_bulk_insert(table, schema, dtypes, store, early)
             except:  # noqa
-                store.logger.warning("Failed to upload table using bulk insert, falling back to polars.write_database.")
+                store.logger.exception(
+                    "Failed to upload table using bulk insert, falling back to polars.write_database."
+                )
+                store.execute(DropTable(table, schema, if_exists=True, cascade=True))
         super().upload_table(table, schema, dtypes, store, early)
 
 
