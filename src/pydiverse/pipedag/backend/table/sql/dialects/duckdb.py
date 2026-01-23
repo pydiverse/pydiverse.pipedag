@@ -4,18 +4,20 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+import numpy as np
 import pandas as pd
 import polars as pl
 import sqlalchemy as sa
 from packaging.version import Version
+from pandas.core.dtypes.base import ExtensionDtype
 
 import pydiverse.pipedag.backend.table.sql.hooks as sql_hooks
-from pydiverse.common import Dtype
 from pydiverse.pipedag import Table
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
 from pydiverse.pipedag.container import Schema
-from pydiverse.pipedag.materialize.details import resolve_materialization_details_label
 from pydiverse.pipedag.optional_dependency.ibis import ibis
+from pydiverse.pipedag.util.arrow import build_types_mapper_from_table_and_dtypes
+from pydiverse.pipedag.util.sql import compile_sql
 
 
 class DuckDBTableStore(SQLTableStore):
@@ -56,29 +58,36 @@ class DuckDBTableStore(SQLTableStore):
             return
 
     def dialect_requests_empty_creation(self, table: Table, is_sql: bool) -> bool:
-        _ = table, is_sql
-        return False  # DuckDB is not good with stable type arithmetic
+        _ = table
+        if is_sql:
+            return False  # DuckDB is not good with stable type arithmetic
+        else:
+            return True  # We write with `INSERT INTO ... SELECT * FROM df`
 
 
-@DuckDBTableStore.register_table(pd)
-class PandasTableHook(sql_hooks.PandasTableHook):
+class DuckDBDataframeSqlTableHook:
     @classmethod
-    def _execute_materialize(
+    def dialect_has_adbc_driver(cls):
+        # by default, we assume an ADBC driver exists
+        return False
+
+    @classmethod
+    def dialect_supports_connectorx(cls):
+        # ConnectorX (used by Polars read_database_uri) does not support DuckDB.
+        return False
+
+    @classmethod
+    def upload_table(
         cls,
-        table: Table[pd.DataFrame],
-        store: DuckDBTableStore,
+        table: Table[pd.DataFrame] | Table[pl.DataFrame] | Table[pl.LazyFrame],
         schema: Schema,
-        dtypes: dict[str, Dtype],
+        dtypes: dict[str, sa.types.TypeEngine],
+        store: DuckDBTableStore,
+        early: bool,
     ):
+        _ = dtypes, early
         df = table.obj
         engine = store.engine
-        dtypes = cls._get_dialect_dtypes(dtypes, table)
-
-        store.check_materialization_details_supported(resolve_materialization_details_label(table))
-
-        # Create empty table with correct schema
-        cls._dialect_create_empty_table(store, table, schema, dtypes)
-        store.add_indexes_and_set_nullable(table, schema, on_empty_table=True, table_cols=df.columns)
 
         # Copy dataframe directly to duckdb
         # This is SIGNIFICANTLY faster than using pandas.to_sql
@@ -88,22 +97,69 @@ class PandasTableHook(sql_hooks.PandasTableHook):
         conn = engine.raw_connection()
         # Attention: This sql copies local variable df into database (FROM df)
         conn.execute(f"INSERT INTO {schema_name}.{table_name} SELECT * FROM df")
+        _ = df  # remove warning
 
-        store.add_indexes_and_set_nullable(
-            table,
-            schema,
-            on_empty_table=False,
-            table_cols=df.columns,
-        )
+    # @classmethod
+    # def _execute_materialize(
+    #     cls,
+    #     table: Table[pd.DataFrame],
+    #     store: DuckDBTableStore,
+    #     schema: Schema,
+    #     dtypes: dict[str, Dtype],
+    # ):
+    #     df = table.obj
+    #     engine = store.engine
+    #     dtypes = cls._get_dialect_dtypes(dtypes, table)
+    #
+    #     store.check_materialization_details_supported(resolve_materialization_details_label(table))
+    #
+    #     # Create empty table with correct schema
+    #     cls._dialect_create_empty_table(store, table, schema, dtypes)
+    #     store.add_indexes_and_set_nullable(table, schema, on_empty_table=True, table_cols=df.columns)
+    #
+    #     # Copy dataframe directly to duckdb
+    #     # This is SIGNIFICANTLY faster than using pandas.to_sql
+    #     table_name = engine.dialect.identifier_preparer.quote(table.name)
+    #     schema_name = engine.dialect.identifier_preparer.format_schema(schema.get())
+    #
+    #     conn = engine.raw_connection()
+    #     # Attention: This sql copies local variable df into database (FROM df)
+    #     conn.execute(f"INSERT INTO {schema_name}.{table_name} SELECT * FROM df")
+    #
+    #     store.add_indexes_and_set_nullable(
+    #         table,
+    #         schema,
+    #         on_empty_table=False,
+    #         table_cols=df.columns,
+    #     )
+
+
+@DuckDBTableStore.register_table(pd)
+class PandasTableHook(DuckDBDataframeSqlTableHook, sql_hooks.PandasTableHook):
+    @classmethod
+    def download_table(
+        cls,
+        query: Any,
+        store: SQLTableStore,
+        dtypes: dict[str, ExtensionDtype | np.dtype] | None = None,
+    ) -> pd.DataFrame:
+        engine = store.engine
+        # Connectorx doesn't support duckdb.
+        # Instead, we load it like this:  DuckDB -> PyArrow -> Polars
+        conn = engine.raw_connection()
+        if not isinstance(query, str):
+            query = compile_sql(query, engine)
+        arrow_tbl = conn.sql(query).arrow().read_all()
+        _, types_mapper = build_types_mapper_from_table_and_dtypes(arrow_tbl, dtypes)
+        df = arrow_tbl.to_pandas(types_mapper=types_mapper)
+        # finally fix ambiguous types
+        for col, dtype in (dtypes or {}).items():
+            df[col] = df[col].astype(dtype)
+        return df
 
 
 @DuckDBTableStore.register_table(pl, duckdb)
-class PolarsTableHook(sql_hooks.PolarsTableHook):
-    @classmethod
-    def dialect_supports_connectorx(cls):
-        # ConnectorX (used by Polars read_database_uri) does not support DuckDB.
-        return False
-
+class PolarsTableHook(DuckDBDataframeSqlTableHook, sql_hooks.PolarsTableHook):
     @classmethod
     def download_table(
         cls,
@@ -113,7 +169,7 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
     ) -> pl.DataFrame:
         assert dtypes is None, (
             "Polars reads SQL schema and loads the data in reasonable types."
-            "Thus, manual dtype manipulation can only done via query or afterwards."
+            "Thus, manual dtype manipulation can only be done via query or afterwards."
         )
         engine = store.engine
         # Connectorx doesn't support duckdb.
@@ -124,7 +180,7 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
 
             df = pl.from_arrow(pl_table)
         else:
-            df = conn.sql(query).pl()
+            df = conn.sql(query).pl()  # TODO: support pl(lazy=True)
         return df
 
 

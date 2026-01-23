@@ -4,7 +4,6 @@ from typing import Any
 
 import polars as pl
 import pytest
-from pandas.core.dtypes.base import ExtensionDtype
 
 from pydiverse.pipedag import (
     AUTO_VERSION,
@@ -196,8 +195,6 @@ def test_custom_download():
 
     cfg = get_config_with_table_store(ConfigContext.get(), TestTableStore)
 
-    import numpy as np
-
     @TestTableStore.register_table(pl, replace_hooks=[PolarsTableHook])
     class CustomPolarsDownloadTableHook(PolarsTableHook):
         @classmethod
@@ -205,7 +202,7 @@ def test_custom_download():
             cls,
             query: Any,
             store: SQLTableStore,
-            dtypes: dict[str, ExtensionDtype | np.dtype] | None = None,
+            dtypes: dict[str, pl.DataType] | None = None,
         ) -> pl.DataFrame:
             # to simplify this test with various dependencies and platforms, it is
             # easier to use pandas:

@@ -503,7 +503,7 @@ class DataframeMsSQLTableHook:
         cls,
         query: Any,
         store: SQLTableStore,
-        dtypes: dict[str, pl.DataFrame] | None = None,
+        dtypes: dict[str, pl.DataType] | None = None,
     ) -> pl.DataFrame:
         assert dtypes is None, (
             "Pyarrow reads SQL schema and loads the data in reasonable types."
@@ -611,7 +611,7 @@ class PandasTableHook(DataframeMsSQLTableHook, sql_hooks.PandasTableHook):
                 return cls.upload_table_bulk_insert(table, schema, dtypes, store, early)
             except Exception as e:  # noqa
                 store.logger.exception("Failed to upload table using bulk insert, falling back to pandas.")
-                store.execute(DropTable(table, schema, if_exists=True, cascade=True))
+                store.execute(DropTable(table.name, schema, if_exists=True, cascade=True))
         # TODO: consider using arrow-odbc for uploading
         super().upload_table(table, schema, dtypes, store, early)
 
@@ -643,7 +643,7 @@ class PolarsTableHook(DataframeMsSQLTableHook, sql_hooks.PolarsTableHook):
         cls,
         query: Any,
         store: SQLTableStore,
-        dtypes: dict[str, pl.DataFrame] | None = None,
+        dtypes: dict[str, pl.DataType] | None = None,
     ) -> pl.DataFrame:
         assert dtypes is None, (
             "Pyarrow reads SQL schema and loads the data in reasonable types."
@@ -683,7 +683,7 @@ class PolarsTableHook(DataframeMsSQLTableHook, sql_hooks.PolarsTableHook):
                 store.logger.exception(
                     "Failed to upload table using bulk insert, falling back to polars.write_database."
                 )
-                store.execute(DropTable(table, schema, if_exists=True, cascade=True))
+                store.execute(DropTable(table.name, schema, if_exists=True, cascade=True))
         super().upload_table(table, schema, dtypes, store, early)
 
 
