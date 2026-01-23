@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 from collections.abc import Callable
@@ -12,6 +12,8 @@ from pandas.core.dtypes.base import ExtensionDtype
 def build_types_mapper_from_table_and_dtypes(
     table: pa.Table,
     dtypes: dict[str, ExtensionDtype | np.dtype] | None,
+    *,
+    skip_datetime: bool = False,
 ) -> tuple[dict[pa.DataType, object], Callable[[pa.DataType], object | None]]:
     """
     Build:
@@ -38,6 +40,9 @@ def build_types_mapper_from_table_and_dtypes(
             continue
 
         desired_pd_dtype = dtypes[name]
+
+        if skip_datetime and str(desired_pd_dtype).startswith("datetime64["):
+            continue  # somehow they seem to cause trouble in the arrow->pandas conversion
 
         if arrow_dtype in type_map_arrow_pandas:
             existing = type_map_arrow_pandas[arrow_dtype]

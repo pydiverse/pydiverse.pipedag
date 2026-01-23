@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 from pathlib import Path
 from typing import Any
@@ -150,8 +150,8 @@ class PandasTableHook(DuckDBDataframeSqlTableHook, sql_hooks.PandasTableHook):
         if not isinstance(query, str):
             query = compile_sql(query, engine)
         arrow_tbl = conn.sql(query).arrow().read_all()
-        _, types_mapper = build_types_mapper_from_table_and_dtypes(arrow_tbl, dtypes)
-        df = arrow_tbl.to_pandas(types_mapper=types_mapper)
+        _, types_mapper = build_types_mapper_from_table_and_dtypes(arrow_tbl, dtypes, skip_datetime=True)
+        df = arrow_tbl.to_pandas(types_mapper=types_mapper, date_as_object=False)
         # finally fix ambiguous types
         for col, dtype in (dtypes or {}).items():
             df[col] = df[col].astype(dtype)
