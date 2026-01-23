@@ -7,6 +7,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 import polars as pl
+import pyarrow
 import sqlalchemy as sa
 from packaging.version import Version
 from pandas.core.dtypes.base import ExtensionDtype
@@ -149,7 +150,9 @@ class PandasTableHook(DuckDBDataframeSqlTableHook, sql_hooks.PandasTableHook):
         conn = engine.raw_connection()
         if not isinstance(query, str):
             query = compile_sql(query, engine)
-        arrow_tbl = conn.sql(query).arrow().read_all()
+        arrow_tbl = conn.sql(query).arrow()
+        if not isinstance(arrow_tbl, pyarrow.Table):
+            arrow_tbl = arrow_tbl.read_all()  # for duckdb >= 1.4 .arrow() is lazy
         _, types_mapper = build_types_mapper_from_table_and_dtypes(arrow_tbl, dtypes, skip_datetime=True)
         df = arrow_tbl.to_pandas(types_mapper=types_mapper, date_as_object=False)
         # finally fix ambiguous types
