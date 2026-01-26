@@ -1,6 +1,15 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
+"""
+After running `pixi run python run_pipeline.py`, you can also explore the parquet files with SQL by using a jupyter
+notebook or jupyter like interactive environment provided by your IDE:
+
+```bash
+pixi run -e jupyter jupyter-notebook jupyter_sql.ipynb
+```
+"""
+
 # %%
 from IPython.core.getipython import get_ipython
 
