@@ -71,6 +71,7 @@ Table Store
 -----------
 .. autoclass:: pydiverse.pipedag.backend.table.SQLTableStore
 .. autoclass:: pydiverse.pipedag.backend.table.ParquetTableStore
+    :members: sync_metadata
 
 SQLTableStore Dialects
 ~~~~~~~~~~~~~~~~~~~~~~
