@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.12.12 (2026-XX-XX)
+- Fix Polars dataframe upload fallbacks for MSSQL and Snowflake backends
+
 ## 0.12.11 (2026-01-23)
 - Feat: simplify accessing tables in ParquetTableStore with polars
 - Fix: Fix mssqlkit bulk upload

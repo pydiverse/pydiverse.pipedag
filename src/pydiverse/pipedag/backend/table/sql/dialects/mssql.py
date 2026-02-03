@@ -684,6 +684,8 @@ class PolarsTableHook(DataframeMsSQLTableHook, sql_hooks.PolarsTableHook):
                     "Failed to upload table using bulk insert, falling back to polars.write_database."
                 )
                 store.execute(DropTable(table.name, schema, if_exists=True, cascade=True))
+                if early:
+                    cls._create_and_configure_empty_table(table, store, schema, dtypes)
         super().upload_table(table, schema, dtypes, store, early)
 
 

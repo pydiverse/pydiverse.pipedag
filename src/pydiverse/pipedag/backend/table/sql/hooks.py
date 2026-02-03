@@ -995,7 +995,7 @@ class DataframeSqlTableHook(DataFrameTableHook):
     @classmethod
     def upload_table(
         cls,
-        table: Table[pd.DataFrame],
+        table: Table[pd.DataFrame | pl.DataFrame],
         schema: Schema,
         dtypes: dict[str, sa.types.TypeEngine],
         store: SQLTableStore,
@@ -1009,7 +1009,7 @@ class DataframeSqlTableHook(DataFrameTableHook):
 
     @classmethod
     def _get_dialect_dtypes(
-        cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame]
+        cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame | pl.DataFrame]
     ) -> dict[str, sa.types.TypeEngine]:
         """
         Convert dtypes to SQLAlchemy types.
@@ -1023,7 +1023,7 @@ class DataframeSqlTableHook(DataFrameTableHook):
     def _dialect_create_empty_table(
         cls,
         store: SQLTableStore,
-        table: Table[pd.DataFrame],
+        table: Table[pd.DataFrame | pl.DataFrame],
         schema: Schema,
         dtypes: dict[str, sa.types.TypeEngine],
     ):
@@ -1031,6 +1031,15 @@ class DataframeSqlTableHook(DataFrameTableHook):
         Create an empty table in the database.
         """
         raise NotImplementedError("This method must be implemented by subclasses.")
+
+    @classmethod
+    def _create_and_configure_empty_table(
+        cls, table: Table[pd.DataFrame | pl.DataFrame], store: SQLTableStore, schema: Schema, dtypes: dict[str, Dtype]
+    ):
+        cls._dialect_create_empty_table(store, table, schema, dtypes)
+        store.add_indexes_and_set_nullable(table, schema, on_empty_table=True, table_cols=cls.get_columns(table.obj))
+        if store.get_unlogged(resolve_materialization_details_label(table)):
+            store.execute(ChangeTableLogged(table.name, schema, False))
 
     @classmethod
     def _execute_materialize(
@@ -1046,10 +1055,7 @@ class DataframeSqlTableHook(DataFrameTableHook):
         store.check_materialization_details_supported(resolve_materialization_details_label(table))
 
         if early := store.dialect_requests_empty_creation(table, is_sql=False):
-            cls._dialect_create_empty_table(store, table, schema, dtypes)
-            store.add_indexes_and_set_nullable(table, schema, on_empty_table=True, table_cols=cls.get_columns(df))
-            if store.get_unlogged(resolve_materialization_details_label(table)):
-                store.execute(ChangeTableLogged(table.name, schema, False))
+            cls._create_and_configure_empty_table(table, store, schema, dtypes)
 
         cls.upload_table(table, schema, dtypes, store, early)
         store.add_indexes_and_set_nullable(
@@ -1440,6 +1446,10 @@ class PolarsTableHook(DataframeSqlTableHook, TableHook[SQLTableStore]):
                     f"Failed writing table using ADBC, falling back to sqlalchemy: {table.name}",
                 )
                 store.execute(DropTable(table.name, schema, if_exists=True, cascade=True))
+                if early:
+                    cls._create_and_configure_empty_table(table, store, schema, dtypes)
+                else:
+                    cls._dialect_create_empty_table(store, table, schema, dtypes)
         df.write_database(
             f"{schema_name}.{table_name}",
             engine,
