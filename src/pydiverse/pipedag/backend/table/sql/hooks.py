@@ -33,6 +33,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateTableAsSelect,
     DropTable,
     InsertIntoSelect,
+    TruncateTable,
 )
 from pydiverse.pipedag.backend.table.sql.sql import (
     SQLTableStore,
@@ -1033,15 +1034,6 @@ class DataframeSqlTableHook(DataFrameTableHook):
         raise NotImplementedError("This method must be implemented by subclasses.")
 
     @classmethod
-    def _create_and_configure_empty_table(
-        cls, table: Table[pd.DataFrame | pl.DataFrame], store: SQLTableStore, schema: Schema, dtypes: dict[str, Dtype]
-    ):
-        cls._dialect_create_empty_table(store, table, schema, dtypes)
-        store.add_indexes_and_set_nullable(table, schema, on_empty_table=True, table_cols=cls.get_columns(table.obj))
-        if store.get_unlogged(resolve_materialization_details_label(table)):
-            store.execute(ChangeTableLogged(table.name, schema, False))
-
-    @classmethod
     def _execute_materialize(
         cls,
         table: Table,
@@ -1055,7 +1047,10 @@ class DataframeSqlTableHook(DataFrameTableHook):
         store.check_materialization_details_supported(resolve_materialization_details_label(table))
 
         if early := store.dialect_requests_empty_creation(table, is_sql=False):
-            cls._create_and_configure_empty_table(table, store, schema, dtypes)
+            cls._dialect_create_empty_table(store, table, schema, dtypes)
+            store.add_indexes_and_set_nullable(table, schema, on_empty_table=True, table_cols=cls.get_columns(df))
+            if store.get_unlogged(resolve_materialization_details_label(table)):
+                store.execute(ChangeTableLogged(table.name, schema, False))
 
         cls.upload_table(table, schema, dtypes, store, early)
         store.add_indexes_and_set_nullable(
@@ -1445,11 +1440,7 @@ class PolarsTableHook(DataframeSqlTableHook, TableHook[SQLTableStore]):
                 store.logger.exception(
                     f"Failed writing table using ADBC, falling back to sqlalchemy: {table.name}",
                 )
-                store.execute(DropTable(table.name, schema, if_exists=True, cascade=True))
-                if early:
-                    cls._create_and_configure_empty_table(table, store, schema, dtypes)
-                else:
-                    cls._dialect_create_empty_table(store, table, schema, dtypes)
+                store.execute(TruncateTable(table.name, schema))
         df.write_database(
             f"{schema_name}.{table_name}",
             engine,
