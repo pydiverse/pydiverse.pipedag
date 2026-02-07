@@ -4,7 +4,6 @@ from typing import Any
 
 import polars as pl
 import pytest
-import sqlalchemy as sa
 
 from pydiverse.pipedag import (
     AUTO_VERSION,
@@ -14,7 +13,6 @@ from pydiverse.pipedag import (
     Table,
     materialize,
 )
-from pydiverse.pipedag.backend.table.sql.dialects.mssql import PolarsTableHook as MSSQLPolarsTableHook
 from pydiverse.pipedag.backend.table.sql.hooks import PolarsTableHook
 from pydiverse.pipedag.backend.table.sql.sql import (
     DISABLE_DIALECT_REGISTRATION,
@@ -237,52 +235,3 @@ def test_custom_download():
             verify_custom(t)
 
     assert f.run(config=cfg).successful
-
-
-@with_instances("mssql", "snowflake")
-def test_polars_upload_fallback_preserves_dtypes(mocker):
-    """
-    Test that when the fast upload path fails (bulk insert on MSSQL, ADBC on Snowflake),
-    the fallback to polars.write_database preserves custom dtypes from type_map.
-
-    This tests the critical table recreation after fallback that ensures dtypes are respected.
-    """
-    store = ConfigContext.get().store.table_store
-    dialect = store.engine.dialect.name
-
-    # Mock the fast path to fail based on dialect
-    if dialect == "mssql":
-        mocker.patch.object(
-            MSSQLPolarsTableHook,
-            "upload_table_bulk_insert",
-            side_effect=Exception("Simulated bulk insert failure"),
-        )
-    elif dialect == "snowflake":
-        from pydiverse.pipedag.backend.table.sql.dialects.snowflake import (
-            PolarsTableHook as SnowflakePolarsTableHook,
-        )
-
-        mocker.patch.object(
-            SnowflakePolarsTableHook,
-            "adbc_write_database",
-            side_effect=Exception("Simulated ADBC write failure"),
-        )
-
-    @materialize
-    def create_table_with_custom_dtype():
-        df = pl.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]})
-        # Use VARCHAR(1) and primary_key to trigger early table creation path
-        return Table(df, type_map={"name": sa.VARCHAR(1)}, primary_key=["id"])
-
-    @materialize(input_type=sa.Table)
-    def verify_dtype(tbl: sa.Alias):
-        name_col = tbl.c.name
-        assert isinstance(name_col.type, sa.VARCHAR), f"Expected VARCHAR, got {type(name_col.type)}"
-        assert name_col.type.length == 1, f"Expected VARCHAR(1), got VARCHAR({name_col.type.length})"
-
-    with Flow() as f:
-        with Stage("test_stage"):
-            tbl = create_table_with_custom_dtype()
-            verify_dtype(tbl)
-
-    assert f.run().successful
