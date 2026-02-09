@@ -1153,7 +1153,7 @@ class PandasTableHook(sql_hooks.PandasTableHook):
 
             pyarrow_fs = pyarrow.fs.S3FileSystem(endpoint_override=store.s3_endpoint_url, region=store.s3_region)
         else:
-            pyarrow_path = path
+            pyarrow_path = str(path)
             pyarrow_fs = None
         return pyarrow_path, pyarrow_fs
 
