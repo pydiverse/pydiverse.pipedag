@@ -11,6 +11,7 @@ from typing import Any, Literal
 
 import sqlalchemy as sa
 import sqlalchemy.exc
+from sqlalchemy.exc import ProgrammingError
 
 from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import Stage, Table
@@ -1095,12 +1096,35 @@ class SQLTableStore(BaseTableStore):
                 conn=conn,
             )
             self.optional_pause_for_db_transactionality("schema_drop")
-            self.execute(RenameSchema(schema, tmp_schema, self.engine), conn=conn)
+            old_schema_dropped = False
+            try:
+                self.execute(RenameSchema(schema, tmp_schema, self.engine), conn=conn)
+            except ProgrammingError as e:
+                # Schema rename can fail when the backend does not support schema renaming (e.g. MSSQL)
+                # and RenameSchema tries to move all objects to the new schema manually instead:
+                # It can fail if the schema contains invalid
+                # objects (e.g. views referencing dropped columns) that
+                # can't be recreated in the swap schema. Since this step
+                # only parks the OLD schema out of the way, dropping it
+                # is an acceptable fallback.
+                self.logger.error(
+                    "Failed to rename schema during swap; dropping old schema instead",
+                    schema=schema.get(),
+                    swap_schema=tmp_schema.get(),
+                    error=str(e),
+                    statement=e.statement,
+                )
+                self.execute(
+                    DropSchema(schema, if_exists=True, cascade=True, engine=self.engine),
+                    conn=conn,
+                )
+                old_schema_dropped = True
             self.optional_pause_for_db_transactionality("schema_rename")
             self.execute(RenameSchema(transaction_schema, schema, self.engine), conn=conn)
             self.optional_pause_for_db_transactionality("schema_rename")
-            self.execute(RenameSchema(tmp_schema, transaction_schema, self.engine), conn=conn)
-            self.optional_pause_for_db_transactionality("schema_rename")
+            if not old_schema_dropped:
+                self.execute(RenameSchema(tmp_schema, transaction_schema, self.engine), conn=conn)
+                self.optional_pause_for_db_transactionality("schema_rename")
 
             with self.metadata_connect(conn) as meta_conn:
                 del conn  # prevent hard to test typos
