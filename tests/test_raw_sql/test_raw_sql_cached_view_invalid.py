@@ -1,19 +1,5 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
-
-"""
-Reproducer for a bug where a cached view becomes invalid after an external
-table is modified (e.g. a column is dropped), causing the flow to fail on
-re-run.
-
-The root cause: during the schema swap commit phase on MSSQL, pipedag tries
-to recreate the old view definition in the swap schema.  When the view
-references a column that no longer exists on the external table, the
-recreation fails and the entire commit fails.
-
-The fix: when the schema rename fails during the swap (e.g. due to invalid
-views), fall back to dropping the old schema instead of propagating the error.
-"""
 
 import sqlalchemy as sa
 
