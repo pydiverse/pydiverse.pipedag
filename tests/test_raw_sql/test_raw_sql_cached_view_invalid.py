@@ -10,8 +10,6 @@ from pydiverse.pipedag.context import ConfigContext, TaskContext
 from tests.fixtures.instances import with_instances
 from tests.test_raw_sql.util import raw_sql_bind_schema
 
-EXT_SCHEMA = Schema("external_schema", prefix="", suffix="")
-
 
 @with_instances("mssql")
 def test_raw_sql_cached_view_becomes_invalid():
@@ -39,8 +37,9 @@ def test_raw_sql_cached_view_becomes_invalid():
     store = config.store.table_store
 
     # (Re-)create external schema and table with columns (a, b)
-    store.execute(DropSchema(EXT_SCHEMA, if_exists=True, cascade=True, engine=store.engine))
-    store.execute(CreateSchema(EXT_SCHEMA))
+    ext_schema = Schema("external_schema", prefix="", suffix="")
+    store.execute(DropSchema(ext_schema, if_exists=True, cascade=True, engine=store.engine))
+    store.execute(CreateSchema(ext_schema))
     with store.engine.connect() as conn:
         conn.execute(sa.text("SELECT 1 as a, 2 as b INTO [external_schema].[t]"))
         if sa.__version__ >= "2.0.0":
