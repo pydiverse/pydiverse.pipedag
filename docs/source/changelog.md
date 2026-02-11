@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.12.12 (2026-XX-XX)
+- Fix dataframe upload fallbacks for MSSQL and Snowflake backends
 - Fix crash when prod schema could not be moved to transaction schema (e.g. due to broken views)
 
 ## 0.12.11 (2026-01-23)
