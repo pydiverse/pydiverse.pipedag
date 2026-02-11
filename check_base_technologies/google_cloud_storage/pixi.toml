@@ -1,0 +1,22 @@
+[workspace]
+name = "gcs-access-examples"
+version = "0.1.0"
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
+
+[dependencies]
+python = ">=3.11,<3.15"
+fsspec = ">=2025.9.0,<2026"
+gcsfs = ">=2025.9.0,<2026"
+# google-auth >=2.48.0 fixes impersonated credential refresh crash
+# (in <2.48 the _refresh_token method name clashed with the _refresh_token string attribute)
+google-auth = ">=2.48.0"
+pandas = ">=2.0,<3"
+polars = ">=0.20,<2"
+pyarrow = ">=14.0,<23"
+duckdb = ">=0.9,<2"
+
+[tasks]
+run = "python run_all.py"
+run-verbose = "python run_all.py --verbose"
+run-fail-fast = "python run_all.py --fail-fast"
