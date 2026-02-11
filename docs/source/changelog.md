@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.12.12 (2026-02-xx)
+- Fix: improved google cloud storage (GCS) support
+
 ## 0.12.11 (2026-01-23)
 - Feat: simplify accessing tables in ParquetTableStore with polars
 - Fix: Fix mssqlkit bulk upload
