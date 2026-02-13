@@ -402,6 +402,11 @@ class ParquetTableStore(DuckDBTableStore):
     def _create_engine(self):
         engine = super()._create_engine()
 
+        # For S3 with custom endpoint (e.g. MinIO): configure fsspec BEFORE creating the
+        # filesystem so the created instance picks up the endpoint URL, region, and URL style.
+        if self.parquet_base_path.protocol == "s3":
+            self._configure_fsspec_s3()
+
         # Register fsspec filesystem (e.g. gcsfs, s3fs) so DuckDB uses it for read_parquet
         # instead of httpfs (which would use HMAC and fail with ADC/OIDC). Must run on every
         # connection. Register the listener before any engine.connect() so the first connection
@@ -416,47 +421,39 @@ class ParquetTableStore(DuckDBTableStore):
 
             event.listen(engine, "connect", _register_fs_on_connect)
 
-        def execute(con, statement):
-            """
-            Execute a SQL statement and return the result.
-            """
-            if sa.__version__ >= "2.0.0":
-                return con.execute(sa.text(statement))
-            else:
-                return con.execute(statement)
-
         with engine.connect() as con:
-            if self.parquet_base_path.protocol == "s3":
-                # Unfortunately it is hard to configure S3 URL endpoint consistently for fsspec, duckdb, and polars.
-                # Thus, we take it as parameter to ParquetTableStore and pass it to fsspec. Fsspec in turn
-                # is passed on to duckdb and polars. This is only needed for non-standard S3 endpoints like minio.
-                from fsspec.config import conf  # fsspec’s global config
-
-                if "s3" not in conf and self.s3_endpoint_url is not None:
-                    conf.setdefault("s3", {})
-                    conf["s3"].update(
-                        {
-                            "client_kwargs": {
-                                "endpoint_url": self.s3_endpoint_url,
-                            },
-                            # ─── botocore.config.Config parameters go here ────
-                            "config_kwargs": {
-                                "connect_timeout": 3,
-                                "read_timeout": 5,
-                                "retries": {"max_attempts": 2, "mode": "standard"},
-                            },
-                        }
-                    )
-                    if self.s3_region:
-                        conf["s3"]["client_kwargs"]["region_name"] = self.s3_region
-                    if self.s3_url_style:
-                        # MinIO needs path-style
-                        conf["s3"]["config_kwargs"]["s3"] = dict(addressing_style=self.s3_url_style)
-
             if sa.__version__ >= "2.0.0":
                 con.commit()
 
         return engine
+
+    def _configure_fsspec_s3(self):
+        """Configure fsspec's global S3 settings (endpoint URL, region, URL style).
+
+        Must be called before ``fsspec.filesystem("s3")`` so the created filesystem
+        instance picks up the custom endpoint (e.g. MinIO).
+        """
+        from fsspec.config import conf  # fsspec's global config
+
+        if "s3" not in conf and self.s3_endpoint_url is not None:
+            conf.setdefault("s3", {})
+            conf["s3"].update(
+                {
+                    "client_kwargs": {
+                        "endpoint_url": self.s3_endpoint_url,
+                    },
+                    "config_kwargs": {
+                        "connect_timeout": 3,
+                        "read_timeout": 5,
+                        "retries": {"max_attempts": 2, "mode": "standard"},
+                    },
+                }
+            )
+            if self.s3_region:
+                conf["s3"]["client_kwargs"]["region_name"] = self.s3_region
+            if self.s3_url_style:
+                # MinIO needs path-style
+                conf["s3"]["config_kwargs"]["s3"] = dict(addressing_style=self.s3_url_style)
 
     def metadata_sync_views(self, schema_name: str):
         """
