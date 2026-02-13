@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 import datetime as dt
@@ -495,3 +495,68 @@ class TestPandasCustomHook:
                 verify_custom(t)
 
         assert f.run(config=cfg).successful
+
+
+@with_instances("mssql", "snowflake")
+@pytest.mark.parametrize("df_library", ["pandas", "polars"])
+def test_upload_fallback_preserves_dtypes(mocker, df_library):
+    """
+    Test that when the fast upload path fails (bulk insert on MSSQL, ADBC on
+    Snowflake), the fallback preserves custom dtypes from type_map.
+    Parametrized over both pandas and polars DataFrames.
+    """
+    import polars as pl
+
+    from pydiverse.pipedag.backend.table.sql.dialects.mssql import (
+        PandasTableHook as MSSQLPandasTableHook,
+    )
+    from pydiverse.pipedag.backend.table.sql.dialects.mssql import (
+        PolarsTableHook as MSSQLPolarsTableHook,
+    )
+
+    store = ConfigContext.get().store.table_store
+    dialect = store.engine.dialect.name
+
+    # Snowflake has no pandas-specific fast upload path with fallback
+    if dialect == "snowflake" and df_library == "pandas":
+        pytest.skip("Snowflake has no pandas-specific fast upload path")
+
+    # Mock the appropriate fast path to fail
+    if dialect == "mssql":
+        hook = MSSQLPolarsTableHook if df_library == "polars" else MSSQLPandasTableHook
+        mocker.patch.object(
+            hook,
+            "upload_table_bulk_insert",
+            side_effect=Exception("Simulated bulk insert failure"),
+        )
+    elif dialect == "snowflake":
+        from pydiverse.pipedag.backend.table.sql.dialects.snowflake import (
+            PolarsTableHook as SnowflakePolarsTableHook,
+        )
+
+        mocker.patch.object(
+            SnowflakePolarsTableHook,
+            "adbc_write_database",
+            side_effect=Exception("Simulated ADBC write failure"),
+        )
+
+    @materialize()
+    def create_table_with_custom_dtype():
+        if df_library == "polars":
+            df = pl.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]})
+        else:
+            df = pd.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]})
+        return Table(df, type_map={"name": sa.VARCHAR(1)}, primary_key=["id"])
+
+    @materialize(input_type=sa.Table)
+    def verify_dtype(tbl: sa.Alias):
+        name_col = tbl.c.name
+        assert isinstance(name_col.type, sa.VARCHAR), f"Expected VARCHAR, got {type(name_col.type)}"
+        assert name_col.type.length == 1, f"Expected VARCHAR(1), got VARCHAR({name_col.type.length})"
+
+    with Flow() as f:
+        with Stage("test_stage"):
+            tbl = create_table_with_custom_dtype()
+            verify_dtype(tbl)
+
+    assert f.run().successful

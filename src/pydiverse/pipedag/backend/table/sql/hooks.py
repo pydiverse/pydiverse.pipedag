@@ -33,6 +33,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     CreateTableAsSelect,
     DropTable,
     InsertIntoSelect,
+    TruncateTable,
 )
 from pydiverse.pipedag.backend.table.sql.sql import (
     SQLTableStore,
@@ -995,7 +996,7 @@ class DataframeSqlTableHook(DataFrameTableHook):
     @classmethod
     def upload_table(
         cls,
-        table: Table[pd.DataFrame],
+        table: Table[pd.DataFrame | pl.DataFrame],
         schema: Schema,
         dtypes: dict[str, sa.types.TypeEngine],
         store: SQLTableStore,
@@ -1009,7 +1010,7 @@ class DataframeSqlTableHook(DataFrameTableHook):
 
     @classmethod
     def _get_dialect_dtypes(
-        cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame]
+        cls, dtypes: dict[str, Dtype], table: Table[pd.DataFrame | pl.DataFrame]
     ) -> dict[str, sa.types.TypeEngine]:
         """
         Convert dtypes to SQLAlchemy types.
@@ -1023,7 +1024,7 @@ class DataframeSqlTableHook(DataFrameTableHook):
     def _dialect_create_empty_table(
         cls,
         store: SQLTableStore,
-        table: Table[pd.DataFrame],
+        table: Table[pd.DataFrame | pl.DataFrame],
         schema: Schema,
         dtypes: dict[str, sa.types.TypeEngine],
     ):
@@ -1439,7 +1440,7 @@ class PolarsTableHook(DataframeSqlTableHook, TableHook[SQLTableStore]):
                 store.logger.exception(
                     f"Failed writing table using ADBC, falling back to sqlalchemy: {table.name}",
                 )
-                store.execute(DropTable(table.name, schema, if_exists=True, cascade=True))
+                store.execute(TruncateTable(table.name, schema))
         df.write_database(
             f"{schema_name}.{table_name}",
             engine,

@@ -26,6 +26,7 @@ __all__ = [
     "CopyTable",
     "RenameTable",
     "DropTable",
+    "TruncateTable",
     "CreateDatabase",
     "DropAlias",
     "DropFunction",
@@ -271,6 +272,12 @@ class DropTable(DDLElement):
         self.if_exists = if_exists
         self.cascade = cascade  # True: remove dependent views in postgres
         self.quote_schema = quote_schema
+
+
+class TruncateTable(DDLElement):
+    def __init__(self, name, schema: Schema | str):
+        self.name = name
+        self.schema = schema
 
 
 class DropView(DDLElement):
@@ -1108,6 +1115,20 @@ def visit_drop_table(drop: DropTable, compiler, **kw):
 def visit_drop_table(drop: DropTable, compiler, **kw):
     drop.cascade = False  # not supported by dialect
     return _visit_drop_anything(drop, "TABLE", compiler, kw, quote_schema=drop.quote_schema)
+
+
+@compiles(TruncateTable)
+def visit_truncate_table(truncate: TruncateTable, compiler, **kw):
+    _ = kw
+    table = compiler.preparer.quote(truncate.name)
+    schema_str = truncate.schema.get() if isinstance(truncate.schema, Schema) else truncate.schema
+    schema = compiler.preparer.format_schema(schema_str)
+    return f"TRUNCATE TABLE {schema}.{table}"
+
+
+@compiles(TruncateTable, "ibm_db_sa")
+def visit_truncate_table_ibm_db2(truncate: TruncateTable, compiler, **kw):
+    return visit_truncate_table(truncate, compiler, **kw) + " IMMEDIATE"
 
 
 @compiles(DropView)

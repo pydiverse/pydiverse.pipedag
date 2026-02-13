@@ -23,6 +23,7 @@ from pydiverse.pipedag.backend.table.sql.ddl import (
     ChangeColumnTypes,
     CreateAlias,
     DropTable,
+    TruncateTable,
     _mssql_update_definition,
 )
 from pydiverse.pipedag.backend.table.sql.reflection import PipedagMSSqlReflection
@@ -611,7 +612,10 @@ class PandasTableHook(DataframeMsSQLTableHook, sql_hooks.PandasTableHook):
                 return cls.upload_table_bulk_insert(table, schema, dtypes, store, early)
             except Exception as e:  # noqa
                 store.logger.exception("Failed to upload table using bulk insert, falling back to pandas.")
-                store.execute(DropTable(table.name, schema, if_exists=True, cascade=True))
+                if early:
+                    store.execute(TruncateTable(table.name, schema))
+                else:
+                    store.execute(DropTable(table.name, schema, if_exists=True, cascade=True))
         # TODO: consider using arrow-odbc for uploading
         super().upload_table(table, schema, dtypes, store, early)
 
@@ -683,7 +687,10 @@ class PolarsTableHook(DataframeMsSQLTableHook, sql_hooks.PolarsTableHook):
                 store.logger.exception(
                     "Failed to upload table using bulk insert, falling back to polars.write_database."
                 )
-                store.execute(DropTable(table.name, schema, if_exists=True, cascade=True))
+                if early:
+                    store.execute(TruncateTable(table.name, schema))
+                else:
+                    store.execute(DropTable(table.name, schema, if_exists=True, cascade=True))
         super().upload_table(table, schema, dtypes, store, early)
 
 
