@@ -501,7 +501,7 @@ class ParquetTableStore(DuckDBTableStore):
                     try:
                         meta_conn.execute(DropView(view[0], schema_name, if_exists=False))
                     except sa.exc.OperationalError:
-                        self.log.error(
+                        self.logger.error(
                             f"Drop view failed while reconciling views with metadata_store: {schema_name}.{view[0]}"
                         )
                 deleted = meta_conn.execute(tbl.delete().where(match_user_id & (tbl.c.obsolete != 0))).rowcount
@@ -532,7 +532,7 @@ class ParquetTableStore(DuckDBTableStore):
                                 try:
                                     conn.execute(DropView(view[0], schema_name, if_exists=False))
                                 except sa.exc.OperationalError:
-                                    self.log.error(
+                                    self.logger.error(
                                         "Drop view failed while reconciling views with metadata_store: "
                                         f"{schema_name}.{view[0]}"
                                     )
@@ -567,12 +567,12 @@ class ParquetTableStore(DuckDBTableStore):
                                 )
                             else:
                                 meta_engine = self.metadata_schema.engine
-                                self.log.error(
+                                self.logger.error(
                                     f"Unknown target_type in sync_views table: {target_type}\n"
                                     f"{query.compile(meta_engine, compile_kwargs={'literal_binds': True})}"
                                 )
                         except sa.exc.OperationalError:
-                            self.log.error(
+                            self.logger.error(
                                 "Create view failed while reconciling views with metadata_store: "
                                 f"{schema_name}.{view} -> {target} ({target_type})"
                             )
@@ -1044,7 +1044,7 @@ class _ParquetPyArrowMixin:
         return pyarrow_path, pyarrow_fs
 
     @classmethod
-    def get_pyarrow_schema(cls, path: str, pyarrow_fs: fsspec.AbstractFileSystem) -> tuple[Any, Any]:
+    def get_pyarrow_schema(cls, path: str, pyarrow_fs: Any) -> tuple[Any, Any]:
         import pyarrow.parquet
 
         # attention: with categorical columns, it might be necessary to fuse dictionaries of all parquet files
