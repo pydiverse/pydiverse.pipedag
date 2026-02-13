@@ -1418,6 +1418,11 @@ class PolarsTableHook(_ParquetPyArrowMixin, sql_hooks.PolarsTableHook):
                 df.write_parquet(str(file_path))
         except OSError as e:
             if file_path.protocol == "gs" and _is_polars_gcs_credential_error(e):
+                store.logger.info(
+                    "Polars GCS write failed, falling back to PyArrow",
+                    file_path=file_path,
+                    error=str(e),
+                )
                 import pyarrow.parquet as pq
 
                 pyarrow_path, pyarrow_fs = cls.get_pyarrow_path(file_path, store)
@@ -1490,6 +1495,11 @@ class PolarsTableHook(_ParquetPyArrowMixin, sql_hooks.PolarsTableHook):
             else:
                 protocol = store.get_table_path(table).protocol
             if protocol == "gs" and _is_polars_gcs_credential_error(e):
+                store.logger.info(
+                    "Polars GCS read failed, falling back to PyArrow",
+                    table=table.name,
+                    error=str(e),
+                )
                 return cls._read_parquet_polars_via_pyarrow(store, table, limit)
             raise
 
