@@ -108,6 +108,40 @@ def test_materialize_table(imperative):
     assert f.run().successful
 
 
+def _gcs_fs_available():
+    """True if the 'gs' fsspec filesystem can be created (gcsfs installed). Does not check credentials or network."""
+    try:
+        import fsspec
+
+        fsspec.filesystem("gs")
+        return True
+    except Exception:  # noqa: BLE001  # typically ImportError when gcsfs is missing
+        return False
+
+
+@pytest.mark.skip("This test requires `gcloud auth application-default login`")
+@pytest.mark.skipif(not _gcs_fs_available(), reason="gcsfs not installed; pip install gcsfs to run GCS tests")
+@with_instances("parquet_gcs_backend")
+def test_materialize_table_gcs():
+    """
+    Parquet table store on GCS: pandas, polars, and sqlalchemy read/write.
+    Requires gcsfs and GCS access. Use service account or OIDC (e.g. GitHub Actions);
+    Polars' GCS backend does not support impersonated ADC (gcloud auth application-default login).
+    """
+    with Flow("flow") as f:
+        with Stage("stage"):
+            x = m.simple_dataframe()
+            x2 = m.simple_lazy_table()
+            y = m.noop(x)
+            y2 = m.noop(x2)
+            m.assert_table_equal(x, y)
+            m.assert_table_equal(x2, y2)
+            _ = m.noop_polars(x)
+            _ = m.noop_lazy(x)
+
+    assert f.run().successful
+
+
 @materialize(input_type=sa.Table, lazy=True)
 def create_view1(tbl: Alias):
     return Table(View(src=tbl, sort_by=tbl.c.col2, columns=tbl.c.col1.label("c1"), limit=2))

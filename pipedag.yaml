@@ -337,3 +337,18 @@ instances:
     stage_commit_technique: READ_VIEWS
     lock_manager:
       class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"
+
+  # Parquet on GCS; run after: gcloud auth application-default login
+  parquet_gcs_backend:
+    instance_id: parquet_gcs_backend
+    table_store:
+      class: "pydiverse.pipedag.backend.table.ParquetTableStore"
+      table_store_connection: parquet_duckdb
+      metadata_table_store:
+        class: "pydiverse.pipedag.backend.table.SQLTableStore"
+        table_store_connection: postgres
+      args:
+        parquet_base_path: "gs://test-bucket-pipedag-actions-public/table_store/"
+    stage_commit_technique: READ_VIEWS
+    lock_manager:
+      class: "pydiverse.pipedag.backend.lock.DatabaseLockManager"

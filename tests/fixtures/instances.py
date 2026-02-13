@@ -51,6 +51,7 @@ DATABASE_INSTANCES = (
     "parquet_s3_backend",
     "parquet_s3_backend_db2",
     # "snowflake",  # too slow for all tests
+    # "parquet_gcs_backend",  # need: gcloud auth application-default login
 )
 
 ORCHESTRATION_INSTANCES = (
