@@ -50,6 +50,7 @@ jobs:
       - name: Install Microsoft ODBC
         if: ${{ contains(inputs.docker-services, 'mssql') }}
         run: |
+          sudo apt-get update
           sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
           sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18
           echo /opt/mssql-tools18/bin >> $GITHUB_PATH
