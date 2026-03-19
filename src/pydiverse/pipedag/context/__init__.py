@@ -1,10 +1,11 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 from pydiverse.pipedag.context.context import (
     CacheValidationMode,
     ConfigContext,
     DAGContext,
+    StageCommitTechnique,
     StageLockContext,
     TaskContext,
     default_config_dict,
@@ -22,6 +23,7 @@ __all__ = [
     "RunContext",
     "RunContextServer",
     "StageLockContext",
+    "StageCommitTechnique",
     "FinalTaskState",
     "default_config_dict",
     "CacheValidationMode",
