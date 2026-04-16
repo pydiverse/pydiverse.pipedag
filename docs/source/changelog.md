@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.12.13 (2026-04-16)
+- Fix #339: fixed bug when using schema_prefix with ParquetTableStore and separate metadata store
+
 ## 0.12.12 (2026-02-16)
 - Fix dataframe upload fallbacks for MSSQL and Snowflake backends
 - Fix crash when prod schema could not be moved to transaction schema (e.g. due to broken views)
