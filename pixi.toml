@@ -1,6 +1,7 @@
 [workspace]
 name = "pydiverse-pidepag"
 channels = ["conda-forge"]
+exclude-newer = "7d"
 platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"] # "linux-aarch64"
 
 [dependencies]
