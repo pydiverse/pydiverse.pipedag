@@ -124,5 +124,8 @@ mlruns
 # baseline update files
 *.updated.json
 
+# local working directory for related repos (feedstock, etc.)
+/tmp/
+
 # pixi
 .pixi

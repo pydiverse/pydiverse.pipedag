@@ -17,6 +17,7 @@ pydiverse.pipedag is a pipeline orchestration framework that materializes task o
   - `tests/fixtures/instances.py` — defines all test database instances and markers
   - `tests/conftest.py` — custom pytest options (--s3, --postgres, etc.)
 - `example_parquet_s3/` — example pipeline with S3/MinIO + PostgreSQL metadata store
+- `tmp/` — gitignored scratch directory for temporary files, cloned repos, and build artifacts. Use this instead of `/tmp` for anything related to this project
 
 ## Running Tests
 
@@ -49,6 +50,30 @@ docker compose up  # starts postgres, minio, zookeeper, mssql, ibm_db2, prefect
 In a typical workflow, services are already running while you iterate on code and tests.
 In rare cases a restart of containers might be needed to clear corrupted caches or to switch from a different
 docker-compose.yaml to working on this repo.
+
+## Release & Dependency Update Procedure
+
+Releases and dependency updates are separate concerns and go through distinct steps:
+
+1. **Bug fix / feature release** — change only version, sha256, and build number in the
+   conda-forge feedstock (`pydiverse-pipedag-feedstock`). Do not touch dependency bounds.
+   This keeps the fix available to users regardless of their pinned dependency versions.
+
+2. **Extend upper bounds** — after the pixi-update branch is tested and merged, update
+   upper bounds in both `pyproject.toml` and the feedstock recipe to match what was
+   validated. This is a separate feedstock PR.
+
+3. **Raise lower bounds** — done as a separate release. Some dependencies (e.g. pyarrow)
+   are intentionally kept with old lower bounds because downstream projects often pin them.
+
+4. **Update examples** — after the feedstock is merged and the package appears on
+   conda-forge, bump the lower bound in each `example_*/pixi.toml` (e.g.
+   `pydiverse-pipedag = ">=0.12.13,<0.13"`), then run `pixi run zip-examples` from the
+   project root. This updates lockfiles and regenerates the zipped examples under
+   `docs/source/examples/zip/`. If the package is not yet available, retry
+   `pixi update pydiverse-pipedag` inside the example directory until it resolves.
+
+The feedstock repo can be cloned into `tmp/pydiverse-pipedag-feedstock` for local work.
 
 ## Skills
 
