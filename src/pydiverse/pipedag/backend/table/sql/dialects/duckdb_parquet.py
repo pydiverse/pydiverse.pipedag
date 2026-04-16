@@ -362,12 +362,19 @@ class ParquetTableStore(DuckDBTableStore):
                     stage, current_transaction_name
                 )
 
+                # Resolve full schema names so they match the entries stored in the
+                # sync_views metadata table.
+                current_transaction_schema = (
+                    self.get_schema(current_transaction_name).get() if current_transaction_name != "" else ""
+                )
+                alternate_transaction_schema = self.get_schema(alternate_transaction_name).get()
+
                 # Sync all schemas related to this stage:
                 # - current transaction schema (e.g., stage_1__odd)
                 # - alternate transaction schema (e.g., stage_1__even)
                 # - stage.name: the read view schema (must be last, as it links to transaction schemas)
-                schemas_to_sync = [current_transaction_name] if current_transaction_name != "" else []
-                schemas_to_sync += [alternate_transaction_name, self.get_schema(stage.name).get()]
+                schemas_to_sync = [current_transaction_schema] if current_transaction_schema != "" else []
+                schemas_to_sync += [alternate_transaction_schema, self.get_schema(stage.name).get()]
 
                 for schema_name in schemas_to_sync:
                     self.metadata_sync_views(schema_name)
@@ -497,13 +504,15 @@ class ParquetTableStore(DuckDBTableStore):
                         schema=schema_name,
                         views=[v[0] for v in obsolete_views],
                     )
-                for view in obsolete_views:
-                    try:
-                        meta_conn.execute(DropView(view[0], schema_name, if_exists=False))
-                    except sa.exc.OperationalError:
-                        self.logger.error(
-                            f"Drop view failed while reconciling views with metadata_store: {schema_name}.{view[0]}"
-                        )
+                    with self.engine_connect() as conn:
+                        for view in obsolete_views:
+                            try:
+                                conn.execute(DropView(view[0], schema_name, if_exists=False))
+                            except sa.exc.OperationalError:
+                                self.logger.error(
+                                    "Drop view failed while reconciling views with metadata_store: "
+                                    f"{schema_name}.{view[0]}"
+                                )
                 deleted = meta_conn.execute(tbl.delete().where(match_user_id & (tbl.c.obsolete != 0))).rowcount
                 if deleted > 0:
                     self.logger.info(
@@ -680,26 +689,31 @@ class ParquetTableStore(DuckDBTableStore):
         old_transaction_name = self._get_read_view_transaction_name(stage.name)
         new_transaction_name = self._get_read_view_original_transaction_name(stage, old_transaction_name)
 
+        # Resolve full schema names (with prefix/suffix applied).
+        old_transaction_schema = self.get_schema(old_transaction_name).get() if old_transaction_name != "" else ""
+        new_transaction_schema = self.get_schema(new_transaction_name).get()
+        stage_schema = self.get_schema(stage.name).get()
+
         # first synchronize views to match the actual state in metadata_store
         if self.metadata_store:
             # Typically the parent schema stage.name references old_transaction schema.
             # But we also need to sync the new transaction schema to avoid double deletion of parquet files.
-            schemas = [old_transaction_name] if old_transaction_name != "" else []
-            schemas = schemas + [self.get_schema(stage.name).get(), new_transaction_name]
+            schemas = [old_transaction_schema] if old_transaction_schema != "" else []
+            schemas = schemas + [stage_schema, new_transaction_schema]
             for schema in schemas:
                 self.metadata_sync_views(schema)
 
         with self.engine_connect() as conn:
             existing_tables = self.execute(
                 f"FROM duckdb_views() SELECT view_name WHERE "
-                f"schema_name='{new_transaction_name}' "
+                f"schema_name='{new_transaction_schema}' "
                 f"and sql like '%%FROM read_parquet(%%'",
                 conn=conn,
             ).fetchall()
         # This creates transaction schema and modifies stage.current_name.
         # It also removes all views that were previously in transaction schema.
         super().init_stage(stage)
-        self.metadata_track_view_flush(new_transaction_name)
+        self.metadata_track_view_flush(new_transaction_schema)
         # update cache: this is important since before this stage commits,
         # self._get_read_view_transaction_name() will yield the wrong name
         new_schema = self.get_schema(stage.current_name)
