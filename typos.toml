@@ -1,2 +1,2 @@
 [default]
-extend-ignore-words-re = ["^schem$"]
+extend-ignore-words-re = ["^schem$", "cpy"]

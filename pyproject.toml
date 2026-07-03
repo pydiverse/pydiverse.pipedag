@@ -60,19 +60,20 @@ packages = ["src/pydiverse"]
 pipedag-manage = "pydiverse.pipedag.management.cli:cli"
 
 [tool.ruff]
-select = ["F", "E", "UP", "W", "I001", "I002", "B", "A"]
-ignore = ["B028"]
 extend-exclude = ["docs/*"]
-ignore-init-module-imports = true
 fix = true
 target-version = "py311"
 # 88 leads to worse comments
 line-length = 120
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint]
+select = ["F", "E", "UP", "W", "I001", "I002", "B", "A"]
+ignore = ["B028"]
+
+[tool.ruff.lint.per-file-ignores]
 "src/pydiverse/pipedag/backend/table/sql/ddl.py" = ["F811"]
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["pydiverse"]
 
 [build-system]

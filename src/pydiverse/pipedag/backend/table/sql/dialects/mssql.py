@@ -1,6 +1,5 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
-import copy
 import dataclasses
 import itertools
 import re
@@ -463,24 +462,24 @@ class DataframeMsSQLTableHook:
                 if isinstance(df, pl.DataFrame):
                     # convert polars DataFrame to pandas DataFrame
                     df = df.to_pandas()
-                # attention: the `(lambda col: lambda...)(copy.copy(col))` part looks odd
-                # but is needed to ensure loop iterations create lambdas working on
-                # different columns
+                # attention: the `col=col` default argument looks odd but is needed to
+                # bind the current loop column into each lambda instead of sharing the
+                # loop variable across all of them
                 df_out = df.assign(
                     **{
-                        col: (lambda col: lambda df: df[col].map({True: 1, False: 0}).astype(pd.Int8Dtype()))(
-                            copy.copy(col)
-                        )
+                        col: (lambda df, col=col: df[col].map({True: 1, False: 0}).astype(pd.Int8Dtype()))
                         for col, dtype in df.dtypes[(df.dtypes == "bool[pyarrow]") | (df.dtypes == "bool")].items()
                     }
                 ).assign(
                     **{
                         col: (
-                            lambda col: lambda df: df[col]
-                            .str.replace("\n", "\\n", regex=False)
-                            .str.replace("\t", "\\t", regex=False)
-                            .str.replace("\r", "\\r", regex=False)
-                        )(copy.copy(col))
+                            lambda df, col=col: (
+                                df[col]
+                                .str.replace("\n", "\\n", regex=False)
+                                .str.replace("\t", "\\t", regex=False)
+                                .str.replace("\r", "\\r", regex=False)
+                            )
+                        )
                         for col, dtype in df.dtypes[
                             (df.dtypes == "object") | (df.dtypes == "string") | (df.dtypes == "string[pyarrow]")
                         ].items()

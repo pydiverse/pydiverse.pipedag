@@ -3,7 +3,7 @@
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import pandas as pd
@@ -38,7 +38,7 @@ _TABLE_SPACE_KEYWORD_MAP = {
 }
 
 
-class IBMDB2CompressionTypes(str, Enum):
+class IBMDB2CompressionTypes(StrEnum):
     """
     Enum for the compression methods for IBM DB2 tables. ``VALUE COMPRESSION`` can
     be combined with one of the other compression methods.

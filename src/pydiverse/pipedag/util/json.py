@@ -11,7 +11,7 @@ type of the object.
 import datetime as dt
 import importlib
 import json
-from enum import Enum
+from enum import Enum, StrEnum
 from functools import cache
 from pathlib import Path
 from typing import get_args, get_origin
@@ -23,7 +23,7 @@ from pydiverse.pipedag.container import View
 TYPE_KEY = "__pipedag_type__"
 
 
-class Type(str, Enum):
+class Type(StrEnum):
     # Pipedag types
     TABLE = "table"
     RAW_SQL = "raw_sql"
