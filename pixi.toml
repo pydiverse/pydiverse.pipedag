@@ -241,6 +241,6 @@ py313mssqlpdt = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "mssql", 
 py311mssqldy = ["py311", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "mssql", "dataframely", "pydot"]
 py313mssqldy = ["py313", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "mssql", "dataframely", "pydot"]
 
-# support for pandas 1.x and sqlalchemy 1.4 is deprecated
+# support for pandas 1.x, sqlalchemy 1.4, and duckdb <1 is deprecated
 py311pdsa1 = ["py311", "dev", "zookeeper", "pd1", "sa1", "dask", "connectorx", "duckdb0", "pydot", "postgres"]
 py311pdsa1all = ["py311", "dev", "zookeeper", "pd1", "sa1", "polars12", "connectorx", "duckdb0", "ibis", "mssql", "pdtransform-old", "filelock", "dask", "prefect2", "snowflake", "pydot", "postgres"]
