@@ -1,5 +1,7 @@
 # Changelog
 
+## 0.12.14 (2026-XX-XX)
+- Fix: Fix compatibility with duckdb >=1.5 when using S3
 - Feat: #343 When encountering error in MSSQL table download outputs original error as part of the failure message now.
 
 ## 0.12.13 (2026-04-16)
