@@ -594,7 +594,9 @@ class PandasTableHook(DataframeMsSQLTableHook, sql_hooks.PandasTableHook):
                 df = pl_df.to_pandas()
                 return cls._fix_dtypes(df, dtypes)
             except Exception as e:  # noqa
-                store.logger.exception("Failed to download table using arrow-odbc, falling back to sqlalchemy/pandas.")
+                store.logger.exception(
+                    f"Failed to download table using arrow-odbc, falling back to sqlalchemy/pandas. Got error: {e}"
+                )
 
         return super().download_table(query, store, dtypes)
 
@@ -611,7 +613,9 @@ class PandasTableHook(DataframeMsSQLTableHook, sql_hooks.PandasTableHook):
             try:
                 return cls.upload_table_bulk_insert(table, schema, dtypes, store, early)
             except Exception as e:  # noqa
-                store.logger.exception("Failed to upload table using bulk insert, falling back to pandas.")
+                store.logger.exception(
+                    f"Failed to upload table using bulk insert, falling back to pandas. Got error: {e}"
+                )
                 if early:
                     store.execute(TruncateTable(table.name, schema))
                 else:
@@ -662,7 +666,7 @@ class PolarsTableHook(DataframeMsSQLTableHook, sql_hooks.PolarsTableHook):
             except Exception as e:  # noqa
                 store.logger.exception(
                     "Failed to download table using arrow-odbc, falling back to "
-                    "sqlalchemy/polars which currently uses pandas in the back."
+                    f"sqlalchemy/polars which currently uses pandas in the back. Got error: {e}"
                 )
 
         return super().download_table(query, store, dtypes)
@@ -683,9 +687,9 @@ class PolarsTableHook(DataframeMsSQLTableHook, sql_hooks.PolarsTableHook):
         if not store.disable_bulk_insert:
             try:
                 return cls.upload_table_bulk_insert(table, schema, dtypes, store, early)
-            except:  # noqa
+            except Exception as e:  # noqa
                 store.logger.exception(
-                    "Failed to upload table using bulk insert, falling back to polars.write_database."
+                    f"Failed to upload table using bulk insert, falling back to polars.write_database. Got error: {e}"
                 )
                 if early:
                     store.execute(TruncateTable(table.name, schema))

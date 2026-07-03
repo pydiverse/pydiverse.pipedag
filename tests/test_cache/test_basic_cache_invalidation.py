@@ -1,11 +1,13 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
+import duckdb
 import pandas as pd
 import polars as pl
 import pytest
 import sqlalchemy as sa
 import structlog
+from packaging.version import Version
 
 from pydiverse.pipedag import AUTO_VERSION, Blob, ConfigContext, Flow, Stage, Table
 from pydiverse.pipedag.container import RawSql
@@ -1117,6 +1119,10 @@ def test_broken_df_hashing(mocker):
         res_pd_spy.assert_called_once()
 
 
+@pytest.mark.skipif(
+    Version(duckdb.__version__) < Version("1"),
+    reason="DuckDB < 1 cannot rename a view that still has dependents (ALTER VIEW ... RENAME)",
+)
 @pytest.mark.parametrize("other_imperative", [False, True])
 @pytest.mark.parametrize("imperative", [False, True])
 def test_lazy_dataframe_table_name_change(imperative, other_imperative):

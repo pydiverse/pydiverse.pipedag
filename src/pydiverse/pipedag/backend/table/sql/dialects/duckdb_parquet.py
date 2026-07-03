@@ -420,9 +420,16 @@ class ParquetTableStore(DuckDBTableStore):
         # from the pool also gets the filesystem.
         if self.parquet_base_path.protocol not in ("file", ""):
             fs = fsspec.filesystem(self.parquet_base_path.protocol)
+            # DuckDB names a registered fsspec filesystem after its protocol (the first
+            # element when the protocol is a tuple, e.g. s3fs' ("s3", "s3a")).
+            fs_name = fs.protocol if isinstance(fs.protocol, str) else fs.protocol[0]
 
             def _register_fs_on_connect(dbapi_connection, connection_record):
-                dbapi_connection.register_filesystem(fs)
+                # DuckDB >= 1.5 shares registered filesystems across all connections of the
+                # same database, so re-registering on a later pooled connection raises
+                # "Filesystem with name ... has already been registered". Skip if present.
+                if not dbapi_connection.filesystem_is_registered(fs_name):
+                    dbapi_connection.register_filesystem(fs)
 
             from sqlalchemy import event
 
