@@ -3,6 +3,7 @@
 ## 0.12.14 (2026-XX-XX)
 - Fix: Fix compatibility with duckdb >=1.5 when using S3
 - Feat: #343 When encountering error in MSSQL table download outputs original error as part of the failure message now.
+- Fix: Pin `setuptools <81` in MSSQL environments so `bcpandas` (which imports the removed `pkg_resources`) keeps working and the bulk-insert fast path is not silently disabled.
 
 ## 0.12.13 (2026-04-16)
 - Fix #339: fixed bug when using schema_prefix with ParquetTableStore and separate metadata store

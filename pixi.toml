@@ -99,11 +99,15 @@ arrow-odbc = ">=8.1.1"
 pyodbc = ">=5.2.0"
 pytsql = ">=1.4.0"
 bcpandas = ">=2.6.3"
+# conda-forge only ships bcpandas <=2.6.x, which imports the removed pkg_resources at load time.
+# Pin setuptools <81 so pkg_resources stays available.
+setuptools = "<81"
 python = "<3.14"  # odbc packages are not compatible, yet
 
 [feature.mssql-no-odbc.dependencies]
 pytsql = ">=1.4.0"
 bcpandas = ">=2.6.3"
+setuptools = "<81"  # see feature.mssql: keep pkg_resources available for bcpandas <2.7
 
 [feature.pdtransform-new.dependencies]
 pydiverse-transform = ">=0.7.0"

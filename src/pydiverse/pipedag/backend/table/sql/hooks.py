@@ -2087,7 +2087,7 @@ class ViewPdtMaterializationHook(BaseViewMaterializationHook):
     def get_column_name(cls, col: ColExpr | str):
         if isinstance(col, str):
             return col
-        # use pydiverse.transform iternals to get underlying Column of expressions like col.ascending()
+        # use pydiverse.transform internals to get underlying Column of expressions like col.ascending()
         from pydiverse.transform._internal.tree.col_expr import ColFn
 
         while isinstance(col, ColFn):
@@ -2104,7 +2104,7 @@ class ViewPdtMaterializationHook(BaseViewMaterializationHook):
 
     @staticmethod
     def extract_sort_opts(col: str | ColExpr) -> tuple[SortOrder, bool]:
-        # use pydiverse.transform iternals to figure out descending()/ascending() or nulls_first()/nulls_last()
+        # use pydiverse.transform internals to figure out descending()/ascending() or nulls_first()/nulls_last()
         from pydiverse.transform._internal.tree.col_expr import ColFn
 
         order = None
