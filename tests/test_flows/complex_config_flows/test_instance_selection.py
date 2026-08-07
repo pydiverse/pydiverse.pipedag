@@ -107,7 +107,6 @@ def extract_a_b(tbls: list[sa.Table]):
     return a, b
 
 
-# noinspection PyTypeChecker
 def get_flow(attrs: dict[str, Any], pipedag_config):
     with Flow("test_instance_selection") as flow:
         with Stage("stage_1") as stage:

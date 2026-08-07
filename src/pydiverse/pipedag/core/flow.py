@@ -5,6 +5,7 @@ import base64
 import random
 from collections import defaultdict
 from collections.abc import Callable, Iterable
+from types import TracebackType
 from typing import TYPE_CHECKING
 
 import networkx as nx
@@ -75,7 +76,7 @@ class Flow:
         self.graph = nx.DiGraph()
         self.explicit_graph: nx.DiGraph | None = None
 
-    def __enter__(self):
+    def __enter__(self) -> "Flow":
         # Check that flows don't get nested
         try:
             DAGContext.get()
@@ -91,7 +92,12 @@ class Flow:
         self._ctx.__enter__()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self._ctx.__exit__()
         del self._ctx
 
@@ -244,9 +250,9 @@ class Flow:
     def run(
         self,
         *components: Task | TaskGetItem | Stage,
-        config: ConfigContext = None,
-        orchestration_engine: "OrchestrationEngine" = None,
-        trace_hook: TraceHook = None,
+        config: ConfigContext | None = None,
+        orchestration_engine: "OrchestrationEngine | None" = None,
+        trace_hook: TraceHook | None = None,
         fail_fast: bool | None = None,
         cache_validation_mode: CacheValidationMode | None = None,
         disable_cache_function: bool | None = None,

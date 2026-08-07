@@ -4,6 +4,7 @@
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
+from types import TracebackType
 from typing import TYPE_CHECKING
 
 import structlog
@@ -122,7 +123,7 @@ class GroupNode:
         state.pop("logger", None)
         return state
 
-    def __enter__(self):
+    def __enter__(self) -> "GroupNode":
         if self._did_enter:
             raise GroupNodeError(f"GroupNode '{self.label}' has already been entered. Can't reuse the same node twice.")
         self._did_enter = True
@@ -158,7 +159,12 @@ class GroupNode:
         self._ctx.__enter__()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         if self.ordering_barrier and self._ctx.stage is not None:
             self.exit_barrier_task = BarrierTask(self, self._ctx.stage, self._ctx.flow, prefix="Exit ")
             self.outer_stage.barrier_tasks.append(self.exit_barrier_task)
