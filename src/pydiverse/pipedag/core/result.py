@@ -1,11 +1,13 @@
 # Copyright (c) QuantCo and pydiverse contributors 2025-2025
 # SPDX-License-Identifier: BSD-3-Clause
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, overload
 
+import attrs
 import structlog
 from attrs import frozen
 
+from pydiverse.pipedag._typing import T
 from pydiverse.pipedag.context import ConfigContext, StageLockContext
 from pydiverse.pipedag.context.run_context import (
     DematerializeRunContext,
@@ -74,11 +76,21 @@ class Result:
             exception=exception,
         )
 
-    def evolve(self, **changes):
-        kwargs = {**dir(self), **changes}
-        return Result(**kwargs)
+    def evolve(self, **changes) -> "Result":
+        # `dir(self)` used to be passed here, which is a list of attribute *names* and
+        # thus never worked as a mapping. `Result` is an attrs class, so delegate.
+        return attrs.evolve(self, **changes)
 
-    def get(self, task: Task | TaskGetItem, as_type: type = None, write_local_table_cache: bool = False) -> Any:
+    # Overloaded on `as_type` only, never on the type of `task`: MaterializingTask has
+    # `Any` among its bases, which makes it mutually assignable with
+    # MaterializingTaskGetItem and would render any task-based overload ambiguous.
+    @overload
+    def get(self, task: Task | TaskGetItem, as_type: type[T], write_local_table_cache: bool = False) -> T: ...
+
+    @overload
+    def get(self, task: Task | TaskGetItem, as_type: None = None, write_local_table_cache: bool = False) -> Any: ...
+
+    def get(self, task: Task | TaskGetItem, as_type: type | None = None, write_local_table_cache: bool = False) -> Any:
         """Retrieve the output produced by a task.
 
         Any tables and blobs returned by a task get loaded from their

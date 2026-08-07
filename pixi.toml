@@ -218,6 +218,17 @@ pydiverse-pipedag = { path = ".", extras = [
   "connectorx",
 ] }
 
+# Static type checking needs the runtime dependencies importable, so it gets its own
+# environment rather than living in `lint` (which is no-default-feature).
+[feature.typecheck.dependencies]
+pyright = ">=1.1.411,<2"
+mypy = ">=2.3.0,<3"
+
+[feature.typecheck.tasks]
+pyright = "pyright"
+mypy = "mypy"
+typecheck = { depends-on = ["pyright", "mypy"] }
+
 [feature.py311.dependencies]
 python = "3.11.*"
 
@@ -260,4 +271,5 @@ no-win = ["dev", "py314", "all", "snowflake"]
 no-adbc-dy = ["dev", "py314", "no-adbc-dy"]
 # only the default feature, so that no optional dependency is installed
 no-features = []
+typecheck = ["py311", "typecheck", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "dataframely", "pdtransform-new", "pydot", "postgres"]
 old = { features = ["dev", "all", "colspec", "pdtransform", "ibm-db", "snowflake"], solve-strategy = "lowest" }
