@@ -296,6 +296,7 @@ parquet_s3
 examples
 table_backends
 database_testing
+typing
 best_practices
 reference/config
 reference/api
