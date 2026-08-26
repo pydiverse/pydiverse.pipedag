@@ -16,6 +16,7 @@ from pydiverse.pipedag.container import Blob, RawSql, Table
 from pydiverse.pipedag.context import ConfigContext, TaskContext
 from pydiverse.pipedag.core.task import Task
 from pydiverse.pipedag.materialize.materializing_task import (
+    AutoVersionType,
     MaterializingTask,
     MaterializingTaskGetItem,
     UnboundMaterializingTask,
@@ -31,7 +32,7 @@ def materialize(
     *,
     name: str | None = None,
     input_type: type | None = None,
-    version: str | None = None,
+    version: str | AutoVersionType | None = None,
     cache: Callable[..., Any] | None = None,
     lazy: bool = False,
     nout: int = 1,
@@ -51,7 +52,7 @@ def materialize(
     *,
     name: str | None = None,
     input_type: type | None = None,
-    version: str | None = None,
+    version: str | AutoVersionType | None = None,
     cache: Callable[..., Any] | None = None,
     lazy: bool = False,
     group_node_tag: str | None = None,

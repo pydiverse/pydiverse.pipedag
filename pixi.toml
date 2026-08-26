@@ -161,7 +161,7 @@ readthedocs = "rm -rf $READTHEDOCS_OUTPUT/html && cp -r docs/build/html $READTHE
 
 [feature.release.dependencies]
 hatch = ">=1.12.0"
-twine = ">=5.1.1"
+twine = ">=7.0.0"
 python = ">=3.14"
 
 [feature.lint.dependencies]

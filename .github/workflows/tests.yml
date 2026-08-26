@@ -261,9 +261,8 @@ jobs:
   snowflake_test:
     name: Snowflake Tests
     needs: [smoke_test]
-    # snowflake tests are currently not passing
-    # TODO: investigate and fix
-    #if: false
+    # don't execute on forks due to missing credentials
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     strategy:
       matrix:
         os:
