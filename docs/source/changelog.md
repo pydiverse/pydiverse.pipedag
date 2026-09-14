@@ -1,5 +1,10 @@
 # Changelog
 
+- Feat: Type the public-facing API. Pipedag now ships a `py.typed` marker, and flow declaration
+  sites are checked for argument count, keyword names and concrete argument types. `Result.get()`
+  and `get_output_from_store()` return the type passed as `as_type`, and `nout=2` / `nout=3`
+  unpacking is checked for arity. See [](/typing).
+
 ## 0.12.14 (2026-07-14)
 - Fix: Fix compatibility with duckdb >=1.5 when using S3
 - Feat: #343 When encountering error in MSSQL table download outputs original error as part of the failure message now.

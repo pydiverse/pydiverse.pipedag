@@ -24,13 +24,21 @@ repos:
         language: system
         types_or: [python, pyi]
         require_serial: true
-      # mypy
-      # - id: mypy
-      #   name: mypy
-      #   entry: pixi run -e lint mypy
-      #   language: system
-      #   types: [python]
-      #   require_serial: true
+      # type checking (scoped to tests/typing via pyproject.toml; pyright is authoritative)
+      - id: pyright
+        name: pyright
+        entry: pixi run -e typecheck pyright
+        language: system
+        types: [python]
+        require_serial: true
+        pass_filenames: false
+      - id: mypy
+        name: mypy
+        entry: pixi run -e typecheck mypy
+        language: system
+        types: [python]
+        require_serial: true
+        pass_filenames: false
       # taplo
       - id: taplo
         name: taplo

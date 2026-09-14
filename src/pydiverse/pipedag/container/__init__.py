@@ -4,7 +4,7 @@
 import copy
 import inspect
 import typing
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from functools import total_ordering
@@ -373,7 +373,7 @@ class Table(Generic[T]):
                 return False
         return self.name < other.name
 
-    def __eq__(self, other: "Table"):
+    def __eq__(self, other: object):
         if not isinstance(other, Table):
             return False
         return (
@@ -505,7 +505,7 @@ class RawSql:
 
     # Dict-like interface
 
-    def __iter__(self) -> Iterable[str]:
+    def __iter__(self) -> Iterator[str]:
         """Yields all names of tables produced by this RawSql object."""
         yield from (self.table_names or [])
 
@@ -529,7 +529,7 @@ class RawSql:
         table.cache_key = self.cache_key
         return table
 
-    def items(self) -> Iterable[tuple[str, Any]]:
+    def items(self) -> Iterator[tuple[str, Any]]:
         """Returns pairs of ``(table_name, table)``."""
         for table_name in self.table_names or []:
             yield table_name, self[table_name]

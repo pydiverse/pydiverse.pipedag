@@ -170,6 +170,9 @@ decorator has a parameter called `nout`, which must match the number of elements
 decomposable. Tasks can also return lists and dictionaries. get-item access executed on them on declaration time will
 also just be recorded and lazily evaluated with consuming tasks.
 
+This split also shapes what a type checker can verify about a flow. See [](/typing) for what is
+checked at declaration sites and how to annotate task functions.
+
 ### Materialization, dematerialization, and `input_type` parameter
 
 Please note the `input_type` parameter of the {py:func}`@materialize <pydiverse.pipedag.materialize>` decorator. It is

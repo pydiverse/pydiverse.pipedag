@@ -3,6 +3,7 @@
 
 import inspect
 from functools import total_ordering
+from types import TracebackType
 from typing import TYPE_CHECKING
 
 import structlog
@@ -77,7 +78,7 @@ class Stage:
         # caller wants from the comparison operators.
         return self.name < other.name
 
-    def __eq__(self, other: "Stage"):
+    def __eq__(self, other: object):
         # Essentially stage name is all that matters and should be unique per flow.
         # See __lt__ for more details.
         if not isinstance(other, Stage):
@@ -137,7 +138,7 @@ class Stage:
         state.pop("logger", None)
         return state
 
-    def __enter__(self):
+    def __enter__(self) -> "Stage":
         if self._did_enter:
             raise StageError(f"Stage '{self.name}' has already been entered. Can't reuse the same stage twice.")
         self._did_enter = True
@@ -167,7 +168,12 @@ class Stage:
         self._ctx.__enter__()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.commit_task = CommitStageTask(self, self._ctx.flow)
         self._ctx.__exit__()
         del self._ctx

@@ -187,6 +187,17 @@ pre-commit-run = "pre-commit run -a"
 conda-deny = "conda-deny check"
 check-deps = "sh -c .github/scripts/check_deps.sh"
 
+# Static type checking needs the runtime dependencies importable, so it gets its own
+# environment rather than living in `lint` (which is no-default-feature).
+[feature.typecheck.dependencies]
+pyright = ">=1.1.411,<2"
+mypy = ">=2.3.0,<3"
+
+[feature.typecheck.tasks]
+pyright = "pyright"
+mypy = "mypy"
+typecheck = { depends-on = ["pyright", "mypy"] }
+
 [feature.py311.dependencies]
 python = "3.11.*"
 [feature.py312.dependencies]
@@ -219,6 +230,7 @@ default = ["py312", "mssql", "pdtransform-new", "dev", "filelock", "zookeeper", 
 all-tests = ["py312", "mssql", "pdtransform-new", "dev", "filelock", "zookeeper", "dask", "prefect3", "pd2", "sa2", "snowflake", "pydot", "postgres"]
 docs = ["docs"]
 lint = { features = ["lint"], no-default-feature = true }
+typecheck = ["py311", "typecheck", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "dataframely", "pdtransform-new", "pydot", "postgres"]
 release = { features = ["release"], no-default-feature = true }
 py311 = ["py311", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1", "postgres"]
 py312 = ["py312", "dev", "zookeeper", "pd2", "sa2", "dask", "duckdb1", "postgres"]

@@ -37,7 +37,12 @@ from .materialize import (
     input_stage_versions,
     materialize,
 )
-from .materialize.materializing_task import AUTO_VERSION
+from .materialize.materializing_task import (
+    AUTO_VERSION,
+    MaterializingTask,
+    MaterializingTaskGetItem,
+    UnboundMaterializingTask,
+)
 from .core import (
     PipedagConfig,
     GroupNode,
@@ -62,6 +67,9 @@ __all__ = [
     "ExternalTableReference",
     "Task",
     "TaskGetItem",
+    "MaterializingTask",
+    "MaterializingTaskGetItem",
+    "UnboundMaterializingTask",
     "GroupNode",
     "VisualizationStyle",
     "Schema",

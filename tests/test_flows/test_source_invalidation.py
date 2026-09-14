@@ -42,7 +42,6 @@ def double_values(df: pd.DataFrame):
     return Table(df.transform(lambda x: x * 2))
 
 
-# noinspection PyTypeChecker
 def get_flow():
     with Flow("FLOW") as flow:
         with Stage("stage_1"):

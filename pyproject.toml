@@ -76,6 +76,46 @@ ignore = ["B028"]
 [tool.ruff.lint.isort]
 known-first-party = ["pydiverse"]
 
+# Static type checking is scoped to the public API surface assertions in tests/typing.
+# `src/` as a whole is not yet type-clean; see docs/source/typing.md.
+[tool.pyright]
+include = ["tests/typing"]
+# Same reason as mypy's `mypy_path`: check the working tree, not whatever happens to be
+# installed in the environment.
+extraPaths = ["src"]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+reportMissingModuleSource = false
+# `tests/typing/negative.py` marks every intentional error. Reporting unnecessary
+# markers turns "this error stopped being reported" into a failure as well.
+reportUnnecessaryTypeIgnoreComment = "error"
+# Don't let mypy's `# type: ignore` markers in that file suppress pyright's own
+# diagnostics - pyright only honours its own `# pyright: ignore` comments.
+enableTypeIgnoreComments = false
+
+[tool.mypy]
+files = ["tests/typing"]
+# Resolve pipedag from the working tree rather than from an install. Without this, an
+# environment that never ran `pixi run postinstall` makes every pipedag name `Any` and
+# the whole suite passes vacuously.
+mypy_path = "src"
+# numpy's bundled stubs use PEP 695 `type` statements, which mypy only parses when
+# targeting 3.12+. pyright is the authoritative checker and does run against the 3.11
+# floor.
+python_version = "3.12"
+ignore_missing_imports = true
+# pandas ships no py.typed marker, so without this mypy treats pd.DataFrame as `Any` and
+# the assertions about `as_type=pd.DataFrame` become vacuous.
+follow_untyped_imports = true
+warn_unused_ignores = true
+enable_error_code = ["ignore-without-code"]
+
+# Analyse pipedag itself for types, but don't report its own diagnostics: `src/` is not
+# type-clean yet, and pyright's `include` already scopes reporting the same way.
+[[tool.mypy.overrides]]
+module = "pydiverse.*"
+follow_imports = "silent"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

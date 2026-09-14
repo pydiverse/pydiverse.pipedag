@@ -239,7 +239,6 @@ def double_values(df: pd.DataFrame):
     return Table(df.transform(lambda x: x * 2))
 
 
-# noinspection PyTypeChecker
 def get_flow(attrs: dict[str, Any], pipedag_config):
     with Flow("test_instance_selection") as flow:
         with Stage("stage_1") as stage:

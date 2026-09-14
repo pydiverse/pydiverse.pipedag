@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import inspect
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -102,7 +102,7 @@ class TaskGetItem:
 
         self._position_hash = stable_hash("POS_GET_ITEM", parent._position_hash, repr(self._item))
 
-    def __getitem__(self, item):
+    def __getitem__(self, item) -> "TaskGetItem":
         return type(self)(self._task, self, item)
 
     def _resolve_value(self, task_value: Any):
@@ -184,7 +184,7 @@ class Task:
     def __getitem__(self, item) -> TaskGetItem:
         return TaskGetItem(self, self, item)
 
-    def __iter__(self) -> Iterable[TaskGetItem]:
+    def __iter__(self) -> Iterator[TaskGetItem]:
         if self._nout is None:
             raise ValueError("Can't iterate over task without specifying `nout`.")
         for i in range(self._nout):
@@ -193,8 +193,8 @@ class Task:
     def _do_run(
         self,
         inputs: dict[int, Any],
-        run_context: RunContext = None,
-        config_context: ConfigContext = None,
+        run_context: RunContext | None = None,
+        config_context: ConfigContext | None = None,
         ignore_position_hashes: bool = False,
     ):
         # Hand over run context if using multiprocessing
@@ -221,7 +221,7 @@ class Task:
                     self._did_finish(FinalTaskState.COMPLETED)
                 return result
 
-    def _run(self, inputs: [int, Any]) -> tuple[Any, TaskContext]:
+    def _run(self, inputs: dict[int, Any]) -> tuple[Any, TaskContext]:
         args = self._bound_args.args
         kwargs = self._bound_args.kwargs
 
