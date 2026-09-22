@@ -51,21 +51,17 @@ pixi install  # see pixi.toml for more environments
 pixi run pre-commit install
 ```
 
-You can either put src/ directory on PYTHONPATH (e.g. in PyCharm use `Mark directory as ... Sources Root`) or install
-this checkout editable by running:
-```bash
-pixi run postinstall
-```
+The checkout is installed editable into every environment, so there is no need to put the src/ directory on
+PYTHONPATH.
 
-You can also use alternative environments as you find them in [pixi.toml](pixi.toml):
+You can also use alternative environments as you find them in [pixi.toml](pixi.toml), for example to test with a
+different python version:
 
 ```bash
-pixi install -e py312all
-pixi run -e py312all postinstall
-pixi run -e py312all pre-commit install
+pixi run -e py311 pytest
 ```
 
-Please, bear in mind, that we currently still want to be python 3.10 compatible while
+Please, bear in mind, that we currently still want to be python 3.11 compatible while
 always supporting the newest python version available on conda-forge.
 
 When using Pycharm, you might find it useful that we install a `conda` executable stub you can
@@ -92,7 +88,7 @@ You can peak in [pytest.ini](pytest.ini) and [github actions](.github/workflows/
 to see different parameters to launch more tests.
 
 ```bash
-pixi run pytest --workers=auto --mssql --duckdb --snowflake --pdtransform --ibis --polars --dask --prefect
+pixi run pytest --workers=auto --mssql --pdtransform --ibis --dask --s3
 ```
 
 for `--ibm_db2`, see the [IBM DB2 development](#ibm-db2-development) section.
@@ -277,9 +273,9 @@ select * from stage_2.task_2_out;
 The `ibm_db` package is only available on the following platforms: linux-64, osx-arm64, win-64.
 
 > [!NOTE]
-> Because of this, the IBM DB2 drivers are only available in the `py312ibm` and `py310ibm`
+> In addition, `ibm_db` is not available for python 3.14, yet, so it is missing from the `py314` and `no-win`
 > environments.
-> You can run tests using `pixi run -e py312ibm pytest --ibm_db2 -m ibm_db2`.
+> You can run tests using `pixi run pytest --ibm_db2 -m ibm_db2`.
 
 ## Troubleshooting
 
@@ -337,8 +333,8 @@ Packages are first released on test.pypi.org:
 
 - bump version number in [pyproject.toml](pyproject.toml) (check consistency with [changelog.md](docs/source/changelog.md))
 - push increased version number to `main` branch
-- `pixi run -e release hatch build`
-- `pixi run -e release twine upload --repository testpypi dist/*`
+- `pixi run hatch build`
+- `pixi run twine upload --repository testpypi dist/*`
 - verify with https://test.pypi.org/search/?q=pydiverse.pipedag
 
 Finally, they are published via:
@@ -346,8 +342,8 @@ Finally, they are published via:
 - `git tag <version>`
 - `git push --tags`
 - Attention: Please, only continue here, if automatic publishing fails for some reason!
-- `pixi run -e release hatch build`
-- `pixi run -e release twine upload --repository pypi dist/*`
+- `pixi run hatch build`
+- `pixi run twine upload --repository pypi dist/*`
 
 ### Publishing package on conda-forge manually
 

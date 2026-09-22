@@ -20,269 +20,283 @@ concurrency:
 jobs:
   lint:
     name: Pre-commit Checks
-    timeout-minutes: 5
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - name: Checkout branch
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - name: Set up pixi
         uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
-      - name: Install repository
-        # needed for generate-col-ops hook
-        run: pixi run postinstall
       - name: pre-commit
         run: pixi run pre-commit run -a --color=always --show-diff-on-failure
       - name: Check pyproject.toml dependencies
         run: pixi run check-deps
 
-#  one_test:
-#    name: One Test
-#    strategy:
-#      matrix:
-#        os:
-#          - ubuntu-latest
-#        environment:
-#          - py311mssqlpdt
-#    uses: ./.github/workflows/test.yml
-#    with:
-#      os: ${{ matrix.os }}
-#      environment: ${{ matrix.environment }}
-#      docker-services: |
-#        mssql
-#        zoo
-#      pytest-arguments: -m mssql --mssql tests/test_cache/test_basic_cache_invalidation.py::test_change_task_version_table
+  import_test:
+    name: Import Test
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
+        with:
+          environments: no-features
+      # the no-features environment has none of the optional dependencies installed
+      - name: Import pipedag
+        run: pixi run -e no-features python -c "from pydiverse.pipedag import *"
+      - name: Run CLI
+        run: pixi run -e no-features pipedag-manage --help
 
-  smoke_test:
-    name: Smoke Test
-#    needs: [one_test]
+  # Every test environment ships all optional dependencies, so the only axis left is the
+  # python version. `old` additionally resolves every dependency to its lowest version;
+  # postgres and duckdb are enough to catch violated lower version bounds.
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.timeout-minutes || 30 }}
     strategy:
+      fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-        environment:
-          - py314
-    uses: ./.github/workflows/test.yml
-    with:
-      os: ${{ matrix.os }}
-      environment: ${{ matrix.environment }}
-      docker-services: |
-        postgres
-        zoo
-        minio
+        include:
+          - name: Smoke Test
+            os: ubuntu-latest
+            environment: py314
+            docker-services: |
+              postgres
+              zoo
+              minio
 
-  postgres_test:
-    name: Postgres Tests
-    needs: [smoke_test]
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-        environment:
-          - py311all
-          - py312all
-          - py313all
-          - py314all
-          - py313pdt
-          - py311cspdt
-          - py314cspdt
-          - py313noadbc
-          - py311ibis
-          - py313ibis
-    uses: ./.github/workflows/test.yml
-    with:
-      os: ${{ matrix.os }}
-      environment: ${{ matrix.environment }}
-      docker-services: |
-        postgres
-        zoo
-      pytest-arguments: --ibis --pdtransform --no-duckdb
+          - name: Postgres (py311)
+            os: ubuntu-latest
+            environment: py311
+            docker-services: |
+              postgres
+              zoo
+            pytest-arguments: --ibis --pdtransform --no-duckdb
+          - name: Postgres (py312)
+            os: ubuntu-latest
+            environment: py312
+            docker-services: |
+              postgres
+              zoo
+            pytest-arguments: --ibis --pdtransform --no-duckdb
+          - name: Postgres (py313)
+            os: ubuntu-latest
+            environment: py313
+            docker-services: |
+              postgres
+              zoo
+            pytest-arguments: --ibis --pdtransform --no-duckdb
+          - name: Postgres (py314)
+            os: ubuntu-latest
+            environment: py314
+            docker-services: |
+              postgres
+              zoo
+            pytest-arguments: --ibis --pdtransform --no-duckdb
+          - name: Postgres (old)
+            os: ubuntu-latest
+            environment: old
+            docker-services: |
+              postgres
+              zoo
+            pytest-arguments: --ibis --pdtransform --no-duckdb
 
-  duckdb_test:
-    name: DuckDB Tests
-    needs: [smoke_test]
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-        environment:
-          - py311all
-          - py313all
-          - py311pdt
-          - py313pdt
-          - py311cspdt
-          - py314cspdt
-          - py311ibis
-          - py313ibis
-    uses: ./.github/workflows/test.yml
-    with:
-      os: ${{ matrix.os }}
-      environment: ${{ matrix.environment }}
-      docker-services: |
-        zoo
-        minio
-      pytest-arguments: --ibis --pdtransform --no-postgres --no-lock_tests
+          - name: DuckDB (py311)
+            os: ubuntu-latest
+            environment: py311
+            docker-services: |
+              zoo
+              minio
+            pytest-arguments: --ibis --pdtransform --no-postgres --no-lock_tests
+          - name: DuckDB (py312)
+            os: ubuntu-latest
+            environment: py312
+            docker-services: |
+              zoo
+              minio
+            pytest-arguments: --ibis --pdtransform --no-postgres --no-lock_tests
+          - name: DuckDB (py313)
+            os: ubuntu-latest
+            environment: py313
+            docker-services: |
+              zoo
+              minio
+            pytest-arguments: --ibis --pdtransform --no-postgres --no-lock_tests
+          - name: DuckDB (py314)
+            os: ubuntu-latest
+            environment: py314
+            docker-services: |
+              zoo
+              minio
+            pytest-arguments: --ibis --pdtransform --no-postgres --no-lock_tests
+          - name: DuckDB (old)
+            os: ubuntu-latest
+            environment: old
+            docker-services: |
+              zoo
+              minio
+            pytest-arguments: --ibis --pdtransform --no-postgres --no-lock_tests
 
-  s3_test:
-    name: S3 Tests
-    needs: [smoke_test]
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-        environment:
-          - py311all
-          - py312all
-          - py313all
-          - py314all
-          - py311cspdt
-          - py314cspdt
-          - py311ibis
-          - py313ibis
-    uses: ./.github/workflows/test.yml
-    with:
-      os: ${{ matrix.os }}
-      environment: ${{ matrix.environment }}
-      docker-services: |
-        postgres
-        minio
-        zoo
-      pytest-arguments: --s3 --ibis --pdtransform --no-duckdb --no-postgres --no-lock_tests
+          - name: S3 (py311)
+            os: ubuntu-latest
+            environment: py311
+            docker-services: |
+              postgres
+              minio
+              zoo
+            pytest-arguments: --s3 --ibis --pdtransform --no-duckdb --no-postgres --no-lock_tests
+          - name: S3 (py312)
+            os: ubuntu-latest
+            environment: py312
+            docker-services: |
+              postgres
+              minio
+              zoo
+            pytest-arguments: --s3 --ibis --pdtransform --no-duckdb --no-postgres --no-lock_tests
+          - name: S3 (py313)
+            os: ubuntu-latest
+            environment: py313
+            docker-services: |
+              postgres
+              minio
+              zoo
+            pytest-arguments: --s3 --ibis --pdtransform --no-duckdb --no-postgres --no-lock_tests
+          - name: S3 (py314)
+            os: ubuntu-latest
+            environment: py314
+            docker-services: |
+              postgres
+              minio
+              zoo
+            pytest-arguments: --s3 --ibis --pdtransform --no-duckdb --no-postgres --no-lock_tests
 
-  colspec_test:
-    name: ColSpec Tests
-    needs: [smoke_test]
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-        environment:
-          - py311cs
-          - py313cs
-          - py311csdy
-          - py313csdy
-          - py311dy
-          - py313dy
-    uses: ./.github/workflows/test.yml
-    with:
-      os: ${{ matrix.os }}
-      environment: ${{ matrix.environment }}
-      docker-services: |
-        postgres
-        zoo
-        minio
-      pytest-arguments: --pdtransform --no-lock_tests
+          - name: MSSql (py311)
+            os: ubuntu-latest
+            environment: py311
+            docker-services: |
+              mssql
+              zoo
+            pytest-arguments: --mssql -m mssql --ibis --pdtransform --no-postgres --no-duckdb
+          - name: MSSql (py312)
+            os: ubuntu-latest
+            environment: py312
+            docker-services: |
+              mssql
+              zoo
+            pytest-arguments: --mssql -m mssql --ibis --pdtransform --no-postgres --no-duckdb
+          - name: MSSql (py313)
+            os: ubuntu-latest
+            environment: py313
+            docker-services: |
+              mssql
+              zoo
+            pytest-arguments: --mssql -m mssql --ibis --pdtransform --no-postgres --no-duckdb
+          - name: MSSql (py314)
+            os: ubuntu-latest
+            environment: py314
+            docker-services: |
+              mssql
+              zoo
+            pytest-arguments: --mssql -m mssql --ibis --pdtransform --no-postgres --no-duckdb
 
-  db2_test:
-    name: DB2 Tests
-    needs: [smoke_test]
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-        environment:
-          - py312ibm
-          - py313ibm
-    uses: ./.github/workflows/test.yml
-    with:
-      os: ${{ matrix.os }}
-      environment: ${{ matrix.environment }}
-      docker-services: |
-        ibm_db2
-      # and --ibis not supported
-      pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform --no-postgres --no-duckdb
+          # ibm_db is not available for python 3.14, yet. --ibis is not supported.
+          - name: DB2 (py311)
+            os: ubuntu-latest
+            environment: py311
+            docker-services: ibm_db2
+            pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform --no-postgres --no-duckdb
+          - name: DB2 (py313)
+            os: ubuntu-latest
+            environment: py313
+            docker-services: ibm_db2
+            pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform --no-postgres --no-duckdb
 
-  mssql_test:
-    name: MSSql Tests
-    needs: [smoke_test]
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-        environment:
-          - py311all
-          - py313all
-          - py311mssqlpdt
-          - py313mssqlpdt
-          - py311mssqldy
-          - py313mssqldy
-          - py311ibis
-          - py313ibis
-    uses: ./.github/workflows/test.yml
-    with:
-      os: ${{ matrix.os }}
-      environment: ${{ matrix.environment }}
-      docker-services: |
-        mssql
-        zoo
-      pytest-arguments: --mssql -m mssql --ibis --pdtransform --no-postgres --no-duckdb
+          # prefect is currently not part of any environment
+          - name: Orchestration (py313)
+            os: ubuntu-latest
+            environment: py313
+            docker-services: |
+              postgres
+              zoo
+            pytest-arguments: --dask -m dask
 
-  orchestration_test:
-    name: Orchestration Tests
-    needs: [smoke_test]
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-        environment:
-          - py311dapre
-          - py313dapre
-          - py311all
-#          - py311pdsa1all  # prefect and pydantac tend to cause trouble for old versions
-    uses: ./.github/workflows/test.yml
-    with:
-      os: ${{ matrix.os }}
-      environment: ${{ matrix.environment }}
-      docker-services: |
-        prefect
-        postgres
-        zoo
-        minio
-      pytest-arguments: --dask --prefect -m "dask or prefect"
+          # snowflake is only part of no-win (no windows build of libadbc-driver-snowflake)
+          - name: Snowflake (no-win)
+            os: ubuntu-latest
+            environment: no-win
+            needs-secrets: true
+            workers: 1  # tests are often waiting on snowflake
+            timeout-minutes: 50
+            docker-services: |
+              postgres
+              zoo
+            pytest-arguments: --ibis --pdtransform --snowflake --no-postgres --no-duckdb
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
-  pandas1_sqlalchemy1_test:
-    name: Pandas 1.x and SQLAlchemy 1.x Tests (Deprecated)
-    needs: [smoke_test]
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-        environment:
-          - py311pdsa1all
-    uses: ./.github/workflows/test.yml
-    with:
-      os: ${{ matrix.os }}
-      environment: ${{ matrix.environment }}
-      docker-services: |
-        postgres
-        zoo
-        minio
-      pytest-arguments: --ibis --pdtransform
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
+        with:
+          environments: ${{ matrix.environment }}
 
-  snowflake_test:
-    name: Snowflake Tests
-    needs: [smoke_test]
-    # don't execute on forks due to missing credentials
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-        environment:
-#          - py311pdsa1all
-          - py311all
-          - py313all
-          - py313noadbc
-    uses: ./.github/workflows/test.yml
-    secrets:
-      SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-    with:
-      os: ${{ matrix.os }}
-      environment: ${{ matrix.environment }}
-      workers: 1  # tests are often waiting on snowflake
-      timeout-minutes: 50
-      docker-services: |
-        postgres
-        zoo
-      pytest-arguments: --ibis --pdtransform --snowflake --no-postgres --no-duckdb
+      - name: Start Docker Compose
+        if: ${{ matrix.docker-services != '' }}
+        uses: isbang/compose-action@248470ecc5ed40d8ed3d4480d8260d77179ef579
+        with:
+          compose-file: docker-compose.yaml
+          services: ${{ matrix.docker-services }}
+
+      - name: Install Microsoft ODBC
+        if: ${{ contains(matrix.docker-services, 'mssql') }}
+        run: |
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+          sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18
+          echo /opt/mssql-tools18/bin >> $GITHUB_PATH
+
+      - name: Test BCP
+        if: ${{ contains(matrix.docker-services, 'mssql') }}
+        run: bcp -v
+
+      - name: Wait for Docker Servers
+        if: ${{ matrix.docker-services != '' }}
+        run: |
+          # store the (possibly multiline) input in a variable
+          services="${{ matrix.docker-services }}"
+          # replace every newline with a single space
+          services="${services//$'\n'/ }"
+          until bash ./.github/scripts/docker_compose_ready.sh ${services}; do
+            sleep 1
+          done
+
+      - name: Run tests
+        # don't execute tests that need credentials on forks
+        if: ${{ !matrix.needs-secrets || github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_DB_SUFFIX: ${{ matrix.environment }}
+          ERROR_ONLY: 1
+          LOG_TEST_NAME: 1
+        run: |
+          # the suffix ends up in a snowflake database name, which must not contain dashes
+          export SNOWFLAKE_DB_SUFFIX="${SNOWFLAKE_DB_SUFFIX//-/_}"
+          pixi run -e ${{ matrix.environment }} pytest tests ${RUNNER_DEBUG:+-v} --color=yes --workers=${{ matrix.workers || 4 }} ${{ matrix.pytest-arguments }}
+
+  # single job to require in the branch protection rules (the matrix job names change often)
+  all_green:
+    name: All Checks Passed
+    if: always()
+    needs:
+      - lint
+      - import_test
+      - test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check that no job failed
+        run: ${{ !(contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}

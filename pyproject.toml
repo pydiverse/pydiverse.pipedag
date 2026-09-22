@@ -37,21 +37,55 @@ dependencies = [
   "structlog >=25.4.0,<27",
   "pynng >=0.8.1,<0.9",
   "msgpack >=1.1.1,<2",
-  "packaging >=25.0,<26",
+  "packaging >=26",
   "python-box >=7.3.2,<8",
   "pyyaml >=6.0.3,<7",
   "cryptography >=45.0.7,<50",
   "click >=8.1.8,<9",
   "pyparsing >=3.2.5,<4",
-  "sqlalchemy >=1.4.54,<3",
-  "pandas >=1.5.3,<4",
+  "sqlalchemy >=2,<3",
+  "pandas >=2,<4",
   "pyarrow >=19.0.0,<25",
-  "duckdb >=0.10.3,<2",             # py311pdsa1 requires < 1
+  "duckdb >=1,<2",
   "duckdb-engine >=0.15.0,<0.16",
-  "polars >=1.2.1,<2",              # py311pdsa1all requires < 1.30.0
+  "polars >=1.34.0,<2",
   "fsspec >=2025.9.0,<2027",
   "universal_pathlib >=0.3.2,<0.4",
 ]
+
+# keep in sync with [package.extra-dependencies.*] in pixi.toml (see .github/scripts/check_deps.sh)
+[project.optional-dependencies]
+pydot = ["pydot >=4.0.0,<5"]
+postgres = ["psycopg2 >=2.9.10"]
+postgres-adbc = ["psycopg2 >=2.9.10", "adbc-driver-postgresql >=1.6.0,<2"]
+filelock = ["filelock >=3.20.0"]
+zookeeper = ["kazoo >=2.8.0"]
+# dask is also used by the computation tracer when running all tests
+dask = ["dask >=2022.1.0"]
+prefect = ["prefect >=3,<4"]
+snowflake = ["snowflake-sqlalchemy >=1.6.1", "adbc-driver-snowflake >=1.9.0"]
+ibis = [
+  "ibis-framework >=10.5.0",
+  "ibis-framework[mssql] >=10.5.0",
+  "ibis-framework[postgres] >=10.5.0",
+]
+mssql = [
+  "arrow-odbc >=8.1.1,<11",
+  "pyodbc >=5.2.0,<6",
+  "pytsql >=1.4.0,<2",
+  "bcpandas >=2.6.3,<3",
+]
+pdtransform = ["pydiverse-transform >=0.7.0,<0.8"]
+colspec = ["pydiverse-colspec >=0.3.1,<0.4"]
+dataframely = ["dataframely >=2.1.0,<3"]
+ibm-db = ["ibm-db >=3.3.0,<4", "ibm-db-sa >=0.4.2,<0.5"]
+s3 = [
+  "s3fs >=2025.5.1,<2027",
+  "boto3 >=1.38.13,<2",
+  "gcsfs >=2025.9.0,<2027",
+  "google-auth >=2.48.0",
+]
+connectorx = ["connectorx >=0.3.3"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pydiverse"]
