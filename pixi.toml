@@ -9,13 +9,23 @@ pydiverse-transform = "0d"
 pydiverse-common = "0d"
 pydiverse-colspec = "0d"
 
-[dependencies]
-#pip = "*"
+[package]
+name = "pydiverse-pipedag"
+
+[package.build.backend]
+name = "pixi-build-python"
+version = "*"
+
+[package.host-dependencies]
+python = ">=3.11"
 hatchling = "*"
-python = ">=3.11.14,<3.15.0a0"
+uv = "*"
+
+[package.run-dependencies]
+python = ">=3.11"
 pydiverse-common = ">=0.4.4,<0.5"
 typing-extensions = ">=4.15.0,<5"
-networkx = ">=3.4,<4"
+networkx = ">=3.4,<4" # Why needed?
 attrs = ">=25.4.0,<27"
 structlog = ">=25.4.0,<27"
 pynng = ">=0.8.1,<0.9"
@@ -23,78 +33,57 @@ msgpack-python = ">=1.1.1,<2"
 packaging = ">=25.0,<26"
 python-box = ">=7.3.2,<8"
 pyyaml = ">=6.0.3,<7"
-cryptography = ">=45.0.7,<50"
+cryptography = ">=45.0.7,<50" # Why explicit?
 click = ">=8.1.8,<9"
 pyparsing = ">=3.2.5,<4"
 sqlalchemy = ">=1.4.54,<3"
-pandas = ">=1.5.3,<4"
-pyarrow = ">=19.0.0,<25"
-duckdb = ">=0.10.3,<2"
-duckdb-engine = ">=0.15.0,<0.16"
-polars = ">=1.2.1,<2"
-fsspec = ">=2025.9.0,<2027"
+pandas = ">=1.5.3,<4" # maybe extra?
+pyarrow = ">=19.0.0,<25" # maybe extra?
+duckdb = ">=0.10.3,<2" # extra
+duckdb-engine = ">=0.15.0,<0.16" # extra
+polars = ">=1.2.1,<2" # maybe extra?
+fsspec = ">=2025.9.0,<2027" # extra
 universal_pathlib = ">=0.3.2,<0.4"
 
-
-[target.osx-arm64.dependencies]
-libgfortran5 = ">=14" # Lower versions cause numpy import errors. See https://github.com/prefix-dev/pixi/issues/3479
-
-[feature.pydot.dependencies]
+[package.extra-dependencies.pydot]
 pydot = ">=4.0.0,<5"
 
-[feature.postgres.dependencies]
+[package.extra-dependencies.postgres]
+psycopg2 = ">=2.9.10"
+
+[package.extra-dependencies.postgres-adbc]
+psycopg2 = ">=2.9.10"
 adbc-driver-postgresql = ">=1.6.0,<2"
-psycopg2 = ">=2.9.10"
 
-[feature.postgres-no-adbc.dependencies]
-psycopg2 = ">=2.9.10"
-
-[feature.filelock.dependencies]
+[package.extra-dependencies.filelock]
 filelock = ">=3.20.0"
 
-[feature.zookeeper.dependencies]
+# TODO: Remove?
+[package.extra-dependencies.zookeeper]
 kazoo = ">=2.8.0"
 
-[feature.dask.dependencies]
+# TODO: Remove?
+[package.extra-dependencies.dask]
 # is also used by computation tracer when running all tests
 dask = ">=2022.1.0"
 
-[feature.prefect2.dependencies]
-prefect = ">=2.14.2,<3a0"
-pydantic = ">=1.10.9"
+# Todo: remove?
+[package.extra-dependencies.prefect]
+prefect = ">=2.14.2,<4a0"
 
-[feature.prefect3.dependencies]
-prefect = ">=3.4.22,<4a0"
-
-[feature.snowflake]
-platforms = ["linux-64", "osx-arm64", "osx-64"]
-
-[feature.snowflake.dependencies]
+[package.extra-dependencies.snowflake]
 snowflake-sqlalchemy = ">=1.6.1"
 adbc-driver-snowflake = ">=1.9.0"
-#polars = "<1.33.0"  # polars 1.33 uses STRING_VIEW which adbc-driver-snowflake 1.8.0 does not support
+# TODO: Do we need a no-adbc version?
 
-[feature.snowflake-no-adbc]
-platforms = ["linux-64", "osx-arm64", "osx-64"]
-
-[feature.snowflake-no-adbc.dependencies]
-snowflake-sqlalchemy = ">=1.6.1"
-
-[feature.dev.dependencies]
-pytest = ">=7.2.0"
-pytest-mock = ">=3.10.0"
-pytest-timeout = ">=2.1.0"
-ruff = ">=0.5.1"
-pre-commit = ">=3.7.1"
-pixi-pycharm = "*"
-
-[feature.ibis.dependencies]
+# TODO: Remove?
+[package.extra-dependencies.ibis]
 # Table Hooks
 ibis-framework = ">=10.5.0"
 ibis-mssql = ">=10.5.0"
 ibis-postgres = ">=10.5.0"
 
-[feature.mssql.dependencies]
+[package.extra-dependencies.mssql]
 arrow-odbc = ">=8.1.1,<11"
 pyodbc = ">=5.2.0,<6"
 pytsql = ">=1.4.0,<2"
@@ -104,40 +93,45 @@ bcpandas = ">=2.6.3,<3"
 setuptools = "<81"
 python = "<3.14"  # odbc packages are not compatible, yet
 
-[feature.mssql-no-odbc.dependencies]
-pytsql = ">=1.4.0,<2"
-bcpandas = ">=2.6.3,<3"
-setuptools = "<81"  # see feature.mssql: keep pkg_resources available for bcpandas <2.7
-
-[feature.pdtransform-new.dependencies]
+[package.extra-dependencies.pdtransform]
 pydiverse-transform = ">=0.7.0,<0.8"
 
-[feature.pdtransform-old.dependencies]
-pydiverse-transform = "<0.2"
-
-[feature.colspec.dependencies]
+[package.extra-dependencies.colspec]
 pydiverse-colspec = ">=0.3.1,<0.4"
 
-[feature.dataframely.dependencies]
+[package.extra-dependencies.dataframely]
 dataframely = ">=2.1.0,<3"
 
-# IBM DB2
-[feature.ibm-db]
-platforms = ["linux-64", "osx-arm64", "win-64"]
-
-[feature.ibm-db.dependencies]
+[package.extra-dependencies.ibm-db]
 ibm_db = ">=3.2.5,<4"
 ibm_db_sa = ">=0.3.8"
 
 # S3 / GCS
-[feature.s3.dependencies]
+[package.extra-dependencies.s3]
 s3fs = ">=2025.5.1,<2027"
 boto3 = ">=1.38.13,<2"
 gcsfs = ">=2025.9.0,<2027"
 google-auth = ">=2.48.0"
 
+[dependencies]
+pydiverse-pipedag = { path = "." }
+
+[tasks]
+zip-examples = "sh -c 'set -ex; for d in example*; do if test -f $d/run_pipeline.py; then echo $d; cd $d; pixi update; pixi install; cd -; rm -r $d/.pixi $d/__pycache__ || echo ignore; rm docs/source/examples/zip/$d.zip || echo $d.zip is new; zip -r docs/source/examples/zip/$d.zip $d/; fi; done'"
+
+
+[target.osx-arm64.dependencies]
+# TODO: Remove
+libgfortran5 = ">=14" # Lower versions cause numpy import errors. See https://github.com/prefix-dev/pixi/issues/3479
+
+
+[feature.dev.dependencies]
+pytest = ">=7.2.0"
+pytest-mock = ">=3.10.0"
+pytest-timeout = ">=2.1.0"
+ruff = ">=0.5.1"
+pre-commit = ">=3.7.1"
 # XGBoost is used by some relistic pipeline examples
-[feature.xgboost.dependencies]
 xgboost = ">=3.0.2"
 
 [feature.docs.dependencies]
@@ -150,10 +144,6 @@ sphinx-click = ">=6.0.0"
 sphinx-autobuild = ">=2024.10.3"
 sphinx-copybutton = ">=0.5.2"
 
-[tasks]
-postinstall = "pip install --no-build-isolation --no-deps --disable-pip-version-check -e ."
-zip-examples = "sh -c 'set -ex; for d in example*; do if test -f $d/run_pipeline.py; then echo $d; cd $d; pixi update; pixi install; cd -; rm -r $d/.pixi $d/__pycache__ || echo ignore; rm docs/source/examples/zip/$d.zip || echo $d.zip is new; zip -r docs/source/examples/zip/$d.zip $d/; fi; done'"
-install-all = "sh -c 'cd .pixi/envs/ && for i in */; do pixi install -e $(basename $i /); done && cd -'"
 
 [feature.docs.tasks]
 docs = "cd docs && make html "
@@ -165,7 +155,6 @@ twine = ">=7.0.0"
 python = ">=3.14"
 
 [feature.lint.dependencies]
-#commitit-internal = "*"
 pre-commit = "*"
 insert-license-header = "*"
 docformatter = "*"
@@ -180,11 +169,9 @@ conda-deny = "*"
 go-yq = "*"
 
 [feature.lint.tasks]
-#commitit-install = "commitit install"
-#commitit = "commitit run --all-files"
 pre-commit-install = "pre-commit install"
-pre-commit-run = "pre-commit run -a"
-conda-deny = "conda-deny check"
+lint = "pre-commit run -a"
+conda-deny-check = "conda-deny check"
 check-deps = "sh -c .github/scripts/check_deps.sh"
 
 [feature.py311.dependencies]
