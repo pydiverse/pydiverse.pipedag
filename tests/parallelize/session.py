@@ -17,6 +17,11 @@ from .worker import start_worker
 
 
 class Session:
+    # A worker puts its `sessionfinish` message on the queue and then exits, so it may
+    # already be dead by the time the main loop gets to that message. Only consider a
+    # cleanly exited worker to be lost once it failed to report back for this long.
+    clean_exit_grace_period = 30  # seconds
+
     def __init__(self, config: Config):
         self.config = config
         self.ctx = mp.get_context("spawn")  # or "forkserver"
@@ -29,6 +34,7 @@ class Session:
 
         self.debug_worker_group = {}
         self.debug_worker_test = {}
+        self.worker_exit_time = {}
 
         self._should_shutdown = False
         self._shutdown_reason = "None"
@@ -108,6 +114,9 @@ class Session:
                 raise ValueError(error_msg)
 
         if self._should_shutdown:
+            # the workers are not daemonic, so they would keep this process alive forever
+            for worker in self.workers:
+                worker.terminate()
             pytest.exit(self._shutdown_reason)
 
         return True
@@ -167,15 +176,23 @@ class Session:
             self.running_workers.add(worker)
 
     def check_workers_alive(self):
-        for worker in self.running_workers:
-            if not worker.is_alive():
-                group_name = self.debug_worker_group.get(worker)
-                test_name = self.debug_worker_test.get(worker)
-                msg = (
-                    f"Worker {worker.name} died with exit code {worker.exitcode}."
-                    f" (group = {group_name}, test = {test_name})"
-                )
-                self.shutdown(msg)
+        # the main loop removes workers from running_workers, so iterate over a copy
+        for worker in list(self.running_workers):
+            if worker.is_alive():
+                continue
+
+            if worker.exitcode == 0:
+                exit_time = self.worker_exit_time.setdefault(worker, time.time())
+                if time.time() - exit_time < self.clean_exit_grace_period:
+                    continue
+
+            group_name = self.debug_worker_group.get(worker)
+            test_name = self.debug_worker_test.get(worker)
+            msg = (
+                f"Worker {worker.name} died with exit code {worker.exitcode}."
+                f" (group = {group_name}, test = {test_name})"
+            )
+            self.shutdown(msg)
 
     def shutdown(self, reason: str):
         self._shutdown_reason = reason
