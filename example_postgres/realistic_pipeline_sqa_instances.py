@@ -434,7 +434,8 @@ def predict(model: xgboost.Booster, test_set: FlatTable):
         predict_col = pd.Series(pd.NA * len(x))[0 : len(x)]
     else:
         dx = xgb.DMatrix(x)
-        predict_col = model.predict(dx)
+        # xgboost returns a (0, 0) shaped array for an empty dataset
+        predict_col = model.predict(dx).reshape(len(x))
 
     return predict_col
 
