@@ -207,9 +207,6 @@ python = "3.13.*"
 [feature.py314.dependencies]
 python = "3.14.*"
 
-[feature.pd3.constraints]
-pandas = "3.*"
-
 [feature.ibm-db.dependencies]
 # ibm-db doesn't work on py314 at the moment
 pydiverse-pipedag = { path = ".", extras = ["ibm-db"] }
@@ -221,16 +218,14 @@ platforms = ["linux-64", "osx-arm64-macos-14-5"]
 pydiverse-pipedag = { path = ".", extras = ["snowflake"] }
 
 [environments]
-default = ["lint", "dev", "release", "all", "ibm-db"]
+default = ["lint", "docs", "dev", "release", "all", "ibm-db"]
 py311 = ["dev", "py311", "all", "ibm-db"]
 py312 = ["dev", "py312", "all", "ibm-db"]
 py313 = ["dev", "py313", "all", "ibm-db"]
 py314 = ["dev", "py314", "all"]
 no-win = ["dev", "py314", "all", "snowflake"]
 no-features = ["dev"]
-# new = ["dev", "py314", "all", "pd3"]
 # todo: use lowest-direct once we fix https://github.com/prefix-dev/pixi/issues/5386
 # TODO: write linter that checks that all dependencies are exactly on their lowest version and if not,
 # tells the user to adjust the lower bounds of the package
-# old = { features = ["dev", "all", "old"], solve-strategy = "lowest" }
-# docs = ["docs"]
+old = { features = ["dev", "all"], solve-strategy = "lowest" }
