@@ -3,7 +3,11 @@ name = "pydiverse-pidepag"
 channels = ["conda-forge"]
 exclude-newer = "7d"
 preview = ["pixi-build"]
-platforms = ["linux-64", "osx-arm64", "win-64"] # "linux-aarch64"
+platforms = [
+  "linux-64",
+  { platform = "osx-arm64", osx = "14.5" },
+  "win-64",
+] # "linux-aarch64"
 
 [exclude-newer]
 pydiverse-transform = "0d"
@@ -104,8 +108,8 @@ pydiverse-colspec = ">=0.3.1,<0.4"
 dataframely = ">=2.1.0,<3"
 
 [package.extra-dependencies.ibm-db]
-ibm_db = ">=3.2.5,<4"
-ibm_db_sa = ">=0.3.8"
+ibm_db = ">=3.3.0,<4"
+ibm_db_sa = ">=0.4.4,<0.5"
 
 # S3 / GCS
 [package.extra-dependencies.s3]
@@ -187,7 +191,7 @@ pydiverse-pipedag = { path = ".", extras = [
   "pdtransform",
   "colspec",
   "dataframely",
-  # "ibm-db",
+  "ibm-db",
   "s3",
   "connectorx",
 ] }
@@ -209,13 +213,13 @@ pandas = "3.*"
 
 [environments]
 default = ["lint", "dev", "release", "all"]
-py311 = ["dev", "py311", "all"]
-py312 = ["dev", "py312", "all"]
-py313 = ["dev", "py313", "all"]
-py314 = ["dev", "py314", "all"]
-new = ["dev", "py314", "all", "pd3"]
+# py311 = ["dev", "py311", "all"]
+# py312 = ["dev", "py312", "all"]
+# py313 = ["dev", "py313", "all"]
+# py314 = ["dev", "py314", "all"]
+# new = ["dev", "py314", "all", "pd3"]
 # todo: use lowest-direct once we fix https://github.com/prefix-dev/pixi/issues/5386
 # TODO: write linter that checks that all dependencies are exactly on their lowest version and if not,
 # tells the user to adjust the lower bounds of the package
-old = { features = ["dev", "all", "old"], solve-strategy = "lowest" }
-docs = ["docs"]
+# old = { features = ["dev", "all", "old"], solve-strategy = "lowest" }
+# docs = ["docs"]
