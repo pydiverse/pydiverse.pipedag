@@ -187,6 +187,7 @@ pydiverse-pipedag = { path = ".", extras = [
   "zookeeper",
   "dask",
   # "prefect",
+  # see feature.snowflake.dependencies
   # "snowflake",
   "ibis",
   "mssql",
