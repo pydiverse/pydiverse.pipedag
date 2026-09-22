@@ -194,7 +194,7 @@ pydiverse-pipedag = { path = ".", extras = [
   "pdtransform",
   "colspec",
   "dataframely",
-  # currently not compatible with all python versions
+  # see feature.ibm-db.dependencies
   # "ibm-db",
   "s3",
   "connectorx",
