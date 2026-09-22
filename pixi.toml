@@ -225,6 +225,7 @@ py311 = ["dev", "py311", "all", "ibm-db"]
 py312 = ["dev", "py312", "all", "ibm-db"]
 py313 = ["dev", "py313", "all", "ibm-db"]
 py314 = ["dev", "py314", "all"]
+no-features = ["dev"]
 # new = ["dev", "py314", "all", "pd3"]
 # todo: use lowest-direct once we fix https://github.com/prefix-dev/pixi/issues/5386
 # TODO: write linter that checks that all dependencies are exactly on their lowest version and if not,
