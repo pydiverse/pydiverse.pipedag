@@ -74,7 +74,7 @@ dask = ">=2022.1.0"
 
 # Todo: remove?
 [package.extra-dependencies.prefect]
-prefect = ">=2.14.2,<4a0"
+prefect = ">=3,<4"
 
 [package.extra-dependencies.snowflake]
 snowflake-sqlalchemy = ">=1.6.1"
@@ -186,6 +186,7 @@ pydiverse-pipedag = { path = ".", extras = [
   "filelock",
   "zookeeper",
   "dask",
+  # prefect is not tested at the moment
   # "prefect",
   # see feature.snowflake.dependencies
   # "snowflake",
@@ -221,9 +222,6 @@ pydiverse-pipedag = { path = ".", extras = ["ibm-db"] }
 platforms = ["linux-64", "osx-arm64-macos-14-5"]
 [feature.snowflake.dependencies]
 pydiverse-pipedag = { path = ".", extras = ["snowflake"] }
-
-[feature.old.constraints]
-# pandas = "2.*"
 
 [environments]
 default = ["lint", "dev", "release", "all", "ibm-db"]
