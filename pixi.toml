@@ -109,7 +109,11 @@ dataframely = ">=2.1.0,<3"
 
 [package.extra-dependencies.ibm-db]
 ibm_db = ">=3.3.0,<4"
-ibm_db_sa = ">=0.4.4,<0.5"
+# https://github.com/conda-forge/ibm_db-feedstock/blob/44d287cc1c838121ddda534094f87b923f5726fb/recipe/conda_build_config.yaml#L4-L8
+# conda-forge's ibm_db builds still pin libxml2 <2.14, while ibm_db_sa 0.4.4 (and the
+# 0.4.2 `_2` rebuilds) require libxml2-16 >=2.14.6 -- so they cannot coexist. Stay on
+# >=0.4.2 so the solver can fall back to the pre-migration 0.4.2 build.
+ibm_db_sa = ">=0.4.2,<0.5"
 
 # S3 / GCS
 [package.extra-dependencies.s3]
@@ -206,6 +210,9 @@ python = "3.14.*"
 
 [feature.pd3.constraints]
 pandas = "3.*"
+
+[feature.ibm-db.dependencies]
+
 
 [feature.old.constraints]
 # pandas = "2.*"
