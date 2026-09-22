@@ -194,7 +194,8 @@ pydiverse-pipedag = { path = ".", extras = [
   "pdtransform",
   "colspec",
   "dataframely",
-  "ibm-db",
+  # currently not compatible with all python versions
+  # "ibm-db",
   "s3",
   "connectorx",
 ] }
@@ -212,17 +213,18 @@ python = "3.14.*"
 pandas = "3.*"
 
 [feature.ibm-db.dependencies]
-
+# ibm-db doesn't work on py314 at the moment
+pydiverse-pipedag = { path = ".", extras = ["ibm-db"] }
 
 [feature.old.constraints]
 # pandas = "2.*"
 
 [environments]
-default = ["lint", "dev", "all", "release"]
-# py311 = ["dev", "py311", "all"]
-# py312 = ["dev", "py312", "all"]
-# py313 = ["dev", "py313", "all"]
-# py314 = ["dev", "py314", "all"]
+default = ["lint", "dev", "release", "all", "ibm-db"]
+py311 = ["dev", "py311", "all", "ibm-db"]
+py312 = ["dev", "py312", "all", "ibm-db"]
+py313 = ["dev", "py313", "all", "ibm-db"]
+py314 = ["dev", "py314", "all"]
 # new = ["dev", "py314", "all", "pd3"]
 # todo: use lowest-direct once we fix https://github.com/prefix-dev/pixi/issues/5386
 # TODO: write linter that checks that all dependencies are exactly on their lowest version and if not,
