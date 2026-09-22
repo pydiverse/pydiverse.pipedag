@@ -3,11 +3,8 @@ name = "pydiverse-pidepag"
 channels = ["conda-forge"]
 exclude-newer = "7d"
 preview = ["pixi-build"]
-platforms = [
-  "linux-64",
-  { platform = "osx-arm64", osx = "14.5" },
-  "win-64",
-] # "linux-aarch64"
+# todo: add linux-aarch64 platform
+platforms = ["linux-64", { platform = "osx-arm64", osx = "14.5" }, "win-64"]
 
 [exclude-newer]
 pydiverse-transform = "0d"
