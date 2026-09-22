@@ -215,6 +215,12 @@ pandas = "3.*"
 # ibm-db doesn't work on py314 at the moment
 pydiverse-pipedag = { path = ".", extras = ["ibm-db"] }
 
+[feature.snowflake]
+# there is currently no windows build for libadbc-driver-snowflake
+platforms = ["linux-64", "osx-arm64-macos-14-5"]
+[feature.snowflake.dependencies]
+pydiverse-pipedag = { path = ".", extras = ["snowflake"] }
+
 [feature.old.constraints]
 # pandas = "2.*"
 
@@ -224,6 +230,7 @@ py311 = ["dev", "py311", "all", "ibm-db"]
 py312 = ["dev", "py312", "all", "ibm-db"]
 py313 = ["dev", "py313", "all", "ibm-db"]
 py314 = ["dev", "py314", "all"]
+no-win = ["dev", "py314", "all", "snowflake"]
 no-features = ["dev"]
 # new = ["dev", "py314", "all", "pd3"]
 # todo: use lowest-direct once we fix https://github.com/prefix-dev/pixi/issues/5386
