@@ -3,7 +3,7 @@ name = "pydiverse-pidepag"
 channels = ["conda-forge"]
 exclude-newer = "7d"
 preview = ["pixi-build"]
-platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"] # "linux-aarch64"
+platforms = ["linux-64", "osx-arm64", "win-64"] # "linux-aarch64"
 
 [exclude-newer]
 pydiverse-transform = "0d"
@@ -170,21 +170,21 @@ conda-deny-check = "conda-deny check"
 check-deps = "sh -c .github/scripts/check_deps.sh"
 
 [feature.all.dependencies]
-pydiverse-pipedag = { extras = [
+pydiverse-pipedag = { path = ".", extras = [
   "pydot",
   "postgres",
   "postgres-adbc",
   "filelock",
   "zookeeper",
   "dask",
-  "prefect",
-  "snowflake",
+  # "prefect",
+  # "snowflake",
   "ibis",
-  "mssql",
+  # "mssql",
   "pdtransform",
   "colspec",
   "dataframely",
-  "ibm-db",
+  # "ibm-db",
   "s3",
 ] }
 
@@ -216,5 +216,5 @@ connectorx = ">=0.3.3"
 polars = "==1.2.1"
 
 [environments]
-default = ["lint", "dev", "release"]
+default = ["lint", "dev", "release", "all"]
 docs = ["docs"]
