@@ -37,12 +37,12 @@ pyyaml = ">=6.0.3,<7"
 cryptography = ">=45.0.7,<50"      # Why explicit?
 click = ">=8.1.8,<9"
 pyparsing = ">=3.2.5,<4"
-sqlalchemy = ">=1.4.54,<3"
-pandas = ">=1.5.3,<4"              # maybe extra?
+sqlalchemy = ">=2,<3"
+pandas = ">=2,<4"                  # maybe extra?
 pyarrow = ">=19.0.0,<25"           # maybe extra?
-duckdb = ">=0.10.3,<2"             # extra
+python-duckdb = ">=1,<2"           # extra
 duckdb-engine = ">=0.15.0,<0.16"   # extra
-polars = ">=1.2.1,<2"              # maybe extra?
+polars = ">=1.34.0,<2"             # maybe extra?
 fsspec = ">=2025.9.0,<2027"        # extra
 universal_pathlib = ">=0.3.2,<0.4"
 
@@ -114,6 +114,10 @@ boto3 = ">=1.38.13,<2"
 gcsfs = ">=2025.9.0,<2027"
 google-auth = ">=2.48.0"
 
+[package.extra-dependencies.connectorx]
+# TODO: remove?
+connectorx = ">=0.3.3"
+
 [dependencies]
 pydiverse-pipedag = { path = "." }
 
@@ -138,7 +142,6 @@ sphinx-autosummary-accessors = ">=2025.3.1"
 sphinx-click = ">=6.0.0"
 sphinx-autobuild = ">=2024.10.3"
 sphinx-copybutton = ">=0.5.2"
-
 
 [feature.docs.tasks]
 docs = "cd docs && make html "
@@ -186,6 +189,7 @@ pydiverse-pipedag = { path = ".", extras = [
   "dataframely",
   # "ibm-db",
   "s3",
+  "connectorx",
 ] }
 
 [feature.py311.dependencies]
@@ -196,25 +200,22 @@ python = "3.12.*"
 python = "3.13.*"
 [feature.py314.dependencies]
 python = "3.14.*"
-[feature.pd1.dependencies]
-pandas = ">=1.5.0, <2"
-[feature.pd2.dependencies]
-pandas = ">=2,<4"
-[feature.sa1.dependencies]
-sqlalchemy = ">=1.4.39, <2"
-[feature.sa2.dependencies]
-sqlalchemy = ">=2"
-[feature.duckdb0.dependencies]
-duckdb = "<1"
-sqlalchemy = "<2.0.45" # sqlalchemy >=2.0.45 is incompatible with duckdb <1.5.3 because of duckdb-engine https://github.com/Mause/duckdb_engine/issues/1379
-[feature.duckdb1.dependencies]
-duckdb = ">=1.5.3" # sqlalchemy >=2.0.45 is incompatible with duckdb <1.5.3 because of duckdb-engine https://github.com/Mause/duckdb_engine/issues/1379
-[feature.connectorx.dependencies]
-connectorx = ">=0.3.3"
-# keeping old code running requires more precise pinning
-[feature.polars12.dependencies]
-polars = "==1.2.1"
+
+[feature.pd3.constraints]
+pandas = "3.*"
+
+[feature.old.constraints]
+# pandas = "2.*"
 
 [environments]
 default = ["lint", "dev", "release", "all"]
+py311 = ["dev", "py311", "all"]
+py312 = ["dev", "py312", "all"]
+py313 = ["dev", "py313", "all"]
+py314 = ["dev", "py314", "all"]
+new = ["dev", "py314", "all", "pd3"]
+# todo: use lowest-direct once we fix https://github.com/prefix-dev/pixi/issues/5386
+# TODO: write linter that checks that all dependencies are exactly on their lowest version and if not,
+# tells the user to adjust the lower bounds of the package
+old = { features = ["dev", "all", "old"], solve-strategy = "lowest" }
 docs = ["docs"]
