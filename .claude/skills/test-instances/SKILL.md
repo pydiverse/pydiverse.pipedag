@@ -26,11 +26,14 @@ Default-enabled: `postgres`, `duckdb`, `polars`, `lock_tests`.
 
 ## CI matrix (from `.github/workflows/tests.yml`)
 
-| Job | Flags |
-|---|---|
-| smoke_test | (defaults) |
-| postgres_test | `--ibis --pdtransform --no-duckdb` |
-| duckdb_test | `--ibis --pdtransform --no-postgres --no-lock_tests` |
-| s3_test | `--s3 --ibis --pdtransform --no-duckdb --no-postgres --no-lock_tests` |
-| mssql_test | `--mssql -m mssql --ibis --pdtransform --no-postgres --no-duckdb` |
-| db2_test | `--ibm_db2 -m ibm_db2 --pdtransform --no-postgres --no-duckdb` |
+Single `test` job; entries vary by pixi environment (`py311`–`py314`, `old`, `no-win`) and flags:
+
+| Backend | Environments | Flags |
+|---|---|---|
+| Postgres | py311–py314, old | `--ibis --pdtransform --no-duckdb` |
+| DuckDB | py311–py314, old | `--ibis --pdtransform --no-postgres --no-lock_tests` |
+| S3 | py311–py314, old | `--s3 --ibis --pdtransform --no-duckdb --no-postgres --no-lock_tests` |
+| MSSql | py311–py314, old | `--mssql -m mssql --ibis --pdtransform --no-postgres --no-duckdb` |
+| DB2 | py311–py313 | `--ibm_db2 -m ibm_db2 --pdtransform --no-postgres --no-duckdb` |
+| Orchestration | py313 | `--dask -m dask` |
+| Snowflake | no-win | `--ibis --pdtransform --snowflake --no-postgres --no-duckdb` |

@@ -49,183 +49,63 @@ jobs:
       - name: Run CLI
         run: pixi run -e no-features pipedag-manage --help
 
-  # Every test environment ships all optional dependencies, so the only axis left is the
-  # python version. `old` additionally resolves every dependency to its lowest version;
-  # postgres and duckdb are enough to catch violated lower version bounds.
+  # Every test environment ships all optional dependencies, so the matrix is backend x
+  # environment. `old` additionally resolves every dependency to its lowest version to
+  # catch violated lower version bounds.
   test:
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.backend }} (${{ matrix.environment }})
+    runs-on: ubuntu-latest
     timeout-minutes: ${{ matrix.timeout-minutes || 30 }}
     strategy:
       fail-fast: false
       matrix:
+        backend: [Postgres, DuckDB, S3, MSSql, DB2]
+        environment: [py311, py312, py313, py314, old]
+        exclude:
+          # ibm_db is not available for python 3.14, yet
+          - backend: DB2
+            environment: py314
+          # the old environment does not include the ibm-db feature
+          - backend: DB2
+            environment: old
         include:
-          - name: Smoke Test
-            os: ubuntu-latest
-            environment: py314
-            docker-services: |
-              postgres
-              zoo
-              minio
-
-          - name: Postgres (py311)
-            os: ubuntu-latest
-            environment: py311
+          # these entries match a backend from the matrix above and only add its settings
+          - backend: Postgres
             docker-services: |
               postgres
               zoo
             pytest-arguments: --ibis --pdtransform --no-duckdb
-          - name: Postgres (py312)
-            os: ubuntu-latest
-            environment: py312
-            docker-services: |
-              postgres
-              zoo
-            pytest-arguments: --ibis --pdtransform --no-duckdb
-          - name: Postgres (py313)
-            os: ubuntu-latest
-            environment: py313
-            docker-services: |
-              postgres
-              zoo
-            pytest-arguments: --ibis --pdtransform --no-duckdb
-          - name: Postgres (py314)
-            os: ubuntu-latest
-            environment: py314
-            docker-services: |
-              postgres
-              zoo
-            pytest-arguments: --ibis --pdtransform --no-duckdb
-          - name: Postgres (old)
-            os: ubuntu-latest
-            environment: old
-            docker-services: |
-              postgres
-              zoo
-            pytest-arguments: --ibis --pdtransform --no-duckdb
-
-          - name: DuckDB (py311)
-            os: ubuntu-latest
-            environment: py311
+          - backend: DuckDB
             docker-services: |
               zoo
               minio
             pytest-arguments: --ibis --pdtransform --no-postgres --no-lock_tests
-          - name: DuckDB (py312)
-            os: ubuntu-latest
-            environment: py312
-            docker-services: |
-              zoo
-              minio
-            pytest-arguments: --ibis --pdtransform --no-postgres --no-lock_tests
-          - name: DuckDB (py313)
-            os: ubuntu-latest
-            environment: py313
-            docker-services: |
-              zoo
-              minio
-            pytest-arguments: --ibis --pdtransform --no-postgres --no-lock_tests
-          - name: DuckDB (py314)
-            os: ubuntu-latest
-            environment: py314
-            docker-services: |
-              zoo
-              minio
-            pytest-arguments: --ibis --pdtransform --no-postgres --no-lock_tests
-          - name: DuckDB (old)
-            os: ubuntu-latest
-            environment: old
-            docker-services: |
-              zoo
-              minio
-            pytest-arguments: --ibis --pdtransform --no-postgres --no-lock_tests
-
-          - name: S3 (py311)
-            os: ubuntu-latest
-            environment: py311
+          - backend: S3
             docker-services: |
               postgres
               minio
               zoo
             pytest-arguments: --s3 --ibis --pdtransform --no-duckdb --no-postgres --no-lock_tests
-          - name: S3 (py312)
-            os: ubuntu-latest
-            environment: py312
-            docker-services: |
-              postgres
-              minio
-              zoo
-            pytest-arguments: --s3 --ibis --pdtransform --no-duckdb --no-postgres --no-lock_tests
-          - name: S3 (py313)
-            os: ubuntu-latest
-            environment: py313
-            docker-services: |
-              postgres
-              minio
-              zoo
-            pytest-arguments: --s3 --ibis --pdtransform --no-duckdb --no-postgres --no-lock_tests
-          - name: S3 (py314)
-            os: ubuntu-latest
-            environment: py314
-            docker-services: |
-              postgres
-              minio
-              zoo
-            pytest-arguments: --s3 --ibis --pdtransform --no-duckdb --no-postgres --no-lock_tests
-
-          - name: MSSql (py311)
-            os: ubuntu-latest
-            environment: py311
+          - backend: MSSql
             docker-services: |
               mssql
               zoo
             pytest-arguments: --mssql -m mssql --ibis --pdtransform --no-postgres --no-duckdb
-          - name: MSSql (py312)
-            os: ubuntu-latest
-            environment: py312
-            docker-services: |
-              mssql
-              zoo
-            pytest-arguments: --mssql -m mssql --ibis --pdtransform --no-postgres --no-duckdb
-          - name: MSSql (py313)
-            os: ubuntu-latest
-            environment: py313
-            docker-services: |
-              mssql
-              zoo
-            pytest-arguments: --mssql -m mssql --ibis --pdtransform --no-postgres --no-duckdb
-          - name: MSSql (py314)
-            os: ubuntu-latest
-            environment: py314
-            docker-services: |
-              mssql
-              zoo
-            pytest-arguments: --mssql -m mssql --ibis --pdtransform --no-postgres --no-duckdb
-
-          # ibm_db is not available for python 3.14, yet. --ibis is not supported.
-          - name: DB2 (py311)
-            os: ubuntu-latest
-            environment: py311
-            docker-services: ibm_db2
-            pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform --no-postgres --no-duckdb
-          - name: DB2 (py313)
-            os: ubuntu-latest
-            environment: py313
+          # --ibis is not supported
+          - backend: DB2
             docker-services: ibm_db2
             pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform --no-postgres --no-duckdb
 
+          # these backends are not part of the matrix above, so each entry is a single extra job
           # prefect is currently not part of any environment
-          - name: Orchestration (py313)
-            os: ubuntu-latest
+          - backend: Orchestration
             environment: py313
             docker-services: |
               postgres
               zoo
             pytest-arguments: --dask -m dask
-
           # snowflake is only part of no-win (no windows build of libadbc-driver-snowflake)
-          - name: Snowflake (no-win)
-            os: ubuntu-latest
+          - backend: Snowflake
             environment: no-win
             needs-secrets: true
             workers: 1  # tests are often waiting on snowflake
