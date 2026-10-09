@@ -65,9 +65,6 @@ jobs:
           # ibm_db is not available for python 3.14, yet
           - backend: DB2
             environment: py314
-          # the old environment does not include the ibm-db feature
-          - backend: DB2
-            environment: old
         include:
           # these entries match a backend from the matrix above and only add its settings
           - backend: Postgres

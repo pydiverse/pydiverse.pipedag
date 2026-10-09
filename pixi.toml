@@ -228,4 +228,4 @@ no-features = ["dev"]
 # todo: use lowest-direct once we fix https://github.com/prefix-dev/pixi/issues/5386
 # TODO: write linter that checks that all dependencies are exactly on their lowest version and if not,
 # tells the user to adjust the lower bounds of the package
-old = { features = ["dev", "all"], solve-strategy = "lowest" }
+old = { features = ["dev", "all", "ibm-db"], solve-strategy = "lowest" }
