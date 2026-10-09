@@ -1,7 +1,8 @@
 version: "3.9"
 services:
   minio:
-    image: quay.io/minio/minio
+    # MinIO no longer publishes images, silo is a community-maintained fork
+    image: pgsty/silo
     ports:
       - "9000:9000" # API
       - "9001:9001" # Console: using minioadmin:minioadmin

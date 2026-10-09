@@ -14,50 +14,50 @@ repos:
       # ruff
       - id: ruff-format
         name: ruff-format
-        entry: pixi run -e lint ruff format --force-exclude
+        entry: pixi run ruff format --force-exclude
         language: system
         types_or: [python, pyi]
         require_serial: true
       - id: ruff
         name: ruff
-        entry: pixi run -e lint ruff check --fix --exit-non-zero-on-fix --force-exclude
+        entry: pixi run ruff check --fix --exit-non-zero-on-fix --force-exclude
         language: system
         types_or: [python, pyi]
         require_serial: true
       # mypy
       # - id: mypy
       #   name: mypy
-      #   entry: pixi run -e lint mypy
+      #   entry: pixi run mypy
       #   language: system
       #   types: [python]
       #   require_serial: true
       # taplo
       - id: taplo
         name: taplo
-        entry: pixi run -e lint taplo format
+        entry: pixi run taplo format
         language: system
         types: [toml]
         exclude: ^pixi\.toml$  # environments should be one-liners
       - id: trailing-whitespace-fixer
         name: trailing-whitespace-fixer
-        entry: pixi run -e lint trailing-whitespace-fixer
+        entry: pixi run trailing-whitespace-fixer
         language: system
         types: [text]
       - id: end-of-file-fixer
         name: end-of-file-fixer
-        entry: pixi run -e lint end-of-file-fixer
+        entry: pixi run end-of-file-fixer
         language: system
         types: [text]
       - id: check-merge-conflict
         name: check-merge-conflict
-        entry: pixi run -e lint check-merge-conflict --assume-in-merge
+        entry: pixi run check-merge-conflict --assume-in-merge
         language: system
         types: [text]
         exclude: ".rst$"
       # typos
       - id: typos
         name: typos
-        entry: pixi run -e lint typos --force-exclude
+        entry: pixi run typos --force-exclude
         language: system
         types: [text]
         require_serial: true
@@ -65,7 +65,7 @@ repos:
       - id: insert-license
         name: insert-license
         entry: >-
-          pixi run -e lint
+          pixi run
           insert-license
           --license-base64 Q29weXJpZ2h0IChjKSBRdWFudENvIGFuZCBweWRpdmVyc2UgY29udHJpYnV0b3JzIDIwMjUtMjAyNQpTUERYLUxpY2Vuc2UtSWRlbnRpZmllcjogQlNELTMtQ2xhdXNlCg==
           --dynamic-years

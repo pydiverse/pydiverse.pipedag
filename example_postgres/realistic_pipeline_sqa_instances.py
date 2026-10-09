@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 # Compared with realistic_pipeline_sqa.py, this example shows how to set up multiple
@@ -434,7 +434,8 @@ def predict(model: xgboost.Booster, test_set: FlatTable):
         predict_col = pd.Series(pd.NA * len(x))[0 : len(x)]
     else:
         dx = xgb.DMatrix(x)
-        predict_col = model.predict(dx)
+        # xgboost returns a (0, 0) shaped array for an empty dataset
+        predict_col = model.predict(dx).reshape(len(x))
 
     return predict_col
 

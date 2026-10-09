@@ -1,13 +1,11 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 import itertools
 import multiprocessing as mp
 import os
 import signal
-import time
 from queue import Empty
-from threading import Thread
 
 import pytest
 from _pytest.python import Config
@@ -17,6 +15,10 @@ from .worker import start_worker
 
 
 class Session:
+    # A worker sends `sessionfinish` as its last message and then exits. Consider it stuck
+    # if it is still alive this long after that message.
+    worker_exit_timeout = 30  # seconds
+
     def __init__(self, config: Config):
         self.config = config
         self.ctx = mp.get_context("spawn")  # or "forkserver"
@@ -69,20 +71,17 @@ class Session:
         self.prepare_work_queue(num_workers, grouped_items)
         self.start_workers(num_workers)
 
-        # Monitor workers
-        def check_workers_alive_loop():
-            while True:
-                self.check_workers_alive()
-                time.sleep(1)
-
-        thread = Thread(target=check_workers_alive_loop, daemon=True)
-        thread.start()
-
         # Handle messages
         while self.running_workers and not self._should_shutdown:
+            # A worker flushes all its messages to the queue before it exits. So if the
+            # queue is empty after a worker was seen to have exited cleanly, that worker
+            # exited without sending `sessionfinish`.
+            exited_workers = self.check_workers_alive()
             try:
                 msg, kwargs = self.msg_queue.get(timeout=1)
             except Empty:
+                for worker in exited_workers:
+                    self.shutdown(self.worker_died_message(worker))
                 continue
 
             worker = self.workers[kwargs["worker_id"]]
@@ -90,7 +89,11 @@ class Session:
             if msg == "sessionstart":
                 pass
             elif msg == "sessionfinish":
-                worker.join()
+                worker.join(timeout=self.worker_exit_timeout)
+                if worker.is_alive():
+                    self.shutdown(
+                        f"Worker {worker.name} did not exit within {self.worker_exit_timeout}s after finishing."
+                    )
                 self.running_workers.remove(worker)
             elif msg == "logstart":
                 self.config.hook.pytest_runtest_logstart(nodeid=kwargs["nodeid"], location=kwargs["location"])
@@ -108,6 +111,7 @@ class Session:
                 raise ValueError(error_msg)
 
         if self._should_shutdown:
+            self.terminate_workers()
             pytest.exit(self._shutdown_reason)
 
         return True
@@ -166,24 +170,38 @@ class Session:
             self.workers.append(worker)
             self.running_workers.add(worker)
 
-    def check_workers_alive(self):
+    def check_workers_alive(self) -> list:
+        """Shut down if a worker crashed and return the workers that exited cleanly."""
+        exited_workers = []
         for worker in self.running_workers:
-            if not worker.is_alive():
-                group_name = self.debug_worker_group.get(worker)
-                test_name = self.debug_worker_test.get(worker)
-                msg = (
-                    f"Worker {worker.name} died with exit code {worker.exitcode}."
-                    f" (group = {group_name}, test = {test_name})"
-                )
-                self.shutdown(msg)
+            if worker.is_alive():
+                continue
+
+            if worker.exitcode == 0:
+                exited_workers.append(worker)
+            else:
+                self.shutdown(self.worker_died_message(worker))
+        return exited_workers
+
+    def worker_died_message(self, worker) -> str:
+        group_name = self.debug_worker_group.get(worker)
+        test_name = self.debug_worker_test.get(worker)
+        return f"Worker {worker.name} died with exit code {worker.exitcode}. (group = {group_name}, test = {test_name})"
+
+    def terminate_workers(self):
+        # the workers are not daemonic, so they would keep this process alive forever
+        for worker in self.workers:
+            worker.terminate()
+        # The remaining work items will never be read. Without this, multiprocessing's exit
+        # handler waits forever for the feeder thread to write them into the full pipe.
+        self.work_queue.cancel_join_thread()
 
     def shutdown(self, reason: str):
         self._shutdown_reason = reason
         self._should_shutdown = True
 
     def exit_gracefully(self, signum, frame):
-        for worker in self.workers:
-            worker.terminate()
+        self.terminate_workers()
 
         signame = signal.Signals(signum).name
         pytest.exit(f"Received signal {signame}")
