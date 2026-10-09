@@ -103,7 +103,7 @@ jobs:
             pytest-arguments: --ibis --pdtransform --no-duckdb
           # prefect is currently not part of any environment
           - backend: Orchestration
-            environment: py313
+            environment: py314
             docker-services: |
               postgres
               zoo
