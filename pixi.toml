@@ -3,7 +3,6 @@ name = "pydiverse-pidepag"
 channels = ["conda-forge"]
 exclude-newer = "7d"
 preview = ["pixi-build"]
-# todo: add linux-aarch64 platform
 platforms = ["linux-64", { platform = "osx-arm64", osx = "14.5" }, "win-64"]
 
 [exclude-newer]
@@ -63,11 +62,9 @@ adbc-driver-postgresql = ">=1.6.0,<2"
 [package.extra-dependencies.filelock]
 filelock = ">=3.20.0"
 
-# TODO: Remove?
 [package.extra-dependencies.zookeeper]
 kazoo = ">=2.8.0"
 
-# TODO: Remove?
 [package.extra-dependencies.dask]
 # is also used by computation tracer when running all tests
 dask = ">=2023.2.0"
@@ -75,16 +72,13 @@ dask = ">=2023.2.0"
 toolz = ">=0.12.1"
 cloudpickle = ">=2.2.0"
 
-# Todo: remove?
 [package.extra-dependencies.prefect]
 prefect = ">=3,<4"
 
 [package.extra-dependencies.snowflake]
 snowflake-sqlalchemy = ">=1.6.1"
 adbc-driver-snowflake = ">=1.9.0"
-# TODO: Do we need a no-adbc version?
 
-# TODO: Remove?
 [package.extra-dependencies.ibis]
 # Table Hooks
 ibis-framework = ">=10.5.0"
@@ -125,7 +119,6 @@ gcsfs = ">=2025.9.0,<2027"
 google-auth = ">=2.48.0"
 
 [package.extra-dependencies.connectorx]
-# TODO: remove?
 connectorx = ">=0.3.3"
 
 [dependencies]
@@ -254,7 +247,4 @@ no-win = ["dev", "py314", "all", "snowflake"]
 no-adbc-dy = ["dev", "py314", "no-adbc-dy"]
 # only the default feature, so that no optional dependency is installed
 no-features = []
-# todo: use lowest-direct once we fix https://github.com/prefix-dev/pixi/issues/5386
-# TODO: write linter that checks that all dependencies are exactly on their lowest version and if not,
-# tells the user to adjust the lower bounds of the package
 old = { features = ["dev", "all", "ibm-db"], solve-strategy = "lowest" }
