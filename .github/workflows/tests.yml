@@ -55,7 +55,7 @@ jobs:
   test:
     name: ${{ matrix.backend }} (${{ matrix.environment }})
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ matrix.timeout-minutes || 30 }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -93,7 +93,14 @@ jobs:
             docker-services: ibm_db2
             pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform --no-postgres --no-duckdb
 
-          # these backends are not part of the matrix above, so each entry is a single extra job
+          # these entries don't match the matrix above, so each one is a single extra job
+          # without postgres-adbc and dataframely to cover the fallback code paths
+          - backend: Postgres
+            environment: no-adbc-dy
+            docker-services: |
+              postgres
+              zoo
+            pytest-arguments: --ibis --pdtransform --no-duckdb
           # prefect is currently not part of any environment
           - backend: Orchestration
             environment: py313
@@ -101,16 +108,12 @@ jobs:
               postgres
               zoo
             pytest-arguments: --dask -m dask
-          # snowflake is only part of no-win (no windows build of libadbc-driver-snowflake)
-          - backend: Snowflake
-            environment: no-win
-            needs-secrets: true
-            workers: 1  # tests are often waiting on snowflake
-            timeout-minutes: 50
+          - backend: Orchestration
+            environment: old
             docker-services: |
               postgres
               zoo
-            pytest-arguments: --ibis --pdtransform --snowflake --no-postgres --no-duckdb
+            pytest-arguments: --dask -m dask
     steps:
       - name: Checkout branch
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -151,19 +154,53 @@ jobs:
           done
 
       - name: Run tests
-        # don't execute tests that need credentials on forks
-        if: ${{ !matrix.needs-secrets || github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          ERROR_ONLY: 1
+          LOG_TEST_NAME: 1
+        run: pixi run -e ${{ matrix.environment }} pytest tests ${RUNNER_DEBUG:+-v} --color=yes --workers=4 ${{ matrix.pytest-arguments }}
+
+  # separate job, so that only it gets the snowflake credentials and it is skipped on forks
+  snowflake:
+    name: Snowflake (no-win)
+    # don't execute on forks due to missing credentials
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
+        with:
+          # snowflake is only part of no-win (no windows build of libadbc-driver-snowflake)
+          environments: no-win
+
+      - name: Start Docker Compose
+        uses: isbang/compose-action@248470ecc5ed40d8ed3d4480d8260d77179ef579
+        with:
+          compose-file: docker-compose.yaml
+          services: |
+            postgres
+            zoo
+
+      - name: Wait for Docker Servers
+        run: |
+          until bash ./.github/scripts/docker_compose_ready.sh postgres zoo; do
+            sleep 1
+          done
+
+      - name: Run tests
         env:
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-          SNOWFLAKE_DB_SUFFIX: ${{ matrix.environment }}
+          # ends up in a snowflake database name, which must not contain dashes
+          SNOWFLAKE_DB_SUFFIX: no_win
           ERROR_ONLY: 1
           LOG_TEST_NAME: 1
-        run: |
-          # the suffix ends up in a snowflake database name, which must not contain dashes
-          export SNOWFLAKE_DB_SUFFIX="${SNOWFLAKE_DB_SUFFIX//-/_}"
-          pixi run -e ${{ matrix.environment }} pytest tests ${RUNNER_DEBUG:+-v} --color=yes --workers=${{ matrix.workers || 4 }} ${{ matrix.pytest-arguments }}
+        # tests are often waiting on snowflake, so more workers don't help
+        run: pixi run -e no-win pytest tests ${RUNNER_DEBUG:+-v} --color=yes --workers=1 --ibis --pdtransform --snowflake --no-postgres --no-duckdb
 
   # single job to require in the branch protection rules (the matrix job names change often)
   all_green:
@@ -173,6 +210,7 @@ jobs:
       - lint
       - import_test
       - test
+      - snowflake
     runs-on: ubuntu-latest
     steps:
       - name: Check that no job failed

@@ -64,9 +64,8 @@ pixi run -e py311 pytest
 Please, bear in mind, that we currently still want to be python 3.11 compatible while
 always supporting the newest python version available on conda-forge.
 
-When using Pycharm, you might find it useful that we install a `conda` executable stub you can
-use for creating conda interpreters: `<pydiverse.pipedag checkout>/.pixi/envs/default/libexec/conda`
-For more information, see [here](https://pixi.sh/latest/ide_integration/pycharm/).
+When using PyCharm, you can add the interpreter of a pixi environment as an existing
+interpreter: `<pydiverse.pipedag checkout>/.pixi/envs/default/bin/python`
 
 ## Testing
 
