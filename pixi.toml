@@ -39,7 +39,6 @@ pyyaml = ">=6.0.3"
 cryptography = ">=45.0.7"
 click = ">=8.1.8"
 pyparsing = ">=3.2.5"
-# SQLAlchemy 2.1 defaults to psycopg 3 for postgresql:// URLs, which breaks our COPY code (copy_expert)
 sqlalchemy = ">=2.0.41"
 pandas = ">=2.3.0"          # maybe extra?
 pyarrow = ">=19.0.0"        # maybe extra?
