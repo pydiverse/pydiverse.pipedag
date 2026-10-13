@@ -18,13 +18,11 @@ jobs:
 
       - name: Set up pixi
         uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
-        with:
-          environments: release
 
       - name: Ensure tag matches version
         if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
         run: |
-          version="$(pixi exec -s go-yq -- yq .project.version pyproject.toml)"
+          version="$(pixi run yq .project.version pyproject.toml)"
           tag="${{ github.ref_name }}"
           if [ "$version" != "$tag" ]; then
             echo "Tag $tag does not match version $version"
@@ -32,10 +30,10 @@ jobs:
           fi
 
       - name: Build
-        run: pixi run -e release hatch build
+        run: pixi run hatch build
 
       - name: Check build
-        run: pixi run -e release twine check dist/*
+        run: pixi run twine check dist/*
 
       - name: Check install
         shell: pixi exec -s python==3.11.* -s pip -- bash -e {0}

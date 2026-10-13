@@ -62,7 +62,7 @@ if [[ "$IBM_DB2" != 0 ]]; then
 fi
 
 if [[ "$MINIO" != 0 ]]; then
-	if ! [[ "$running_services" =~ "minio" ]] || ! docker compose logs minio 2>&1 | grep "Docs: https://docs.min.io" > /dev/null; then
+	if ! [[ "$running_services" =~ "minio" ]] || ! curl -sf http://localhost:9000/minio/health/live > /dev/null; then
     echo "MINIO is not ready yet."
     exit 1
   fi
