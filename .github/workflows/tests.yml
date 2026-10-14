@@ -24,9 +24,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout branch
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up pixi
-        uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
+        uses: prefix-dev/setup-pixi@9dabb60412d3d2d967a8d682f7ce01317af40514 # v0.11.0
       - name: pre-commit
         run: pixi run pre-commit run -a --color=always --show-diff-on-failure
       - name: Check pyproject.toml dependencies
@@ -38,9 +38,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout branch
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up pixi
-        uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
+        uses: prefix-dev/setup-pixi@9dabb60412d3d2d967a8d682f7ce01317af40514 # v0.11.0
         with:
           environments: no-features
       # the no-features environment has none of the optional dependencies installed
@@ -116,16 +116,16 @@ jobs:
             pytest-arguments: --dask -m dask
     steps:
       - name: Checkout branch
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up pixi
-        uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
+        uses: prefix-dev/setup-pixi@9dabb60412d3d2d967a8d682f7ce01317af40514 # v0.11.0
         with:
           environments: ${{ matrix.environment }}
 
       - name: Start Docker Compose
         if: ${{ matrix.docker-services != '' }}
-        uses: isbang/compose-action@248470ecc5ed40d8ed3d4480d8260d77179ef579
+        uses: isbang/compose-action@b659c744ee9bed25aea2307c017ad849bd104433
         with:
           compose-file: docker-compose.yaml
           services: ${{ matrix.docker-services }}
@@ -168,16 +168,16 @@ jobs:
     timeout-minutes: 50
     steps:
       - name: Checkout branch
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up pixi
-        uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
+        uses: prefix-dev/setup-pixi@9dabb60412d3d2d967a8d682f7ce01317af40514 # v0.11.0
         with:
           # snowflake is only part of no-win (no windows build of libadbc-driver-snowflake)
           environments: no-win
 
       - name: Start Docker Compose
-        uses: isbang/compose-action@248470ecc5ed40d8ed3d4480d8260d77179ef579
+        uses: isbang/compose-action@b659c744ee9bed25aea2307c017ad849bd104433
         with:
           compose-file: docker-compose.yaml
           services: |
