@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import datetime as dt
+import importlib.metadata
 import string
 import sys
 from typing import Any
@@ -38,6 +39,13 @@ from tests.util.sql import get_config_with_table_store
 # disable duckdb for now, since they have a bug in version 0.9.2 that needs fixing
 pytestmark = [with_instances(tuple(set(DATABASE_INSTANCES) | {"snowflake"}))]
 pd_version = Version(pd.__version__)
+
+
+def ibm_db_sa_retrieves_boolean_as_int16() -> bool:
+    # with ibm_db_sa < 0.4.4, boolean columns are retrieved as SMALLINT
+    if get_dialect_name() != "ibm_db_sa":
+        return False
+    return Version(importlib.metadata.version("ibm_db_sa")) < Version("0.4.4")
 
 
 class Values:
@@ -129,7 +137,7 @@ class TestPandasTableHookNumpy:
 
             allowed_dtypes = set(df.dtypes)
             for col, dtype in in_df.dtypes.items():
-                if col == "boolean" and get_dialect_name() == "ibm_db_sa":
+                if col == "boolean" and ibm_db_sa_retrieves_boolean_as_int16():
                     assert dtype == pd.Int16Dtype()
                 else:
                     assert dtype in allowed_dtypes
@@ -290,7 +298,7 @@ class TestPandasTableHookArrow:
             allowed_dtypes.remove(pd.ArrowDtype(pa.string()))
             allowed_dtypes.add(pd.StringDtype("pyarrow"))
             for col, dtype in in_df.dtypes.items():
-                if col == "boolean" and get_dialect_name() == "ibm_db_sa":
+                if col == "boolean" and ibm_db_sa_retrieves_boolean_as_int16():
                     assert dtype == pd.ArrowDtype(pa.int16())
                 else:
                     assert dtype in allowed_dtypes

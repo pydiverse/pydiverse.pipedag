@@ -2,6 +2,7 @@
 
 ## 0.12.15 (2026-XX-XX)
 - Build: Clean up pixi environments and update package constraints
+- Deps: Update dependencies. In particular: support Polars 2
 
 ## 0.12.14 (2026-07-14)
 - Fix: Fix compatibility with duckdb >=1.5 when using S3

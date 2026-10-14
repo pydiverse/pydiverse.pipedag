@@ -120,6 +120,30 @@ class PostgresTableStore(SQLTableStore):
         )
 
 
+def _bulk_load_csv(store: SQLTableStore, table: Table, schema: Schema, buf: StringIO | BytesIO):
+    """Load CSV data from ``buf`` into an existing table with ``COPY ... FROM STDIN``."""
+    engine = store.engine
+    table_name = engine.dialect.identifier_preparer.quote(table.name)
+    schema_name = engine.dialect.identifier_preparer.format_schema(schema.get())
+    sql = f"COPY {schema_name}.{table_name} FROM STDIN WITH (FORMAT CSV, NULL '\\N')"
+
+    dbapi_conn = engine.raw_connection()
+    try:
+        with dbapi_conn.cursor() as cur:
+            store.logger.info("Executing bulk load", query=sql)
+            if hasattr(cur, "copy_expert"):
+                # psycopg2 (default driver for postgresql:// URLs before SQLAlchemy 2.1)
+                cur.copy_expert(sql=sql, file=buf)
+            else:
+                # psycopg 3 (default driver for postgresql:// URLs since SQLAlchemy 2.1)
+                with cur.copy(sql) as copy:
+                    while data := buf.read(1024 * 1024):
+                        copy.write(data)
+        dbapi_conn.commit()
+    finally:
+        dbapi_conn.close()
+
+
 @PostgresTableStore.register_table()
 class SQLAlchemyTableHook(sql_hooks.SQLAlchemyTableHook):
     pass  # postgres is our reference dialect
@@ -158,20 +182,7 @@ class PandasTableHook(sql_hooks.PandasTableHook):
             quoting=csv.QUOTE_MINIMAL,
         )
         s_buf.seek(0)
-
-        engine = store.engine
-        table_name = engine.dialect.identifier_preparer.quote(table.name)
-        schema_name = engine.dialect.identifier_preparer.format_schema(schema.get())
-
-        dbapi_conn = engine.raw_connection()
-        try:
-            with dbapi_conn.cursor() as cur:
-                sql = f"COPY {schema_name}.{table_name} FROM STDIN WITH (FORMAT CSV, NULL '\\N')"
-                store.logger.info("Executing bulk load", query=sql)
-                cur.copy_expert(sql=sql, file=s_buf)
-            dbapi_conn.commit()
-        finally:
-            dbapi_conn.close()
+        _bulk_load_csv(store, table, schema, s_buf)
         store.add_indexes_and_set_nullable(
             table,
             schema,
@@ -211,17 +222,4 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
             quote_style="necessary",
         )
         s_buf.seek(0)
-
-        engine = store.engine
-        table_name = engine.dialect.identifier_preparer.quote(table.name)
-        schema_name = engine.dialect.identifier_preparer.format_schema(schema.get())
-
-        dbapi_conn = engine.raw_connection()
-        try:
-            with dbapi_conn.cursor() as cur:
-                sql = f"COPY {schema_name}.{table_name} FROM STDIN WITH (FORMAT CSV, NULL '\\N')"
-                store.logger.info("Executing bulk load", query=sql)
-                cur.copy_expert(sql=sql, file=s_buf)
-            dbapi_conn.commit()
-        finally:
-            dbapi_conn.close()
+        _bulk_load_csv(store, table, schema, s_buf)
