@@ -50,6 +50,20 @@ In a typical workflow, services are already running while you iterate on code an
 In rare cases a restart of containers might be needed to clear corrupted caches or to switch from a different
 docker-compose.yaml to working on this repo.
 
+MSSQL on macOS: msodbcsql18 hardcodes `/opt/homebrew/opt/openssl/lib`, which Homebrew now points to the unsupported
+openssl@4 ([upstream issue](https://github.com/microsoft/homebrew-mssql-release/issues/113)). Install openssl@3 and
+prefix the command: `DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib pytest ... --mssql`. Exporting it in `.envrc`
+doesn't reach the agent's shell, because macOS SIP strips `DYLD_*` variables.
+
+### Working without network access (agent sandbox)
+
+Plain `pixi run` (even with `--frozen`) needs network access, because the pixi-build source package re-initializes
+its build backend on every run. Offline:
+- Default env: run tools directly (`pytest ...`, `python ...`) when it's activated, e.g. via `eval "$(pixi shell-hook)"` in `.envrc`.
+- Other envs: `pixi run --no-install -e <env> ...`. Tasks: `pixi run --as-is <task>`.
+- Run `pixi install` outside the sandbox when the env needs updating (after lockfile/dependency changes).
+- Commit with `SKIP=pixi-install git commit ...`. All other pre-commit hooks use `pixi run --as-is` and work offline.
+
 ## Skills
 
 Read the relevant `SKILL.md` when working in a matching area.
