@@ -38,7 +38,6 @@ dependencies = [
   "fsspec >=2025.9.0,<2027",
   "msgpack >=1.1.1,<2",
   "networkx >=3.4,<4",
-  # allows installing next to prefect, raise once prefect is dropped (see pixi.toml)
   "packaging >=25.0",
   "pandas >=2.3.0,<4",
   "polars >=1.34.0,<3",

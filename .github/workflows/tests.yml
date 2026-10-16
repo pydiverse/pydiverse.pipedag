@@ -31,6 +31,8 @@ jobs:
         run: pixi run pre-commit run -a --color=always --show-diff-on-failure
       - name: Check pyproject.toml dependencies
         run: pixi run check-deps
+      - name: Check lower version bounds of the old environment
+        run: pixi run check-lowest-versions
 
   import_test:
     name: Import Test
