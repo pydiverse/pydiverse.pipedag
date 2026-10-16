@@ -49,9 +49,10 @@ jobs:
       - name: Run CLI
         run: pixi run -e no-features pipedag-manage --help
 
-  # Every test environment ships all optional dependencies, so the matrix is backend x
-  # environment. `old` additionally resolves every dependency to its lowest version to
-  # catch violated lower version bounds.
+  # Every test environment ships all optional dependencies except pydiverse-transform and
+  # pydiverse-colspec, so the matrix is backend x environment. Those two are only part of
+  # `py311cspd` and `old`. `old` additionally resolves every dependency to its lowest version
+  # to catch violated lower version bounds.
   test:
     name: ${{ matrix.backend }} (${{ matrix.environment }})
     runs-on: ubuntu-latest
@@ -60,38 +61,43 @@ jobs:
       fail-fast: false
       matrix:
         backend: [Postgres, DuckDB, S3, MSSql, DB2]
-        environment: [py311, py312, py313, py314, old]
+        environment: [py311, py311cspd, py312, py313, py314, old]
         exclude:
           # ibm_db is not available for python 3.14, yet
           - backend: DB2
             environment: py314
         include:
-          # these entries match a backend from the matrix above and only add its settings
+          # these entries match a backend or environment from the matrix above and only add
+          # its settings
+          - environment: py311cspd
+            pdtransform-argument: --pdtransform
+          - environment: old
+            pdtransform-argument: --pdtransform
           - backend: Postgres
             docker-services: |
               postgres
               zoo
-            pytest-arguments: --ibis --pdtransform --no-duckdb
+            pytest-arguments: --ibis --no-duckdb
           - backend: DuckDB
             docker-services: |
               zoo
               minio
-            pytest-arguments: --ibis --pdtransform --no-postgres --no-lock_tests
+            pytest-arguments: --ibis --no-postgres --no-lock_tests
           - backend: S3
             docker-services: |
               postgres
               minio
               zoo
-            pytest-arguments: --s3 --ibis --pdtransform --no-duckdb --no-postgres --no-lock_tests
+            pytest-arguments: --s3 --ibis --no-duckdb --no-postgres --no-lock_tests
           - backend: MSSql
             docker-services: |
               mssql
               zoo
-            pytest-arguments: --mssql -m mssql --ibis --pdtransform --no-postgres --no-duckdb
+            pytest-arguments: --mssql -m mssql --ibis --no-postgres --no-duckdb
           # --ibis is not supported
           - backend: DB2
             docker-services: ibm_db2
-            pytest-arguments: --ibm_db2 -m ibm_db2 --pdtransform --no-postgres --no-duckdb
+            pytest-arguments: --ibm_db2 -m ibm_db2 --no-postgres --no-duckdb
 
           # these entries don't match the matrix above, so each one is a single extra job
           # without postgres-adbc and dataframely to cover the fallback code paths
@@ -157,7 +163,7 @@ jobs:
         env:
           ERROR_ONLY: 1
           LOG_TEST_NAME: 1
-        run: pixi run -e ${{ matrix.environment }} pytest tests ${RUNNER_DEBUG:+-v} --color=yes --workers=4 ${{ matrix.pytest-arguments }}
+        run: pixi run -e ${{ matrix.environment }} pytest tests ${RUNNER_DEBUG:+-v} --color=yes --workers=4 ${{ matrix.pytest-arguments }} ${{ matrix.pdtransform-argument }}
 
   # separate job, so that only it gets the snowflake credentials and it is skipped on forks
   snowflake:
@@ -200,7 +206,7 @@ jobs:
           ERROR_ONLY: 1
           LOG_TEST_NAME: 1
         # tests are often waiting on snowflake, so more workers don't help
-        run: pixi run -e no-win pytest tests ${RUNNER_DEBUG:+-v} --color=yes --workers=1 --ibis --pdtransform --snowflake --no-postgres --no-duckdb
+        run: pixi run -e no-win pytest tests ${RUNNER_DEBUG:+-v} --color=yes --workers=1 --ibis --snowflake --no-postgres --no-duckdb
 
   # single job to require in the branch protection rules (the matrix job names change often)
   all_green:
