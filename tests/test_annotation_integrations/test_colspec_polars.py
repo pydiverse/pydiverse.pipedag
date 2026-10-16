@@ -107,7 +107,7 @@ def test_enum_violation():
     # it is expected that cast fails on invalid enum value
     with pytest.raises(
         pl.exceptions.InvalidOperationError,
-        match="conversion from `str` to `enum` failed in column 'c' for 1 out of 4 values",
+        match="conversion from `str` to `enum` failed in column 'c' for 1 out of \\d+ values",
     ):
         MySecondColSpec.cast_polars(second).collect()
     x, y = MySecondColSpec.filter_polars(second, cast=True)

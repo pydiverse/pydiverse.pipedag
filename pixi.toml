@@ -191,8 +191,9 @@ pydiverse-pipedag = { path = ".", extras = [
   # "snowflake",
   "ibis",
   "mssql",
-  "pdtransform",
-  "colspec",
+  # see feature.pdtransform.dependencies and feature.colspec.dependencies
+  # "pdtransform",
+  # "colspec",
   "dataframely",
   # see feature.ibm-db.dependencies
   # "ibm-db",
@@ -231,6 +232,13 @@ python = "3.14.*"
 # ibm-db doesn't work on py314 at the moment
 pydiverse-pipedag = { path = ".", extras = ["ibm-db"] }
 
+# pydiverse-transform and pydiverse-colspec pin lower versions of some dependencies, so they
+# are kept out of feature.all to test the latest versions everywhere else.
+[feature.pdtransform.dependencies]
+pydiverse-pipedag = { path = ".", extras = ["pdtransform"] }
+[feature.colspec.dependencies]
+pydiverse-pipedag = { path = ".", extras = ["colspec"] }
+
 [feature.snowflake]
 # there is currently no windows build for libadbc-driver-snowflake
 platforms = ["linux-64", "osx-arm64-macos-14-5"]
@@ -240,6 +248,7 @@ pydiverse-pipedag = { path = ".", extras = ["snowflake"] }
 [environments]
 default = ["lint", "docs", "dev", "release", "all", "ibm-db"]
 py311 = ["dev", "py311", "all", "ibm-db"]
+py311cspd = ["dev", "py311", "all", "colspec", "pdtransform", "ibm-db"]
 py312 = ["dev", "py312", "all", "ibm-db"]
 py313 = ["dev", "py313", "all", "ibm-db"]
 py314 = ["dev", "py314", "all"]
@@ -247,4 +256,4 @@ no-win = ["dev", "py314", "all", "snowflake"]
 no-adbc-dy = ["dev", "py314", "no-adbc-dy"]
 # only the default feature, so that no optional dependency is installed
 no-features = []
-old = { features = ["dev", "all", "ibm-db"], solve-strategy = "lowest" }
+old = { features = ["dev", "all", "colspec", "pdtransform", "ibm-db"], solve-strategy = "lowest" }
