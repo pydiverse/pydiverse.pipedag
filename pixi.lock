@@ -472,7 +472,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/xyzservices-2026.9.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zict-3.0.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.1-pyh5ded981_0.conda
-      - conda_source: pydiverse-pipedag[02749ad0] @ .
+      - conda_source: pydiverse-pipedag[f27c0298] @ .
       osx-arm64-macos-14-5:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/accessible-pygments-0.0.5-pyhd8ed1ab_1.conda
@@ -889,7 +889,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.3.2-h8088a28_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-h31dac16_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
-      - conda_source: pydiverse-pipedag[16ab77ba] @ .
+      - conda_source: pydiverse-pipedag[ba1a96e1] @ .
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/accessible-pygments-0.0.5-pyhd8ed1ab_1.conda
@@ -1297,7 +1297,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-1.3.2-hfd05255_3.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_7.conda
-      - conda_source: pydiverse-pipedag[9f7336bc] @ .
+      - conda_source: pydiverse-pipedag[b97a33e5] @ .
   no-adbc-dy:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -1663,7 +1663,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/xyzservices-2026.9.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zict-3.0.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.1-pyh5ded981_0.conda
-      - conda_source: pydiverse-pipedag[02749ad0] @ .
+      - conda_source: pydiverse-pipedag[f27c0298] @ .
       osx-arm64-macos-14-5:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/adwaita-icon-theme-51.0-unix_0.conda
@@ -1989,7 +1989,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.3.2-h8088a28_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-h31dac16_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
-      - conda_source: pydiverse-pipedag[16ab77ba] @ .
+      - conda_source: pydiverse-pipedag[ba1a96e1] @ .
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/aiobotocore-3.9.2-pyh5ded981_0.conda
@@ -2305,7 +2305,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-1.3.2-hfd05255_3.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_7.conda
-      - conda_source: pydiverse-pipedag[9f7336bc] @ .
+      - conda_source: pydiverse-pipedag[b97a33e5] @ .
   no-features:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -2444,7 +2444,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/typing_extensions-4.16.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026c-h151e31d_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/universal_pathlib-0.3.10-pyhd8ed1ab_0.conda
-      - conda_source: pydiverse-pipedag[02749ad0] @ .
+      - conda_source: pydiverse-pipedag[f27c0298] @ .
       osx-arm64-macos-14-5:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/attrs-26.1.0-pyhcf101f3_0.conda
@@ -2574,7 +2574,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/yaml-0.2.5-h74c22ad_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.3.2-h8088a28_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
-      - conda_source: pydiverse-pipedag[16ab77ba] @ .
+      - conda_source: pydiverse-pipedag[ba1a96e1] @ .
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/attrs-26.1.0-pyhcf101f3_0.conda
@@ -2700,7 +2700,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/yaml-0.2.5-h6a83c73_3.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-1.3.2-hfd05255_3.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_7.conda
-      - conda_source: pydiverse-pipedag[9f7336bc] @ .
+      - conda_source: pydiverse-pipedag[b97a33e5] @ .
   no-win:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -3072,7 +3072,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/xyzservices-2026.9.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zict-3.0.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.1-pyh5ded981_0.conda
-      - conda_source: pydiverse-pipedag[02749ad0] @ .
+      - conda_source: pydiverse-pipedag[f27c0298] @ .
       osx-arm64-macos-14-5:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/adbc-driver-postgresql-1.12.0-pyh8af1aa0_2.conda
@@ -3404,7 +3404,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.3.2-h8088a28_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-h31dac16_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
-      - conda_source: pydiverse-pipedag[16ab77ba] @ .
+      - conda_source: pydiverse-pipedag[ba1a96e1] @ .
   old:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -3738,7 +3738,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/xgboost-3.0.2-cpu_pyhb39878e_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zict-2.1.0-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-0.5.0-py_0.tar.bz2
-      - conda_source: pydiverse-pipedag[02749ad0] @ .
+      - conda_source: pydiverse-pipedag[f27c0298] @ .
       osx-arm64-macos-14-5:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/adbc-driver-postgresql-1.8.0-pyha770c72_1.conda
@@ -4050,7 +4050,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/yarl-1.8.1-py311he2be06e_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.3.1-h8359307_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
-      - conda_source: pydiverse-pipedag[16ab77ba] @ .
+      - conda_source: pydiverse-pipedag[ba1a96e1] @ .
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/adbc-driver-postgresql-1.6.0-pyha770c72_2.conda
@@ -4315,7 +4315,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/yaml-0.2.5-h6a83c73_3.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/yarl-1.8.1-py311ha68e1ae_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.6-h0ea2cb4_0.conda
-      - conda_source: pydiverse-pipedag[9f7336bc] @ .
+      - conda_source: pydiverse-pipedag[b97a33e5] @ .
   py311:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -4678,7 +4678,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/xyzservices-2026.9.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zict-3.0.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.1-pyh5ded981_0.conda
-      - conda_source: pydiverse-pipedag[02749ad0] @ .
+      - conda_source: pydiverse-pipedag[f27c0298] @ .
       osx-arm64-macos-14-5:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/adbc-driver-postgresql-1.12.0-pyh8af1aa0_2.conda
@@ -5004,7 +5004,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.3.2-h8088a28_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-h31dac16_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
-      - conda_source: pydiverse-pipedag[16ab77ba] @ .
+      - conda_source: pydiverse-pipedag[ba1a96e1] @ .
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/adbc-driver-postgresql-1.12.0-pyh8af1aa0_2.conda
@@ -5320,7 +5320,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-1.3.2-hfd05255_3.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_7.conda
-      - conda_source: pydiverse-pipedag[9f7336bc] @ .
+      - conda_source: pydiverse-pipedag[b97a33e5] @ .
   py311cspd:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -5689,7 +5689,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/xyzservices-2026.9.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zict-3.0.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.1-pyh5ded981_0.conda
-      - conda_source: pydiverse-pipedag[02749ad0] @ .
+      - conda_source: pydiverse-pipedag[f27c0298] @ .
       osx-arm64-macos-14-5:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/adbc-driver-postgresql-1.12.0-pyh8af1aa0_2.conda
@@ -6021,7 +6021,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.3.2-h8088a28_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-h31dac16_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
-      - conda_source: pydiverse-pipedag[16ab77ba] @ .
+      - conda_source: pydiverse-pipedag[ba1a96e1] @ .
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/adbc-driver-postgresql-1.12.0-pyh8af1aa0_2.conda
@@ -6343,7 +6343,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-1.3.2-hfd05255_3.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_7.conda
-      - conda_source: pydiverse-pipedag[9f7336bc] @ .
+      - conda_source: pydiverse-pipedag[b97a33e5] @ .
   py312:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -6706,7 +6706,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/xyzservices-2026.9.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zict-3.0.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.1-pyh5ded981_0.conda
-      - conda_source: pydiverse-pipedag[02749ad0] @ .
+      - conda_source: pydiverse-pipedag[f27c0298] @ .
       osx-arm64-macos-14-5:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/adbc-driver-postgresql-1.12.0-pyh8af1aa0_2.conda
@@ -7032,7 +7032,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.3.2-h8088a28_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-h31dac16_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
-      - conda_source: pydiverse-pipedag[16ab77ba] @ .
+      - conda_source: pydiverse-pipedag[ba1a96e1] @ .
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/adbc-driver-postgresql-1.12.0-pyh8af1aa0_2.conda
@@ -7348,7 +7348,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-1.3.2-hfd05255_3.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_7.conda
-      - conda_source: pydiverse-pipedag[9f7336bc] @ .
+      - conda_source: pydiverse-pipedag[b97a33e5] @ .
   py313:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -7710,7 +7710,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/xyzservices-2026.9.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zict-3.0.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.1-pyh5ded981_0.conda
-      - conda_source: pydiverse-pipedag[02749ad0] @ .
+      - conda_source: pydiverse-pipedag[f27c0298] @ .
       osx-arm64-macos-14-5:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/adbc-driver-postgresql-1.12.0-pyh8af1aa0_2.conda
@@ -8036,7 +8036,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.3.2-h8088a28_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-h31dac16_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
-      - conda_source: pydiverse-pipedag[16ab77ba] @ .
+      - conda_source: pydiverse-pipedag[ba1a96e1] @ .
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/adbc-driver-postgresql-1.12.0-pyh8af1aa0_2.conda
@@ -8352,7 +8352,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-1.3.2-hfd05255_3.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_7.conda
-      - conda_source: pydiverse-pipedag[9f7336bc] @ .
+      - conda_source: pydiverse-pipedag[b97a33e5] @ .
   py314:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -8716,7 +8716,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/xyzservices-2026.9.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zict-3.0.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.1-pyh5ded981_0.conda
-      - conda_source: pydiverse-pipedag[02749ad0] @ .
+      - conda_source: pydiverse-pipedag[f27c0298] @ .
       osx-arm64-macos-14-5:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/adbc-driver-postgresql-1.12.0-pyh8af1aa0_2.conda
@@ -9040,7 +9040,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.3.2-h8088a28_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-h31dac16_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
-      - conda_source: pydiverse-pipedag[16ab77ba] @ .
+      - conda_source: pydiverse-pipedag[ba1a96e1] @ .
       win-64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/adbc-driver-postgresql-1.12.0-pyh8af1aa0_2.conda
@@ -9354,7 +9354,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-1.3.2-hfd05255_3.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_7.conda
-      - conda_source: pydiverse-pipedag[9f7336bc] @ .
+      - conda_source: pydiverse-pipedag[b97a33e5] @ .
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
   build_number: 20
@@ -40545,33 +40545,33 @@ packages:
     - zstd >=1.5.7,<1.6.0a0
   size: 387535
   timestamp: 1786599623274
-- conda_source: pydiverse-pipedag[02749ad0] @ .
+- conda_source: pydiverse-pipedag[b97a33e5] @ .
   variants:
     target_platform: noarch
   depends:
-  - attrs >=25.4.0
-  - click >=8.1.8
-  - cryptography >=45.0.7
-  - duckdb-engine >=0.15.0
-  - fsspec >=2025.9.0
-  - msgpack-python >=1.1.1
-  - networkx >=3.4
+  - attrs >=25.4.0,<27
+  - click >=8.1.8,<9
+  - cryptography >=45.0.7,<51
+  - duckdb-engine >=0.15.0,<0.16
+  - fsspec >=2025.9.0,<2027
+  - msgpack-python >=1.1.1,<2
+  - networkx >=3.4,<4
   - packaging >=25.0
-  - pandas >=2.3.0
-  - polars >=1.34.0
-  - pyarrow >=19.0.0
+  - pandas >=2.3.0,<4
+  - polars >=1.34.0,<3
+  - pyarrow >=19.0.0,<26
   - pydiverse-common >=0.4.4,<0.5
-  - pynng >=0.8.1
-  - pyparsing >=3.2.5
+  - pynng >=0.8.1,<0.9
+  - pyparsing >=3.2.5,<4
   - python *
   - python >=3.11
-  - python-box >=7.3.2
-  - python-duckdb >=1.3.0
-  - pyyaml >=6.0.3
+  - python-box >=7.3.2,<8
+  - python-duckdb >=1.3.0,<2
+  - pyyaml >=6.0.3,<7
   - sqlalchemy >=2.0.41,<2.1
-  - structlog >=25.4.0
+  - structlog >=25.4.0,<27
   - typing-extensions >=4.15.0,<5
-  - universal_pathlib >=0.3.2
+  - universal_pathlib >=0.3.2,<0.4
   extra_depends:
     colspec:
     - pydiverse-colspec >=0.3.1,<0.4
@@ -40590,11 +40590,11 @@ packages:
     - ibis-mssql >=10.5.0
     - ibis-postgres >=10.5.0
     ibm-db:
-    - ibm_db >=3.3.0
-    - ibm_db_sa >=0.4.2
+    - ibm_db >=3.3.0,<4
+    - ibm_db_sa >=0.4.2,<0.5
     mssql:
     - arrow-odbc >=8.1.1,<11
-    - bcpandas >=2.6.3
+    - bcpandas >=2.6.3,<3
     - pyodbc >=5.2.0,<6
     - pytsql >=1.4.0,<2
     - setuptools <81
@@ -40603,17 +40603,220 @@ packages:
     postgres:
     - psycopg2 >=2.9.10
     postgres-adbc:
-    - adbc-driver-postgresql >=1.6.0
+    - adbc-driver-postgresql >=1.6.0,<2
     - psycopg2 >=2.9.10
     prefect:
-    - prefect >=3
+    - prefect >=3,<4
     pydot:
-    - pydot >=4.0.0
+    - pydot >=4.0.0,<5
     s3:
-    - boto3 >=1.38.13
-    - gcsfs >=2025.9.0
+    - boto3 >=1.38.13,<2
+    - gcsfs >=2025.9.0,<2027
     - google-auth >=2.48.0
-    - s3fs >=2025.9.0
+    - s3fs >=2025.9.0,<2027
+    snowflake:
+    - adbc-driver-snowflake >=1.9.0
+    - snowflake-sqlalchemy >=1.6.1
+    zookeeper:
+    - kazoo >=2.8.0
+  host_packages:
+  - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-h4c7d964_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/noarch/editables-0.6-pyhcf101f3_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/noarch/hatchling-1.32.4-pyh5ded981_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/noarch/packaging-26.3-pyhc364b38_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/noarch/pathspec-1.1.1-pyhd8ed1ab_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/noarch/pluggy-1.6.0-pyhf9edf01_1.conda
+  - conda: https://conda.anaconda.org/conda-forge/noarch/python_abi-3.14-9_cp314.conda
+  - conda: https://conda.anaconda.org/conda-forge/noarch/tomlkit-0.15.1-pyhcf101f3_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/noarch/trove-classifiers-2026.9.21.13-pyh5ded981_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026c-h151e31d_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/win-64/bzip2-1.0.8-h0ad9c76_10.conda
+  - conda: https://conda.anaconda.org/conda-forge/win-64/libexpat-2.8.5-hac47afa_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/win-64/libffi-3.7.0-h3d046cb_1.conda
+  - conda: https://conda.anaconda.org/conda-forge/win-64/liblzma-5.8.3-hfd05255_1.conda
+  - conda: https://conda.anaconda.org/conda-forge/win-64/libmpdec-4.0.0-hfd05255_2.conda
+  - conda: https://conda.anaconda.org/conda-forge/win-64/libpython-3.14.8-h4f90d01_101_cp314.conda
+  - conda: https://conda.anaconda.org/conda-forge/win-64/libsqlite-3.53.4-hf5d6505_103.conda
+  - conda: https://conda.anaconda.org/conda-forge/win-64/libzlib-1.3.2-hfd05255_3.conda
+  - conda: https://conda.anaconda.org/conda-forge/win-64/openssl-3.6.5-hf411b9b_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/win-64/python-3.14.8-h53f6dd8_101_cp314.conda
+  - conda: https://conda.anaconda.org/conda-forge/win-64/tk-8.6.13-h967ab96_4.conda
+  - conda: https://conda.anaconda.org/conda-forge/win-64/ucrt-10.0.26100.0-h57928b3_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/win-64/uv-0.12.23-hf7a7c96_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/win-64/vc-14.5-ha367084_41.conda
+  - conda: https://conda.anaconda.org/conda-forge/win-64/vc14_runtime-14.51.36247-habf1de7_41.conda
+  - conda: https://conda.anaconda.org/conda-forge/win-64/vcomp14-14.51.36247-habf1de7_41.conda
+  - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_7.conda
+- conda_source: pydiverse-pipedag[ba1a96e1] @ .
+  variants:
+    target_platform: noarch
+  depends:
+  - attrs >=25.4.0,<27
+  - click >=8.1.8,<9
+  - cryptography >=45.0.7,<51
+  - duckdb-engine >=0.15.0,<0.16
+  - fsspec >=2025.9.0,<2027
+  - msgpack-python >=1.1.1,<2
+  - networkx >=3.4,<4
+  - packaging >=25.0
+  - pandas >=2.3.0,<4
+  - polars >=1.34.0,<3
+  - pyarrow >=19.0.0,<26
+  - pydiverse-common >=0.4.4,<0.5
+  - pynng >=0.8.1,<0.9
+  - pyparsing >=3.2.5,<4
+  - python *
+  - python >=3.11
+  - python-box >=7.3.2,<8
+  - python-duckdb >=1.3.0,<2
+  - pyyaml >=6.0.3,<7
+  - sqlalchemy >=2.0.41,<2.1
+  - structlog >=25.4.0,<27
+  - typing-extensions >=4.15.0,<5
+  - universal_pathlib >=0.3.2,<0.4
+  extra_depends:
+    colspec:
+    - pydiverse-colspec >=0.3.1,<0.4
+    connectorx:
+    - connectorx >=0.3.3
+    dask:
+    - cloudpickle >=2.2.0
+    - dask >=2023.2.0
+    - toolz >=0.12.1
+    dataframely:
+    - dataframely >=2.1.0,<3
+    filelock:
+    - filelock >=3.20.0
+    ibis:
+    - ibis-framework >=10.5.0
+    - ibis-mssql >=10.5.0
+    - ibis-postgres >=10.5.0
+    ibm-db:
+    - ibm_db >=3.3.0,<4
+    - ibm_db_sa >=0.4.2,<0.5
+    mssql:
+    - arrow-odbc >=8.1.1,<11
+    - bcpandas >=2.6.3,<3
+    - pyodbc >=5.2.0,<6
+    - pytsql >=1.4.0,<2
+    - setuptools <81
+    pdtransform:
+    - pydiverse-transform >=0.7.0,<0.8
+    postgres:
+    - psycopg2 >=2.9.10
+    postgres-adbc:
+    - adbc-driver-postgresql >=1.6.0,<2
+    - psycopg2 >=2.9.10
+    prefect:
+    - prefect >=3,<4
+    pydot:
+    - pydot >=4.0.0,<5
+    s3:
+    - boto3 >=1.38.13,<2
+    - gcsfs >=2025.9.0,<2027
+    - google-auth >=2.48.0
+    - s3fs >=2025.9.0,<2027
+    snowflake:
+    - adbc-driver-snowflake >=1.9.0
+    - snowflake-sqlalchemy >=1.6.1
+    zookeeper:
+    - kazoo >=2.8.0
+  host_packages:
+  - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-hbd8a1cb_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/noarch/editables-0.6-pyhcf101f3_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/noarch/hatchling-1.32.4-pyh5ded981_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/noarch/packaging-26.3-pyhc364b38_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/noarch/pathspec-1.1.1-pyhd8ed1ab_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/noarch/pluggy-1.6.0-pyhf9edf01_1.conda
+  - conda: https://conda.anaconda.org/conda-forge/noarch/python_abi-3.14-9_cp314.conda
+  - conda: https://conda.anaconda.org/conda-forge/noarch/tomlkit-0.15.1-pyhcf101f3_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/noarch/trove-classifiers-2026.9.21.13-pyh5ded981_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026c-h151e31d_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/bzip2-1.0.8-h4e30115_10.conda
+  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libcxx-23.1.3-h55c6f16_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libexpat-2.8.5-h6111c0a_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libffi-3.7.0-h47dc5ef_1.conda
+  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/liblzma-5.8.3-h8088a28_1.conda
+  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libmpdec-4.0.0-h84a0fba_2.conda
+  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libpython-3.14.8-h4311e70_101_cp314.conda
+  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libsqlite-3.53.4-h34a968b_103.conda
+  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libzlib-1.3.2-h8088a28_3.conda
+  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/ncurses-6.6-he64c551_1.conda
+  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/openssl-3.6.5-h55eecbc_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/python-3.14.8-h0ae1c2c_101_cp314.conda
+  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/readline-8.3-h8b90a29_1.conda
+  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-hbeba79b_4.conda
+  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/uv-0.12.23-hfc06f74_0.conda
+  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
+- conda_source: pydiverse-pipedag[f27c0298] @ .
+  variants:
+    target_platform: noarch
+  depends:
+  - attrs >=25.4.0,<27
+  - click >=8.1.8,<9
+  - cryptography >=45.0.7,<51
+  - duckdb-engine >=0.15.0,<0.16
+  - fsspec >=2025.9.0,<2027
+  - msgpack-python >=1.1.1,<2
+  - networkx >=3.4,<4
+  - packaging >=25.0
+  - pandas >=2.3.0,<4
+  - polars >=1.34.0,<3
+  - pyarrow >=19.0.0,<26
+  - pydiverse-common >=0.4.4,<0.5
+  - pynng >=0.8.1,<0.9
+  - pyparsing >=3.2.5,<4
+  - python *
+  - python >=3.11
+  - python-box >=7.3.2,<8
+  - python-duckdb >=1.3.0,<2
+  - pyyaml >=6.0.3,<7
+  - sqlalchemy >=2.0.41,<2.1
+  - structlog >=25.4.0,<27
+  - typing-extensions >=4.15.0,<5
+  - universal_pathlib >=0.3.2,<0.4
+  extra_depends:
+    colspec:
+    - pydiverse-colspec >=0.3.1,<0.4
+    connectorx:
+    - connectorx >=0.3.3
+    dask:
+    - cloudpickle >=2.2.0
+    - dask >=2023.2.0
+    - toolz >=0.12.1
+    dataframely:
+    - dataframely >=2.1.0,<3
+    filelock:
+    - filelock >=3.20.0
+    ibis:
+    - ibis-framework >=10.5.0
+    - ibis-mssql >=10.5.0
+    - ibis-postgres >=10.5.0
+    ibm-db:
+    - ibm_db >=3.3.0,<4
+    - ibm_db_sa >=0.4.2,<0.5
+    mssql:
+    - arrow-odbc >=8.1.1,<11
+    - bcpandas >=2.6.3,<3
+    - pyodbc >=5.2.0,<6
+    - pytsql >=1.4.0,<2
+    - setuptools <81
+    pdtransform:
+    - pydiverse-transform >=0.7.0,<0.8
+    postgres:
+    - psycopg2 >=2.9.10
+    postgres-adbc:
+    - adbc-driver-postgresql >=1.6.0,<2
+    - psycopg2 >=2.9.10
+    prefect:
+    - prefect >=3,<4
+    pydot:
+    - pydot >=4.0.0,<5
+    s3:
+    - boto3 >=1.38.13,<2
+    - gcsfs >=2025.9.0,<2027
+    - google-auth >=2.48.0
+    - s3fs >=2025.9.0,<2027
     snowflake:
     - adbc-driver-snowflake >=1.9.0
     - snowflake-sqlalchemy >=1.6.1
@@ -40651,206 +40854,3 @@ packages:
   - conda: https://conda.anaconda.org/conda-forge/noarch/tomlkit-0.15.1-pyhcf101f3_0.conda
   - conda: https://conda.anaconda.org/conda-forge/noarch/trove-classifiers-2026.9.21.13-pyh5ded981_0.conda
   - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026c-h151e31d_0.conda
-- conda_source: pydiverse-pipedag[16ab77ba] @ .
-  variants:
-    target_platform: noarch
-  depends:
-  - attrs >=25.4.0
-  - click >=8.1.8
-  - cryptography >=45.0.7
-  - duckdb-engine >=0.15.0
-  - fsspec >=2025.9.0
-  - msgpack-python >=1.1.1
-  - networkx >=3.4
-  - packaging >=25.0
-  - pandas >=2.3.0
-  - polars >=1.34.0
-  - pyarrow >=19.0.0
-  - pydiverse-common >=0.4.4,<0.5
-  - pynng >=0.8.1
-  - pyparsing >=3.2.5
-  - python *
-  - python >=3.11
-  - python-box >=7.3.2
-  - python-duckdb >=1.3.0
-  - pyyaml >=6.0.3
-  - sqlalchemy >=2.0.41,<2.1
-  - structlog >=25.4.0
-  - typing-extensions >=4.15.0,<5
-  - universal_pathlib >=0.3.2
-  extra_depends:
-    colspec:
-    - pydiverse-colspec >=0.3.1,<0.4
-    connectorx:
-    - connectorx >=0.3.3
-    dask:
-    - cloudpickle >=2.2.0
-    - dask >=2023.2.0
-    - toolz >=0.12.1
-    dataframely:
-    - dataframely >=2.1.0,<3
-    filelock:
-    - filelock >=3.20.0
-    ibis:
-    - ibis-framework >=10.5.0
-    - ibis-mssql >=10.5.0
-    - ibis-postgres >=10.5.0
-    ibm-db:
-    - ibm_db >=3.3.0
-    - ibm_db_sa >=0.4.2
-    mssql:
-    - arrow-odbc >=8.1.1,<11
-    - bcpandas >=2.6.3
-    - pyodbc >=5.2.0,<6
-    - pytsql >=1.4.0,<2
-    - setuptools <81
-    pdtransform:
-    - pydiverse-transform >=0.7.0,<0.8
-    postgres:
-    - psycopg2 >=2.9.10
-    postgres-adbc:
-    - adbc-driver-postgresql >=1.6.0
-    - psycopg2 >=2.9.10
-    prefect:
-    - prefect >=3
-    pydot:
-    - pydot >=4.0.0
-    s3:
-    - boto3 >=1.38.13
-    - gcsfs >=2025.9.0
-    - google-auth >=2.48.0
-    - s3fs >=2025.9.0
-    snowflake:
-    - adbc-driver-snowflake >=1.9.0
-    - snowflake-sqlalchemy >=1.6.1
-    zookeeper:
-    - kazoo >=2.8.0
-  host_packages:
-  - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-hbd8a1cb_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/noarch/editables-0.6-pyhcf101f3_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/noarch/hatchling-1.32.4-pyh5ded981_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/noarch/packaging-26.3-pyhc364b38_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/noarch/pathspec-1.1.1-pyhd8ed1ab_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/noarch/pluggy-1.6.0-pyhf9edf01_1.conda
-  - conda: https://conda.anaconda.org/conda-forge/noarch/python_abi-3.14-9_cp314.conda
-  - conda: https://conda.anaconda.org/conda-forge/noarch/tomlkit-0.15.1-pyhcf101f3_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/noarch/trove-classifiers-2026.9.21.13-pyh5ded981_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026c-h151e31d_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/bzip2-1.0.8-h4e30115_10.conda
-  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libcxx-23.1.3-h55c6f16_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libexpat-2.8.5-h6111c0a_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libffi-3.7.0-h47dc5ef_1.conda
-  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/liblzma-5.8.3-h8088a28_1.conda
-  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libmpdec-4.0.0-h84a0fba_2.conda
-  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libpython-3.14.8-h4311e70_101_cp314.conda
-  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libsqlite-3.53.4-h34a968b_103.conda
-  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libzlib-1.3.2-h8088a28_3.conda
-  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/ncurses-6.6-he64c551_1.conda
-  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/openssl-3.6.5-h55eecbc_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/python-3.14.8-h0ae1c2c_101_cp314.conda
-  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/readline-8.3-h8b90a29_1.conda
-  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-hbeba79b_4.conda
-  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/uv-0.12.23-hfc06f74_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
-- conda_source: pydiverse-pipedag[9f7336bc] @ .
-  variants:
-    target_platform: noarch
-  depends:
-  - attrs >=25.4.0
-  - click >=8.1.8
-  - cryptography >=45.0.7
-  - duckdb-engine >=0.15.0
-  - fsspec >=2025.9.0
-  - msgpack-python >=1.1.1
-  - networkx >=3.4
-  - packaging >=25.0
-  - pandas >=2.3.0
-  - polars >=1.34.0
-  - pyarrow >=19.0.0
-  - pydiverse-common >=0.4.4,<0.5
-  - pynng >=0.8.1
-  - pyparsing >=3.2.5
-  - python *
-  - python >=3.11
-  - python-box >=7.3.2
-  - python-duckdb >=1.3.0
-  - pyyaml >=6.0.3
-  - sqlalchemy >=2.0.41,<2.1
-  - structlog >=25.4.0
-  - typing-extensions >=4.15.0,<5
-  - universal_pathlib >=0.3.2
-  extra_depends:
-    colspec:
-    - pydiverse-colspec >=0.3.1,<0.4
-    connectorx:
-    - connectorx >=0.3.3
-    dask:
-    - cloudpickle >=2.2.0
-    - dask >=2023.2.0
-    - toolz >=0.12.1
-    dataframely:
-    - dataframely >=2.1.0,<3
-    filelock:
-    - filelock >=3.20.0
-    ibis:
-    - ibis-framework >=10.5.0
-    - ibis-mssql >=10.5.0
-    - ibis-postgres >=10.5.0
-    ibm-db:
-    - ibm_db >=3.3.0
-    - ibm_db_sa >=0.4.2
-    mssql:
-    - arrow-odbc >=8.1.1,<11
-    - bcpandas >=2.6.3
-    - pyodbc >=5.2.0,<6
-    - pytsql >=1.4.0,<2
-    - setuptools <81
-    pdtransform:
-    - pydiverse-transform >=0.7.0,<0.8
-    postgres:
-    - psycopg2 >=2.9.10
-    postgres-adbc:
-    - adbc-driver-postgresql >=1.6.0
-    - psycopg2 >=2.9.10
-    prefect:
-    - prefect >=3
-    pydot:
-    - pydot >=4.0.0
-    s3:
-    - boto3 >=1.38.13
-    - gcsfs >=2025.9.0
-    - google-auth >=2.48.0
-    - s3fs >=2025.9.0
-    snowflake:
-    - adbc-driver-snowflake >=1.9.0
-    - snowflake-sqlalchemy >=1.6.1
-    zookeeper:
-    - kazoo >=2.8.0
-  host_packages:
-  - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-h4c7d964_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/noarch/editables-0.6-pyhcf101f3_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/noarch/hatchling-1.32.4-pyh5ded981_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/noarch/packaging-26.3-pyhc364b38_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/noarch/pathspec-1.1.1-pyhd8ed1ab_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/noarch/pluggy-1.6.0-pyhf9edf01_1.conda
-  - conda: https://conda.anaconda.org/conda-forge/noarch/python_abi-3.14-9_cp314.conda
-  - conda: https://conda.anaconda.org/conda-forge/noarch/tomlkit-0.15.1-pyhcf101f3_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/noarch/trove-classifiers-2026.9.21.13-pyh5ded981_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026c-h151e31d_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/win-64/bzip2-1.0.8-h0ad9c76_10.conda
-  - conda: https://conda.anaconda.org/conda-forge/win-64/libexpat-2.8.5-hac47afa_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/win-64/libffi-3.7.0-h3d046cb_1.conda
-  - conda: https://conda.anaconda.org/conda-forge/win-64/liblzma-5.8.3-hfd05255_1.conda
-  - conda: https://conda.anaconda.org/conda-forge/win-64/libmpdec-4.0.0-hfd05255_2.conda
-  - conda: https://conda.anaconda.org/conda-forge/win-64/libpython-3.14.8-h4f90d01_101_cp314.conda
-  - conda: https://conda.anaconda.org/conda-forge/win-64/libsqlite-3.53.4-hf5d6505_103.conda
-  - conda: https://conda.anaconda.org/conda-forge/win-64/libzlib-1.3.2-hfd05255_3.conda
-  - conda: https://conda.anaconda.org/conda-forge/win-64/openssl-3.6.5-hf411b9b_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/win-64/python-3.14.8-h53f6dd8_101_cp314.conda
-  - conda: https://conda.anaconda.org/conda-forge/win-64/tk-8.6.13-h967ab96_4.conda
-  - conda: https://conda.anaconda.org/conda-forge/win-64/ucrt-10.0.26100.0-h57928b3_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/win-64/uv-0.12.23-hf7a7c96_0.conda
-  - conda: https://conda.anaconda.org/conda-forge/win-64/vc-14.5-ha367084_41.conda
-  - conda: https://conda.anaconda.org/conda-forge/win-64/vc14_runtime-14.51.36247-habf1de7_41.conda
-  - conda: https://conda.anaconda.org/conda-forge/win-64/vcomp14-14.51.36247-habf1de7_41.conda
-  - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_7.conda
