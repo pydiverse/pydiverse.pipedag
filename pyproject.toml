@@ -37,7 +37,6 @@ dependencies = [
   "structlog >=25.4.0,<27",
   "pynng >=0.8.1,<0.9",
   "msgpack >=1.1.1,<2",
-  # allows installing next to prefect, raise once prefect is dropped (see pixi.toml)
   "packaging >=25.0",
   "python-box >=7.3.2,<8",
   "pyyaml >=6.0.3,<7",

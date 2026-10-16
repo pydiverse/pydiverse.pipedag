@@ -31,8 +31,6 @@ attrs = ">=25.4.0,<27"
 structlog = ">=25.4.0,<27"
 pynng = ">=0.8.1,<0.9"
 msgpack-python = ">=1.1.1,<2"
-# conda-forge prefect requires packaging <25.1. The old env still resolves 26, so this floor is
-# not tested. Raise it to the lowest version selected by the old env once prefect is dropped.
 packaging = ">=25.0"
 python-box = ">=7.3.2,<8"
 pyyaml = ">=6.0.3,<7"
@@ -176,6 +174,7 @@ pre-commit-install = "pre-commit install"
 lint = "pre-commit run -a"
 conda-deny-check = "conda-deny check"
 check-deps = "sh -c .github/scripts/check_deps.sh"
+check-lowest-versions = "python .github/scripts/check_lowest_versions.py"
 
 [feature.all.dependencies]
 pydiverse-pipedag = { path = ".", extras = [
