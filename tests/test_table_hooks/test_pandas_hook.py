@@ -247,7 +247,7 @@ class TestPandasTableHookNumpy:
         def assert_expected(in_df):
             import polars.testing as pl_testing
 
-            pl_testing.assert_frame_equal(in_df, df_expected, check_dtype=False)
+            pl_testing.assert_frame_equal(in_df, df_expected, check_dtypes=False)
 
         with Flow() as f:
             with Stage("stage"):
