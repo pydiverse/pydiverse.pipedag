@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.12.15 (2026-XX-XX)
+## 0.12.15 (2026-10-16)
 - Build: Clean up pixi environments and update package constraints
 - Deps: Update dependencies. In particular: support Polars 2
 
