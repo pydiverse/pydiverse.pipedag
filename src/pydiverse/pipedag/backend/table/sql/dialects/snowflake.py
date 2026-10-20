@@ -18,6 +18,7 @@ from pydiverse.pipedag.backend.table.sql.hooks import (
     IbisTableHook,
 )
 from pydiverse.pipedag.backend.table.sql.sql import SQLTableStore
+from pydiverse.pipedag.context import ConfigContext, StageCommitTechnique
 from pydiverse.pipedag.optional_dependency.ibis import ibis
 from pydiverse.pipedag.optional_dependency.snowflake import snowflake
 
@@ -192,30 +193,171 @@ class SnowflakeTableStore(SQLTableStore):
             query_not_executed=str(AddIndex(table_name, schema, index_columns, name)),
         )
 
+    def init_stage(self, stage):
+        super().init_stage(stage)
+        self._clear_reflection_cache_for_schema(self.get_schema(stage.transaction_name).get())
+
+    def commit_stage(self, stage):
+        transaction_schema = self.get_schema(stage.transaction_name).get()
+        final_schema = self.get_schema(stage.name).get()
+        stage_commit_technique = ConfigContext.get().stage_commit_technique
+
+        super().commit_stage(stage)
+
+        self._clear_reflection_cache_for_schema(final_schema)
+        self._replace_reflection_cache(
+            transaction_schema,
+            final_schema,
+            keep_source=stage_commit_technique == StageCommitTechnique.READ_VIEWS,
+        )
+
     def reflect_table(self, table_name: str, schema: str | Schema) -> sa.Table:
         if isinstance(schema, Schema):
             schema = schema.get()
-        if schema.count(".") == 1:
-            # sqlalchemy snowflake driver does not support schema="database.schema"
-            database, schema_part = schema.split(".")
-            with self.engine.connect() as conn:
-                conn.execute(sa.text(f"USE DATABASE {database}"))
-                tbl = sa.Table(
-                    table_name,
-                    sa.MetaData(),
-                    schema=schema_part,
-                    autoload_with=conn,
-                )
-                tbl.schema = schema  # restore full schema name
-                conn.execute(sa.text(f"USE DATABASE {self.engine.url.database}"))
+
+        schema_cache = self.hook_cache.get(self._reflection_cache_key(schema))
+        if schema_cache is None:
+            schema_cache = self._load_schema_reflection(schema)
+            self.hook_cache[self._reflection_cache_key(schema)] = schema_cache
+
+        table_key = self._normalize_reflection_name(table_name)
+        column_specs = schema_cache.get(table_key)
+
+        if column_specs is None:
+            schema_cache = self._load_schema_reflection(schema)
+            self.hook_cache[self._reflection_cache_key(schema)] = schema_cache
+            column_specs = schema_cache.get(table_key)
+
+        if column_specs is None:
+            raise sa.exc.NoSuchTableError(table_name)
+
+        return self._build_reflected_table(schema, table_name, column_specs)
+
+    def _reflection_cache_key(self, schema: str) -> tuple[type["SnowflakeTableStore"], str, str]:
+        return type(self), "snowflake_reflection", schema
+
+    def _clear_reflection_cache_for_schema(self, schema: str):
+        self.hook_cache.pop(self._reflection_cache_key(schema), None)
+
+    def _replace_reflection_cache(self, from_schema: str, to_schema: str, *, keep_source: bool):
+        from_key = self._reflection_cache_key(from_schema)
+        to_key = self._reflection_cache_key(to_schema)
+
+        if from_key == to_key:
+            return
+
+        payload = self.hook_cache.get(from_key)
+        self.hook_cache.pop(to_key, None)
+
+        if payload is None:
+            return
+
+        if keep_source:
+            self.hook_cache[to_key] = copy.deepcopy(payload)
         else:
-            tbl = sa.Table(
-                table_name,
-                sa.MetaData(),
-                schema=schema,
-                autoload_with=self.engine,
+            self.hook_cache[to_key] = self.hook_cache.pop(from_key)
+
+    def _split_reflection_schema(self, schema: str) -> tuple[str | None, str]:
+        if schema.count(".") == 1:
+            return tuple(schema.split(".", 1))
+        return None, schema
+
+    def _quote_identifier(self, identifier: str) -> str:
+        return self.engine.dialect.identifier_preparer.quote_identifier(identifier)
+
+    def _normalize_reflection_name(self, name: str) -> str:
+        if hasattr(self, "engine") and hasattr(self.engine.dialect, "normalize_name"):
+            normalized = self.engine.dialect.normalize_name(name)
+            if normalized is not None:
+                return normalized
+        return name.casefold()
+
+    def _load_schema_reflection(self, schema: str) -> dict[str, list[dict[str, object]]]:
+        database, schema_part = self._split_reflection_schema(schema)
+        info_schema = "INFORMATION_SCHEMA.COLUMNS"
+        if database is not None:
+            info_schema = f"{self._quote_identifier(database)}.{info_schema}"
+
+        query = sa.text(
+            f"""
+            SELECT
+                TABLE_NAME,
+                COLUMN_NAME,
+                ORDINAL_POSITION,
+                IS_NULLABLE,
+                DATA_TYPE,
+                CHARACTER_MAXIMUM_LENGTH,
+                NUMERIC_PRECISION,
+                NUMERIC_SCALE,
+                DATETIME_PRECISION
+            FROM {info_schema}
+            WHERE UPPER(TABLE_SCHEMA) = UPPER(:schema_name)
+            ORDER BY TABLE_NAME, ORDINAL_POSITION
+            """
+        )
+
+        with self.engine.connect() as conn:
+            rows = conn.execute(query, {"schema_name": schema_part}).mappings().all()
+
+        schema_cache: dict[str, list[dict[str, object]]] = {}
+        for row in rows:
+            table_key = self._normalize_reflection_name(row["table_name"])
+            schema_cache.setdefault(table_key, []).append(
+                {
+                    "name": self._normalize_reflection_name(row["column_name"]),
+                    "nullable": str(row["is_nullable"]).upper() == "YES",
+                    "type": self._sa_type_from_info_schema_row(row),
+                }
             )
-        return tbl
+        return schema_cache
+
+    def _build_reflected_table(self, schema: str, table_name: str, column_specs: list[dict[str, object]]) -> sa.Table:
+        columns = [
+            sa.Column(
+                spec["name"],
+                copy.deepcopy(spec["type"]),
+                nullable=spec["nullable"],
+            )
+            for spec in column_specs
+        ]
+        return sa.Table(table_name, sa.MetaData(), *columns, schema=schema)
+
+    @staticmethod
+    def _info_schema_int(value):
+        return None if value is None else int(value)
+
+    def _sa_type_from_info_schema_row(self, row) -> sa.types.TypeEngine:
+        data_type = str(row["data_type"]).upper()
+        length = self._info_schema_int(row["character_maximum_length"])
+        precision = self._info_schema_int(row["numeric_precision"])
+        scale = self._info_schema_int(row["numeric_scale"])
+
+        if data_type in {"FIXED", "NUMBER", "NUMERIC", "DECIMAL"}:
+            kwargs = {}
+            if precision is not None:
+                kwargs["precision"] = precision
+            if scale is not None:
+                kwargs["scale"] = scale
+            return sa.Numeric(**kwargs)
+        if data_type in {"FLOAT", "DOUBLE", "DOUBLE PRECISION", "REAL"}:
+            return sa.Float() if precision is None else sa.Float(precision=precision)
+        if data_type in {"VARCHAR", "STRING", "TEXT", "CHAR", "CHARACTER"}:
+            return sa.String(length=length)
+        if data_type in {"BINARY", "VARBINARY"}:
+            return sa.LargeBinary(length=length)
+        if data_type == "BOOLEAN":
+            return sa.Boolean()
+        if data_type == "DATE":
+            return sa.Date()
+        if data_type == "TIME":
+            return sa.Time()
+        if data_type == "TIMESTAMP_NTZ":
+            return sa.TIMESTAMP(timezone=False)
+        if data_type in {"TIMESTAMP_LTZ", "TIMESTAMP_TZ"}:
+            return sa.TIMESTAMP(timezone=True)
+        if data_type in {"ARRAY", "OBJECT", "VARIANT"}:
+            return sa.JSON()
+        return sa.NullType()
 
     def has_table_or_view(self, name: str, schema: Schema | str):
         if isinstance(schema, Schema):
@@ -262,8 +404,8 @@ class SQLAlchemyTableHook(sql_hooks.SQLAlchemyTableHook):
             return col
 
         def fix(c: sa.Column) -> sa.Column:
-            # convert DECIMAL(38,0) to BIGINTEGER
-            if isinstance(c.type, sa.DECIMAL) and c.type.precision == 38 and c.type.scale == 0:
+            # convert Numeric(38,0) / DECIMAL(38,0) to BIGINTEGER
+            if isinstance(c.type, sa.Numeric) and c.type.precision == 38 and c.type.scale == 0:
                 new_c = copy.deepcopy(c)
                 new_c.type = sa.BigInteger()
                 return new_c
