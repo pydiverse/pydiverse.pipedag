@@ -98,40 +98,6 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/pydiverse"]
 
-[tool.ruff]
-extend-exclude = ["docs/*"]
-fix = true
-target-version = "py311"
-# 88 leads to worse comments
-line-length = 120
-
-[tool.ruff.lint]
-select = ["F", "E", "UP", "W", "I001", "I002", "B", "A"]
-ignore = ["B028"]
-
-[tool.ruff.lint.per-file-ignores]
-"src/pydiverse/pipedag/backend/table/sql/ddl.py" = ["F811"]
-
-[tool.ruff.lint.isort]
-known-first-party = ["pydiverse"]
-
-# Static type checking is scoped to the public API surface assertions in tests/typing.
-# `src/` as a whole is not yet type-clean; see docs/source/typing.md.
-[tool.pyright]
-include = ["tests/typing"]
-# Same reason as mypy's `mypy_path`: check the working tree, not whatever happens to be
-# installed in the environment.
-extraPaths = ["src"]
-pythonVersion = "3.11"
-typeCheckingMode = "basic"
-reportMissingModuleSource = false
-# `tests/typing/negative.py` marks every intentional error. Reporting unnecessary
-# markers turns "this error stopped being reported" into a failure as well.
-reportUnnecessaryTypeIgnoreComment = "error"
-# Don't let mypy's `# type: ignore` markers in that file suppress pyright's own
-# diagnostics - pyright only honours its own `# pyright: ignore` comments.
-enableTypeIgnoreComments = false
-
 [tool.mypy]
 files = ["tests/typing"]
 # Resolve pipedag from the working tree rather than from an install. Without this, an
@@ -155,6 +121,36 @@ enable_error_code = ["ignore-without-code"]
 module = "pydiverse.*"
 follow_imports = "silent"
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+# Static type checking is scoped to the public API surface assertions in tests/typing.
+# `src/` as a whole is not yet type-clean; see docs/source/typing.md.
+[tool.pyright]
+include = ["tests/typing"]
+# Same reason as mypy's `mypy_path`: check the working tree, not whatever happens to be
+# installed in the environment.
+extraPaths = ["src"]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+reportMissingModuleSource = false
+# `tests/typing/negative.py` marks every intentional error. Reporting unnecessary
+# markers turns "this error stopped being reported" into a failure as well.
+reportUnnecessaryTypeIgnoreComment = "error"
+# Don't let mypy's `# type: ignore` markers in that file suppress pyright's own
+# diagnostics - pyright only honours its own `# pyright: ignore` comments.
+enableTypeIgnoreComments = false
+
+[tool.ruff]
+extend-exclude = ["docs/*"]
+fix = true
+target-version = "py311"
+# 88 leads to worse comments
+line-length = 120
+
+[tool.ruff.lint]
+select = ["F", "E", "UP", "W", "I001", "I002", "B", "A"]
+ignore = ["B028"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/pydiverse/pipedag/backend/table/sql/ddl.py" = ["F811"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pydiverse"]
