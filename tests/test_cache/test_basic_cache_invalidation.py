@@ -17,7 +17,7 @@ from pydiverse.pipedag.materialize.core import (
     input_stage_versions,
     materialize,
 )
-from pydiverse.pipedag.optional_dependency.transform import pdt_new as pdt
+from pydiverse.pipedag.optional_dependency.transform import pdt
 from pydiverse.pipedag.util.sql import compile_sql
 
 # Parameterize all tests in this file with several instance_id configurations

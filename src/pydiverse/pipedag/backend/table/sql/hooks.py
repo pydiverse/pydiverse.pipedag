@@ -55,7 +55,7 @@ from pydiverse.pipedag.optional_dependency.dataframely import dy
 from pydiverse.pipedag.optional_dependency.ibis import ibis
 from pydiverse.pipedag.optional_dependency.sqlalchemy import Select, SqlText, TextClause
 from pydiverse.pipedag.optional_dependency.tidypolars import Tibble, tidypolars
-from pydiverse.pipedag.optional_dependency.transform import ColExpr, Pandas, Polars, SqlAlchemy, pdt, pdt_new, pdt_old
+from pydiverse.pipedag.optional_dependency.transform import C, ColExpr, Pandas, Polars, SqlAlchemy, pdt
 from pydiverse.pipedag.util.sql import compile_sql
 
 
@@ -161,7 +161,7 @@ def _polars_apply_materialize_annotation(df, table, store):
                         f"Failure counts: {failures.counts()}; "
                         f"\nInvalid:\n{fail_df}"
                     )
-            elif pdt_new is not None:
+            elif C is not None:
                 tbl, failures = column_spec.filter(pdt.Table(df), cast=True)
                 if len(failures) > 0:
                     with pl.Config() as cfg:
@@ -190,7 +190,7 @@ def _sql_apply_materialize_annotation_pdt_early(table: Table, schema: Schema, st
     if cs.ColSpec is not object:
         if inspect.isclass(table.annotation) and issubclass(table.annotation, cs.ColSpec):
             column_spec = table.annotation
-            if pdt_new is not None:
+            if C is not None:
                 # cast columns according to column specification
                 # Enum and Struct are currently not supported by pydiverse libraries
                 cols = set(c.name for c in tbl)
@@ -229,7 +229,7 @@ def _sql_apply_materialize_annotation(
     if cs.ColSpec is not object:
         if inspect.isclass(table.annotation) and issubclass(table.annotation, cs.ColSpec):
             column_spec = table.annotation
-            if pdt_new is not None:
+            if C is not None:
                 supported_dialects = ["duckdb", "sqlite", "postgresql", "mssql", "ibm_db_sa"]
                 if store.engine.dialect.name in supported_dialects:
                     intermediate_tbls = []
@@ -1835,90 +1835,7 @@ class TidyPolarsTableHook(TableHook[SQLTableStore]):
 # region PYDIVERSE TRANSFORM
 
 
-@SQLTableStore.register_table(pdt_old)
-class PydiverseTransformTableHookOld(TableHook[SQLTableStore]):
-    @classmethod
-    def can_materialize(cls, tbl: Table) -> CanMatResult:
-        type_ = type(tbl.obj)
-        return CanMatResult.new(issubclass(type_, pdt.Table))
-
-    @classmethod
-    def can_retrieve(cls, type_) -> CanRetResult:
-        from pydiverse.transform.eager import PandasTableImpl
-        from pydiverse.transform.lazy import SQLTableImpl
-
-        return CanRetResult.new(issubclass(type_, (PandasTableImpl, SQLTableImpl)))
-
-    @classmethod
-    def retrieve_as_reference(cls, type_) -> bool:
-        from pydiverse.transform.lazy import SQLTableImpl
-
-        return issubclass(type_, SQLTableImpl)
-
-    @classmethod
-    def materialize(
-        cls,
-        store,
-        table: Table[pdt.Table],
-        stage_name,
-        without_config_context: bool = False,
-    ):
-        from pydiverse.transform.core.verbs import collect
-        from pydiverse.transform.eager import PandasTableImpl
-        from pydiverse.transform.lazy import SQLTableImpl
-
-        t = table.obj
-        table = table.copy_without_obj()
-        if isinstance(t._impl, PandasTableImpl):
-            table.obj = t >> collect()
-            hook = store.get_m_table_hook(table)
-            return hook.materialize(store, table, stage_name)
-        if isinstance(t._impl, SQLTableImpl):
-            table.obj = t._impl.build_select()
-            hook = store.get_m_table_hook(table)
-            return hook.materialize(store, table, stage_name)
-        raise NotImplementedError
-
-    @classmethod
-    def retrieve(
-        cls,
-        store: SQLTableStore,
-        table: Table,
-        stage_name: str | None,
-        as_type: type[T],
-        limit: int | None = None,
-    ) -> T:
-        # hooks responsible for pd.DataFrame and sa.Table take care of resolving views as input table.
-        from pydiverse.transform.eager import PandasTableImpl
-        from pydiverse.transform.lazy import SQLTableImpl
-
-        if issubclass(as_type, PandasTableImpl):
-            hook = store.get_r_table_hook(pd.DataFrame)
-            df = hook.retrieve(store, table, stage_name, pd.DataFrame, limit)
-            return pdt.Table(PandasTableImpl(table.name, df))
-        if issubclass(as_type, SQLTableImpl):
-            hook = store.get_r_table_hook(sa.Table)
-            sa_tbl = hook.retrieve(store, table, stage_name, sa.Table, limit)
-            return pdt.Table(SQLTableImpl(store.engine, sa_tbl))
-        raise NotImplementedError
-
-    @classmethod
-    def auto_table(cls, obj: pdt.Table):
-        return Table(obj, obj._impl.name)
-
-    @classmethod
-    def lazy_query_str(cls, store, obj: pdt.Table) -> str:
-        from pydiverse.transform.core.verbs import build_query
-
-        query = obj >> build_query()
-
-        if query is not None:
-            return canonicalize_query(str(query))
-        # Currently, does not support hashing pandas backed transform table
-        return super().lazy_query_str(store, obj)
-
-
-@SQLTableStore.register_table(pdt_new)
+@SQLTableStore.register_table(C)
 class PydiverseTransformTableHook(TableHook[SQLTableStore]):
     auto_version_support = AutoVersionSupport.LAZY
 
@@ -2059,7 +1976,7 @@ class PydiverseTransformTableHook(TableHook[SQLTableStore]):
         return LazyPolarsTableHook.get_auto_version_lazy(obj >> pdt.export(pdt.Polars(lazy=True)))
 
 
-@SQLTableStore.register_table(pdt_new)
+@SQLTableStore.register_table(C)
 class ViewPdtMaterializationHook(BaseViewMaterializationHook):
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanMatResult:

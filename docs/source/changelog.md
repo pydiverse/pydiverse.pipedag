@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.12.16 (202X-XX-XX)
+- Remove support code for pydiverse.transform <0.2 (pipedag requires pydiverse.transform >=0.7.0 anyway)
+
 ## 0.12.15 (2026-10-16)
 - Build: Clean up pixi environments and update package constraints
 - Deps: Update dependencies. In particular: support Polars 2
