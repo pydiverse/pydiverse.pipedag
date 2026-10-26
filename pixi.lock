@@ -3704,7 +3704,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.4.4-pyhc364b38_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-transform-0.7.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.6.1-py_0.tar.bz2
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-1.5.3-py_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.0.0-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyopenssl-25.1.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyparsing-3.2.5-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pysocks-1.7.1-pyha55dd90_7.conda
@@ -3844,7 +3844,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-common-0.4.4-pyhc364b38_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pydiverse-transform-0.7.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.6.1-py_0.tar.bz2
-      - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-1.5.3-py_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.0.0-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyopenssl-25.1.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pyparsing-3.2.5-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pysocks-1.7.1-pyha55dd90_7.conda
@@ -22879,16 +22879,16 @@ packages:
   run_exports: {}
   size: 699210
   timestamp: 1583673245316
-- conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-1.5.3-py_0.tar.bz2
-  sha256: 1a43946c3786af43484677e86d098c15d32fec60071c67053b6ce7bdd351b88f
-  md5: b5f388bb1fc0f380aef0d20fe9286339
+- conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.0.0-pyhd8ed1ab_0.tar.bz2
+  sha256: 046f94d377863306abda68cbfc5de2617be8feb429b4817c04450ee31fb0fbc4
+  md5: 73ae796b9b7b5f95b66aa491bd1075a7
   depends:
-  - cryptography >=1.4
-  - python
+  - python >=3.6
   license: MIT
   license_family: MIT
   run_exports: {}
-  size: 15323
+  size: 16952
+  timestamp: 1609976877440
 - conda: https://conda.anaconda.org/conda-forge/noarch/pyjwt-2.15.1-pyh5ded981_0.conda
   sha256: aac9df67e9c6a8f092c46d1eeea393f6d6de756e0c0deac038b79ab68c485fb8
   md5: ceb86f6237588761137d5b3387e049ca

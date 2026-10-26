@@ -248,6 +248,9 @@ platforms = ["linux-64", "osx-arm64-macos-14-5"]
 
 [feature.snowflake.dependencies]
 pydiverse-pipedag = { path = ".", extras = ["snowflake"] }
+# snowflake-connector-python doesn't declare a lower bound for pyjwt, so the lowest solve of the
+# old environment picks pyjwt 1.5.3, which imports `Mapping` from `collections`
+pyjwt = ">=2"
 
 [environments]
 default = ["lint", "docs", "dev", "release", "all", "ibm-db"]
