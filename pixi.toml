@@ -74,7 +74,7 @@ cloudpickle = ">=2.2.0"
 prefect = ">=3,<4"
 
 [package.extra-dependencies.snowflake]
-snowflake-sqlalchemy = ">=1.6.1"
+snowflake-sqlalchemy = ">=1.7.2"
 adbc-driver-snowflake = ">=1.9.0"
 
 [package.extra-dependencies.ibis]
