@@ -28,22 +28,24 @@ def normalize(name: str) -> str:
 
 
 def lower_bound(spec: str) -> str | None:
+    """Returns the `>=` floor of a version spec, or None if the spec has no lower bound."""
+    floor = None
     for part in spec.split(","):
         part = part.strip()
         if part.startswith(">="):
-            return part.removeprefix(">=").strip()
-    return None
+            floor = part.removeprefix(">=").strip()
+        elif not part.startswith(("<", "!=")) and part != "*":
+            # e.g. `>1.0`, `~=1.0`, `==1.0` or `1.0.*` bound the version from below as well
+            raise ValueError(f"unsupported version spec '{spec}', declare the lower bound with '>='")
+    return floor
 
 
 def matches_floor(floor: str, resolved: str) -> bool:
     try:
-        floor_version, resolved_version = Version(floor), Version(resolved)
+        # trailing zeros are ignored (e.g. `>=3.11` matches `3.11.0`, but not `3.11.1`)
+        return Version(floor) == Version(resolved)
     except InvalidVersion:
         return floor == resolved
-    # only compare as many components as the floor specifies (e.g. `>=3.11` matches `3.11.0`)
-    length = len(floor_version.release)
-    resolved_release = resolved_version.release + (0,) * length
-    return resolved_release[:length] == floor_version.release
 
 
 def environment_extras(pixi: dict) -> set[str]:
@@ -73,8 +75,14 @@ def declared_floors(pixi: dict) -> dict[str, tuple[str, str]]:
     floors = {}
     for origin, dependencies in tables.items():
         for name, spec in dependencies.items():
+            if isinstance(spec, dict):
+                spec = spec.get("version", "*")
+            try:
+                floor = lower_bound(spec)
+            except ValueError as e:
+                raise ValueError(f"{name} ({origin}): {e}") from None
             # dependencies without a lower bound (e.g. `setuptools = "<81"`) are skipped
-            if isinstance(spec, str) and (floor := lower_bound(spec)) is not None:
+            if floor is not None:
                 floors.setdefault(normalize(name), (floor, origin))
     return floors
 
@@ -97,9 +105,15 @@ def main() -> int:
     pixi = tomllib.loads((root / "pixi.toml").read_text())
     lock = yaml.safe_load((root / "pixi.lock").read_text())
 
+    try:
+        floors = declared_floors(pixi)
+    except ValueError as e:
+        print(e)
+        return 1
+
     versions = resolved_versions(lock)
     exit_code = 0
-    for name, (floor, origin) in sorted(declared_floors(pixi).items()):
+    for name, (floor, origin) in sorted(floors.items()):
         if name not in versions:
             print(f"{name} ({origin}): not part of the {ENVIRONMENT} environment on {PLATFORM}")
             exit_code = 1

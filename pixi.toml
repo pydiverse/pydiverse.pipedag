@@ -260,4 +260,4 @@ no-win = ["dev", "py314", "all", "snowflake"]
 no-adbc-dy = ["dev", "py314", "no-adbc-dy"]
 # only the default feature, so that no optional dependency is installed
 no-features = []
-old = { features = ["dev", "all", "colspec", "pdtransform", "ibm-db"], solve-strategy = "lowest" }
+old = { features = ["dev", "all", "colspec", "pdtransform", "ibm-db", "snowflake"], solve-strategy = "lowest" }
