@@ -9,3 +9,5 @@ except ImportError:
     cs = types.ModuleType("pydiverse.colspec")
     fn = lambda *args, **kwargs: lambda *args, **kwargs: None  # noqa: E731
     cs.__getattr__ = lambda name: object if name in ["ColSpec", "Collection"] else fn
+
+__all__ = ["cs"]

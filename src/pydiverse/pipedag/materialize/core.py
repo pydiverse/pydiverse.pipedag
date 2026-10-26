@@ -5,13 +5,13 @@ import uuid
 from collections.abc import Callable, Iterable
 from contextlib import contextmanager
 from functools import partial
-from typing import TYPE_CHECKING, Any, Literal, overload
+from typing import TYPE_CHECKING, Any, Literal, Protocol, overload
 
 import sqlalchemy as sa
 
 from pydiverse.common.util import deep_map
 from pydiverse.common.util.hashing import stable_hash
-from pydiverse.pipedag._typing import R1, R2, R3, P, R
+from pydiverse.pipedag._typing import R1, R2, R3, InputType, P, R
 from pydiverse.pipedag.container import Blob, RawSql, Table
 from pydiverse.pipedag.context import ConfigContext, TaskContext
 from pydiverse.pipedag.core.task import Task
@@ -29,21 +29,30 @@ if TYPE_CHECKING:
     from pydiverse.pipedag import Stage
 
 
-# The overloads below exist so that type checkers can validate flow declaration sites.
-# `P` and `R` carry the decorated function's signature and return type through to the
-# resulting task; `nout=2` / `nout=3` get dedicated overloads so that unpacking
-# assignment is checked for arity. Any other `nout` value falls back to the general
-# overload, where the task is not unpackable in a checked way.
-#
-# The `type: ignore[overload-overlap]` markers are for mypy only: `Literal[2]` overlaps
-# with the `nout: int` overload below, which mypy flags even though the more specific
-# signature comes first and therefore always wins. pyright does not complain.
+class _MaterializeNout2(Protocol):
+    # A function returning a 2-tuple gets a task that unpacks into two typed items.
+    # Anything else (e.g. a list) falls back to the general task type.
+    @overload
+    def __call__(self, fn: Callable[P, tuple[R1, R2]], /) -> UnboundMaterializingTask2[P, R1, R2]: ...
+    @overload
+    def __call__(self, fn: Callable[P, R], /) -> UnboundMaterializingTask[P, R]: ...
+
+
+class _MaterializeNout3(Protocol):
+    @overload
+    def __call__(self, fn: Callable[P, tuple[R1, R2, R3]], /) -> UnboundMaterializingTask3[P, R1, R2, R3]: ...
+    @overload
+    def __call__(self, fn: Callable[P, R], /) -> UnboundMaterializingTask[P, R]: ...
+
+
+# mypy reports `Literal[2]` as overlapping with `nout: int` even though the more
+# specific overload comes first.
 @overload
 def materialize(  # type: ignore[overload-overlap]
     *,
     nout: Literal[2],
     name: str | None = None,
-    input_type: type | None = None,
+    input_type: InputType | None = None,
     version: str | AutoVersionType | None = None,
     cache: Callable[..., Any] | None = None,
     lazy: bool = False,
@@ -52,7 +61,7 @@ def materialize(  # type: ignore[overload-overlap]
     ordering_barrier: bool | dict[str, Any] = False,
     call_context: Callable[[], Any] | None = None,
     allow_fresh_input: bool = False,
-) -> Callable[[Callable[P, tuple[R1, R2]]], UnboundMaterializingTask2[P, R1, R2]]: ...
+) -> _MaterializeNout2: ...
 
 
 @overload
@@ -60,7 +69,7 @@ def materialize(  # type: ignore[overload-overlap]
     *,
     nout: Literal[3],
     name: str | None = None,
-    input_type: type | None = None,
+    input_type: InputType | None = None,
     version: str | AutoVersionType | None = None,
     cache: Callable[..., Any] | None = None,
     lazy: bool = False,
@@ -69,14 +78,14 @@ def materialize(  # type: ignore[overload-overlap]
     ordering_barrier: bool | dict[str, Any] = False,
     call_context: Callable[[], Any] | None = None,
     allow_fresh_input: bool = False,
-) -> Callable[[Callable[P, tuple[R1, R2, R3]]], UnboundMaterializingTask3[P, R1, R2, R3]]: ...
+) -> _MaterializeNout3: ...
 
 
 @overload
 def materialize(
     *,
     name: str | None = None,
-    input_type: type | None = None,
+    input_type: InputType | None = None,
     version: str | AutoVersionType | None = None,
     cache: Callable[..., Any] | None = None,
     lazy: bool = False,
@@ -94,10 +103,10 @@ def materialize(fn: Callable[P, R], /) -> UnboundMaterializingTask[P, R]: ...
 
 
 def materialize(
-    fn: Callable | None = None,
+    fn: Callable[..., Any] | None = None,
     *,
     name: str | None = None,
-    input_type: type | None = None,
+    input_type: InputType | None = None,
     version: str | AutoVersionType | None = None,
     cache: Callable[..., Any] | None = None,
     lazy: bool = False,
@@ -107,7 +116,7 @@ def materialize(
     ordering_barrier: bool | dict[str, Any] = False,
     call_context: Callable[[], Any] | None = None,
     allow_fresh_input: bool = False,
-):
+) -> Any:
     """Decorator to create a task whose outputs get materialized.
 
     This decorator takes a class and turns it into a :py:class:`MaterializingTask`.
@@ -305,16 +314,13 @@ def materialize(
     )
 
 
-# Unlike @materialize, this decorator cannot preserve the decorated function's
-# signature: the resulting task takes an arbitrary expression of Table/Blob/RawSql
-# references (often no arguments at all) while the decorated function receives one
-# dictionary per stage version. The two signatures are unrelated by construction, so
-# the return type stays deliberately loose.
+# The resulting task's signature is unrelated to the decorated function's (which
+# receives one dictionary per stage version), so it can't be preserved.
 @overload
 def input_stage_versions(
     *,
     name: str | None = None,
-    input_type: type | None = None,
+    input_type: InputType | None = None,
     version: str | AutoVersionType | None = None,
     cache: Callable[..., Any] | None = None,
     lazy: bool = False,
@@ -335,10 +341,10 @@ def input_stage_versions(fn: Callable[..., R], /) -> UnboundMaterializingTask[..
 
 
 def input_stage_versions(
-    fn: Callable | None = None,
+    fn: Callable[..., Any] | None = None,
     *,
     name: str | None = None,
-    input_type: type | None = None,
+    input_type: InputType | None = None,
     version: str | AutoVersionType | None = None,
     cache: Callable[..., Any] | None = None,
     lazy: bool = False,
@@ -351,7 +357,7 @@ def input_stage_versions(
     include_views: bool = True,
     lock_source_stages: bool = True,
     pass_args: Iterable[str] = tuple(),
-):
+) -> Any:
     """
     A decorator that marks a function as a task that receives tables from two versions
     of the same stage. This can either be the currently active schema of this stage

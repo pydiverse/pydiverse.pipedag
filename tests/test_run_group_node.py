@@ -25,7 +25,7 @@ from pydiverse.pipedag.context.context import (
     TaskContext,
 )
 from pydiverse.pipedag.core.config import PipedagConfig
-from pydiverse.pipedag.core.flow import pydot
+from pydiverse.pipedag.optional_dependency.pydot import pydot
 from tests.fixtures.instances import (
     ORCHESTRATION_INSTANCES,
     skip_instances,

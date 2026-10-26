@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 import inspect
@@ -34,7 +34,7 @@ class UnboundTask:
 
     def __init__(
         self,
-        fn: Callable,
+        fn: Callable[..., Any],
         *,
         name: str | None = None,
         nout: int | None = None,
@@ -50,18 +50,18 @@ class UnboundTask:
             name = getattr(fn, "__name__", type(self).__name__)
 
         self.fn = fn
-        self.name = name
+        self.name: str = name
         self.nout = nout
         self.group_node_tag = group_node_tag
         self.call_context = call_context
 
-        self._bound_task_type = Task
+        self._bound_task_type: type[Task] = Task
         self._signature = inspect.signature(fn)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<UnboundTask '{self.name}' {hex(id(self))}>"
 
-    def __call__(self, *args, **kwargs) -> "Task":
+    def __call__(self, *args: Any, **kwargs: Any) -> "Task":
         """
         When called inside a flow definition context:
         Constructs a `Task` with bound inputs
@@ -89,7 +89,7 @@ class UnboundTask:
         return self.fn(*args, **kwargs)
 
 
-class TaskGetItem:
+class TaskGetItem(Any):
     """
     Wrapper __getitem__ on tasks
     """
@@ -102,7 +102,7 @@ class TaskGetItem:
 
         self._position_hash = stable_hash("POS_GET_ITEM", parent._position_hash, repr(self._item))
 
-    def __getitem__(self, item) -> "TaskGetItem":
+    def __getitem__(self, item: Any) -> "TaskGetItem":
         return type(self)(self._task, self, item)
 
     def _resolve_value(self, task_value: Any):
@@ -115,7 +115,15 @@ class TaskGetItem:
             return parent_value[self._item]
 
 
-class Task:
+class Task(Any):
+    """A task bound to its inputs within a flow.
+
+    ``Any`` is among the base classes because during flow declaration a task object
+    stands in for the dematerialized value it will eventually produce, so it must be
+    assignable to whatever type the receiving task declares for that parameter. The same
+    holds for :py:class:`TaskGetItem`. See :doc:`/typing`.
+    """
+
     def __init__(
         self,
         unbound_task: UnboundTask,
@@ -175,20 +183,20 @@ class Task:
         # Private flags
         self._visualize_hidden = False
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<Task '{self._name}' (id: {self._id})>"
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return id(self)
 
-    def __getitem__(self, item) -> TaskGetItem:
+    def __getitem__(self, item: Any) -> TaskGetItem:
         return TaskGetItem(self, self, item)
 
     def __iter__(self) -> Iterator[TaskGetItem]:
         if self._nout is None:
             raise ValueError("Can't iterate over task without specifying `nout`.")
         for i in range(self._nout):
-            yield TaskGetItem(self, self, i)
+            yield self[i]
 
     def _do_run(
         self,

@@ -1,10 +1,11 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 import inspect
+from collections.abc import Iterator
 from functools import total_ordering
 from types import TracebackType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -50,7 +51,7 @@ class Stage:
         name: str,
         materialization_details: str | None = None,
         group_node_tag: str | None = None,
-        force_committed=False,
+        force_committed: bool = False,
     ):
         self._name = normalize_name(name)
         self._transaction_name = f"{self._name}__tmp"
@@ -70,7 +71,7 @@ class Stage:
         self.force_committed = force_committed
         self._did_enter = False
 
-    def __lt__(self, other: "Stage"):
+    def __lt__(self, other: "Stage") -> bool:
         # Essentially stage name is all that matters and should be unique per flow.
         # In case of comparing stages among different flows or pipeline instances,
         # the caller needs to check whether those are different. The stage links to
@@ -78,14 +79,14 @@ class Stage:
         # caller wants from the comparison operators.
         return self.name < other.name
 
-    def __eq__(self, other: object):
+    def __eq__(self, other: object) -> bool:
         # Essentially stage name is all that matters and should be unique per flow.
         # See __lt__ for more details.
         if not isinstance(other, Stage):
             return False
         return self.name == other.name
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         # Essentially stage name is all that matters and should be unique per flow.
         # See __lt__ for more details.
         return hash(self.name)
@@ -100,7 +101,7 @@ class Stage:
         """The name temporary transaction stage."""
         return self._transaction_name
 
-    def set_transaction_name(self, new_transaction_name):
+    def set_transaction_name(self, new_transaction_name: str) -> None:
         # used by stage_commit_technique=READ_VIEWS to change odd/even
         # transaction schemas
         self._transaction_name = new_transaction_name
@@ -127,10 +128,10 @@ class Stage:
 
         return RunContext.get().get_stage_state(self) == StageState.COMMITTED
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<Stage: {self.name}>"
 
-    def __getstate__(self):
+    def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
         state.pop("tasks", None)
         state.pop("commit_task", None)
@@ -178,7 +179,7 @@ class Stage:
         self._ctx.__exit__()
         del self._ctx
 
-    def __getitem__(self, item: str | tuple[str, int]) -> Task:
+    def __getitem__(self, item: str | tuple[str, int | None]) -> Task:
         """Retrieves a task inside the stage by name.
 
         You can either subscribe a Stage using just a string (``stage["name"]``) or
@@ -226,12 +227,12 @@ class Stage:
             "which is out of bounds."
         )
 
-    def all_tasks(self):
+    def all_tasks(self) -> Iterator[Task]:
         yield from self.tasks
         yield from self.barrier_tasks
         yield self.commit_task
 
-    def is_inner(self, other: "Stage"):
+    def is_inner(self, other: "Stage") -> bool:
         outer = self.outer_stage
         while outer is not None:
             if outer == other:

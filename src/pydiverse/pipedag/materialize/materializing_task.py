@@ -8,7 +8,7 @@ import typing
 import uuid
 from collections.abc import Callable, Iterable, Iterator
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Generic, overload
+from typing import TYPE_CHECKING, Any, Generic
 
 import sqlalchemy as sa
 
@@ -26,7 +26,7 @@ from pydiverse.pipedag import (
     Task,
     TaskGetItem,
 )
-from pydiverse.pipedag._typing import R1, R2, R3, P, R, T
+from pydiverse.pipedag._typing import R1, R2, R3, InputType, P, R
 from pydiverse.pipedag.container import attach_annotation
 from pydiverse.pipedag.context import RunContext, TaskContext
 from pydiverse.pipedag.context.context import CacheValidationMode, DAGContext
@@ -99,10 +99,10 @@ class UnboundMaterializingTask(UnboundTask, Generic[P, R]):
 
     def __init__(
         self,
-        fn: Callable,
+        fn: Callable[..., Any],
         *,
         name: str | None = None,
-        input_type: type | None = None,
+        input_type: InputType | None = None,
         version: "str | AutoVersionType | None" = None,
         cache: Callable[..., Any] | None = None,
         lazy: bool = False,
@@ -159,11 +159,8 @@ class UnboundMaterializingTask(UnboundTask, Generic[P, R]):
                 raise ValueError("Task can't be lazy and auto-versioning at the same time")
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> "MaterializingTask[R]":
-        # Statically, this always returns a task. At run time, calling the task outside
-        # of a flow declaration context invokes the original function instead (see
-        # UnboundTask.__call__). That distinction depends on an ambient ContextVar and
-        # is therefore not expressible in the type system; declaring the task type is
-        # the useful half, because that is what flow declaration sites need.
+        # Outside of a flow declaration, this calls the original function instead (see
+        # UnboundTask.__call__). That depends on a ContextVar and can't be typed.
         if self.group_node_args["ordering_barrier"]:
             from pydiverse.pipedag import GroupNode
 
@@ -202,53 +199,35 @@ class UnboundMaterializingTask(UnboundTask, Generic[P, R]):
         return deep_map(result, unwrap_mutator)
 
 
-class MaterializingTaskGetItem(TaskGetItem, Generic[R], Any):
+class MaterializingTaskGetItem(TaskGetItem, Generic[R]):
     """Object that represents a subset of a :py:class:`~.MaterializingTask` output.
 
     Instances of this class get initialized by calling
     :py:class:`MaterializingTask.__getitem__`.
-
-    ``Any`` appears among the base classes on purpose: during flow declaration these
-    objects stand in for the dematerialized values the task will eventually produce, so
-    they must be assignable to whatever type the receiving task declares for that
-    parameter. See :doc:`/typing` for the full rationale.
     """
 
     def __init__(
         self,
-        task: "MaterializingTask",
-        parent: "MaterializingTask | MaterializingTaskGetItem",
+        task: "MaterializingTask[Any]",
+        parent: "MaterializingTask[Any] | MaterializingTaskGetItem[Any]",
         item: Any,
         *,
         is_member_lookup: bool = False,
     ):
         super().__init__(task, parent, item, is_member_lookup=is_member_lookup)
 
-    def __getitem__(self, item) -> "MaterializingTaskGetItem[Any]":
+    def __getitem__(self, item: Any) -> "MaterializingTaskGetItem[Any]":
         """
         Same as :py:meth:`MaterializingTask.__getitem__`,
         except that it allows you to further refine the selection.
         """
         return super().__getitem__(item)
 
-    @overload
     def get_output_from_store(
         self,
-        as_type: type[T],
+        as_type: InputType | None = None,
         ignore_position_hashes: bool = False,
         write_local_table_cache: bool = False,
-    ) -> T: ...
-
-    @overload
-    def get_output_from_store(
-        self,
-        as_type: None = None,
-        ignore_position_hashes: bool = False,
-        write_local_table_cache: bool = False,
-    ) -> Any: ...
-
-    def get_output_from_store(
-        self, as_type: type | None = None, ignore_position_hashes: bool = False, write_local_table_cache: bool = False
     ) -> Any:
         """
         Same as :py:meth:`MaterializingTask.get_output_from_store()`,
@@ -264,7 +243,7 @@ class MaterializingTaskGetItem(TaskGetItem, Generic[R], Any):
         )
 
 
-class MaterializingTask(Task, Generic[R], Any):
+class MaterializingTask(Task, Generic[R]):
     """
     A pipedag task that materializes all its outputs.
 
@@ -276,15 +255,13 @@ class MaterializingTask(Task, Generic[R], Any):
     because they are used to bind the output (or parts of the output) from one
     task, to the input of another task.
 
-    ``Any`` appears among the base classes on purpose: during flow declaration a task
-    object stands in for the dematerialized value it will eventually produce, so it must
-    be assignable to whatever type the receiving task declares for that parameter.
-    See :doc:`/typing` for the full rationale.
+    Like every :py:class:`~.Task`, it has ``Any`` among its base classes, so it is
+    accepted as input for any task parameter. See :doc:`/typing`.
     """
 
     def __init__(
         self,
-        unbound_task: UnboundMaterializingTask,
+        unbound_task: UnboundMaterializingTask[..., Any],
         bound_args: inspect.BoundArguments,
         flow: "Flow",
         stage: "Stage",
@@ -317,7 +294,7 @@ class MaterializingTask(Task, Generic[R], Any):
         except LookupError:
             raise AttributeError("Can't set task version outside of a TaskContext") from None
 
-    def __getitem__(self, item) -> MaterializingTaskGetItem[Any]:
+    def __getitem__(self, item: Any) -> MaterializingTaskGetItem[Any]:
         """Construct a :py:class:`~.MaterializingTaskGetItem`.
 
         If the corresponding task returns an object that supports
@@ -349,19 +326,14 @@ class MaterializingTask(Task, Generic[R], Any):
         """
         return MaterializingTaskGetItem(self, self, item)
 
-    def __iter__(self) -> Iterator[MaterializingTaskGetItem[Any]]:
-        # Task.__iter__ yields plain TaskGetItem objects, which are not usable as task
-        # inputs from a type checker's point of view. The runtime behaviour is
-        # unchanged - MaterializingTaskGetItem is what __getitem__ produces anyway.
-        if self._nout is None:
-            raise ValueError("Can't iterate over task without specifying `nout`.")
-        for i in range(self._nout):
-            yield MaterializingTaskGetItem(self, self, i)
+    if TYPE_CHECKING:
+        # Task.__iter__ yields `self[i]`
+        def __iter__(self) -> Iterator[MaterializingTaskGetItem[Any]]: ...
 
     def _field_lookup(self, item):
         return MaterializingTaskGetItem(self, self, item, is_member_lookup=True)
 
-    def __getattr__(self, item) -> Any:
+    def __getattr__(self, item: str) -> Any:
         """Construct a :py:class:`~.MaterializingTaskGetItem`.
 
         If the corresponding task returns a dataclass, member field access
@@ -405,27 +377,9 @@ class MaterializingTask(Task, Generic[R], Any):
 
         return super()._do_run(inputs, **kwargs)
 
-    @overload
     def get_output_from_store(
         self,
-        as_type: type[T],
-        ignore_position_hashes: bool = False,
-        write_local_table_cache: bool = False,
-        config: ConfigContext | None = None,
-    ) -> T: ...
-
-    @overload
-    def get_output_from_store(
-        self,
-        as_type: None = None,
-        ignore_position_hashes: bool = False,
-        write_local_table_cache: bool = False,
-        config: ConfigContext | None = None,
-    ) -> Any: ...
-
-    def get_output_from_store(
-        self,
-        as_type: type | None = None,
+        as_type: InputType | None = None,
         ignore_position_hashes: bool = False,
         write_local_table_cache: bool = False,
         config: ConfigContext | None = None,
@@ -485,13 +439,9 @@ class MaterializingTask(Task, Generic[R], Any):
 
 
 if TYPE_CHECKING:
-    # A task declared with `nout=2` / `nout=3` is one object that also behaves like a
-    # tuple of that many items: `a, b = some_task()` unpacks it, but `inp = some_task()`
-    # keeps a task that can be passed to `Result.get` or wired into another task. Both
-    # facts have to be true of a single type, so these declare a task that *is* a
-    # fixed-length tuple. At run time nothing of the sort exists - the call returns the
-    # same MaterializingTask as always, and tuple unpacking goes through
-    # `Task.__iter__`.
+    # A `nout=2` / `nout=3` task both unpacks like a fixed-length tuple
+    # (`a, b = task()`) and stays usable as a single task (`whole = task()`).
+    # At run time, unpacking goes through `Task.__iter__`.
     class MaterializingTask2(
         MaterializingTask[tuple[R1, R2]],
         tuple[MaterializingTaskGetItem[R1], MaterializingTaskGetItem[R2]],
@@ -509,39 +459,33 @@ if TYPE_CHECKING:
     ): ...
 
 else:
-    MaterializingTask2 = MaterializingTask
-    MaterializingTask3 = MaterializingTask
+    # Never instantiated; they only exist so that annotations using them evaluate.
+    class MaterializingTask2(MaterializingTask[tuple[R1, R2]], Generic[R1, R2]): ...
+
+    class MaterializingTask3(MaterializingTask[tuple[R1, R2, R3]], Generic[R1, R2, R3]): ...
 
 
 class UnboundMaterializingTask2(UnboundMaterializingTask[P, tuple[R1, R2]], Generic[P, R1, R2]):
-    """An :py:class:`~.UnboundMaterializingTask` declared with ``nout=2``.
+    """Static return type of ``@materialize(nout=2)`` for functions returning a 2-tuple.
 
-    This exists purely so that unpacking assignment (``a, b = some_task()``) can be
-    checked for the right arity and so that each element keeps its own declared type.
-    It is a real subclass, but nothing ever instantiates it: the
-    :py:func:`@materialize <pydiverse.pipedag.materialize>` overloads name it as the
-    return type for ``nout=2`` while the implementation keeps returning a plain
+    Never instantiated: at run time the decorator returns a plain
     :py:class:`~.UnboundMaterializingTask`.
     """
 
     if TYPE_CHECKING:
-        # Declaration only. At run time the inherited __call__ is used unchanged.
-        def __call__(  # type: ignore[override]
-            self, *args: P.args, **kwargs: P.kwargs
-        ) -> "MaterializingTask2[R1, R2]": ...
+
+        def __call__(self, *args: P.args, **kwargs: P.kwargs) -> "MaterializingTask2[R1, R2]": ...
 
 
 class UnboundMaterializingTask3(UnboundMaterializingTask[P, tuple[R1, R2, R3]], Generic[P, R1, R2, R3]):
-    """An :py:class:`~.UnboundMaterializingTask` declared with ``nout=3``.
+    """Static return type of ``@materialize(nout=3)`` for functions returning a 3-tuple.
 
     See :py:class:`~.UnboundMaterializingTask2`.
     """
 
     if TYPE_CHECKING:
-        # Declaration only. At run time the inherited __call__ is used unchanged.
-        def __call__(  # type: ignore[override]
-            self, *args: P.args, **kwargs: P.kwargs
-        ) -> "MaterializingTask3[R1, R2, R3]": ...
+
+        def __call__(self, *args: P.args, **kwargs: P.kwargs) -> "MaterializingTask3[R1, R2, R3]": ...
 
 
 class AutoVersionType:
@@ -615,10 +559,10 @@ class AutoVersionType:
 
     """
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "AUTO_VERSION"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "AUTO_VERSION"
 
 

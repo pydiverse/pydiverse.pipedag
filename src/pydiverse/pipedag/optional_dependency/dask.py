@@ -5,3 +5,5 @@ try:
     import dask
 except ImportError:
     dask = None
+
+__all__ = ["dask"]

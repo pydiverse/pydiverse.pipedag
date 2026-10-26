@@ -15,18 +15,30 @@ import sqlalchemy as sa
 
 from pydiverse.pipedag import (
     AUTO_VERSION,
+    Blob,
     ConfigContext,
+    ExternalTableReference,
     Flow,
     GroupNode,
     MaterializingTask,
     MaterializingTaskGetItem,
+    PipedagConfig,
+    RawSql,
     Result,
+    Schema,
+    SortCol,
+    SortOrder,
     Stage,
+    StageLockContext,
     Table,
+    Task,
+    TaskGetItem,
     UnboundMaterializingTask,
+    View,
     materialize,
 )
 from pydiverse.pipedag.materialize.materializing_task import MaterializingTask2
+from pydiverse.pipedag.materialize.store import BaseTableStore
 
 
 @materialize(version="1.0", input_type=pd.DataFrame)
@@ -67,6 +79,27 @@ def two() -> tuple[Table, Table]:
 @materialize(nout=3)
 def three() -> tuple[Table, Table, Table]:
     return Table(pd.DataFrame()), Table(pd.DataFrame()), Table(pd.DataFrame())
+
+
+@materialize(nout=2)
+def two_as_list() -> list[Table]:
+    return [Table(pd.DataFrame()), Table(pd.DataFrame())]
+
+
+@materialize(input_type=(pd.DataFrame, "arrow"))
+def arrow_backed(df: pd.DataFrame) -> Table:
+    return Table(df)
+
+
+@materialize(input_type={"type": pd.DataFrame, "backend": "numpy"})
+def numpy_backed(df: pd.DataFrame) -> Table:
+    return Table(df)
+
+
+@materialize(input_type=sa.Table, lazy=True)
+def materialize_imperatively(tbl: sa.Alias) -> Table:
+    ref, df = Table(sa.select(tbl)).materialize(return_as_type=[None, pd.DataFrame])
+    return Table(ref)
 
 
 @materialize(nout=10)
@@ -131,6 +164,17 @@ def declaration_time() -> None:
             _ = takes_container([a, b], {"a": a, "b": c})
             _ = takes_container([polars_task(a)], {"x": sql_task(a)})
 
+            # Table / Blob objects created at declaration time are valid inputs too.
+            _ = sql_task(Table(ExternalTableReference("tbl", schema="ext")))
+            _ = clean(Table(pd.DataFrame({"x": [1]})))
+            _ = arrow_backed(a)
+            _ = numpy_backed(a)
+            _ = materialize_imperatively(a)
+
+            # Values annotated with the generic task types are accepted as well.
+            src_tbls: dict[str, Task | TaskGetItem] = {"a": a, "x": ten()[0]}
+            _ = combine(src_tbls["a"], src_tbls["x"])
+
         with Stage("stage_2"), GroupNode("group") as group:
             assert_type(group, GroupNode)
 
@@ -145,6 +189,12 @@ def declaration_time() -> None:
             # An un-unpacked nout=2 result stays usable as a single task as well.
             whole = two()
             assert_type(whole, MaterializingTask2[Table, Table])
+
+            # nout=2 with a non-tuple return type falls back to the general task type.
+            assert_type(two_as_list(), MaterializingTask[list[Table]])
+            k, m = two_as_list()
+            assert_type(k, MaterializingTaskGetItem[Any])
+            _ = combine(k, m)
 
             # Other nout values fall back to iteration / subscripting: still usable,
             # but each element is opaque and the arity is not checked.
@@ -178,6 +228,8 @@ def declaration_time() -> None:
     _ = flow.run()
     _ = flow.run(a, stage_1)
     _ = flow.get_subflow(a, x, stage_1)
+    inputs = {a: ExternalTableReference("tbl", schema="ext")}
+    _ = flow.run(inputs=inputs)
 
 
 def run_time() -> None:
@@ -189,37 +241,73 @@ def run_time() -> None:
     assert_type(result, Result)
     assert_type(result.successful, bool)
 
-    # `as_type` decides the type of the returned object.
-    assert_type(result.get(a, as_type=pd.DataFrame), pd.DataFrame)
-    assert_type(result.get(a, pl.DataFrame), pl.DataFrame)
-
-    # Without `as_type` the value is dematerialized as the task's own input_type, which
-    # is not knowable statically.
+    # The returned object depends on the task's output structure and the table hook
+    # (e.g. `as_type=sa.Table` returns an `sa.Alias`), so it is `Any`.
+    assert_type(result.get(a, as_type=pd.DataFrame), Any)
+    assert_type(result.get(a, (pd.DataFrame, "arrow")), Any)
     assert_type(result.get(a), Any)
+    df: pd.DataFrame = result.get(a, as_type=pd.DataFrame)
+    _ = df
 
-    assert_type(a.get_output_from_store(as_type=pd.DataFrame), pd.DataFrame)
-    assert_type(a.get_output_from_store(), Any)
+    assert_type(a.get_output_from_store(as_type=pd.DataFrame), Any)
 
     with flow, Stage("other"):
         x, _ = two()
         whole = two()
-    assert_type(x.get_output_from_store(as_type=pl.DataFrame), pl.DataFrame)
-    assert_type(x.get_output_from_store(), Any)
-
-    # A nout=2 result that was never unpacked is still a task, so it can be fetched as a
-    # whole (the store returns a list of the task's outputs).
-    assert_type(result.get(whole, as_type=pd.DataFrame), pd.DataFrame)
-    assert_type(whole.get_output_from_store(as_type=pd.DataFrame), pd.DataFrame)
+    assert_type(x.get_output_from_store(as_type=pl.DataFrame), Any)
+    assert_type(result.get(whole, as_type=pd.DataFrame), Any)
 
 
 def outside_flow() -> None:
-    # Calling a task outside a flow declaration context invokes the original function.
-    # That distinction depends on an ambient ContextVar, so statically it is still the
-    # task type; the `Any` base keeps such calls from producing false errors.
-    value = bare()
-    _: int = value
+    # Outside a flow declaration, calling a task invokes the original function. That
+    # can't be expressed statically, but the `Any` base keeps it from erroring.
+    value: int = bare()
+    _ = value
 
 
 def config() -> None:
     cfg = ConfigContext.get()
     assert_type(cfg.instance_name, str)
+    assert_type(cfg.evolve(fail_fast=True), ConfigContext)
+    assert_type(cfg.store.table_store, BaseTableStore)
+
+    pipedag_config = PipedagConfig.default
+    assert_type(pipedag_config.get(instance="x", flow="y"), ConfigContext)
+
+    # Contexts return themselves from __enter__.
+    with cfg as entered_cfg, StageLockContext() as lock_ctx:
+        assert_type(entered_cfg, ConfigContext)
+        assert_type(lock_ctx, StageLockContext)
+
+
+def containers() -> None:
+    tbl = Table(pd.DataFrame(), "name", primary_key=["x"], indexes=[["x"]])
+    assert_type(tbl, Table[pd.DataFrame])
+    assert_type(tbl.obj, pd.DataFrame | None)
+    assert_type(tbl.name, str | None)
+    assert_type(tbl.copy_without_obj(), Table[pd.DataFrame])
+
+    blob = Blob({"a": 1})
+    assert_type(blob, Blob[dict[str, int]])
+    assert_type(blob.name, str | None)
+
+    raw = RawSql("SELECT 1", "raw")
+    assert_type(list(raw), list[str])
+    assert_type(raw.name, str | None)
+
+    _ = Table(ExternalTableReference("tbl", schema="ext"))
+    _ = Table(View(tbl, columns=["x"], sort_by=[SortCol("x", SortOrder.DESC)], limit=10))
+    assert_type(Schema("s", prefix="p_").get(), str)
+
+
+def flow_structure() -> None:
+    with Flow("flow") as flow, Stage("stage") as stage:
+        _ = one_frame()
+
+    assert_type(flow["stage"], Stage)
+    assert_type(flow.get_stage("stage"), Stage)
+    assert_type(stage["one_frame"], Task)
+    assert_type(stage.get_task("one_frame", 0), Task)
+    assert_type(stage.name, str)
+    assert_type(stage.current_name, str)
+    assert_type(flow.visualize_url(), str)

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 from pydiverse.common.util import Disposable
 from pydiverse.pipedag import ExternalTableReference, Task
@@ -17,7 +18,7 @@ class OrchestrationEngine(Disposable, ABC):
         flow: Subflow,
         ignore_position_hashes: bool = False,
         inputs: dict[Task, ExternalTableReference] | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> Result:
         """Execute a flow
 

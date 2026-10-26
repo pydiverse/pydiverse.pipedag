@@ -10,3 +10,5 @@ try:
 except ImportError:
     prefect = None
     prefect_version = Version("0")
+
+__all__ = ["prefect", "prefect_version"]

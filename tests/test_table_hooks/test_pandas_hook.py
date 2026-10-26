@@ -28,7 +28,7 @@ from pydiverse.pipedag import (
 from pydiverse.pipedag.backend import SQLTableStore
 from pydiverse.pipedag.backend.table.sql.hooks import PandasTableHook
 from pydiverse.pipedag.backend.table.sql.sql import DISABLE_DIALECT_REGISTRATION
-from pydiverse.pipedag.engine import dask
+from pydiverse.pipedag.optional_dependency.dask import dask
 
 # Parameterize all tests in this file with several instance_id configurations
 from tests.fixtures.instances import DATABASE_INSTANCES, skip_instances, with_instances
@@ -364,7 +364,7 @@ def test_pandas_table_hook_postgres_null_string():
 
 
 @with_instances("postgres", "local_table_store")
-@pytest.mark.skipif(dask.dask is None, reason="AUTO_VERSION for pandas requires dask")
+@pytest.mark.skipif(dask is None, reason="AUTO_VERSION for pandas requires dask")
 @pytest.mark.skipif(
     sys.version_info >= (3, 13),
     reason="Pandas AUTO_VERSION ComputationTracer might be deprecated since it is hard to maintain",

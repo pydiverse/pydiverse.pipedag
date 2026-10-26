@@ -28,3 +28,5 @@ except ImportError:
     SqlAlchemy = object
     Polars = object
     Pandas = object
+
+__all__ = ["pdt", "pdt_old", "pdt_new", "C", "ColExpr", "Pandas", "Polars", "SqlAlchemy", "verb"]

@@ -9,3 +9,5 @@ try:
 except ImportError:
     pydot = types.ModuleType("pydot")
     pydot.Dot = None
+
+__all__ = ["pydot"]

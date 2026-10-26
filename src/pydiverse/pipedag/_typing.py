@@ -1,7 +1,7 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
-from typing import TYPE_CHECKING, ParamSpec, TypeVar, Union
+from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar, Union
 
 if TYPE_CHECKING:
     from pydiverse.pipedag import Blob, Table
@@ -12,15 +12,17 @@ T = TypeVar("T")
 StoreT = TypeVar("StoreT", bound="BaseTableStore")
 TableHookResolverT = TypeVar("TableHookResolverT", bound="TableHookResolver")
 
-# Used by the @materialize decorator to preserve the signature of the decorated
-# function. `P` captures the parameter list, `R` the (declaration-time) return type.
-# R1/R2/R3 spell out the element types of `nout=2` / `nout=3` tuple returns, which is
-# the only way to give tuple-unpacking assignments a checkable arity.
+# Signature (`P`) and return type (`R`) of functions decorated with @materialize.
+# R1/R2/R3 are the element types of `nout=2` / `nout=3` tuple returns.
 P = ParamSpec("P")
 R = TypeVar("R")
 R1 = TypeVar("R1")
 R2 = TypeVar("R2")
 R3 = TypeVar("R3")
+
+# Accepted by `input_type` / `as_type`: a type, or a type with a backend such as
+# `(pd.DataFrame, "arrow")` / `{"type": pd.DataFrame, "backend": "arrow"}`
+InputType = type | tuple[type, str] | dict[str, Any]
 
 # Materializable
 MPrimitives = int | float | bool | str

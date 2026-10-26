@@ -9,3 +9,5 @@ except ImportError:
     ibis = types.ModuleType("ibis")
     ibis.api = types.ModuleType("ibis.api")
     ibis.api.Table = None
+
+__all__ = ["ibis"]

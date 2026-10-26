@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 import base64
@@ -6,7 +6,7 @@ import random
 from collections import defaultdict
 from collections.abc import Callable, Iterable
 from types import TracebackType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import networkx as nx
 import structlog
@@ -73,7 +73,7 @@ class Flow:
         self.tasks: list[Task] = []
         self.group_nodes: list[GroupNode] = []
 
-        self.graph = nx.DiGraph()
+        self.graph: nx.DiGraph = nx.DiGraph()
         self.explicit_graph: nx.DiGraph | None = None
 
     def __enter__(self) -> "Flow":
@@ -103,7 +103,7 @@ class Flow:
 
         self.explicit_graph = self.build_graph()
 
-    def __getitem__(self, name) -> Stage:
+    def __getitem__(self, name: str) -> Stage:
         """Retrieves a stage by name.
 
         :param name: The name of the stage.
@@ -114,25 +114,25 @@ class Flow:
             return stage
         raise KeyError(f"Couldn't find a stage with name '{name}' in flow.")
 
-    def add_stage(self, stage: Stage):
+    def add_stage(self, stage: Stage) -> None:
         if stage.name in self.stages:
             raise DuplicateNameError(f"Stage with name '{stage.name}' already exists.")
 
         stage.id = len(self.stages)
         self.stages[stage.name] = stage
 
-    def add_group_node(self, group_node: GroupNode):
+    def add_group_node(self, group_node: GroupNode) -> None:
         group_node.id = len(self.group_nodes)
         self.group_nodes.append(group_node)
 
-    def add_task(self, task: Task):
+    def add_task(self, task: Task) -> None:
         assert self.stages[task._stage.name] is task._stage
 
         task._id = len(self.tasks)
         self.tasks.append(task)
         self.graph.add_node(task)
 
-    def add_edge(self, from_: Task, to: Task):
+    def add_edge(self, from_: Task, to: Task) -> None:
         if from_ not in self.graph:
             raise FlowError(f"Can't add edge from {from_} to {to} because `from` is not in the flow.")
         if to not in self.graph:
@@ -258,8 +258,9 @@ class Flow:
         disable_cache_function: bool | None = None,
         ignore_task_version: bool | None = None,
         ignore_position_hashes: bool = False,
-        inputs: dict[Task, ExternalTableReference] | None = None,
-        **kwargs,
+        # keys are tasks; `Any` because dict keys are invariant (dict[MaterializingTask[X], ...])
+        inputs: dict[Any, ExternalTableReference] | None = None,
+        **kwargs: Any,
     ) -> Result:
         """Execute the flow.
         This will execute the flow and all tasks within using the orchestration engine.
@@ -434,7 +435,7 @@ class Flow:
         return self[name]
 
     # Visualization
-    def visualize(self, result: Result | None = None, visualization_tag: str | None = None):
+    def visualize(self, result: Result | None = None, visualization_tag: str | None = None) -> pydot.Dot:
         """Visualizes the flow as a graph.
 
         If you are running in a jupyter notebook, the graph will get displayed inline.
@@ -474,7 +475,7 @@ class Flow:
         """
         return self.get_subflow().visualize_pydot(result, visualization_tag)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             f"{type(self).__name__}("
             f"name={self.name}, stages={list(self.stages.keys())}, tasks={[t._name for t in self.tasks]}"
@@ -485,8 +486,10 @@ class Flow:
 class Subflow:
     def __init__(self, flow: Flow, tasks: list[Task], stages: list[Stage]):
         self.flow = flow
-        self.name = flow.name
-        self.is_tasks_subflow = len(tasks) > 0
+        self.name: str = flow.name
+        self.is_tasks_subflow: bool = len(tasks) > 0
+        self.selected_stages: set[Stage]
+        self.selected_tasks: set[Task]
 
         if tasks and stages:
             raise ValueError("You can only specify either a subset of tasks OR subset of stages to run, but not both.")
@@ -535,7 +538,7 @@ class Subflow:
             if parent_task in self.selected_tasks or isinstance(parent_task, BarrierTask):
                 yield parent_task
 
-    def visualize(self, result: Result | None = None, visualization_tag: str | None = None):
+    def visualize(self, result: Result | None = None, visualization_tag: str | None = None) -> pydot.Dot:
         dot = self.visualize_pydot(result, visualization_tag)
         _display_pydot(dot)
         return dot

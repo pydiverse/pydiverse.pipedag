@@ -2,9 +2,18 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import itertools
+from typing import overload
 
 
-def normalize_name(name: str) -> str:
+@overload
+def normalize_name(name: str) -> str: ...
+
+
+@overload
+def normalize_name(name: None) -> None: ...
+
+
+def normalize_name(name: str | None) -> str | None:
     """Normalizes an identifier
 
     All names in PipeDAG are case-insensitive and can't contain any

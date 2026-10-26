@@ -5,3 +5,5 @@ try:
     import filelock as fl
 except ImportError:
     fl = None
+
+__all__ = ["fl"]

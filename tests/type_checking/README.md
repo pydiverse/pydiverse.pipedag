@@ -14,9 +14,9 @@ pipedag's public annotations promise:
 Run them with:
 
 ```shell
-pixi run -e typecheck pyright     # authoritative
-pixi run -e typecheck mypy        # second opinion
+pixi run typecheck   # runs both
+pixi run -e typecheck pyright   # authoritative
+pixi run -e typecheck mypy      # second opinion
 ```
 
-The files are also collected by pytest (they import cleanly and define module-level flows lazily
-inside functions, so importing them has no side effects) but they contain no test functions.
+Run-time behaviour these annotations rely on is covered by `tests/test_typing_runtime.py`.

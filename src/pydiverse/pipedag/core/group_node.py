@@ -1,11 +1,11 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
 from types import TracebackType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -105,16 +105,16 @@ class GroupNode:
         self.exit_barrier_task: BarrierTask = None  # type: ignore
         self.outer_stage: Stage | None = None
         self.outer_group_node: GroupNode | None = None
-        self.id = None  # will be set by flow.add_group_node
+        self.id: int = None  # type: ignore  # will be set by flow.add_group_node
 
         self.logger = structlog.get_logger(logger_name=type(self).__name__, group=self)
 
         self._did_enter = False
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<GroupNode: {self.label}>"
 
-    def __getstate__(self):
+    def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
         state.pop("tasks", None)
         state.pop("stages", None)
@@ -171,13 +171,13 @@ class GroupNode:
         self._ctx.__exit__()
         del self._ctx
 
-    def add_stage(self, stage: "Stage"):
+    def add_stage(self, stage: "Stage") -> None:
         self.stages.add(stage)
 
-    def add_task(self, task: Task):
+    def add_task(self, task: Task) -> None:
         self.tasks.add(task)
 
-    def is_content_hidden(self, get_style: Callable[["GroupNode"], VisualizationStyle]):
+    def is_content_hidden(self, get_style: Callable[["GroupNode"], VisualizationStyle]) -> bool:
         # recursive lookup for style.hide_content==True
         obj = self
         if get_style(obj).hide_content or False:
@@ -186,7 +186,7 @@ class GroupNode:
             return obj.outer_group_node.is_content_hidden(get_style)
         return False
 
-    def box_like_stage(self, style: VisualizationStyle):
+    def box_like_stage(self, style: VisualizationStyle) -> bool:
         return not (style.hide_content or False)
 
 

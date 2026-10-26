@@ -5,3 +5,5 @@ try:
     import snowflake
 except ImportError:
     snowflake = None
+
+__all__ = ["snowflake"]

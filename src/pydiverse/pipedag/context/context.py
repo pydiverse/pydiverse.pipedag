@@ -12,7 +12,7 @@ from enum import Enum
 from functools import cached_property
 from threading import Lock
 from types import GenericAlias
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 import structlog
 from attrs import define, evolve, field, frozen
@@ -29,16 +29,17 @@ if TYPE_CHECKING:
     from pydiverse.pipedag.context.run_context import StageLockStateHandler
     from pydiverse.pipedag.engine.base import OrchestrationEngine
     from pydiverse.pipedag.materialize import Table
+    from pydiverse.pipedag.materialize.store import PipeDAGStore
 
 
 class BaseContext:
-    _context_var: ClassVar[ContextVar]
+    _context_var: ClassVar[ContextVar[Any]]
     _lock: Lock = Lock()
-    _thread_state: dict[int, list[Token]] = {}
+    _thread_state: dict[int, list[Token[Any]]] = {}
     _instance_state: dict[int, int] = {}
-    _base_context_logger = []  # enable late initialization of logger
+    _base_context_logger: ClassVar[list[Any]] = []  # enable late initialization of logger
 
-    def get_logger(self):
+    def get_logger(self) -> Any:
         # Derived class DagContext is frozen and would not call any constructor of baseclasses.
         # Initializing loggers at import time is an option, but has risks since existing loggers
         # might not be correctly initialized. Logger initialization typically happens in __main__ or
@@ -47,7 +48,7 @@ class BaseContext:
             self._base_context_logger.append(structlog.get_logger(__name__ + "." + BaseContext.__name__))
         return self._base_context_logger[0]
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         with self._lock:
             _id = id(self) + (threading.get_ident() << 64)
             if _id not in self._thread_state:
@@ -70,7 +71,7 @@ class BaseContext:
             self._instance_state[id(self)] += 1
         return self
 
-    def __exit__(self, *_):
+    def __exit__(self, *_: object) -> None:
         with self._lock:
             _id = id(self) + (threading.get_ident() << 64)
             _tokens = self._thread_state.get(_id)
@@ -109,7 +110,7 @@ class BaseContext:
         """
         return cls._context_var.get()
 
-    def __getstate__(self):
+    def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
         return state
 
@@ -344,7 +345,7 @@ class ConfigContext(BaseAttrsContext):
         return tuple(map(import_object, self._config_dict.get("auto_blob", ())))
 
     @cached_property
-    def store(self):
+    def store(self) -> "PipeDAGStore":
         from pydiverse.pipedag.materialize.store import PipeDAGStore
 
         # Load objects referenced in config
@@ -397,7 +398,7 @@ class ConfigContext(BaseAttrsContext):
             local_table_cache=local_table_cache,
         )
 
-    def evolve(self, **changes) -> "ConfigContext":
+    def evolve(self, **changes: Any) -> "ConfigContext":
         """Create a new config context instance with the changes applied.
 
         Because ConfigContext is immutable, this is the only valid way to derive a
@@ -446,7 +447,7 @@ class ConfigContext(BaseAttrsContext):
                 store.dispose()
                 self.__dict__.pop("store")
 
-    def __getstate__(self):
+    def __getstate__(self) -> dict[str, Any]:
         state = super().__getstate__()
         # store is not serializable, but @cached_property will reload
         # it from config_dict
@@ -456,7 +457,7 @@ class ConfigContext(BaseAttrsContext):
         return state
 
     @staticmethod
-    def new(config: dict[str, Any], pipedag_name: str, flow: str, instance: str):
+    def new(config: dict[str, Any], pipedag_name: str, flow: str | None, instance: str) -> "ConfigContext":
         """
         Create a new ConfigContext instance from dictionary and a few names.
 
@@ -568,7 +569,7 @@ class ConfigContext(BaseAttrsContext):
         within: str,
         *,
         inout: dict[str, Any],
-    ):
+    ) -> None:
         """
         Parse a dictionary into a dataclass instance.
 
@@ -635,11 +636,11 @@ class StageLockContext(BaseContext):
             df = result.get(task_x)
     """
 
-    lock_state_handlers: ["StageLockStateHandler"]
+    lock_state_handlers: list["StageLockStateHandler"]
 
     _context_var = ContextVar("stage_lock_context")
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.logger = structlog.get_logger(logger_name=type(self).__name__, id=id(self))
         self.logger.info("Open stage lock context")
         self.lock_state_handlers = []

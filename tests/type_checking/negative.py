@@ -63,17 +63,3 @@ def nout_errors() -> None:
 
         combine(p, q, str(r))
         combine(s, t)
-
-
-def result_get_errors() -> None:
-    flow = Flow("flow")
-    with flow, Stage("stage"):
-        a = one_frame()
-
-    result = flow.run()
-
-    # `as_type` decides the returned type, so the annotation here is wrong.
-    _: int = result.get(a, as_type=pd.DataFrame)  # type: ignore[assignment]  # pyright: ignore[reportAssignmentType]
-
-    # Same for the task's own accessor.
-    __: int = a.get_output_from_store(as_type=pd.DataFrame)  # type: ignore[assignment]  # pyright: ignore[reportAssignmentType]
