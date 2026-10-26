@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.16 (202X-XX-XX)
+- Build: Check in CI that the `old` environment resolves the declared lower version bounds, and run the Snowflake tests in the `old` environment
+- Fix: Introduce lower bound for pyjwt
+
 ## 0.12.15 (2026-10-16)
 - Build: Clean up pixi environments and update package constraints
 - Deps: Update dependencies. In particular: support Polars 2
