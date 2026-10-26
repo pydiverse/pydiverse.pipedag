@@ -18,59 +18,60 @@ classifiers = [
   "Intended Audience :: Developers",
   "Intended Audience :: Science/Research",
   "License :: OSI Approved :: BSD License",
-  "Programming Language :: SQL",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
+  "Programming Language :: SQL",
   "Topic :: Database",
   "Topic :: Scientific/Engineering",
   "Topic :: Software Development",
 ]
 
 dependencies = [
-  "pydiverse-common >=0.4.4,<0.5",
-  "typing-extensions >=4.15.0,<5",
-  "networkx >=3.4,<4",
   "attrs >=25.4.0,<27",
-  "structlog >=25.4.0,<27",
-  "pynng >=0.8.1,<0.9",
+  "click >=8.1.8,<9",
+  "cryptography >=45.0.7,<51",
+  "duckdb-engine >=0.15.0,<0.16",
+  "duckdb >=1.3.0,<2",
+  "fsspec >=2025.9.0,<2027",
   "msgpack >=1.1.1,<2",
+  "networkx >=3.4,<4",
   # allows installing next to prefect, raise once prefect is dropped (see pixi.toml)
   "packaging >=25.0",
+  "pandas >=2.3.0,<4",
+  "polars >=1.34.0,<3",
+  "pyarrow >=19.0.0,<26",
+  "pydiverse-common >=0.4.4,<0.5",
+  "pynng >=0.8.1,<0.9",
+  "pyparsing >=3.2.5,<4",
   "python-box >=7.3.2,<8",
   "pyyaml >=6.0.3,<7",
-  "cryptography >=45.0.7,<51",
-  "click >=8.1.8,<9",
-  "pyparsing >=3.2.5,<4",
   # duckdb-engine does not support SQLAlchemy 2.1 yet (see pixi.toml)
   "sqlalchemy >=2.0.41,<2.1",
-  "pandas >=2.3.0,<4",
-  "pyarrow >=19.0.0,<26",
-  "duckdb >=1.3.0,<2",
-  "duckdb-engine >=0.15.0,<0.16",
-  "polars >=1.34.0,<3",
-  "fsspec >=2025.9.0,<2027",
+  "structlog >=25.4.0,<27",
+  "typing-extensions >=4.15.0,<5",
   "universal_pathlib >=0.3.2,<0.4",
 ]
 
+[project.scripts]
+pipedag-manage = "pydiverse.pipedag.management.cli:cli"
+
 # keep in sync with [package.extra-dependencies.*] in pixi.toml (see .github/scripts/check_deps.sh)
 [project.optional-dependencies]
-pydot = ["pydot >=4.0.0,<5"]
-postgres = ["psycopg2 >=2.9.10"]
-postgres-adbc = ["psycopg2 >=2.9.10", "adbc-driver-postgresql >=1.6.0,<2"]
-filelock = ["filelock >=3.20.0"]
-zookeeper = ["kazoo >=2.8.0"]
+colspec = ["pydiverse-colspec >=0.3.1,<0.4"]
+connectorx = ["connectorx >=0.3.3"]
 # dask is also used by the computation tracer when running all tests
 dask = ["dask >=2023.2.0", "toolz >=0.12.1", "cloudpickle >=2.2.0"]
-prefect = ["prefect >=3,<4"]
-snowflake = ["snowflake-sqlalchemy >=1.6.1", "adbc-driver-snowflake >=1.9.0"]
+dataframely = ["dataframely >=2.1.0,<3"]
+filelock = ["filelock >=3.20.0"]
 ibis = [
   "ibis-framework >=10.5.0",
   "ibis-framework[mssql] >=10.5.0",
   "ibis-framework[postgres] >=10.5.0",
 ]
+ibm-db = ["ibm-db >=3.3.0,<4", "ibm-db-sa >=0.4.2,<0.5"]
 mssql = [
   "arrow-odbc >=8.1.1,<11",
   "pyodbc >=5.2.0,<6",
@@ -78,22 +79,25 @@ mssql = [
   "bcpandas >=2.6.3,<3",
 ]
 pdtransform = ["pydiverse-transform >=0.7.0,<0.8"]
-colspec = ["pydiverse-colspec >=0.3.1,<0.4"]
-dataframely = ["dataframely >=2.1.0,<3"]
-ibm-db = ["ibm-db >=3.3.0,<4", "ibm-db-sa >=0.4.2,<0.5"]
+postgres = ["psycopg2 >=2.9.10"]
+postgres-adbc = ["psycopg2 >=2.9.10", "adbc-driver-postgresql >=1.6.0,<2"]
+prefect = ["prefect >=3,<4"]
+pydot = ["pydot >=4.0.0,<5"]
 s3 = [
   "s3fs >=2025.9.0,<2027",
   "boto3 >=1.38.13,<2",
   "gcsfs >=2025.9.0,<2027",
   "google-auth >=2.48.0",
 ]
-connectorx = ["connectorx >=0.3.3"]
+snowflake = ["snowflake-sqlalchemy >=1.6.1", "adbc-driver-snowflake >=1.9.0"]
+zookeeper = ["kazoo >=2.8.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pydiverse"]
-
-[project.scripts]
-pipedag-manage = "pydiverse.pipedag.management.cli:cli"
 
 [tool.ruff]
 extend-exclude = ["docs/*"]
@@ -111,7 +115,3 @@ ignore = ["B028"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["pydiverse"]
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"

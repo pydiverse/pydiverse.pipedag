@@ -32,13 +32,12 @@ repos:
       #   language: system
       #   types: [python]
       #   require_serial: true
-      # taplo
-      - id: taplo
-        name: taplo
-        entry: pixi run --as-is taplo format
+      # tombi
+      - id: tombi
+        name: tombi
+        entry: pixi run tombi format --offline
         language: system
         types: [toml]
-        exclude: ^pixi\.toml$  # environments should be one-liners
       - id: trailing-whitespace-fixer
         name: trailing-whitespace-fixer
         entry: pixi run --as-is trailing-whitespace-fixer
