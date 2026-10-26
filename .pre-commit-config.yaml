@@ -4,6 +4,7 @@ repos:
     hooks:
       # ensure pixi environments are up to date
       # workaround for https://github.com/prefix-dev/pixi/issues/1482
+      # the hooks below use `pixi run --as-is`, so this is the only hook that needs network access
       - id: pixi-install
         name: pixi-install
         entry: pixi install -e default
@@ -14,50 +15,50 @@ repos:
       # ruff
       - id: ruff-format
         name: ruff-format
-        entry: pixi run ruff format --force-exclude
+        entry: pixi run --as-is ruff format --force-exclude
         language: system
         types_or: [python, pyi]
         require_serial: true
       - id: ruff
         name: ruff
-        entry: pixi run ruff check --fix --exit-non-zero-on-fix --force-exclude
+        entry: pixi run --as-is ruff check --fix --exit-non-zero-on-fix --force-exclude
         language: system
         types_or: [python, pyi]
         require_serial: true
       # mypy
       # - id: mypy
       #   name: mypy
-      #   entry: pixi run mypy
+      #   entry: pixi run --as-is mypy
       #   language: system
       #   types: [python]
       #   require_serial: true
       # taplo
       - id: taplo
         name: taplo
-        entry: pixi run taplo format
+        entry: pixi run --as-is taplo format
         language: system
         types: [toml]
         exclude: ^pixi\.toml$  # environments should be one-liners
       - id: trailing-whitespace-fixer
         name: trailing-whitespace-fixer
-        entry: pixi run trailing-whitespace-fixer
+        entry: pixi run --as-is trailing-whitespace-fixer
         language: system
         types: [text]
       - id: end-of-file-fixer
         name: end-of-file-fixer
-        entry: pixi run end-of-file-fixer
+        entry: pixi run --as-is end-of-file-fixer
         language: system
         types: [text]
       - id: check-merge-conflict
         name: check-merge-conflict
-        entry: pixi run check-merge-conflict --assume-in-merge
+        entry: pixi run --as-is check-merge-conflict --assume-in-merge
         language: system
         types: [text]
         exclude: ".rst$"
       # typos
       - id: typos
         name: typos
-        entry: pixi run typos --force-exclude
+        entry: pixi run --as-is typos --force-exclude
         language: system
         types: [text]
         require_serial: true
@@ -65,7 +66,7 @@ repos:
       - id: insert-license
         name: insert-license
         entry: >-
-          pixi run
+          pixi run --as-is
           insert-license
           --license-base64 Q29weXJpZ2h0IChjKSBRdWFudENvIGFuZCBweWRpdmVyc2UgY29udHJpYnV0b3JzIDIwMjUtMjAyNQpTUERYLUxpY2Vuc2UtSWRlbnRpZmllcjogQlNELTMtQ2xhdXNlCg==
           --dynamic-years
