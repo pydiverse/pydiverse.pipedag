@@ -7,9 +7,8 @@
 - Feat: Type the public-facing API. Pipedag now ships a `py.typed` marker, and flow declaration
   sites are checked for argument count, keyword names and concrete argument types. `nout=2` /
   `nout=3` unpacking is checked for arity. `Task`, `TaskGetItem` (and their subclasses), `Table`
-  and `Blob` have `Any` among their base classes so that they are accepted as task inputs. This
-  gives them the metaclass `typing._AnyMeta`, so subclasses can't also derive from an ABC.
-  See [](/typing).
+  and `Blob` have `Any` among their base classes (for type checkers only, not at run time) so that
+  they are accepted as task inputs. See [](/typing).
 - Feat: Export `MaterializingTask`, `MaterializingTaskGetItem` and `UnboundMaterializingTask` from
   `pydiverse.pipedag`.
 - Fix: `RawSql.get()` returned the table name instead of the table.

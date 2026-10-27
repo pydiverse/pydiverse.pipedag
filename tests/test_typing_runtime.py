@@ -4,7 +4,18 @@
 
 import pandas as pd
 
-from pydiverse.pipedag import Flow, MaterializingTaskGetItem, RawSql, Result, Stage, Table, materialize
+from pydiverse.pipedag import (
+    Blob,
+    Flow,
+    MaterializingTaskGetItem,
+    RawSql,
+    Result,
+    Stage,
+    Table,
+    Task,
+    TaskGetItem,
+    materialize,
+)
 from pydiverse.pipedag.materialize.materializing_task import MaterializingTask2, MaterializingTask3
 
 
@@ -21,6 +32,13 @@ def test_unpacked_items_are_materializing_task_get_items():
     assert isinstance(a, MaterializingTaskGetItem)
     assert isinstance(b, MaterializingTaskGetItem)
     assert all(isinstance(x, MaterializingTaskGetItem) for x in whole)
+
+
+def test_any_base_adds_no_metaclass():
+    # `Any` as a run-time base would add `typing._AnyMeta`, which breaks subclasses with
+    # their own metaclass (pydiverse.colspec's ColSpec derives from Table).
+    for cls in (Table, Blob, Task, TaskGetItem):
+        assert type(cls) is type
 
 
 def test_nout_task_types_are_subscriptable_at_run_time():

@@ -14,7 +14,7 @@ import sqlalchemy as sa
 import structlog
 from attr import frozen
 
-from pydiverse.pipedag._typing import InputType, T
+from pydiverse.pipedag._typing import AnyBase, InputType, T
 from pydiverse.pipedag.context import ConfigContext, TaskContext
 from pydiverse.pipedag.errors import DuplicateNameError
 from pydiverse.pipedag.optional_dependency.transform import C, pdt
@@ -55,7 +55,7 @@ class Schema:
 
 
 @total_ordering
-class Table(Generic[T], Any):
+class Table(Generic[T], AnyBase):
     """Container for storing Tables.
 
     Used to wrap table objects that get returned from materializing
@@ -562,7 +562,7 @@ class RawSql:
         return state
 
 
-class Blob(Generic[T], Any):
+class Blob(Generic[T], AnyBase):
     """Blob (binary large object) container.
 
     Used to wrap arbitrary Python objects that get returned from materializing

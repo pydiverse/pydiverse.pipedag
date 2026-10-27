@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 import types
@@ -29,4 +29,4 @@ except ImportError:
     Polars = object
     Pandas = object
 
-__all__ = ["pdt", "pdt_old", "pdt_new", "C", "ColExpr", "Pandas", "Polars", "SqlAlchemy", "verb"]
+__all__ = ["pdt", "C", "ColExpr", "Pandas", "Polars", "SqlAlchemy", "verb"]

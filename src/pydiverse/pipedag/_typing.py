@@ -24,6 +24,18 @@ R3 = TypeVar("R3")
 # `(pd.DataFrame, "arrow")` / `{"type": pd.DataFrame, "backend": "arrow"}`
 InputType = type | tuple[type, str] | dict[str, Any]
 
+if TYPE_CHECKING:
+
+    class AnyBase(Any):
+        """Base class that makes type checkers accept instances wherever any type is expected."""
+
+else:
+    # At run time, `Any` as a base class would add the metaclass `typing._AnyMeta`, which
+    # conflicts with other metaclasses (e.g. pydiverse.colspec's `ColSpecMeta`).
+    class AnyBase:
+        pass
+
+
 # Materializable
 MPrimitives = int | float | bool | str
 MTypes = Union["Table", "Blob"]

@@ -10,6 +10,7 @@ import structlog
 from pydiverse.common.util import deep_map
 from pydiverse.common.util.hashing import stable_hash
 from pydiverse.pipedag import Table
+from pydiverse.pipedag._typing import AnyBase
 from pydiverse.pipedag.context import ConfigContext, DAGContext, RunContext, TaskContext
 from pydiverse.pipedag.context.run_context import FinalTaskState
 from pydiverse.pipedag.errors import StageError
@@ -89,7 +90,7 @@ class UnboundTask:
         return self.fn(*args, **kwargs)
 
 
-class TaskGetItem(Any):
+class TaskGetItem(AnyBase):
     """
     Wrapper __getitem__ on tasks
     """
@@ -115,10 +116,10 @@ class TaskGetItem(Any):
             return parent_value[self._item]
 
 
-class Task(Any):
+class Task(AnyBase):
     """A task bound to its inputs within a flow.
 
-    ``Any`` is among the base classes because during flow declaration a task object
+    ``Any`` is among the base classes (for type checkers only) because during flow declaration a task object
     stands in for the dematerialized value it will eventually produce, so it must be
     assignable to whatever type the receiving task declares for that parameter. The same
     holds for :py:class:`TaskGetItem`. See :doc:`/typing`.
