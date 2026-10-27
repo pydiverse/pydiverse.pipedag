@@ -31,6 +31,8 @@ jobs:
         run: pixi run pre-commit run -a --color=always --show-diff-on-failure
       - name: Check pyproject.toml dependencies
         run: pixi run check-deps
+      - name: Check lower version bounds of the old environment
+        run: pixi run check-lowest-versions
 
   import_test:
     name: Import Test
@@ -167,11 +169,20 @@ jobs:
 
   # separate job, so that only it gets the snowflake credentials and it is skipped on forks
   snowflake:
-    name: Snowflake (no-win)
+    name: Snowflake (${{ matrix.environment }})
     # don't execute on forks due to missing credentials
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # each environment uses its own snowflake database, which must not contain dashes
+          - environment: no-win
+            db-suffix: no_win
+          - environment: old
+            db-suffix: old
     steps:
       - name: Checkout branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -179,8 +190,8 @@ jobs:
       - name: Set up pixi
         uses: prefix-dev/setup-pixi@9dabb60412d3d2d967a8d682f7ce01317af40514 # v0.11.0
         with:
-          # snowflake is only part of no-win (no windows build of libadbc-driver-snowflake)
-          environments: no-win
+          # snowflake is only part of no-win and old (no windows build of libadbc-driver-snowflake)
+          environments: ${{ matrix.environment }}
 
       - name: Start Docker Compose
         uses: isbang/compose-action@b659c744ee9bed25aea2307c017ad849bd104433
@@ -201,12 +212,11 @@ jobs:
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-          # ends up in a snowflake database name, which must not contain dashes
-          SNOWFLAKE_DB_SUFFIX: no_win
+          SNOWFLAKE_DB_SUFFIX: ${{ matrix.db-suffix }}
           ERROR_ONLY: 1
           LOG_TEST_NAME: 1
         # tests are often waiting on snowflake, so more workers don't help
-        run: pixi run -e no-win pytest tests ${RUNNER_DEBUG:+-v} --color=yes --workers=1 --ibis --snowflake --no-postgres --no-duckdb
+        run: pixi run -e ${{ matrix.environment }} pytest tests ${RUNNER_DEBUG:+-v} --color=yes --workers=1 --ibis --snowflake --no-postgres --no-duckdb
 
   # single job to require in the branch protection rules (the matrix job names change often)
   all_green:
