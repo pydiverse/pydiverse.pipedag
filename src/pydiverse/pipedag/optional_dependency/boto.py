@@ -7,3 +7,5 @@ try:
 except ImportError:
     boto3 = None
     ClientError = None
+
+__all__ = ["boto3", "ClientError"]

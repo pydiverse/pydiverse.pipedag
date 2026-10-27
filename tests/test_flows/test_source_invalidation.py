@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
@@ -42,7 +42,6 @@ def double_values(df: pd.DataFrame):
     return Table(df.transform(lambda x: x * 2))
 
 
-# noinspection PyTypeChecker
 def get_flow():
     with Flow("FLOW") as flow:
         with Stage("stage_1"):

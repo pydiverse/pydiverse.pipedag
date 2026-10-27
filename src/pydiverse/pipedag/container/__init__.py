@@ -4,7 +4,7 @@
 import copy
 import inspect
 import typing
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from functools import total_ordering
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 import structlog
 from attr import frozen
 
-from pydiverse.pipedag._typing import T
+from pydiverse.pipedag._typing import AnyBase, InputType, T
 from pydiverse.pipedag.context import ConfigContext, TaskContext
 from pydiverse.pipedag.errors import DuplicateNameError
 from pydiverse.pipedag.optional_dependency.transform import C, pdt
@@ -50,12 +50,12 @@ class Schema:
         """
         return self.prefix + self.name + self.suffix
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.get()
 
 
 @total_ordering
-class Table(Generic[T]):
+class Table(Generic[T], AnyBase):
     """Container for storing Tables.
 
     Used to wrap table objects that get returned from materializing
@@ -93,6 +93,10 @@ class Table(Generic[T]):
 
     .. seealso:: You can specify which types of objects should automatically get
         converted to tables using the :ref:`auto_table` config option.
+
+    ``Any`` is among the base classes because a ``Table`` stands in for its
+    dematerialized value: it is returned from tasks annotated with a schema class and
+    can be passed as a task input during flow declaration. See :doc:`/typing`.
     """
 
     def __init__(
@@ -110,7 +114,7 @@ class Table(Generic[T]):
         stage: "Stage | None" = None,
     ):
         # state
-        self._name = None
+        self._name: str | None = None
         self.stage: Stage | None = stage
         self.external_schema: str | None = None
         self.shared_lock_allowed: bool = True
@@ -173,26 +177,26 @@ class Table(Generic[T]):
         # cache_key will be overridden shortly before handing over to downstream tasks
         # that use it to compute their input_hash for cache_invalidation due to input
         # change
-        self.cache_key = None
+        self.cache_key: str | None = None
         # assumed dependencies are filled by imperative materialization to ensure
         # correct cache invalidation
-        self.assumed_dependencies: list[Table] | None = None
+        self.assumed_dependencies: list[Table[Any]] | None = None
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         stage_name = self.stage.name if self.stage else None
         return f"<Table '{self.name}' ({stage_name})>"
 
     @property
-    def name(self):
+    def name(self) -> str | None:
         return self._name
 
     @name.setter
-    def name(self, value):
+    def name(self, value: str | None) -> None:
         if value is not None and not isinstance(value, str):
             raise TypeError(f"Table name must be of instance 'str' not {type(value)}.")
         self._name = normalize_name(value)
 
-    def copy_without_obj(self) -> "Table":
+    def copy_without_obj(self) -> "Table[T]":
         obj = self.obj
         self.obj = None
         self_copy = copy.deepcopy(self)
@@ -203,10 +207,10 @@ class Table(Generic[T]):
         self,
         config_context: ConfigContext | None = None,
         schema: Schema | None = None,
-        return_as_type=None,
-        return_nothing=False,
-        clear_table_obj=True,
-    ):
+        return_as_type: InputType | Iterable[InputType | None] | None = None,
+        return_nothing: bool = False,
+        clear_table_obj: bool = True,
+    ) -> Any:
         """Materialize the table.
 
         This method is used to materialize the table in the table store.
@@ -345,14 +349,14 @@ class Table(Generic[T]):
                 )
             return self.obj
 
-    def __getstate__(self):
+    def __getstate__(self) -> dict[str, Any]:
         # The table `obj` field can't necessarily be pickled. That's why we remove it
         # from the state before pickling.
         state = self.__dict__.copy()
         state["obj"] = None
         return state
 
-    def __lt__(self, other):
+    def __lt__(self, other: "Table[Any]") -> bool:
         if self.external_schema is not None or other.external_schema is not None:
             if self.external_schema is None and other.external_schema is not None:
                 return True
@@ -373,7 +377,7 @@ class Table(Generic[T]):
                 return False
         return self.name < other.name
 
-    def __eq__(self, other: "Table"):
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, Table):
             return False
         return (
@@ -385,8 +389,8 @@ class Table(Generic[T]):
             )
         )
 
-    def __hash__(self):
-        a = [self.name]
+    def __hash__(self) -> int:
+        a: list[Any] = [self.name]
         if self.stage is not None:
             a.append(self.stage)
         if self.external_schema is not None:
@@ -465,7 +469,7 @@ class RawSql:
         name: str | None = None,
         separator: str = ";",
     ):
-        self._name = None
+        self._name: str | None = None
         self.stage: Stage | None = None
 
         self.sql = sql
@@ -475,18 +479,18 @@ class RawSql:
         # cache_key will be overridden shortly before handing over to downstream tasks
         # that use it to compute their input_hash for cache_invalidation due to input
         # change
-        self.cache_key = None
+        self.cache_key: str | None = None
 
         # assumed dependencies are filled by imperative materialization to ensure
         # correct cache invalidation
-        self.assumed_dependencies: list[Table] | None = None
+        self.assumed_dependencies: list[Table[Any]] | None = None
 
         # If a task receives a RawSQL object as input, it loads all tables
         # produced by it and makes them available through a dict like interface.
         self.table_names: list[str] | None = None  # type: ignore
         self.loaded_tables: dict[str, Any] | None = None  # type: ignore
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         stage_name = self.stage.name if self.stage else None
         sql_short = None
         if self.sql:
@@ -494,18 +498,18 @@ class RawSql:
         return f"<Raw SQL '{self.name}' ({stage_name}) - {sql_short}>"
 
     @property
-    def name(self):
+    def name(self) -> str | None:
         return self._name
 
     @name.setter
-    def name(self, value):
+    def name(self, value: str | None) -> None:
         if value is not None and not isinstance(value, str):
             raise TypeError(f"RawSql name must be of instance 'str' not {type(value)}.")
         self._name = normalize_name(value)
 
     # Dict-like interface
 
-    def __iter__(self) -> Iterable[str]:
+    def __iter__(self) -> Iterator[str]:
         """Yields all names of tables produced by this RawSql object."""
         yield from (self.table_names or [])
 
@@ -513,7 +517,7 @@ class RawSql:
         """Check if this RawSql object produced a table with name `table_name`."""
         return table_name in (self.table_names or [])
 
-    def __getitem__(self, table_name: str):
+    def __getitem__(self, table_name: str) -> Any:
         """Gets the table produced by this RawSql object with name `table_name`."""
         if table_name not in (self.table_names or []):
             raise KeyError(f"No table with name '{table_name}' found in RawSql.")
@@ -529,18 +533,18 @@ class RawSql:
         table.cache_key = self.cache_key
         return table
 
-    def items(self) -> Iterable[tuple[str, Any]]:
+    def items(self) -> Iterator[tuple[str, Any]]:
         """Returns pairs of ``(table_name, table)``."""
         for table_name in self.table_names or []:
             yield table_name, self[table_name]
 
-    def get(self, table_name: str, default=None):
+    def get(self, table_name: str, default: Any = None) -> Any:
         """
         Returns the table with name `table_name`, or if no such table exists,
         the `default` value.
         """
         if table_name in self:
-            return table_name
+            return self[table_name]
         return default
 
     def copy_without_obj(self) -> "RawSql":
@@ -550,7 +554,7 @@ class RawSql:
         self.loaded_tables = obj
         return self_copy
 
-    def __getstate__(self):
+    def __getstate__(self) -> dict[str, Any]:
         # The `loaded_tables` field can't necessarily be pickled. That's why we
         # remove it from the state before pickling.
         state = self.__dict__.copy()
@@ -558,7 +562,7 @@ class RawSql:
         return state
 
 
-class Blob(Generic[T]):
+class Blob(Generic[T], AnyBase):
     """Blob (binary large object) container.
 
     Used to wrap arbitrary Python objects that get returned from materializing
@@ -580,6 +584,8 @@ class Blob(Generic[T]):
 
     .. seealso:: You can specify which types of objects should automatically get
         converted to blobs using the :ref:`auto_blob` config option.
+
+    Like :py:class:`Table`, ``Blob`` has ``Any`` among its base classes.
     """
 
     def __init__(
@@ -587,7 +593,7 @@ class Blob(Generic[T]):
         obj: T | None = None,
         name: str | None = None,
     ):
-        self._name = None
+        self._name: str | None = None
         self.stage: Stage | None = None
 
         self.obj = obj
@@ -596,21 +602,21 @@ class Blob(Generic[T]):
         # cache_key will be overridden shortly before handing over to downstream tasks
         # that use it to compute their input_hash for cache_invalidation due to input
         # change
-        self.cache_key = None
+        self.cache_key: str | None = None
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         stage_name = self.stage.name if self.stage else None
         return f"<Blob '{self.name}' ({stage_name})>"
 
     @property
-    def name(self):
+    def name(self) -> str | None:
         return self._name
 
     @name.setter
-    def name(self, value):
+    def name(self, value: str | None) -> None:
         self._name = normalize_name(value)
 
-    def copy_without_obj(self) -> "Blob":
+    def copy_without_obj(self) -> "Blob[T]":
         obj = self.obj
         self.obj = None
         self_copy = copy.deepcopy(self)
@@ -682,7 +688,7 @@ class ExternalTableReference:
         self.schema = schema
         self.shared_lock_allowed = shared_lock_allowed
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             f"<ExternalTableReference: '{self.name}' (schema: {self.schema}, lock_allowed={self.shared_lock_allowed})>"
         )
@@ -699,7 +705,7 @@ class SortCol:
     order: SortOrder = SortOrder.ASC
     nulls_first: bool | None = None  # whether nulls should be ordered first
 
-    def sql(self, sqlalchemy_collection):
+    def sql(self, sqlalchemy_collection: Any) -> Any:
         ret = sqlalchemy_collection[self.col]
         ret = ret.desc() if self.order == SortOrder.DESC else ret.asc()
         if self.nulls_first:
@@ -833,10 +839,10 @@ class View:
             else:
                 assert sort_by is None
 
-    def clone_assert_normalized(self):
+    def clone_assert_normalized(self) -> "View":
         return View(self.src, columns=self.columns, sort_by=self.sort_by, limit=self.limit, assert_normalized=True)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         # attention: don't put id(self) in here because it is used as lazy query string
         ret = f"<View: {repr(self.src)}"  # str(src) returns empty string for sqlalchemy aliases
         params = []
@@ -888,10 +894,10 @@ def attach_annotation(annotation: type, arg):
 if C:
 
     @overload
-    def materialize_table(name: str | None = None, table_prefix: str | None = None): ...
+    def materialize_table(name: str | None = None, table_prefix: str | None = None) -> Any: ...
 
     @pdt.verb
-    def materialize_table(tbl: pdt.Table, name: str | None = None, table_prefix: str | None = None):
+    def materialize_table(tbl: pdt.Table, name: str | None = None, table_prefix: str | None = None) -> Any:
         # use imperative materialization of pipedag within pydiverse transform task
         if name is None:
             name = table_prefix or ""
@@ -902,7 +908,7 @@ if C:
         return tbl >> pdt.alias()
 else:
     # If pydiverse.transform is not available, we cannot use the materialize_table verb
-    def materialize_table(tbl: Any, table_prefix: str | None = None):
+    def materialize_table(tbl: Any, name: str | None = None, table_prefix: str | None = None) -> Any:
         raise ImportError(
             "pydiverse.transform is not available. Please install pydiverse-transform to use materialize_table."
         )

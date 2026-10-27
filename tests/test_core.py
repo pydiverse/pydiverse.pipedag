@@ -6,8 +6,8 @@ import pytest
 
 from pydiverse.pipedag import Flow, Stage
 from pydiverse.pipedag.core import UnboundTask
-from pydiverse.pipedag.core.flow import pydot
 from pydiverse.pipedag.errors import DuplicateNameError, FlowError, StageError
+from pydiverse.pipedag.optional_dependency.pydot import pydot
 
 
 def t(name: str, **kwargs):

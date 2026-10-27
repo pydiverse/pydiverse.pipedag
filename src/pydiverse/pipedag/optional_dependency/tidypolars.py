@@ -7,3 +7,5 @@ try:
 except ImportError:
     tidypolars = None
     Tibble = None
+
+__all__ = ["tidypolars", "Tibble"]

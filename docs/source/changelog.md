@@ -4,6 +4,17 @@
 - Chore: Remove support code for pydiverse.transform <0.2 (pipedag requires pydiverse.transform >=0.7.0 anyway)
 - Build: Check in CI that the `old` environment resolves the declared lower version bounds, and run the Snowflake tests in the `old` environment
 - Deps: Raise lower bound of `snowflake-sqlalchemy` to 1.7.2, the first version supporting `isolation_level="AUTOCOMMIT"`
+- Feat: Type the public-facing API. Pipedag now ships a `py.typed` marker, and flow declaration
+  sites are checked for argument count, keyword names and concrete argument types. `nout=2` /
+  `nout=3` unpacking is checked for arity. `Task`, `TaskGetItem` (and their subclasses), `Table`
+  and `Blob` have `Any` among their base classes (for type checkers only, not at run time) so that
+  they are accepted as task inputs. See [](/typing).
+- Feat: Export `MaterializingTask`, `MaterializingTaskGetItem` and `UnboundMaterializingTask` from
+  `pydiverse.pipedag`.
+- Fix: `RawSql.get()` returned the table name instead of the table.
+- Fix: `Result.evolve()` always raised an exception.
+- Fix: Unpacking a `MaterializingTask` (`a, b = task()`) now yields `MaterializingTaskGetItem`
+  objects like subscripting does, so they support `get_output_from_store()`.
 
 ## 0.12.15 (2026-10-16)
 - Build: Clean up pixi environments and update package constraints

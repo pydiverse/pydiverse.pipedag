@@ -5,3 +5,5 @@ try:
     import xgboost as xgb
 except ImportError:
     xgb = None
+
+__all__ = ["xgb"]

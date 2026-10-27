@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 import os
@@ -107,7 +107,6 @@ def extract_a_b(tbls: list[sa.Table]):
     return a, b
 
 
-# noinspection PyTypeChecker
 def get_flow(attrs: dict[str, Any], pipedag_config):
     with Flow("test_instance_selection") as flow:
         with Stage("stage_1") as stage:

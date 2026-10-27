@@ -6,26 +6,27 @@ import getpass
 import itertools
 import os
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Generic
 
 import sqlalchemy as sa
 import structlog
 import yaml
 
 from pydiverse.common.util import deep_merge
+from pydiverse.pipedag._typing import T
 
 if TYPE_CHECKING:
     from pydiverse.pipedag.context import ConfigContext
 
 
 # noinspection PyPep8Naming
-class cached_class_property:
-    def __init__(self, func):
+class cached_class_property(Generic[T]):
+    def __init__(self, func: Callable[[Any], T]) -> None:
         self.func = func
 
-    def __get__(self, instance, cls):
+    def __get__(self, instance: object, cls: type) -> T:
         if not hasattr(self, "cache"):
             self.cache = self.func(cls)
         return self.cache
@@ -55,7 +56,8 @@ class PipedagConfig:
     default: "PipedagConfig"
 
     def __init__(self, path: str | Path | dict[str, Any]):
-        self.path = None
+        self.path: Path | None = None
+        self.raw_config: dict[str, Any]
         if isinstance(path, dict):
             self.raw_config = path
         else:
@@ -65,10 +67,10 @@ class PipedagConfig:
             with open(path) as f:
                 self.raw_config = yaml.safe_load(f)
 
-        self.config_dict = self.__parse_config(self.raw_config)
+        self.config_dict: dict[str, Any] = self.__parse_config(self.raw_config)
 
     @cached_class_property
-    def default(cls):
+    def default(cls) -> "PipedagConfig":
         config_path = find_config()
         return PipedagConfig(config_path)
 
@@ -76,7 +78,7 @@ class PipedagConfig:
     def name(self) -> str:
         return self.config_dict.get("name")
 
-    def __parse_config(self, raw_config: dict[str:Any]):
+    def __parse_config(self, raw_config: dict[str, Any]) -> dict[str, Any]:
         config = copy.deepcopy(raw_config)
 
         # Expand all references
@@ -284,15 +286,15 @@ def create_basic_pipedag_config(
     blob_directory: str | Path | None = None,
     name: str = "pipeline",
     instance_id: str = "pipeline",
-    network_interface="127.0.0.1",
-    kroki_url=None,
-    auto_table=(
+    network_interface: str = "127.0.0.1",
+    kroki_url: str | None = None,
+    auto_table: Iterable[str] = (
         "pandas.DataFrame",
         "sqlalchemy.sql.expression.TextClause",
         "sqlalchemy.sql.expression.Selectable",
     ),
-    fail_fast=True,
-    disable_stage_locking=False,
+    fail_fast: bool = True,
+    disable_stage_locking: bool = False,
     file_locking_directory: str | Path | None = None,
 ) -> PipedagConfig:
     """

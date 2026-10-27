@@ -5,13 +5,13 @@ import uuid
 from collections.abc import Callable, Iterable
 from contextlib import contextmanager
 from functools import partial
-from typing import TYPE_CHECKING, Any, overload
+from typing import TYPE_CHECKING, Any, Literal, Protocol, overload
 
 import sqlalchemy as sa
 
 from pydiverse.common.util import deep_map
 from pydiverse.common.util.hashing import stable_hash
-from pydiverse.pipedag._typing import CallableT
+from pydiverse.pipedag._typing import R1, R2, R3, InputType, P, R
 from pydiverse.pipedag.container import Blob, RawSql, Table
 from pydiverse.pipedag.context import ConfigContext, TaskContext
 from pydiverse.pipedag.core.task import Task
@@ -20,6 +20,8 @@ from pydiverse.pipedag.materialize.materializing_task import (
     MaterializingTask,
     MaterializingTaskGetItem,
     UnboundMaterializingTask,
+    UnboundMaterializingTask2,
+    UnboundMaterializingTask3,
 )
 from pydiverse.pipedag.util.json import PipedagJSONEncoder
 
@@ -27,31 +29,63 @@ if TYPE_CHECKING:
     from pydiverse.pipedag import Stage
 
 
+class _MaterializeNout2(Protocol):
+    # A function returning a 2-tuple gets a task that unpacks into two typed items.
+    # Anything else (e.g. a list) falls back to the general task type.
+    @overload
+    def __call__(self, fn: Callable[P, tuple[R1, R2]], /) -> UnboundMaterializingTask2[P, R1, R2]: ...
+    @overload
+    def __call__(self, fn: Callable[P, R], /) -> UnboundMaterializingTask[P, R]: ...
+
+
+class _MaterializeNout3(Protocol):
+    @overload
+    def __call__(self, fn: Callable[P, tuple[R1, R2, R3]], /) -> UnboundMaterializingTask3[P, R1, R2, R3]: ...
+    @overload
+    def __call__(self, fn: Callable[P, R], /) -> UnboundMaterializingTask[P, R]: ...
+
+
+# mypy reports `Literal[2]` as overlapping with `nout: int` even though the more
+# specific overload comes first.
 @overload
-def materialize(
+def materialize(  # type: ignore[overload-overlap]
     *,
+    nout: Literal[2],
     name: str | None = None,
-    input_type: type | None = None,
+    input_type: InputType | None = None,
     version: str | AutoVersionType | None = None,
     cache: Callable[..., Any] | None = None,
     lazy: bool = False,
-    nout: int = 1,
+    group_node_tag: str | None = None,
     add_input_source: bool = False,
     ordering_barrier: bool | dict[str, Any] = False,
     call_context: Callable[[], Any] | None = None,
     allow_fresh_input: bool = False,
-) -> Callable[[CallableT], CallableT | UnboundMaterializingTask]: ...
+) -> _MaterializeNout2: ...
 
 
 @overload
-def materialize(fn: CallableT, /) -> CallableT | UnboundMaterializingTask: ...
+def materialize(  # type: ignore[overload-overlap]
+    *,
+    nout: Literal[3],
+    name: str | None = None,
+    input_type: InputType | None = None,
+    version: str | AutoVersionType | None = None,
+    cache: Callable[..., Any] | None = None,
+    lazy: bool = False,
+    group_node_tag: str | None = None,
+    add_input_source: bool = False,
+    ordering_barrier: bool | dict[str, Any] = False,
+    call_context: Callable[[], Any] | None = None,
+    allow_fresh_input: bool = False,
+) -> _MaterializeNout3: ...
 
 
+@overload
 def materialize(
-    fn: CallableT | None = None,
     *,
     name: str | None = None,
-    input_type: type | None = None,
+    input_type: InputType | None = None,
     version: str | AutoVersionType | None = None,
     cache: Callable[..., Any] | None = None,
     lazy: bool = False,
@@ -61,7 +95,28 @@ def materialize(
     ordering_barrier: bool | dict[str, Any] = False,
     call_context: Callable[[], Any] | None = None,
     allow_fresh_input: bool = False,
-):
+) -> Callable[[Callable[P, R]], UnboundMaterializingTask[P, R]]: ...
+
+
+@overload
+def materialize(fn: Callable[P, R], /) -> UnboundMaterializingTask[P, R]: ...
+
+
+def materialize(
+    fn: Callable[..., Any] | None = None,
+    *,
+    name: str | None = None,
+    input_type: InputType | None = None,
+    version: str | AutoVersionType | None = None,
+    cache: Callable[..., Any] | None = None,
+    lazy: bool = False,
+    group_node_tag: str | None = None,
+    nout: int = 1,
+    add_input_source: bool = False,
+    ordering_barrier: bool | dict[str, Any] = False,
+    call_context: Callable[[], Any] | None = None,
+    allow_fresh_input: bool = False,
+) -> Any:
     """Decorator to create a task whose outputs get materialized.
 
     This decorator takes a class and turns it into a :py:class:`MaterializingTask`.
@@ -259,12 +314,14 @@ def materialize(
     )
 
 
+# The resulting task's signature is unrelated to the decorated function's (which
+# receives one dictionary per stage version), so it can't be preserved.
 @overload
 def input_stage_versions(
     *,
     name: str | None = None,
-    input_type: type | None = None,
-    version: str | None = None,
+    input_type: InputType | None = None,
+    version: str | AutoVersionType | None = None,
     cache: Callable[..., Any] | None = None,
     lazy: bool = False,
     group_node_tag: str | None = None,
@@ -273,22 +330,22 @@ def input_stage_versions(
     ordering_barrier: bool | dict[str, Any] = True,
     call_context: Callable[[], Any] | None = None,
     allow_fresh_input: bool = False,
-    include_views=True,
-    lock_source_stages=True,
+    include_views: bool = True,
+    lock_source_stages: bool = True,
     pass_args: Iterable[str] = tuple(),
-) -> Callable[[CallableT], CallableT | UnboundMaterializingTask]: ...
+) -> Callable[[Callable[..., R]], UnboundMaterializingTask[..., R]]: ...
 
 
 @overload
-def input_stage_versions(fn: CallableT, /) -> CallableT | UnboundMaterializingTask: ...
+def input_stage_versions(fn: Callable[..., R], /) -> UnboundMaterializingTask[..., R]: ...
 
 
 def input_stage_versions(
-    fn: CallableT | None = None,
+    fn: Callable[..., Any] | None = None,
     *,
     name: str | None = None,
-    input_type: type | None = None,
-    version: str | None = None,
+    input_type: InputType | None = None,
+    version: str | AutoVersionType | None = None,
     cache: Callable[..., Any] | None = None,
     lazy: bool = False,
     group_node_tag: str | None = None,
@@ -297,10 +354,10 @@ def input_stage_versions(
     ordering_barrier: bool | dict[str, Any] = True,
     call_context: Callable[[], Any] | None = None,
     allow_fresh_input: bool = False,
-    include_views=True,
-    lock_source_stages=True,
+    include_views: bool = True,
+    lock_source_stages: bool = True,
     pass_args: Iterable[str] = tuple(),
-):
+) -> Any:
     """
     A decorator that marks a function as a task that receives tables from two versions
     of the same stage. This can either be the currently active schema of this stage
@@ -760,7 +817,7 @@ def input_stage_versions(
 
 def _get_output_from_store(
     task: MaterializingTask | MaterializingTaskGetItem,
-    as_type: type,
+    as_type: type | None,
     ignore_position_hashes: bool = False,
     write_local_table_cache: bool = False,
     config: ConfigContext | None = None,

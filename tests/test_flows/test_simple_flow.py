@@ -1,4 +1,4 @@
-# Copyright (c) QuantCo and pydiverse contributors 2025-2025
+# Copyright (c) QuantCo and pydiverse contributors 2025-2026
 # SPDX-License-Identifier: BSD-3-Clause
 
 import pandas as pd
@@ -41,7 +41,6 @@ def join_on_a(left: sa.sql.expression.Alias, right: sa.sql.expression.Alias):
     return Table(left.select().join(right, left.c.a == right.c.a))
 
 
-# noinspection PyTypeChecker
 def get_flow():
     with Flow() as flow:
         with Stage("simple_flow_stage1"):

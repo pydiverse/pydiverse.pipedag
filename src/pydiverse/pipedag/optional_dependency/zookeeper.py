@@ -10,3 +10,5 @@ except ImportError:
     KazooClient = None
     KazooState = None
     KazooLock = None
+
+__all__ = ["kazoo", "KazooClient", "KazooState", "KazooLock"]

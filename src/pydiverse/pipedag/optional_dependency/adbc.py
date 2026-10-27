@@ -5,3 +5,5 @@ try:
     import adbc_driver_postgresql as adbc_postgres
 except ImportError:
     adbc_postgres = None
+
+__all__ = ["adbc_postgres"]

@@ -7,7 +7,7 @@ repos:
       # the hooks below use `pixi run --as-is`, so this is the only hook that needs network access
       - id: pixi-install
         name: pixi-install
-        entry: pixi install -e default
+        entry: pixi install -e default -e typecheck
         language: system
         always_run: true
         require_serial: true
@@ -25,17 +25,24 @@ repos:
         language: system
         types_or: [python, pyi]
         require_serial: true
-      # mypy
-      # - id: mypy
-      #   name: mypy
-      #   entry: pixi run --as-is mypy
-      #   language: system
-      #   types: [python]
-      #   require_serial: true
-      # tombi
+      # type checking (scoped to tests/type_checking via pyproject.toml; pyright is authoritative)
+      - id: pyright
+        name: pyright
+        entry: pixi run --as-is -e typecheck pyright
+        language: system
+        types: [python]
+        require_serial: true
+        pass_filenames: false
+      - id: mypy
+        name: mypy
+        entry: pixi run --as-is -e typecheck mypy
+        language: system
+        types: [python]
+        require_serial: true
+        pass_filenames: false
       - id: tombi
         name: tombi
-        entry: pixi run tombi format --offline
+        entry: pixi run --as-is tombi format --offline
         language: system
         types: [toml]
       - id: trailing-whitespace-fixer
