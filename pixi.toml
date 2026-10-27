@@ -271,10 +271,5 @@ no-win = ["dev", "py314", "all", "snowflake"]
 no-adbc-dy = ["dev", "py314", "no-adbc-dy"]
 # only the default feature, so that no optional dependency is installed
 no-features = []
-<<<<<<< HEAD
-typecheck = ["py311", "typecheck", "dev", "zookeeper", "pd2", "sa2", "duckdb1", "colspec", "dataframely", "pdtransform-new", "pydot", "postgres"]
-old = { features = ["dev", "all", "colspec", "pdtransform", "ibm-db", "snowflake"], solve-strategy = "lowest" }
-=======
 typecheck = ["py311", "typecheck", "dev", "colspec"]
-old = { features = ["dev", "all", "colspec", "pdtransform", "ibm-db"], solve-strategy = "lowest" }
->>>>>>> 250123d (fix after rebase)
+old = { features = ["dev", "all", "colspec", "pdtransform", "ibm-db", "snowflake"], solve-strategy = "lowest" }
