@@ -223,6 +223,8 @@ pydiverse-pipedag = { path = ".", extras = [
 [feature.typecheck.dependencies]
 pyright = ">=1.1.411,<2"
 mypy = ">=2.3.0,<3"
+# pyright runs on the `node` found in PATH; the one on CI runners is too old
+nodejs = "*"
 
 [feature.typecheck.tasks]
 pyright = "pyright"
