@@ -16,7 +16,7 @@ from pydiverse.pipedag import ConfigContext, Stage, Table
 from pydiverse.pipedag.materialize.materializing_task import MaterializingTask
 from pydiverse.pipedag.materialize.store import BaseTableCache
 from pydiverse.pipedag.materialize.table_hook_base import CanMatResult, CanRetResult, DataFrameTableHook, TableHook
-from pydiverse.pipedag.optional_dependency.transform import pdt, pdt_new, pdt_old
+from pydiverse.pipedag.optional_dependency.transform import C, pdt
 from pydiverse.pipedag.util import normalize_name
 from pydiverse.pipedag.util.path import is_file_uri
 
@@ -231,69 +231,7 @@ class PolarsTableHook(sql_hooks.PolarsTableHook):
         return df
 
 
-@ParquetTableCache.register_table(pdt_old)
-class PydiverseTransformTableHookOld(TableHook[ParquetTableCache]):
-    @classmethod
-    def can_materialize(cls, tbl: Table) -> CanMatResult:
-        type_ = type(tbl.obj)
-        if not issubclass(type_, pdt.Table):
-            return CanMatResult.NO
-        from pydiverse.transform.eager import PandasTableImpl
-
-        return CanMatResult.YES_BUT_DONT_CACHE if issubclass(type_, PandasTableImpl) else CanMatResult.NO
-
-    @classmethod
-    def can_retrieve(cls, type_) -> CanRetResult:
-        from pydiverse.transform.eager import PandasTableImpl
-
-        return CanRetResult.new(issubclass(type_, PandasTableImpl))
-
-    @classmethod
-    def materialize(
-        cls,
-        store: ParquetTableCache,
-        table: Table[pdt.Table],
-        stage_name: str,
-        without_config_context: bool = False,
-    ):
-        from pydiverse.transform.core.verbs import collect
-        from pydiverse.transform.eager import PandasTableImpl
-
-        t = table.obj
-        table = table.copy_without_obj()
-
-        if isinstance(t._impl, PandasTableImpl):
-            table.obj = t >> collect()
-            return store.get_r_table_hook(pd.DataFrame).materialize(store, table, stage_name)
-
-        raise TypeError(f"Unsupported type {type(t._impl).__name__}")
-
-    @classmethod
-    def retrieve(
-        cls,
-        store: ParquetTableCache,
-        table: Table,
-        stage_name: str | None,
-        as_type: type,
-        limit: int | None = None,
-    ):
-        # From the viewpoint of the parquet table cache, a view is no different from a table.
-        # It will materialize the actual dataframe as parquet file in case a dataframe based
-        # task reads it. A view can never end up in the output cache.
-        # Attention: The cache is the only component which uses the name of the view. So problems
-        # of name collision might occur only when activating the local table cache.
-
-        from pydiverse.transform.eager import PandasTableImpl
-
-        if as_type is PandasTableImpl:
-            hook = store.get_r_table_hook(pd.DataFrame)
-            df = hook.retrieve(store, table, stage_name, pd.DataFrame, limit)
-            return pdt.Table(PandasTableImpl(table.name, df))
-
-        raise ValueError(f"Invalid type {as_type}")
-
-
-@ParquetTableCache.register_table(pdt_new)
+@ParquetTableCache.register_table(C)
 class PydiverseTransformTableHook(TableHook[ParquetTableCache]):
     @classmethod
     def can_materialize(cls, tbl: Table) -> CanMatResult:
